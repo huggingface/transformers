@@ -33,15 +33,17 @@ BboxInput = Union[
     list[list[tuple[float, float, float]]],
 ]
 
+NestedList = list[Union[Optional[int], "NestedList"]]
+
 
 class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
-    bboxes: Optional[list[float]]
-    num_image_tokens: Optional[int]
+    bboxes: Optional[NestedList]  # NOTE: hub validators can't accept `Sequence`
+    num_image_tokens: int
     first_image_token_id: Optional[int]
 
 
 class Kosmos2TextKwargs(TextKwargs, total=False):
-    add_eos_token: Optional[bool]
+    add_eos_token: bool
 
 
 class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -134,10 +136,8 @@ class Kosmos2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, list[TextInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Kosmos2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -342,7 +342,7 @@ class Kosmos2Processor(ProcessorMixin):
     def preprocess_examples(
         self,
         texts: Union[TextInput, list[TextInput]],
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         bboxes: BboxInput = None,
         num_image_tokens: Optional[int] = 64,
     ) -> Union[str, list[str]]:

@@ -160,16 +160,13 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     pipeline_model_mapping = {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
     is_encoder_decoder = False
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = True
-    test_torchscript = False
     test_inputs_embeds = False
 
     test_resize_embeddings = True
     test_resize_position_embeddings = False
     test_mismatched_shapes = True
-    test_model_parallel = False
     has_attentions = True
 
     def setUp(self):

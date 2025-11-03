@@ -35,6 +35,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -122,6 +123,10 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
+class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
+    size_divisor: int
+
+
 class BridgeTowerImageProcessor(BaseImageProcessor):
     r"""
     Constructs a BridgeTower image processor.
@@ -169,6 +174,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
+    valid_kwargs = BridgeTowerImageProcessorKwargs
 
     def __init__(
         self,
@@ -339,10 +345,8 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -378,7 +382,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         size_divisor: Optional[int] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -431,10 +435,8 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -469,10 +471,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         # Here, crop_size is used only if it is set, else size will be used.
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -480,8 +479,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size_divisor,
             do_center_crop=do_center_crop,
             crop_size=crop_size,
             do_resize=do_resize,

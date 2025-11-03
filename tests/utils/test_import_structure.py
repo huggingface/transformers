@@ -1,7 +1,7 @@
 import os
 import unittest
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import pytest
 
@@ -53,10 +53,8 @@ class TestImportStructures(unittest.TestCase):
             },
             frozenset({"random_item_that_should_not_exist"}): {"failing_export": {"A0"}},
             frozenset({"torch"}): {
-                "import_structure_register_with_duplicates": {"C0", "C1", "C2", "C3", "c0", "c1", "c2", "c3"}
-            },
-            frozenset({"tf", "torch"}): {
                 "import_structure_raw_register": {"A1", "A2", "A3", "a1", "a2", "a3"},
+                "import_structure_register_with_duplicates": {"C0", "C1", "C2", "C3", "c0", "c1", "c2", "c3"},
                 "import_structure_register_with_comments": {"B1", "B2", "B3", "b1", "b2", "b3"},
             },
             frozenset({"torch>=2.5"}): {"import_structure_raw_register_with_versions": {"D0", "d0"}},
@@ -73,7 +71,9 @@ class TestImportStructures(unittest.TestCase):
         self.assertEqual(len(import_structure.keys()), len(valid_frozensets.keys()))
         for _frozenset in valid_frozensets:
             self.assertTrue(_frozenset in import_structure)
-            self.assertListEqual(list(import_structure[_frozenset].keys()), list(valid_frozensets[_frozenset].keys()))
+            self.assertListEqual(
+                sorted(import_structure[_frozenset].keys()), sorted(valid_frozensets[_frozenset].keys())
+            )
             for module, objects in valid_frozensets[_frozenset].items():
                 self.assertTrue(module in import_structure[_frozenset])
                 self.assertSetEqual(objects, import_structure[_frozenset][module])
@@ -132,7 +132,7 @@ class TestImportStructures(unittest.TestCase):
             "models": {
                 frozenset(): {"dummy_config": {"DummyConfig"}},
                 "albert": {
-                    frozenset(): {"configuration_albert": {"AlbertConfig", "AlbertOnnxConfig"}},
+                    frozenset(): {"configuration_albert": {"AlbertConfig"}},
                     frozenset({"torch"}): {
                         "modeling_albert": {
                             "AlbertForMaskedLM",
@@ -174,7 +174,7 @@ class TestImportStructures(unittest.TestCase):
             frozenset(): {
                 "dummy_non_model": {"DummyObject"},
                 "models.dummy_config": {"DummyConfig"},
-                "models.albert.configuration_albert": {"AlbertConfig", "AlbertOnnxConfig"},
+                "models.albert.configuration_albert": {"AlbertConfig"},
                 "models.llama.configuration_llama": {"LlamaConfig"},
                 "models.deprecated.transfo_xl.configuration_transfo_xl": {"TransfoXLConfig"},
                 "models.deprecated.transfo_xl.tokenization_transfo_xl": {"TransfoXLCorpus", "TransfoXLTokenizer"},
@@ -198,7 +198,6 @@ class TestImportStructures(unittest.TestCase):
     "backend,package_name,version_comparison,version",
     [
         pytest.param(Backend("torch>=2.5 "), "torch", VersionComparison.GREATER_THAN_OR_EQUAL.value, "2.5"),
-        pytest.param(Backend("tf<=1"), "tf", VersionComparison.LESS_THAN_OR_EQUAL.value, "1"),
         pytest.param(Backend("torchvision==0.19.1"), "torchvision", VersionComparison.EQUAL.value, "0.19.1"),
     ],
 )

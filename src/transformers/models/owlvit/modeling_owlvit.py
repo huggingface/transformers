@@ -19,7 +19,6 @@ from functools import lru_cache
 from typing import Any, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
@@ -449,7 +448,7 @@ class OwlViTAttention(nn.Module):
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if output_attentions:
-            # this operation is a bit akward, but it's required to
+            # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
@@ -551,6 +550,7 @@ class OwlViTEncoderLayer(GradientCheckpointingLayer):
 class OwlViTPreTrainedModel(PreTrainedModel):
     config: OwlViTConfig
     base_model_prefix = "owlvit"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["OwlViTEncoderLayer"]
 
@@ -753,6 +753,7 @@ class OwlViTTextTransformer(nn.Module):
 
 class OwlViTTextModel(OwlViTPreTrainedModel):
     config: OwlViTTextConfig
+    input_modalities = "text"
 
     def __init__(self, config: OwlViTTextConfig):
         super().__init__(config)
@@ -863,6 +864,7 @@ class OwlViTVisionTransformer(nn.Module):
 class OwlViTVisionModel(OwlViTPreTrainedModel):
     config: OwlViTVisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: OwlViTVisionConfig):
         super().__init__(config)

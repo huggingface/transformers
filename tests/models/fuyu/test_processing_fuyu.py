@@ -1,9 +1,6 @@
-import io
 import tempfile
 import unittest
 from shutil import rmtree
-
-import requests
 
 from transformers import (
     AutoProcessor,
@@ -11,15 +8,11 @@ from transformers import (
     FuyuImageProcessor,
     FuyuProcessor,
     is_torch_available,
-    is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from PIL import Image
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_torch_available():
@@ -44,8 +37,10 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         processor.save_pretrained(cls.tmpdirname)
 
         cls.text_prompt = "Generate a coco-style caption.\\n"
-        bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
-        cls.bus_image_pil = Image.open(io.BytesIO(requests.get(bus_image_url).content))
+        bus_image_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
+        )
+        cls.bus_image_pil = load_image(bus_image_url)
 
     @classmethod
     def tearDownClass(cls):

@@ -43,7 +43,7 @@ import os
 import re
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from check_repo import ignore_undocumented
 from git import Repo
@@ -81,6 +81,7 @@ ALWAYS_OVERRIDE = ["labels"]
 OBJECTS_TO_IGNORE = {
     "ApertusConfig",
     "Mxfp4Config",
+    "Qwen3OmniMoeConfig",
     "Exaone4Config",
     "SmolLM3Config",
     "Gemma3nVisionConfig",
@@ -128,6 +129,8 @@ OBJECTS_TO_IGNORE = {
     "BlipVisionConfig",
     "BloomConfig",
     "BloomTokenizerFast",
+    "BLTConfig",
+    "BLTPatcherConfig",
     "BridgeTowerTextConfig",
     "BridgeTowerVisionConfig",
     "BrosModel",
@@ -312,6 +315,7 @@ OBJECTS_TO_IGNORE = {
     "OpenAIGPTTokenizerFast",
     "OpenLlamaConfig",
     "PLBartConfig",
+    "ParakeetCTCConfig",
     "PegasusConfig",
     "PegasusTokenizer",
     "PegasusTokenizerFast",
@@ -460,13 +464,13 @@ OBJECTS_TO_IGNORE = {
     "ZeroShotImageClassificationPipeline",
     "ZeroShotObjectDetectionPipeline",
     "Llama4TextConfig",
+    "BltConfig",
+    "BltPatcherConfig",
 }
 # In addition to the objects above, we also ignore objects with certain prefixes. If you add an item to the list
 # below, make sure to add a comment explaining why.
 OBJECT_TO_IGNORE_PREFIXES = [
     "_",  # Private objects are not documented
-    "TF",  # TensorFlow objects are scheduled to be removed in the future
-    "Flax",  # Flax objects are scheduled to be removed in the future
 ]
 
 # Supported math operations when interpreting the value of defaults.
@@ -521,7 +525,7 @@ def stringify_default(default: Any) -> str:
         return f"`{default}`"
 
 
-def eval_math_expression(expression: str) -> Optional[Union[float, int]]:
+def eval_math_expression(expression: str) -> float | int | None:
     # Mainly taken from the excellent https://stackoverflow.com/a/9558001
     """
     Evaluate (safely) a mathematial expression and returns its value.
@@ -669,7 +673,7 @@ def find_source_file(obj: Any) -> Path:
     return obj_file.with_suffix(".py")
 
 
-def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
+def match_docstring_with_signature(obj: Any) -> tuple[str, str] | None:
     """
     Matches the docstring of an object with its signature.
 
@@ -707,7 +711,11 @@ def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
         elif re.search(r"^\s*#\s*ignore-order\s*$", line_before_docstring):
             ignore_order = True
 
-    # Read the signature
+    # Read the signature. Skip on `TypedDict` objects for now. Inspect cannot
+    # parse their signature ("no signature found for builtin type <class 'dict'>")
+    if issubclass(obj, dict) and hasattr(obj, "__annotations__"):
+        return
+
     signature = inspect.signature(obj).parameters
 
     obj_doc_lines = obj.__doc__.split("\n")
@@ -923,14 +931,10 @@ def find_matching_model_files(check_all: bool = False):
     potential_files = glob.glob(modeling_glob_pattern)
     image_processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/image_processing_*_fast.py")
     potential_files += glob.glob(image_processing_glob_pattern)
-    exclude_substrings = ["modeling_tf_", "modeling_flax_"]
     matching_files = []
     for file_path in potential_files:
         if os.path.isfile(file_path):
-            filename = os.path.basename(file_path)
-            is_excluded = any(exclude in filename for exclude in exclude_substrings)
-            if not is_excluded:
-                matching_files.append(file_path)
+            matching_files.append(file_path)
     if not check_all:
         # intersect with module_diff_files
         matching_files = sorted([file for file in matching_files if file in module_diff_files])

@@ -42,15 +42,16 @@ fine-tune for translation or summarization.
 The `generate()` method can be used to generate text using GPTSAN-Japanese model.
 
 ```python
->>> from transformers import AutoModel, AutoTokenizer, infer_device
+>>> from transformers import AutoModel, AutoTokenizer
+from accelerate import Accelerator
 >>> import torch
 
->>> device = infer_device()
+>>> device = Accelerator().device
 >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
 >>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
 >>> x_tok = tokenizer("は、", prefix_text="織田信長", return_tensors="pt")
 >>> torch.manual_seed(0)
->>> gen_tok = model.generate(x_tok.input_ids.to(model.device), token_type_ids=x_tok.token_type_ids.to(mdoel.device), max_new_tokens=20)
+>>> gen_tok = model.generate(x_tok.input_ids.to(model.device), token_type_ids=x_tok.token_type_ids.to(model.device), max_new_tokens=20)
 >>> tokenizer.decode(gen_tok[0])
 '織田信長は、2004年に『戦国BASARA』のために、豊臣秀吉'
 ```
@@ -78,6 +79,8 @@ When token_type_ids=None or all zero, it is equivalent to regular causal mask
 for example:
 
 >>> x_token = tokenizer("ｱｲｳｴ")
+
+```text
 input_ids:      | SOT | SEG | ｱ | ｲ | ｳ | ｴ |
 token_type_ids: | 1   | 0   | 0 | 0 | 0 | 0 |
 prefix_lm_mask:
@@ -87,8 +90,11 @@ SEG | 1 1 0 0 0 0 |
 ｲ   | 1 1 1 1 0 0 |
 ｳ   | 1 1 1 1 1 0 |
 ｴ   | 1 1 1 1 1 1 |
+```
 
 >>> x_token = tokenizer("", prefix_text="ｱｲｳｴ")
+
+```text
 input_ids:      | SOT | ｱ | ｲ | ｳ | ｴ | SEG |
 token_type_ids: | 1   | 1 | 1 | 1 | 1 | 0  |
 prefix_lm_mask:
@@ -98,8 +104,11 @@ SOT | 1 1 1 1 1 0 |
 ｳ   | 1 1 1 1 1 0 |
 ｴ   | 1 1 1 1 1 0 |
 SEG | 1 1 1 1 1 1 |
+```
 
 >>> x_token = tokenizer("ｳｴ", prefix_text="ｱｲ")
+
+```text
 input_ids:      | SOT | ｱ | ｲ | SEG | ｳ | ｴ |
 token_type_ids: | 1   | 1 | 1 | 0   | 0 | 0 |
 prefix_lm_mask:
@@ -109,6 +118,7 @@ SOT | 1 1 1 0 0 0 |
 SEG | 1 1 1 1 0 0 |
 ｳ   | 1 1 1 1 1 0 |
 ｴ   | 1 1 1 1 1 1 |
+```
 
 ### Spout Vector
 

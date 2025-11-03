@@ -15,12 +15,11 @@
 """PyTorch RoFormer model."""
 
 import math
-import os
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -38,9 +37,8 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_roformer import RoFormerConfig
 
 
@@ -82,79 +80,6 @@ class RoFormerSinusoidalPositionalEmbedding(nn.Embedding):
         return super().forward(position_ids)
 
 
-def load_tf_weights_in_roformer(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name.replace("bert", "roformer"))
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            continue
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-        try:
-            if not pointer.shape == array.shape:
-                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array)
-    return model
-
-
 class RoFormerEmbeddings(nn.Module):
     """Construct the embeddings from word and token_type embeddings."""
 
@@ -163,8 +88,6 @@ class RoFormerEmbeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=config.pad_token_id)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.embedding_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -212,13 +135,11 @@ class RoFormerSelfAttention(nn.Module):
         self.rotary_value = config.rotary_value
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         sinusoidal_pos=None,
-        head_mask=None,
         encoder_hidden_states=None,
         past_key_values=None,
         output_attentions=False,
@@ -241,17 +162,17 @@ class RoFormerSelfAttention(nn.Module):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_value = past_key_values.cross_attention_cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_values.self_attention_cache
+                    curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_values
+                curr_past_key_values = past_key_values
 
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = curr_past_key_value.layers[self.layer_idx].keys
-            value_layer = curr_past_key_value.layers[self.layer_idx].values
+            key_layer = curr_past_key_values.layers[self.layer_idx].keys
+            value_layer = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_layer = (
                 self.key(current_states)
@@ -278,7 +199,7 @@ class RoFormerSelfAttention(nn.Module):
             if past_key_values is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_layer, value_layer = curr_past_key_value.update(
+                key_layer, value_layer = curr_past_key_values.update(
                     key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -299,10 +220,6 @@ class RoFormerSelfAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
@@ -360,34 +277,12 @@ class RoFormerAttention(nn.Module):
         super().__init__()
         self.self = RoFormerSelfAttention(config, layer_idx=layer_idx)
         self.output = RoFormerSelfOutput(config)
-        self.pruned_heads = set()
 
-    # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         sinusoidal_pos=None,
-        head_mask=None,
         encoder_hidden_states=None,
         past_key_values=None,
         output_attentions=False,
@@ -397,7 +292,6 @@ class RoFormerAttention(nn.Module):
             hidden_states,
             attention_mask=attention_mask,
             sinusoidal_pos=sinusoidal_pos,
-            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
@@ -454,13 +348,11 @@ class RoFormerLayer(GradientCheckpointingLayer):
         self.intermediate = RoFormerIntermediate(config)
         self.output = RoFormerOutput(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         sinusoidal_pos=None,
-        head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
@@ -471,7 +363,6 @@ class RoFormerLayer(GradientCheckpointingLayer):
             hidden_states,
             attention_mask=attention_mask,
             sinusoidal_pos=sinusoidal_pos,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             past_key_values=past_key_values,
             cache_position=cache_position,
@@ -490,7 +381,6 @@ class RoFormerLayer(GradientCheckpointingLayer):
                 attention_output,
                 attention_mask=encoder_attention_mask,
                 sinusoidal_pos=sinusoidal_pos,
-                head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
@@ -524,7 +414,6 @@ class RoFormerEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
@@ -541,16 +430,6 @@ class RoFormerEncoder(nn.Module):
                 )
                 use_cache = False
 
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
-
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -564,13 +443,10 @@ class RoFormerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
             layer_outputs = layer_module(
                 hidden_states,
                 attention_mask,
                 sinusoidal_pos,
-                layer_head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 past_key_values,
@@ -762,15 +638,12 @@ class RoFormerOnlyMLMHead(nn.Module):
 @auto_docstring
 class RoFormerPreTrainedModel(PreTrainedModel):
     config: RoFormerConfig
-    load_tf_weights = load_tf_weights_in_roformer
     base_model_prefix = "roformer"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -820,25 +693,16 @@ class RoFormerModel(RoFormerPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -869,13 +733,14 @@ class RoFormerModel(RoFormerPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        past_key_values_length = 0
-        if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values[0][0].shape[-2]
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
+        if use_cache and past_key_values is None:
+            past_key_values = (
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                if encoder_hidden_states is not None or self.config.is_encoder_decoder
+                else DynamicCache(config=self.config)
             )
+
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -897,13 +762,6 @@ class RoFormerModel(RoFormerPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(
             input_ids=input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
@@ -913,7 +771,6 @@ class RoFormerModel(RoFormerPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
             past_key_values=past_key_values,
@@ -969,7 +826,6 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
@@ -990,7 +846,6 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
@@ -1069,15 +924,14 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[CausalLMOutputWithCrossAttentions, tuple[torch.Tensor]]:
         r"""
@@ -1108,7 +962,6 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
@@ -1120,25 +973,22 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
             cache_position=cache_position,
         )
 
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.cls(hidden_states[:, slice_indices, :])
 
-        lm_loss = None
+        loss = None
         if labels is not None:
-            lm_loss = self.loss_function(
-                prediction_scores,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
-            loss=lm_loss,
-            logits=prediction_scores,
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
@@ -1189,7 +1039,6 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1208,7 +1057,6 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1270,7 +1118,6 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1319,7 +1166,6 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1368,7 +1214,6 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1385,7 +1230,6 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1434,7 +1278,6 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -1448,7 +1291,6 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1502,5 +1344,4 @@ __all__ = [
     "RoFormerLayer",
     "RoFormerModel",
     "RoFormerPreTrainedModel",
-    "load_tf_weights_in_roformer",
 ]

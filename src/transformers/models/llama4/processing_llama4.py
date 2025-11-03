@@ -16,20 +16,14 @@
 
 from typing import Optional, Union
 
-from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 
 
-class Llama4ImagesKwargs(ImagesKwargs, total=False):
-    max_patches: Optional[int]
-    resize_to_max_canvas: Optional[bool]
-
-
 class Llama4ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Llama4ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding_side": "left",
@@ -139,8 +133,6 @@ class Llama4Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Llama4ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -159,10 +151,8 @@ class Llama4Processor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

@@ -14,10 +14,10 @@
 # limitations under the License.
 """PyTorch OPT model."""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -36,7 +36,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_opt import OPTConfig
 
 
@@ -139,13 +138,11 @@ class OPTAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,
@@ -175,13 +172,7 @@ class OPTAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
 
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -221,13 +212,11 @@ class OPTDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim, bias=config.enable_bias)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim, elementwise_affine=config.layer_norm_elementwise_affine)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         position_ids: Optional[torch.LongTensor] = None,
@@ -239,15 +228,13 @@ class OPTDecoderLayer(GradientCheckpointingLayer):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`, *optional*): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence..
         """
@@ -264,7 +251,6 @@ class OPTDecoderLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
             cache_position=cache_position,
             **kwargs,
@@ -508,7 +494,6 @@ class OPTDecoder(OPTPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -536,15 +521,8 @@ class OPTDecoder(OPTPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(num_hidden_layers, num_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
             past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+                It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
                 cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
@@ -634,15 +612,6 @@ class OPTDecoder(OPTPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        # check if head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask], ["head_mask"]):
-            if attn_mask is not None:
-                if attn_mask.size()[0] != (len(self.layers)):
-                    raise ValueError(
-                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
-                        f" {head_mask.size()[0]}."
-                    )
-
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
@@ -657,7 +626,6 @@ class OPTDecoder(OPTPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
@@ -708,8 +676,7 @@ class OPTModel(OPTPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -731,7 +698,6 @@ class OPTModel(OPTPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -781,8 +747,7 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -791,6 +756,7 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
@@ -822,12 +788,10 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model.decoder(
+        outputs: BaseModelOutputWithPast = self.model.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -838,18 +802,14 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        logits = self.lm_head(outputs[0]).contiguous()
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :]).contiguous()
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            loss = self.loss_function(
-                logits,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -889,8 +849,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -912,7 +871,6 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1001,8 +959,7 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -1051,7 +1008,6 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,

@@ -41,7 +41,6 @@ This model was contributed by [stas](https://huggingface.co/stas). The original 
   either. Its tokenizer is very similar to [`XLMTokenizer`] and the main model is derived from
   [`BartModel`].
 
-
 ## FSMTConfig
 
 [[autodoc]] FSMTConfig

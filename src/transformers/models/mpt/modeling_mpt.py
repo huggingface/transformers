@@ -18,7 +18,6 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
@@ -36,7 +35,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_mpt import MptConfig
 
 
@@ -87,7 +85,6 @@ class MptAttention(nn.Module):
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -233,8 +230,6 @@ class MptPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -246,26 +241,6 @@ class MptPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    @staticmethod
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
-    def _convert_to_mpt_cache(
-        past_key_values: tuple[tuple[torch.Tensor, torch.Tensor]],
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
-        """
-        Converts the cache to the format expected by Mpt, i.e. to tuple(tuple([batch_size * num_heads, ...]))
-        """
-        batch_size, num_heads, head_dim, seq_length = past_key_values[0][0].shape
-        batch_size_times_num_heads = batch_size * num_heads
-        # key:  [batch_size, num_heads, head_dim, seq_length] -> [batch_size * num_heads, head_dim, seq_length]
-        # value: [batch_size, num_heads, seq_length, head_dim] -> [batch_size * num_heads, seq_length, head_dim]
-        return tuple(
-            (
-                layer_past[0].reshape(batch_size_times_num_heads, head_dim, seq_length),
-                layer_past[1].reshape(batch_size_times_num_heads, seq_length, head_dim),
-            )
-            for layer_past in past_key_values
-        )
 
 
 @auto_docstring
@@ -305,7 +280,7 @@ class MptModel(MptPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[tuple[tuple[torch.Tensor, torch.Tensor], ...], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -356,13 +331,6 @@ class MptModel(MptPreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `DynamicCache` instead, e.g. "
-                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         hidden_states = inputs_embeds
 
@@ -445,7 +413,7 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -454,6 +422,7 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
@@ -486,29 +455,23 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
             return_dict=return_dict,
             cache_position=cache_position,
         )
-        hidden_states = transformer_outputs[0]
 
-        lm_logits = self.lm_head(hidden_states)
+        hidden_states = transformer_outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(lm_logits.device)
-            # Flatten the tokens
-            loss = self.loss_function(
-                lm_logits,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
-            output = (lm_logits,) + transformer_outputs[1:]
+            output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
-            logits=lm_logits,
+            logits=logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
@@ -543,7 +506,7 @@ class MptForSequenceClassification(MptPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -666,7 +629,7 @@ class MptForTokenClassification(MptPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -712,7 +675,7 @@ class MptForTokenClassification(MptPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             batch_size, seq_length = labels.shape
             loss_fct = CrossEntropyLoss()

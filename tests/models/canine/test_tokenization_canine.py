@@ -17,11 +17,11 @@ import os
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import BatchEncoding, CanineTokenizer
 from transformers.testing_utils import require_tokenizers, require_torch
 from transformers.tokenization_utils import AddedToken
-from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

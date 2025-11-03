@@ -101,19 +101,15 @@ class UnivNetModelTester:
 class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UnivNetModel,) if is_torch_available() else ()
     # UnivNetModel currently cannot be traced with torch.jit.trace.
-    test_torchscript = False
     # The UnivNetModel is not a transformer and does not use any attention mechanisms, so skip transformer/attention
     # related tests.
-    test_pruning = False
+
     test_resize_embeddings = False
     test_resize_position_embeddings = False
-    test_head_masking = False
     # UnivNetModel is not a sequence classification model.
     test_mismatched_shapes = False
     # UnivNetModel does not have a base_model_prefix attribute.
     test_missing_keys = False
-    # UnivNetModel does not implement a parallelize method.
-    test_model_parallel = False
     is_encoder_decoder = False
     has_attentions = False
 

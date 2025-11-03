@@ -41,6 +41,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 
 
@@ -50,6 +51,24 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class SmolVLMImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_image_splitting (`bool`, *optional*, defaults to `True`):
+        Whether to split the image into sub-images concatenated with the original image. They are split into patches
+        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
+    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
+        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
+    return_row_col_info (`bool`, *optional*, defaults to `False`):
+        Whether to return the row and column information of the images.
+    """
+
+    do_image_splitting: bool
+    max_image_size: dict[str, int]
+    return_row_col_info: bool
+
+
 MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
 
@@ -288,6 +307,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_attention_mask"]
+    valid_kwargs = SmolVLMImageProcessorKwargs
 
     def __init__(
         self,
@@ -543,10 +563,8 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -605,7 +623,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         do_convert_rgb: Optional[bool] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_image_splitting: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
         max_image_size: Optional[dict[str, int]] = None,
@@ -654,10 +672,8 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             return_row_col_info (`bool`, *optional*, default to `False`):
                 Whether to return the number of rows and columns of the split images. This is used for the
                 `SmolVLMProcessor` to generate prompt strings based on the number of rows and columns.
@@ -690,10 +706,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         images_list = make_nested_list_of_images(images)
 
         if not valid_images(images_list[0]):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

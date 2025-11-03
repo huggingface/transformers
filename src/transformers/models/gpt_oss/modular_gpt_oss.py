@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 from torch import nn
@@ -32,13 +33,11 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     repeat_kv,
 )
 from ..mixtral.modeling_mixtral import (
@@ -47,7 +46,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralForTokenClassification,
     MixtralModel,
 )
-from ..qwen2.modeling_qwen2 import Qwen2Attention
+from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2RotaryEmbedding
 from .configuration_gpt_oss import GptOssConfig
 
 
@@ -97,7 +96,9 @@ class GptOssExperts(nn.Module):
         if hidden_states.device.type == "cpu" or self.training:
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
-                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts)
+                expert_mask = torch.nn.functional.one_hot(
+                    router_indices, num_classes=num_experts + 1
+                )  # masking is also a class
                 expert_mask = expert_mask.permute(2, 1, 0)
                 # we sum on the top_k and on the sequence length to get which experts
                 # are hit this time around
@@ -105,6 +106,9 @@ class GptOssExperts(nn.Module):
             for expert_idx in expert_hit[:]:
                 # expert_idx only have 1 element, so we can use scale for fast indexing
                 expert_idx = expert_idx[0]
+                # skip masking index
+                if expert_idx == num_experts:
+                    continue
                 with torch.no_grad():
                     _, token_idx = torch.where(expert_mask[expert_idx])
                 current_state = hidden_states[token_idx]
@@ -160,12 +164,12 @@ class GptOssMLP(nn.Module):
         self.experts = GptOssExperts(config)
 
     def forward(self, hidden_states):
-        router_scores, router_indices = self.router(hidden_states)  # (num_experts, seq_len)
-        routed_out = self.experts(hidden_states, router_indices=router_indices, routing_weights=router_scores)
+        router_scores, router_indices = self.router(hidden_states)
+        routed_out = self.experts(hidden_states, router_indices, router_scores)
         return routed_out, router_scores
 
 
-class GptOssRotaryEmbedding(LlamaRotaryEmbedding):
+class GptOssRotaryEmbedding(Qwen2RotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
@@ -250,7 +254,6 @@ class GptOssAttention(Qwen2Attention):
         )
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -258,6 +261,7 @@ class GptOssAttention(Qwen2Attention):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -287,6 +291,7 @@ class GptOssAttention(Qwen2Attention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
+            position_ids=position_ids,
             s_aux=self.sinks,  # diff with Llama
             **kwargs,
         )
@@ -306,7 +311,6 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
         self.post_attention_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -315,7 +319,7 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -381,14 +385,14 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
 class GptOssModel(MixtralModel):
     _no_split_modules = ["GptOssDecoderLayer"]
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -432,11 +436,11 @@ class GptOssModel(MixtralModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)

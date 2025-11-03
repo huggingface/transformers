@@ -16,10 +16,13 @@
 
 from typing import Optional, Union
 
+import torch
+from torch import nn
+from torchvision.transforms.v2 import functional as F
+
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     get_max_height_width,
     group_images_by_shape,
     reorder_images,
@@ -36,25 +39,12 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
 )
-from .image_processing_oneformer import load_metadata, prepare_metadata
+from .image_processing_oneformer import OneFormerImageProcessorKwargs, load_metadata, prepare_metadata
 
 
 logger = logging.get_logger(__name__)
-
-if is_torch_available():
-    import torch
-    from torch import nn
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
 
 
 def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "torch.Tensor":
@@ -309,30 +299,6 @@ def get_oneformer_resize_output_image_size(
     return (new_long, new_short) if width <= height else (new_short, new_long)
 
 
-class OneFormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    repo_path (`str`, *optional*, defaults to `shi-labs/oneformer_demo`):
-        Path to a local directory or Hugging Face Hub repository containing model metadata.
-    class_info_file (`str`, *optional*):
-        Path to the JSON file within the repository that contains class metadata.
-    num_text (`int`, *optional*):
-        Number of text queries for the text encoder, used as task-guiding prompts.
-    num_labels (`int`, *optional*):
-        Number of semantic classes for segmentation, determining the output layer's size.
-    ignore_index (`int`, *optional*):
-        Label to ignore in segmentation maps, often used for padding.
-    do_reduce_labels (`bool`, *optional*, defaults to `False`):
-        Whether to decrement all label values by 1, mapping the background class to `ignore_index`.
-    """
-
-    repo_path: Optional[str]
-    class_info_file: Optional[str]
-    num_text: Optional[int]
-    num_labels: Optional[int]
-    ignore_index: Optional[int]
-    do_reduce_labels: Optional[bool]
-
-
 @auto_docstring
 class OneFormerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -353,10 +319,10 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
     class_info_file = None
     num_text = None
     num_labels = None
-    valid_kwargs = OneFormerFastImageProcessorKwargs
+    valid_kwargs = OneFormerImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_mask", "task_inputs"]
 
-    def __init__(self, **kwargs: Unpack[OneFormerFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[OneFormerImageProcessorKwargs]):
         super().__init__(**kwargs)
         if self.class_info_file:
             self.metadata = prepare_metadata(load_metadata(self.repo_path, self.class_info_file))
@@ -368,7 +334,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         task_inputs: Optional[list[str]] = None,
         segmentation_maps: Optional[ImageInput] = None,
         instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
-        **kwargs: Unpack[OneFormerFastImageProcessorKwargs],
+        **kwargs: Unpack[OneFormerImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         task_inputs (`list[str]`, *optional*):
@@ -395,7 +361,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[OneFormerFastImageProcessorKwargs],
+        **kwargs: Unpack[OneFormerImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -457,11 +423,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
             for shape, stacked_segmentation_maps in grouped_segmentation_maps.items():
                 if do_resize:
                     stacked_segmentation_maps = self.resize(
-                        stacked_segmentation_maps,
-                        size=size,
-                        interpolation=F.InterpolationMode.NEAREST_EXACT
-                        if is_torchvision_v2_available()
-                        else F.InterpolationMode.NEAREST,
+                        stacked_segmentation_maps, size=size, interpolation=F.InterpolationMode.NEAREST_EXACT
                     )
                 processed_segmentation_maps_grouped[shape] = stacked_segmentation_maps
             processed_segmentation_maps = reorder_images(
@@ -530,24 +492,9 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `BatchFeature`: Padded images and optional pixel masks.
         """
-        pad_size = get_max_height_width(images)
-
-        padded_images = []
-        pixel_masks = []
-
-        for image in images:
-            padded_image = self._pad_image_fast(
-                image=image,
-                output_size=pad_size,
-                constant_values=0,
-            )
-            padded_images.append(padded_image)
-
-            if return_pixel_mask:
-                input_height, input_width = image.shape[1], image.shape[2]
-                mask = torch.zeros(pad_size, dtype=torch.int64, device=image.device)
-                mask[:input_height, :input_width] = 1
-                pixel_masks.append(mask)
+        outputs = super().pad(images, return_mask=return_pixel_mask)
+        padded_images = outputs[0] if return_pixel_mask else outputs
+        pixel_masks = outputs[1] if return_pixel_mask else None
 
         if return_tensors:
             padded_images = torch.stack(padded_images, dim=0)

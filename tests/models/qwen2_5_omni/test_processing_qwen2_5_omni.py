@@ -213,6 +213,8 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+        processor.image_processor.size = {"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
+        processor.video_processor.size = {"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
         processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -457,7 +459,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {
                 "type": "video",
                 "url": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
                 ),
             }
         )
@@ -482,7 +484,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 14400)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5760)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -503,15 +505,19 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 432000)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 17280)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
         messages[0][0]["content"][-1] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
             ],
         }
         out_dict_with_video = processor.apply_chat_template(

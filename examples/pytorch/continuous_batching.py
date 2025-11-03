@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import contextlib
 import json
 import os
 import time
@@ -20,42 +21,46 @@ from typing import Optional
 
 import datasets
 import torch
+from torch.profiler import ProfilerActivity, profile
+from tqdm import tqdm
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
+from transformers.generation.continuous_batching.requests import logger
 
 
-MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
+# MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
+SLIDING_WINDOW = 0
+MODEL_ID = "google/gemma-2-2b-it" if SLIDING_WINDOW > 0 else "meta-llama/Meta-Llama-3-8B"
+FORCE_MAX_LENGTH = False  # should be False unless you are debugging sliding window features
+SKIP_SPECIAL_TOKENS = False
 
 
 def generate_simple(
-    attn_implementation: str, simple_batch_inputs: list[int], generation_config: GenerationConfig
-) -> list[str]:
-    attn_implementation = {
-        "sdpa_paged": "sdpa",
-        "eager_paged": "eager",
-        "flash_paged": "flash_attention_2",
-    }[attn_implementation]
+    attn_impl: str, simple_batch_inputs: list[int], generation_config: GenerationConfig
+) -> dict[str, str]:
+    attn_impl = {
+        "sdpa": "sdpa",
+        "eager": "eager",
+        "paged_attention": "eager",  # TODO: this does not work on AMD docker
+        "flash_paged": "flash_attention_2",  # TODO: this does not work on AMD docker
+        "kernels-community/flash-attn": "eager",
+    }[attn_impl]
 
-    model = (
-        AutoModelForCausalLM.from_pretrained(
-            MODEL_ID,
-            torch_dtype=torch.bfloat16,
-            attn_implementation=attn_implementation,
-        )
-        .cuda()
-        .eval()
-    )
+    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.bfloat16, attn_implementation=attn_impl)
+    model = model.cuda().eval()
+    if getattr(model.config, "sliding_window", None) is not None:
+        model.config.sliding_window = SLIDING_WINDOW
 
-    decoded_outputs = []
-    for input_ids in simple_batch_inputs:
+    decoded_outputs = {}
+    for input_ids in tqdm(simple_batch_inputs, desc="Generating outputs without CB"):
+        key = " ".join(map(str, input_ids))  # This will be used to identify the output after batched generation
         input_ids = torch.tensor([input_ids]).to("cuda")
-        attention_mask = torch.ones_like(input_ids)
-        outputs = model.generate(input_ids, attention_mask=attention_mask, generation_config=generation_config)
+        # attention_mask = torch.ones_like(input_ids)
+        outputs = model.generate(input_ids, generation_config=generation_config, use_model_defaults=False)
         generated_tokens = outputs[0][input_ids.shape[1] :]
-        decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-        decoded_outputs.append(decoded_output)
-
+        decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=SKIP_SPECIAL_TOKENS)
+        decoded_outputs[key] = decoded_output
     return decoded_outputs
 
 
@@ -97,7 +102,6 @@ def batch_generate(
     displayed_samples: int = 0,  # -1: no display, 0: display stats, >0: display inputs and some outputs
     output_file: Optional[str] = None,
     expected_outputs: Optional[list[str]] = None,
-    slice_inputs: bool = True,
 ) -> tuple[float, float]:
     # Actual batch generation
     if displayed_samples >= 0:
@@ -106,7 +110,6 @@ def batch_generate(
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
-        slice_inputs=slice_inputs,  # TODO: move this to the generation config
     )
     end_time_simple = time.time()
     if displayed_samples >= 0:
@@ -116,17 +119,21 @@ def batch_generate(
     token_count = 0
     data = []
     for i, request in enumerate(batch_outputs):
-        input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=True)
-        data.append({"input": input_text})
+        input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=SKIP_SPECIAL_TOKENS)
+        # The key is used to tie back to the output of unbatched generation
+        key = " ".join(map(str, batch_outputs[request].prompt_ids))
+        data.append({"input": input_text, "key": key})
 
         # Try to decode the output
         try:
-            output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=True)
+            output_text = tokenizer.decode(
+                batch_outputs[request].generated_tokens, skip_special_tokens=SKIP_SPECIAL_TOKENS
+            )
             token_count += len(batch_outputs[request].generated_tokens[1:])
-            data[-1]["output"] = output_text
+            data[-1]["cb_outputs"] = output_text
         except Exception as e:
             print(f"Decoding failed for request {request}: {e}")
-            data[-1]["output"] = "__ERROR__"
+            data[-1]["cb_outputs"] = "__ERROR__"
             continue
 
         # Display sample if asked
@@ -142,9 +149,11 @@ def batch_generate(
 
         # Compare with classic generate if asked
         if expected_outputs is not None:
-            matches = output_text == expected_outputs[i]
-            data[-1]["ref"] = expected_outputs[i]
+            expected_output = expected_outputs.pop(key)
+            matches = output_text == expected_output  # TODO: rework this for a better distance metric
+            data[-1]["without_cb"] = expected_output
             data[-1]["matches"] = matches
+            data[-1].pop("key")
             print(f"Request {i} matches" if matches else f"Request {i} does NOT match!")
 
     # Compute stats and maybe print them
@@ -178,20 +187,22 @@ if __name__ == "__main__":
     parser.add_argument("--num-blocks", "-n", type=int, default=None)
     parser.add_argument("--max-batch-tokens", "-b", type=int, default=None)
 
-    parser.add_argument(
-        "--attn", type=str, default="paged_attention|kernels-community/flash-attn", help="Attention implementation"
-    )
+    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn", help="Attention implementation")
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
-    parser.add_argument("--slice-inputs", action="store_true", default=False)
-    parser.add_argument("--use-cuda-graph", action="store_true", default=False)
-    parser.add_argument("--compile", action="store_true", default=False)
+    parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
+    parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
 
-    parser.add_argument("--samples", type=int, default=500)
+    parser.add_argument("--samples", type=int, default=500, help="Number of samples to generate")
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
+    parser.add_argument("--log-level", type=str, default="INFO")
     parser.add_argument("--output-file", type=str, default=None)
-    parser.add_argument("--compare", action="store_true", default=False)
-    parser.add_argument("--metrics", action="store_true", default=False)
+    parser.add_argument("--compare", action="store_true")
+    parser.add_argument("--metrics", action="store_true")
+    parser.add_argument("--profile", type=str, default=None)
     args = parser.parse_args()
+
+    # Set log level
+    logger.setLevel(args.log_level.upper())
 
     # If turned on, we setup metrics
     if args.metrics:
@@ -200,6 +211,15 @@ if __name__ == "__main__":
     # Set matmul precision if not none
     if args.matmul_precision != "none":
         torch.set_float32_matmul_precision(args.matmul_precision)
+    # Parse cuda graph argument
+    if args.cuda_graph is not None:
+        use_cuda_graph = {
+            "none": None,
+            "yes": True, "y": True, "true": True, "t": True, "1": True,
+            "no": False, "n": False, "false": False, "f": False, "0": False,
+        }[args.cuda_graph.lower()]  # fmt: skip
+    else:
+        use_cuda_graph = None
 
     # Prepare model
     model = AutoModelForCausalLM.from_pretrained(
@@ -208,28 +228,31 @@ if __name__ == "__main__":
         dtype=torch.bfloat16,
     )
     model = model.cuda().eval()
+    if getattr(model.config, "sliding_window", None) is not None:
+        print(f"Setting sliding window from {model.config.sliding_window} to {SLIDING_WINDOW}")
+        model.config.sliding_window = SLIDING_WINDOW
 
     # If turned on, we compile the model
     if args.compile:
         model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
-    if args.slice_inputs:
-        assert not args.compile, "Slicing inputs requires is not the model to be compiled"
-        assert not args.use_cuda_graph, "Slicing inputs is not compatible with cuda graphs"
 
     # Prepare tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, padding_side="left")
+
     dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-    dataset = dataset.select(range(args.samples))  # Use only 5 examples for the simple version
-    tokenized_datasets = dataset.map(lambda x: tokenizer(x["question"]), batched=True)
-    simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
+    dataset = dataset.select(range(args.samples))
+
+    simple_batch_inputs = [tokenizer(item["question"])["input_ids"] for item in dataset]
 
     # Prepare generation config
     generation_config = GenerationConfig(
         max_new_tokens=512,
-        use_cuda_graph=args.use_cuda_graph,
-        eos_token_id=tokenizer.eos_token_id,
+        use_cuda_graph=use_cuda_graph,
+        eos_token_id=tokenizer.pad_token_id if FORCE_MAX_LENGTH else tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
-        do_sample=False,
+        do_sample=not args.compare,
+        temperature=0.8,
+        top_p=0.9,
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
     )
@@ -245,27 +268,34 @@ if __name__ == "__main__":
             f"runs/cb/{args.num_blocks}_{args.max_batch_tokens}_{attn}_{args.matmul_precision}_{args.samples}.json"
         )
 
-    # Run warmup batch generation
+    # Run warmup batch generation # TODO: understand why warmup incurs a large overhead during cache creation
     batch_generate(
         model,
         simple_batch_inputs[: min(5, args.samples)],
         generation_config,
         tokenizer,
         displayed_samples=-1,
-        slice_inputs=args.slice_inputs,
     )
 
-    # Run batch generation
-    gen_time, tok_per_sec = batch_generate(
-        model,
-        simple_batch_inputs,
-        generation_config,
-        tokenizer,
-        displayed_samples=args.displayed,
-        output_file=args.output_file,
-        expected_outputs=expected_outputs,
-        slice_inputs=args.slice_inputs,
-    )
+    if args.profile is not None:
+        cm = profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True)
+    else:
+        cm = contextlib.nullcontext()
+    with cm as prof:
+        # Run batch generation
+        gen_time, tok_per_sec = batch_generate(
+            model,
+            simple_batch_inputs,
+            generation_config,
+            tokenizer,
+            displayed_samples=args.displayed,
+            output_file=args.output_file,
+            expected_outputs=expected_outputs,
+        )
+    if args.profile is not None:
+        filename = args.profile if args.profile.endswith(".json") else args.profile + ".json"
+        prof.export_chrome_trace(filename)
 
 # Example usage:
+# python examples/pytorch/continuous_batching.py --attn sdpa_paged -mp none --samples 3 --compare
 # python examples/pytorch/continuous_batching.py --num-blocks 369 --max-batch-tokens 23 --attn sdpa_paged -mp none --samples 1 --displayed 0 --output-file sliced.json

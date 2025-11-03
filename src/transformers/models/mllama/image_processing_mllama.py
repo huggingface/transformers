@@ -38,15 +38,24 @@ from ...image_utils import (
     to_numpy_array,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging
 
 
 if is_vision_available():
-    import PIL
     from PIL import Image
 
 
 logger = logging.get_logger(__name__)
+
+
+class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    max_image_tiles (`int`, *optional*):
+        The maximum number of tiles allowed.
+    """
+
+    max_image_tiles: int
 
 
 @lru_cache(maxsize=10)
@@ -327,7 +336,7 @@ def build_aspect_ratio_mask(aspect_ratios: list[list[tuple[int, int]]], max_imag
             The mask contains 1s for valid tiles and 0s for padding.
     """
     batch_size = len(aspect_ratios)
-    max_num_images = max([len(row) for row in aspect_ratios])
+    max_num_images = max(len(row) for row in aspect_ratios)
 
     aspect_ratio_mask = np.zeros((batch_size, max_num_images, max_image_tiles), dtype=np.int64)
 
@@ -374,7 +383,7 @@ def pack_images(
 
     # Determine output shape
     batch_size = len(batch_images)
-    max_num_images = max([len(images) for images in batch_images])
+    max_num_images = max(len(images) for images in batch_images)
     shapes = [image.shape for images in batch_images for image in images]
     _, channels, tile_height, tile_width = shapes[0]
 
@@ -395,30 +404,6 @@ def pack_images(
         all_num_tiles.append(num_sample_tiles)
 
     return stacked_images, all_num_tiles
-
-
-def pack_aspect_ratios(aspect_ratios: list[list[tuple[int, int]]], pad_value: int = 1) -> np.ndarray:
-    """
-    Stack a list of aspect ratios into a numpy array.
-
-    Args:
-        aspect_ratios (`list[list[tuple[int, int]]]`):
-            A list of aspect ratios.
-        pad_value (`int`, *optional*, defaults to 1):
-            The value to pad the aspect ratios with.
-
-    Returns:
-        `np.ndarray`:
-            The aspect ratios stacked into a numpy array with shape (batch_size, max_num_images, 2).
-    """
-    batch_size = len(aspect_ratios)
-    max_num_images = max([len(row) for row in aspect_ratios])
-
-    aspect_ratios_stacked = np.full((batch_size, max_num_images, 2), pad_value, dtype=np.int64)
-    for i, row in enumerate(aspect_ratios):
-        if len(row) > 0:
-            aspect_ratios_stacked[i, : len(row)] = np.array(row)
-    return aspect_ratios_stacked
 
 
 def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
@@ -442,7 +427,7 @@ def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max
     """
 
     batch_size = len(aspect_ratios)
-    max_num_images = max([len(row) for row in aspect_ratios])
+    max_num_images = max(len(row) for row in aspect_ratios)
     supported_aspect_ratios = get_all_supported_aspect_ratios(max_image_tiles)
 
     aspect_ratios_ids = np.zeros((batch_size, max_num_images), dtype=np.int64)
@@ -501,7 +486,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
         image (Image):
             The image to convert.
     """
-    if not isinstance(image, PIL.Image.Image):
+    if not isinstance(image, Image.Image):
         return image
 
     # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
@@ -567,6 +552,7 @@ class MllamaImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids", "aspect_ratio_mask"]
+    valid_kwargs = MllamaImageProcessorKwargs
 
     def __init__(
         self,
@@ -655,10 +641,8 @@ class MllamaImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
 
         Returns:
             `BatchFeature` of the following structure:
@@ -709,7 +693,7 @@ class MllamaImageProcessor(BaseImageProcessor):
             # iterate over images in a batch sample
             for image in images:
                 # default PIL images to channels_last
-                if input_data_format is None and isinstance(image, PIL.Image.Image):
+                if input_data_format is None and isinstance(image, Image.Image):
                     input_data_format = ChannelDimension.LAST
 
                 # convert to numpy array for processing

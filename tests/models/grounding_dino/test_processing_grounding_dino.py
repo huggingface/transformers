@@ -17,7 +17,6 @@ import os
 import shutil
 import tempfile
 import unittest
-from typing import Optional
 
 import pytest
 
@@ -79,7 +78,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.embed_dim = 5
         cls.seq_length = 5
 
-    def prepare_text_inputs(self, batch_size: Optional[int] = None, **kwargs):
+    def prepare_text_inputs(self, batch_size: int | None = None, **kwargs):
         labels = ["a cat", "remote control"]
         labels_longer = ["a person", "a car", "a dog", "a cat"]
 
@@ -236,8 +235,8 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(
-            list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values", "pixel_mask"]
+        self.assertSetEqual(
+            set(inputs.keys()), {"input_ids", "token_type_ids", "attention_mask", "pixel_values", "pixel_mask"}
         )
 
         # test if it raises when no input is passed

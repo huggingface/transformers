@@ -11,6 +11,19 @@ logger = logging.get_logger(__name__)
 _use_top_left_mask = flash_attn_supports_top_left_mask()
 
 
+def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtype:
+    """If the query is in float32, return a target dtype compatible with flash attention. Return None otherwise."""
+    if query.dtype == torch.float32:
+        if torch.is_autocast_enabled():
+            return torch.get_autocast_gpu_dtype()
+        # Handle the case where the model is quantized
+        elif hasattr(module.config, "_pre_quantization_dtype"):
+            return module.config._pre_quantization_dtype
+        else:
+            return next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
+    return None
+
+
 def flash_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -21,11 +34,12 @@ def flash_attention_forward(
     scaling: Optional[float] = None,
     sliding_window: Optional[int] = None,
     softcap: Optional[float] = None,
+    is_causal: Optional[bool] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
-    if kwargs.get("output_attentions", False) or kwargs.get("head_mask") is not None:
+    if kwargs.get("output_attentions", False):
         logger.warning_once(
-            "`flash_attention_2` does not support `output_attentions=True` or `head_mask`."
+            "`flash_attention_2` does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
         )
 
@@ -48,20 +62,10 @@ def flash_attention_forward(
     # cast them back in the correct dtype just to be sure everything works as expected.
     # This might slowdown training & inference so it is recommended to not cast the LayerNorms
     # in fp32. (usually our RMSNorm modules handle it correctly)
-    target_dtype = None
-    if query.dtype == torch.float32:
-        if torch.is_autocast_enabled():
-            target_dtype = torch.get_autocast_gpu_dtype()
-        # Handle the case where the model is quantized
-        elif hasattr(module.config, "_pre_quantization_dtype"):
-            target_dtype = module.config._pre_quantization_dtype
-        else:
-            target_dtype = next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
+    target_dtype = get_target_dtype(query, module)
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
-    is_causal = kwargs.pop("is_causal", None)
-    if is_causal is None:
-        is_causal = module.is_causal
+    is_causal = is_causal if is_causal is not None else module.is_causal
 
     attn_output = _flash_attention_forward(
         query,
