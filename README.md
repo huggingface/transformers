@@ -330,7 +330,7 @@ We now have a [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) you 
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6"
     pages = "38--45"
 }
-```
+``` 
