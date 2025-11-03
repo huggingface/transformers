@@ -207,7 +207,6 @@ OBJECTS_TO_IGNORE = {
     "FlavaTextModel",
     "FocalNetModel",
     "FunnelTokenizerFast",
-    "FuyuImageProcessorFast",
     "GPTBigCodeConfig",
     "GPTJConfig",
     "GPTNeoXConfig",
