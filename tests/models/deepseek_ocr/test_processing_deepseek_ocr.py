@@ -145,3 +145,26 @@ class DeepseekOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor(text=text, images=image, return_tensors="pt")
 
         self.assertIn("does not match", str(context.exception))
+
+    @require_torch
+    def test_unstructured_kwargs_batched(self):
+        processor_components = self.prepare_components()
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
+        image_input = self.prepare_image_inputs(batch_size=2)
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            do_rescale=True,
+            rescale_factor=-1.0,
+            padding="longest",
+            max_length=76,
+        )
+
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertTrue(len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1]))
+        self.assertEqual(len(inputs[self.text_input_name][0]), 76)
