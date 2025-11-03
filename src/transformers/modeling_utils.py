@@ -4532,7 +4532,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Remove tied weights keys and etc
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
-            missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model.config
+            missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model
         )
         logger.warning(f"Loading the checkpoint files into the model took {end - start}")
         log_state_dict_report(
@@ -4805,7 +4805,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.initialize_weights()
 
     def _adjust_missing_and_unexpected_keys(
-        self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool, config
+        self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool, model
     ) -> tuple[set[str], set[str]]:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors.
@@ -4815,9 +4815,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # `_keys_to_ignore_on_load_unexpected` as it touches many models -> we add it manually to the existing patterns
         has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer, _ in self.named_buffers())
         additional_unexpected_patterns = [r"rotary_emb\.inv_freq"] if has_inv_freq_buffers else []
-        if isinstance(self._tied_weights_keys, list) and config.tie_word_embeddings:
-            for k in self._tied_weights_keys:
-                missing_keys.discard(k)
+        tied_param_names = "|".join(model._tied_weights_keys or [])
+        if model.config.tie_word_embeddings:
+            for k in missing_keys.copy():
+                if re.match(tied_param_names, k):
+                    missing_keys.discard(k)
 
         missing_patterns = self._keys_to_ignore_on_load_missing or []
         unexpected_patterns = (self._keys_to_ignore_on_load_unexpected or []) + additional_unexpected_patterns
