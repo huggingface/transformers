@@ -253,6 +253,7 @@ class HiggsAudioConfig(PretrainedConfig):
         audio_out_token_idx=128016,
         audio_out_bos_token_id=128013,
         audio_eos_token_id=128012,
+        audio_eos_start_delay_token_id=128014,
         # Llama specific
         vocab_size=32000,
         hidden_size=4096,
@@ -333,6 +334,7 @@ class HiggsAudioConfig(PretrainedConfig):
         self.use_audio_out_embed_projector = use_audio_out_embed_projector
         self.audio_num_codebooks = audio_num_codebooks
         self.audio_codebook_size = audio_codebook_size
+        self.audio_eos_start_delay_token_id = audio_eos_start_delay_token_id
         self.audio_bos_token = audio_bos_token
         self.audio_eos_token = audio_eos_token
         self.audio_out_bos_token = audio_out_bos_token

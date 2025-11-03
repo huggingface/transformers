@@ -432,13 +432,15 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
 
         audio_in_token_mask = input_ids == self.config.audio_in_token_idx
         audio_out_token_mask = input_ids == self.config.audio_out_token_idx
-        audio_token_mask = audio_in_token_mask | audio_out_token_mask
+        audio_eos_delay_pattern_mask = input_ids == self.config.audio_eos_start_delay_token_id
+        audio_token_mask = audio_in_token_mask | audio_out_token_mask | audio_eos_delay_pattern_mask
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
             if audio_input_ids is not None:
                 audio_inputs_embeds = self.embed_audio_tokens(audio_input_ids[audio_input_ids_mask])
+                # TODO: @eustlb, in-place operation on leaf tensor? check if training compatible
                 inputs_embeds[audio_token_mask] = audio_inputs_embeds.to(inputs_embeds.device)
 
         if use_cache and past_key_values is None:

@@ -99,7 +99,7 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                 eos_token_id=self.config.audio_stream_eos_id,
                 max_generation_len=kwargs.get("generation_config").max_length,
                 device=kwargs.get("device"),
-                audio_eos_token_id=self.config.audio_eos_token_id,
+                audio_eos_token_id=self.config.audio_eos_start_delay_token_id,
             )
         )
 
@@ -215,33 +215,27 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             # BELOW DIFFERENCES WITH GenerationMixin._sample()
             next_token_logits = next_token_logits.reshape(-1, self.config.num_codebooks, self.config.codebook_size)
             next_tokens = next_tokens.reshape(batch_size, self.config.num_codebooks)
-            ras_win_len = 7
-            ras_win_max_num_repeat = 2
-            if ras_win_len is not None:
-                # check if there are repetitions over a window of tokens.
-                # TODO: add detailed explanation
-                # Find number of consecutive audio_out_token_idx for each batch element starting from the end
-                flipped_ids = torch.flip(input_ids, dims=[1])
-                is_audio = flipped_ids == self.config.audio_out_token_idx
-                consecutive_counts = torch.argmax((~is_audio).int(), dim=1)
-                consecutive_counts = torch.where(torch.all(is_audio, dim=1), input_ids.shape[1], consecutive_counts)
-                # NOTE: consecutive_counts should be the same across batch idx
-                cut_idx = min(consecutive_counts.max(), ras_win_len)
-                if cut_idx > 0:
-                    generated_audio_inputs_ids = model_kwargs["audio_input_ids"][:, -cut_idx:, :]
-                    # Create mask to exclude counting when equality is 1024, audio_stream_eos_id, or audio_stream_bos_id
-                    equality_mask = generated_audio_inputs_ids[:, -ras_win_len:, :] == next_tokens[:, None, :]
-                    not_excluded_mask = (generated_audio_inputs_ids[:, -ras_win_len:, :] != 1024) & (
-                        generated_audio_inputs_ids[:, -ras_win_len:, :] != 1025
-                    )
-                    rep_num = (equality_mask & not_excluded_mask).sum(dim=1)
 
-                    row_indices = rep_num >= ras_win_max_num_repeat
-                    if row_indices.any():
-                        resampled_next_tokens = (
-                            next_token_logits[row_indices].softmax(dim=-1).multinomial(1, replacement=True).squeeze(1)
-                        )
-                        next_tokens[row_indices] = resampled_next_tokens
+            ras_win_len = generation_config.ras_win_len if hasattr(generation_config, "ras_win_len") else None
+            ras_win_max_num_repeat = generation_config.ras_win_max_num_repeat if hasattr(generation_config, "ras_win_max_num_repeat") else None
+            if ras_win_len is not None and ras_win_max_num_repeat is not None:
+                # check if there are repetitions over a window of tokens.
+                generated_audio_inputs_ids = model_kwargs["audio_input_ids"][:, -ras_win_len:, :]
+                repetition_mask = generated_audio_inputs_ids[:, -ras_win_len:, :] == next_tokens.unsqueeze(1)
+
+                # avoid counting the repetition of the audio stream EOS and BOS tokens
+                not_excluded_mask = (
+                    generated_audio_inputs_ids[:, -ras_win_len:, :] != self.config.audio_stream_bos_id
+                ) & (generated_audio_inputs_ids[:, -ras_win_len:, :] != self.config.audio_stream_eos_id)
+                repetition_mask = repetition_mask & not_excluded_mask
+                rep_num = repetition_mask.sum(dim=1)
+
+                # if we saw repeated tokens in the most recent window of tokens, resample without temperature.
+                replacement_mask = rep_num >= ras_win_max_num_repeat
+                replacement_tokens = (
+                    next_token_logits[replacement_mask].softmax(dim=-1).multinomial(1, replacement=True).view(-1)
+                )
+                next_tokens[replacement_mask] = replacement_tokens
 
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:
@@ -249,31 +243,28 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                     1 - unfinished_sequences[:, None]
                 )
 
-            # Check which batch elements have audio stream EOS tokens
             has_audio_stream_eos = (next_tokens == self.config.audio_stream_eos_id).any(dim=-1)
-            # Check which batch elements have all audio stream EOS tokens
             has_all_audio_stream_eos = (next_tokens == self.config.audio_stream_eos_id).all(dim=-1)
-
             next_tokens = next_tokens[:, None, :]
+
             if model_kwargs.get("audio_input_ids") is not None:
                 model_kwargs["audio_input_ids"] = torch.cat([model_kwargs["audio_input_ids"], next_tokens], dim=1)
             else:
                 model_kwargs["audio_input_ids"] = next_tokens
 
             next_audio_input_ids_mask = torch.ones((batch_size, 1), dtype=torch.bool, device=next_tokens.device)
-            next_audio_input_ids_mask[has_audio_stream_eos] = 0
-
-            audio_input_ids_mask = model_kwargs.get("audio_input_ids_mask")
-            if audio_input_ids_mask is not None:
-                audio_input_ids_mask = torch.cat([audio_input_ids_mask, next_audio_input_ids_mask], dim=1)
+            next_audio_input_ids_mask[has_all_audio_stream_eos] = 0
+            if model_kwargs.get("audio_input_ids_mask") is not None:
+                model_kwargs["audio_input_ids_mask"] = torch.cat(
+                    [model_kwargs["audio_input_ids_mask"], next_audio_input_ids_mask], dim=1
+                )
             else:
-                audio_input_ids_mask = next_audio_input_ids_mask
+                model_kwargs["audio_input_ids_mask"] = next_audio_input_ids_mask
 
-            model_kwargs["audio_input_ids_mask"] = audio_input_ids_mask
-
-            # For batches with audio stream EOS, set next token to audio_eos_token_id
+            # generation of a stream eos audio token will start delay pattern masking in the logits processor
+            # for that, we need to set next text token to audio_eos_start_delay_token_id
             next_tokens_flat = input_ids.new_ones(batch_size) * self.config.audio_out_token_idx
-            next_tokens_flat[has_audio_stream_eos] = self.config.audio_eos_token_id
+            next_tokens_flat[has_audio_stream_eos] = self.config.audio_eos_start_delay_token_id
             next_tokens_flat[has_all_audio_stream_eos] = self.config.eos_token_id
             next_tokens = next_tokens_flat
             # ============================
