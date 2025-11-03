@@ -88,6 +88,7 @@ class DynamoConfig(ExportConfigMixin):
 
     export_format: ExportFormat = ExportFormat.DYNAMO
     sample_inputs: dict[str, Any] | None = None
+    dynamic: bool | None = None
 
     strict: bool = False
     dynamic_shapes: dict[str, Any] | None = None
@@ -107,6 +108,7 @@ class OnnxConfig(ExportConfigMixin):
 
     export_format: ExportFormat = ExportFormat.ONNX
     sample_inputs: dict[str, Any] | None = None
+    dynamic: bool | None = None
 
     f: str | PathLike | None = None
     dynamic_shapes: dict[str, Any] | None = None

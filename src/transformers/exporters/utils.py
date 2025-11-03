@@ -15,7 +15,7 @@
 from collections.abc import Callable
 from contextlib import contextmanager
 
-from ..cache_utils import DynamicCache, DynamicLayer, DynamicSlidingWindowLayer
+from ..cache_utils import Cache, DynamicCache, DynamicLayer, DynamicSlidingWindowLayer
 from ..masking_utils import (
     ALL_MASK_ATTENTION_FUNCTIONS,
     _ignore_causal_mask_sdpa,
@@ -151,3 +151,29 @@ def patch_masks_for_export():
     finally:
         ALL_MASK_ATTENTION_FUNCTIONS["sdpa"] = sdpa_mask
         ALL_MASK_ATTENTION_FUNCTIONS["eager"] = eager_mask
+
+
+def _get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str, dict[int, torch.export.Dim]]:
+    """
+    Utility function to automatically generate dynamic shapes for model inputs.
+
+    Args:
+        inputs (`dict[str, torch.Tensor | Cache]`):
+            The inputs with which the model will be exported.
+    Returns:
+        `dict[str, dict[int, torch.export.Dim]]`: A dictionary mapping input names to their dynamic shapes.
+    """
+    from torch.export import Dim
+
+    dynamic_shapes: dict[str, dict[int, torch.export.Dim]] = {}
+
+    for name, input in inputs.items():
+        if isinstance(input, DynamicCache):
+            dynamic_shapes[name] = [
+                [dict.fromkeys(range(len(layer.keys.shape)), Dim.AUTO) for layer in input.layers],
+                [dict.fromkeys(range(len(layer.values.shape)), Dim.AUTO) for layer in input.layers],
+            ]
+        else:
+            dynamic_shapes[name] = dict.fromkeys(range(len(input.shape)), Dim.AUTO)
+
+    return dynamic_shapes

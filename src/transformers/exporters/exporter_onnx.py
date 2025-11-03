@@ -5,7 +5,7 @@ from ..utils import logging
 from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 from .base import HfExporter
-from .utils import patch_masks_for_export, register_dynamic_cache_for_export
+from .utils import _get_auto_dynamic_shapes, patch_masks_for_export, register_dynamic_cache_for_export
 
 
 if is_torch_available():
@@ -29,7 +29,6 @@ class OnnxExporter(HfExporter):
             raise ImportError("OnnxExporter requires torch>=2.9.0 for Dynamo based ONNX export.")
 
     def export(self, model: "PreTrainedModel"):
-        from torch.export import Dim
         from torch.onnx import ONNXProgram
 
         if self.export_config.sample_inputs is None:
@@ -46,15 +45,12 @@ class OnnxExporter(HfExporter):
 
         if isinstance(model, GenerationMixin) and model.config.use_cache:
             register_dynamic_cache_for_export()
-
-            # NOTE: for now i'm creating it here reduces to reduce user burden
+            # NOTE: for now i'm creating it here to reduce user burden
             kwargs["past_key_values"] = model(**kwargs).past_key_values
 
-            if dynamic_shapes is not None:
-                dynamic_shapes["past_key_values"] = [
-                    [{0: Dim.DYNAMIC, 2: Dim.DYNAMIC} for _ in range(len(kwargs["past_key_values"].layers))],
-                    [{0: Dim.DYNAMIC, 2: Dim.DYNAMIC} for _ in range(len(kwargs["past_key_values"].layers))],
-                ]
+        if self.export_config.dynamic and dynamic_shapes is None:
+            # assigns AUTO to all axes to let torch.onnx decide
+            dynamic_shapes = _get_auto_dynamic_shapes(kwargs)
 
         with patch_masks_for_export():
             onnx_program: ONNXProgram = torch.onnx.export(
