@@ -859,7 +859,7 @@ def check_model_inputs(tie_last_hidden_states=True):
 
             # Check attention implementation is properly set for capturing attention outputs
             if recordable_keys.get("output_attentions", False):
-                supported_attn = ["eager", "eager_paged", "flex_attention"]
+                supported_attn = ["eager", "eager_paged", "flex_attention", "sdpa"]
                 config_attn = getattr(self.config, "_attn_implementation", None)
                 sub_configs = [getattr(self.config, key, None) for key in self.config.sub_configs]
                 sub_configs_attn = [
