@@ -87,11 +87,17 @@ class BenchmarkConfig:
         if is_fa:
             logger.warning("Flash attention does not support compile mode. Turning off compile mode.")
             self.compile_mode = None
-        if self.continuous_batching and self.attn_implementation == "flex_attention":
-            logger.error(
-                "disabling continuous batching because of invalid configuration: flex attention is not supported"
-            )
-            self.continuous_batching = False
+        if self.continuous_batching:
+            if self.attn_implementation == "flex_attention":
+                logger.error(
+                    "disabling continuous batching because of invalid configuration: flex attention is not supported"
+                )
+                self.continuous_batching = False
+            elif self.attn_implementation == "sdpa" and self.sdpa_backend is not None:
+                logger.warning(
+                    "when continuous batching is enabled, sdpa_backend must be None because of the attention mask, setting it to None"
+                )
+                self.sdpa_backend = None
 
     @property
     def hash(self) -> str:
