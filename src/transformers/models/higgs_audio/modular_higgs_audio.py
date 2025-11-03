@@ -31,13 +31,13 @@ from ...utils import (
     logging,
 )
 from ..csm.modeling_csm import CsmBackboneModelEmbeddings
+from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaMLP,
     LlamaModel,
     LlamaRMSNorm,
 )
-from .configuration_higgs_audio import HiggsAudioConfig
 from .generation_higgs_audio import HiggsAudioGenerationMixin
 
 
@@ -48,15 +48,87 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
+class HiggsAudioConfig(LlamaConfig):
+    def __init__(
+        self,
+        vocab_size=128256,
+        hidden_size=3072,
+        intermediate_size=8192,
+        num_hidden_layers=28,
+        num_attention_heads=24,
+        num_key_value_heads=8,
+        hidden_act="silu",
+        max_position_embeddings=2048,
+        initializer_range=0.02,
+        rms_norm_eps=1e-05,
+        use_cache=True,
+        pad_token_id=128001,
+        bos_token_id=1,
+        eos_token_id=128009,
+        pretraining_tp=1,
+        tie_word_embeddings=False,
+        rope_theta=500000.0,
+        rope_scaling={
+            "factor": 32.0,
+            "high_freq_factor": 4.0,
+            "low_freq_factor": 1.0,
+            "original_max_position_embeddings": 8192,
+            "rope_type": "llama3",
+        },
+        attention_bias=False,
+        attention_dropout=0.0,
+        mlp_bias=False,
+        head_dim=128,
+        num_codebooks=8,
+        codebook_size=1024,
+        audio_token_id=128016,
+        audio_bos_token_id=128013,
+        audio_delay_token_id=128014,
+        audio_stream_bos_id=1024,
+        audio_stream_eos_id=1025,
+        **kwargs,
+    ):
+        super().__init__(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=num_key_value_heads,
+            hidden_act=hidden_act,
+            max_position_embeddings=max_position_embeddings,
+            initializer_range=initializer_range,
+            rms_norm_eps=rms_norm_eps,
+            use_cache=use_cache,
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pretraining_tp=pretraining_tp,
+            tie_word_embeddings=tie_word_embeddings,
+            rope_theta=rope_theta,
+            rope_scaling=rope_scaling,
+            attention_bias=attention_bias,
+            attention_dropout=attention_dropout,
+            mlp_bias=mlp_bias,
+            head_dim=head_dim,
+            **kwargs,
+        )
+        self.num_codebooks = num_codebooks
+        self.codebook_size = codebook_size
+        self.audio_token_id = audio_token_id
+        self.audio_bos_token_id = audio_bos_token_id
+        self.audio_delay_token_id = audio_delay_token_id
+        self.audio_stream_bos_id = audio_stream_bos_id
+        self.audio_stream_eos_id = audio_stream_eos_id
+
+
 class HiggsAudioDecoderProjector(nn.Module):
     """Projection layers that map hidden states from the LLM component to audio / text logits."""
 
     def __init__(self, config: HiggsAudioConfig):
         super().__init__()
         self.text_lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.audio_lm_head = nn.Linear(
-            config.hidden_size, config.audio_num_codebooks * (config.audio_codebook_size + 2), bias=False
-        )
+        self.audio_lm_head = nn.Linear(config.hidden_size, config.num_codebooks * config.codebook_size, bias=False)
 
     def forward(
         self,
@@ -202,11 +274,7 @@ class HiggsAudioModel(LlamaModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        audio_in_token_mask = input_ids == self.config.audio_in_token_idx
-        audio_out_token_mask = input_ids == self.config.audio_out_token_idx
-        audio_eos_delay_pattern_mask = input_ids == self.config.audio_eos_start_delay_token_id
-        audio_token_mask = audio_in_token_mask | audio_out_token_mask | audio_eos_delay_pattern_mask
-
+        audio_token_mask = (input_ids == self.config.audio_token_id) | (input_ids == self.config.audio_delay_token_id)
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
@@ -272,7 +340,7 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         self.model = HiggsAudioModel(config)
         self.audio_decoder_proj = HiggsAudioDecoderProjector(config)
         self.audio_codebook_weights = (
-            torch.ones(config.audio_num_codebooks) / config.audio_num_codebooks
+            torch.ones(config.num_codebooks) / config.num_codebooks
         )  # default to equal weights
 
         self.post_init()
@@ -348,4 +416,4 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         )
 
 
-__all__ = ["HiggsAudioForConditionalGeneration", "HiggsAudioPreTrainedModel", "HiggsAudioModel"]
+__all__ = ["HiggsAudioForConditionalGeneration", "HiggsAudioPreTrainedModel", "HiggsAudioModel", "HiggsAudioConfig"]

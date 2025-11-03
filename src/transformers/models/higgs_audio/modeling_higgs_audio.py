@@ -45,9 +45,7 @@ class HiggsAudioDecoderProjector(nn.Module):
     def __init__(self, config: HiggsAudioConfig):
         super().__init__()
         self.text_lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.audio_lm_head = nn.Linear(
-            config.hidden_size, config.audio_num_codebooks * (config.audio_codebook_size + 2), bias=False
-        )
+        self.audio_lm_head = nn.Linear(config.hidden_size, config.num_codebooks * config.codebook_size, bias=False)
 
     def forward(
         self,
@@ -430,11 +428,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        audio_in_token_mask = input_ids == self.config.audio_in_token_idx
-        audio_out_token_mask = input_ids == self.config.audio_out_token_idx
-        audio_eos_delay_pattern_mask = input_ids == self.config.audio_eos_start_delay_token_id
-        audio_token_mask = audio_in_token_mask | audio_out_token_mask | audio_eos_delay_pattern_mask
-
+        audio_token_mask = (input_ids == self.config.audio_token_id) | (input_ids == self.config.audio_delay_token_id)
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
@@ -500,7 +494,7 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         self.model = HiggsAudioModel(config)
         self.audio_decoder_proj = HiggsAudioDecoderProjector(config)
         self.audio_codebook_weights = (
-            torch.ones(config.audio_num_codebooks) / config.audio_num_codebooks
+            torch.ones(config.num_codebooks) / config.num_codebooks
         )  # default to equal weights
 
         self.post_init()

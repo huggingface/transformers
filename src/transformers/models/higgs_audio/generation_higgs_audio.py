@@ -54,13 +54,13 @@ class HiggsAudioGenerationOutput(GenerateDecoderOnlyOutput):
             at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
             each generated token).
             If the generated token is a text token, the tensor will have shape `(batch_size, config.vocab_size)`.
-            If the generated token is an audio token, the tensor will have shape `(config.audio_num_codebooks, self.model.audio_codebook_size)`
+            If the generated token is an audio token, the tensor will have shape `(config.num_codebooks, self.model.codebook_size)`
         logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
             Unprocessed prediction scores of the language modeling head or the audio head (scores for each vocabulary token before SoftMax)
             at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
             each generated token).
             If the generated token is a text token, the tensor will have shape `(batch_size, config.vocab_size)`.
-            If the generated token is an audio token, the tensor will have shape `(config.audio_num_codebooks, self.model.audio_codebook_size)`
+            If the generated token is an audio token, the tensor will have shape `(config.num_codebooks, self.model.codebook_size)`
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
@@ -86,7 +86,7 @@ class HiggsAudioGenerationMixin(GenerationMixin):
 
         logits_processor.append(
             HiggsAudioSuppressTokensAtBeginLogitsProcessor(
-                begin_token_id=self.config.audio_out_bos_token_id,
+                begin_token_id=self.config.audio_bos_token_id,
                 num_codebooks=self.config.num_codebooks,
                 codebook_size=self.config.codebook_size,
                 audio_stream_bos_id=self.config.audio_stream_bos_id,
@@ -217,7 +217,11 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             next_tokens = next_tokens.reshape(batch_size, self.config.num_codebooks)
 
             ras_win_len = generation_config.ras_win_len if hasattr(generation_config, "ras_win_len") else None
-            ras_win_max_num_repeat = generation_config.ras_win_max_num_repeat if hasattr(generation_config, "ras_win_max_num_repeat") else None
+            ras_win_max_num_repeat = (
+                generation_config.ras_win_max_num_repeat
+                if hasattr(generation_config, "ras_win_max_num_repeat")
+                else None
+            )
             if ras_win_len is not None and ras_win_max_num_repeat is not None:
                 # check if there are repetitions over a window of tokens.
                 generated_audio_inputs_ids = model_kwargs["audio_input_ids"][:, -ras_win_len:, :]
@@ -263,8 +267,8 @@ class HiggsAudioGenerationMixin(GenerationMixin):
 
             # generation of a stream eos audio token will start delay pattern masking in the logits processor
             # for that, we need to set next text token to audio_eos_start_delay_token_id
-            next_tokens_flat = input_ids.new_ones(batch_size) * self.config.audio_out_token_idx
-            next_tokens_flat[has_audio_stream_eos] = self.config.audio_eos_start_delay_token_id
+            next_tokens_flat = input_ids.new_ones(batch_size) * self.config.audio_token_id
+            next_tokens_flat[has_audio_stream_eos] = self.config.audio_delay_token_id
             next_tokens_flat[has_all_audio_stream_eos] = self.config.eos_token_id
             next_tokens = next_tokens_flat
             # ============================
