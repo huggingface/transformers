@@ -12,11 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import PushToHubMixin, is_kernels_available, is_torch_available
-
-
-if is_kernels_available():
-    from kernels import LayerRepository, Mode
+from ..utils import PushToHubMixin, is_torch_available
 
 if is_torch_available():
     import torch
@@ -58,6 +54,9 @@ def infer_device(model):
 
 
 def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
+
+    from kernels import LayerRepository
+
     if device not in ["cuda", "rocm", "xpu"]:
         raise ValueError(f"Only cuda, rocm, and xpu devices supported, got: {device}")
     repo_layer_name = repo_name.split(":")[1]
@@ -76,12 +75,15 @@ class KernelConfig(PushToHubMixin):
     """
     Kernel configuration class. This class is used to configure the kernel mapping for a model.
     """
-
     def __init__(self, kernel_mapping={}):
+
         self.kernel_mapping = kernel_mapping
         self.registered_layer_names = {}
 
     def update_kernel(self, repo_id, registered_name, layer_name, device, mode, revision=None):
+
+        from kernels import LayerRepository
+
         self.kernel_mapping[registered_name] = {
             device: {
                 mode: LayerRepository(
@@ -204,6 +206,8 @@ class KernelConfig(PushToHubMixin):
         The device is inferred from the model's parameters if not provided.
         The Mode is inferred from the model's training state.
         """
+        from kernels import Mode
+
         compatible_mapping = {}
         for layer_name, kernel in self.kernel_mapping.items():
             # Infer Mode: use Mode.TRAINING if model is training, else use Mode.INFERENCE
