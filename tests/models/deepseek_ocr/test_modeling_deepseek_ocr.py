@@ -104,7 +104,11 @@ class DeepseekOcrModelTester:
         self.clip_config = clip_config
         if projector_config is None:
             projector_hidden = text_config["hidden_size"]
-            sam_projector_dim = sam_config["downsample_channels"][-1] if sam_config["downsample_channels"] else sam_config["output_channels"]
+            sam_projector_dim = (
+                sam_config["downsample_channels"][-1]
+                if sam_config["downsample_channels"]
+                else sam_config["output_channels"]
+            )
             projector_input_dim = clip_config["hidden_size"] + sam_projector_dim
             projector_config = {
                 "input_dim": projector_input_dim,
