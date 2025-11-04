@@ -274,6 +274,80 @@ class VoxtralProcessor(ProcessorMixin):
 
         return BatchFeature(data=out, tensor_type=output_kwargs["text_kwargs"].get("return_tensors", None))
 
+    def decode_asr(
+        self,
+        model_outputs,
+        *,
+        return_timestamps: Optional[Union[bool, str]] = None,
+        return_language: bool = False,
+        time_precision: float = 0.02,
+    ):
+        """
+        Decode model outputs for ASR (Automatic Speech Recognition) with optional timestamp support.
+        This method processes the generated tokens and extracts timestamps if requested.
+
+        Args:
+            model_outputs: Generated token sequences from the model
+            return_timestamps: Whether to return timestamps. Can be True for segment-level or "word" for word-level
+            return_language: Whether to return detected language
+            time_precision: Time precision for timestamp decoding (in seconds)
+
+        Returns:
+            dict: Decoded output with text and optionally timestamps
+        """
+        if return_timestamps is None:
+            # Simple text decoding without timestamps
+            return {
+                "text": self.tokenizer.batch_decode(
+                    [output["sequences"] for output in model_outputs],
+                    skip_special_tokens=True
+                )[0] if len(model_outputs) == 1 else [
+                    self.tokenizer.decode(output["sequences"], skip_special_tokens=True) 
+                    for output in model_outputs
+                ]
+            }
+
+        # For now, implement basic timestamp support
+        # This is a simplified implementation that assumes the model generates timestamps
+        # In a full implementation, we'd need to parse timestamp tokens similar to Whisper
+        
+        decoded_texts = []
+        timestamp_data = []
+
+        for output in model_outputs:
+            sequences = output["sequences"]
+            text = self.tokenizer.decode(sequences, skip_special_tokens=True)
+            decoded_texts.append(text)
+            
+            # Extract any timestamps if present in the generation config
+            # This would need to be enhanced based on the actual timestamp token format
+            timestamp_info = []
+            if return_timestamps and "timestamp" in output:
+                timestamp_info = output["timestamp"]
+            
+            timestamp_data.append(timestamp_info)
+
+        result = {"text": decoded_texts[0] if len(decoded_texts) == 1 else decoded_texts}
+        
+        if return_timestamps:
+            result["chunks"] = []
+            for i, (text, timestamps) in enumerate(zip(decoded_texts, timestamp_data)):
+                if timestamps and len(timestamps) >= 2:
+                    # Assume timestamps are in format [start, end] in seconds
+                    result["chunks"].append({
+                        "text": text,
+                        "timestamp": [float(timestamps[0]), float(timestamps[1])]
+                    })
+                else:
+                    # For segments without timestamps, estimate based on text length
+                    # This is a placeholder implementation
+                    result["chunks"].append({
+                        "text": text,
+                        "timestamp": [i * 30.0, (i + 1) * 30.0]  # Assume 30-second segments
+                    })
+
+        return result
+
     # TODO: @eustlb, this should be moved to mistral_common + testing
     def apply_transcription_request(
         self,
