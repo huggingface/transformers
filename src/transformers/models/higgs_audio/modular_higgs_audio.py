@@ -133,6 +133,7 @@ class HiggsAudioDecoderProjector(nn.Module):
         hidden_states,
         audio_out_mask,
     ):
+        # TODO: see if I can come up with a way of not loading text_lm_head when generating
         logits = self.text_lm_head(hidden_states)
         audio_logits = self.audio_lm_head(hidden_states[audio_out_mask])
 
@@ -412,6 +413,7 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.audio_decoder_proj.audio_lm_head(hidden_state[:, slice_indices, :])
 
+        # TODO: can be improved by not inferring audio head on text tokens in a training regime
         loss = None
         if audio_labels is not None:
             audio_logits = logits[input_ids == self.config.audio_token_id]
