@@ -308,9 +308,10 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     if language_model_pretrained_name is None:
         language_model_pretrained_name = "Qwen/Qwen2.5-1.5B"
 
+    tokenizer = VibeVoiceTokenizer.from_pretrained(language_model_pretrained_name)
     processor = VibeVoiceProcessor(
         feature_extractor=VibeVoiceFeatureExtractor(**audio_config),
-        tokenizer=VibeVoiceTokenizer.from_pretrained(language_model_pretrained_name),
+        tokenizer=tokenizer,
         # audio_tokenizer=VibeVoiceAcousticTokenizerModel.from_pretrained(push_to_hub + "-AcousticTokenizer"),
     )
     processor.save_pretrained(output_dir)
@@ -346,8 +347,27 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         raise ValueError(f"Unexpected keys: {unexpected}")
     if len(missing) != 0:
         raise ValueError(f"missing keys found: {missing}")
-    vibevoice_model.save_pretrained(output_dir)
+    print("Full model checkpoint loaded successfully.")
 
+    # Set default generation config
+    vibevoice_model.generation_config._from_model_config = False
+    vibevoice_model.generation_config.speech_start_id = tokenizer.speech_start_id
+    vibevoice_model.generation_config.speech_end_id = tokenizer.speech_end_id
+    vibevoice_model.generation_config.speech_diffusion_id = tokenizer.speech_diffusion_id
+    vibevoice_model.generation_config.bos_token_id = tokenizer.bos_token_id
+    vibevoice_model.generation_config.eos_token_id = tokenizer.eos_token_id
+    vibevoice_model.generation_config.pad_token_id = tokenizer.pad_token_id
+    vibevoice_model.generation_config.cfg_scale = 1.3
+    vibevoice_model.generation_config.do_sample = False
+    vibevoice_model.generation_config.noise_scheduler = "DPMSolverMultistepScheduler"
+    vibevoice_model.generation_config.noise_scheduler_config = {
+        "num_train_timesteps": 1000,
+        "beta_schedule": "squaredcos_cap_v2",
+        "prediction_type": "v_prediction",
+    }
+    vibevoice_model.generation_config.ddpm_inference_steps = 10
+
+    vibevoice_model.save_pretrained(output_dir)
     # -- push to hub
     if push_to_hub is not None:
         print(f"------ Pushing full VibeVoice model to hub as {push_to_hub} ------")
