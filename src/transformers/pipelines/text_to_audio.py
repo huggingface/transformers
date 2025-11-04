@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
-from typing import Any, Union, overload
+from typing import Any, overload
 
 from ..generation import GenerationConfig
 from ..utils import is_torch_available
@@ -60,7 +60,7 @@ class TextToAudioPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
+    >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small")
 
     >>> # diversify the music generation by adding randomness with a high temperature and set a maximum music length
     >>> generate_kwargs = {
@@ -80,9 +80,6 @@ class TextToAudioPipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-to-speech).
     """
 
-    # Introducing the processor at load time for new behaviour
-    _load_processor = True
-
     _pipeline_calls_generate = True
     _load_processor = False
     _load_image_processor = False
@@ -99,9 +96,6 @@ class TextToAudioPipeline(Pipeline):
 
         # Legacy behaviour just uses the tokenizer while new models use the processor as a whole at any given time
         self.no_processor = no_processor
-
-        if self.framework == "tf":
-            raise ValueError("The TextToAudioPipeline is only available in PyTorch.")
 
         self.vocoder = None
         if self.model.__class__ in MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING.values():
@@ -199,9 +193,7 @@ class TextToAudioPipeline(Pipeline):
     @overload
     def __call__(self, text_inputs: list[str], **forward_params: Any) -> list[dict[str, Any]]: ...
 
-    def __call__(
-        self, text_inputs: Union[str, list[str]], **forward_params
-    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
+    def __call__(self, text_inputs: str | list[str], **forward_params) -> dict[str, Any] | list[dict[str, Any]]:
         """
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 

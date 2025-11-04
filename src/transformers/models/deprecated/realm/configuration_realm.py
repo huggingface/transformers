@@ -14,14 +14,14 @@
 # limitations under the License.
 """REALM model configuration."""
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class RealmConfig(PretrainedConfig):
+class RealmConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of
 
@@ -37,8 +37,8 @@ class RealmConfig(PretrainedConfig):
     [google/realm-cc-news-pretrained-embedder](https://huggingface.co/google/realm-cc-news-pretrained-embedder)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

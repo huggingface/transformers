@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -126,6 +125,7 @@ class VideoLlavaMultiModalProjector(nn.Module):
 class VideoLlavaPreTrainedModel(PreTrainedModel):
     config: VideoLlavaConfig
     base_model_prefix = ""
+    input_modalities = ["image", "video", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"

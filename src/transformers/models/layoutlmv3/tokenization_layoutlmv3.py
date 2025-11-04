@@ -85,7 +85,6 @@ LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING = r"""
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
 """
@@ -134,7 +133,6 @@ LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
 """
@@ -524,7 +522,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         if (
             (is_split_into_words or add_prefix_space)
             and (len(text) > 0 and not text[0].isspace())
-            and sum([text.startswith(no_split_token) for no_split_token in self.added_tokens_encoder]) == 0
+            and sum(text.startswith(no_split_token) for no_split_token in self.added_tokens_encoder) == 0
         ):
             text = " " + text
         return (text, kwargs)

@@ -13,14 +13,17 @@
 # limitations under the License.
 """Pixtral model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from typing import Optional
+
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PixtralVisionConfig(PretrainedConfig):
+class PixtralVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PixtralVisionModel`]. It is used to instantiate an
     Pixtral vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -28,8 +31,8 @@ class PixtralVisionConfig(PretrainedConfig):
 
     e.g. [pixtral-hf/pixtral-9b](https://huggingface.co/pixtral-hf/pixtral-9b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -50,8 +53,8 @@ class PixtralVisionConfig(PretrainedConfig):
             Activation function used in the hidden layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for the attention layers.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            The RopeParameters
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
@@ -74,17 +77,17 @@ class PixtralVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=1024,
-        intermediate_size=4096,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        num_channels=3,
-        image_size=1024,
-        patch_size=16,
-        hidden_act="gelu",
-        attention_dropout=0.0,
-        rope_theta=10000.0,
-        initializer_range=0.02,
+        hidden_size: Optional[int] = 1024,
+        intermediate_size: Optional[int] = 4096,
+        num_hidden_layers: Optional[int] = 24,
+        num_attention_heads: Optional[int] = 16,
+        num_channels: Optional[int] = 3,
+        image_size: Optional[int] = 1024,
+        patch_size: Optional[int] = 16,
+        hidden_act: Optional[str] = "gelu",
+        attention_dropout: Optional[float] = 0.0,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -98,9 +101,16 @@ class PixtralVisionConfig(PretrainedConfig):
         self.image_size = image_size
         self.attention_dropout = attention_dropout
         self.hidden_act = hidden_act
-        self.rope_theta = rope_theta
         self.head_dim = hidden_size // num_attention_heads
         self.initializer_range = initializer_range
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
 
 __all__ = ["PixtralVisionConfig"]

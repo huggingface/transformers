@@ -34,6 +34,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_torch_available, logging
 from ...utils.import_utils import requires_backends
 
@@ -43,6 +44,19 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 DEFAULT_FONT_PATH = "ybelkada/fonts"
+
+
+class Kosmos2_5ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+        The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
+    max_patches (`int`, *optional*, defaults to 4096):
+        The maximum number of patches to extract from the image as per the
+        [KOSMOS 2.5 paper](https://huggingface.co/papers/2309.11419).
+    """
+
+    patch_size: dict[str, int]
+    max_patches: int
 
 
 # Copied from transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches
@@ -92,6 +106,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["flattened_patches"]
+    valid_kwargs = Kosmos2_5ImageProcessorKwargs
 
     def __init__(
         self,
@@ -209,9 +224,6 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         """
         Normalize an image. image = (image - image_mean) / image_std.
 
-        The image std is to mimic the tensorflow implementation of the `per_image_standardization`:
-        https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization
-
         Args:
             image (`np.ndarray`):
                 Image to normalize.
@@ -253,9 +265,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         """
         Preprocess an image or batch of images. The processor first computes the maximum possible number of
         aspect-ratio preserving patches of size `patch_size` that can be extracted from the image. It then pads the
-        image with zeros to make the image respect the constraint of `max_patches`. Before extracting the patches the
-        images are standardized following the tensorflow implementation of `per_image_standardization`
-        (https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization).
+        image with zeros to make the image respect the constraint of `max_patches`.
 
 
         Args:
@@ -272,10 +282,8 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -299,10 +307,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         # PIL RGBA images are converted to RGB
         if do_convert_rgb:

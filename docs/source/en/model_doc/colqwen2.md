@@ -107,10 +107,11 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import BitsAndBytesConfig, ColQwen2ForRetrieval, ColQwen2Processor, infer_device
+from transformers import BitsAndBytesConfig, ColQwen2ForRetrieval, ColQwen2Processor
+from accelerate import Accelerator
 
 model_name = "vidore/colqwen2-v1.0-hf"
-device = infer_device()
+device = Accelerator().device
 
 # 4-bit quantization configuration
 bnb_config = BitsAndBytesConfig(
@@ -155,6 +156,24 @@ scores = processor.score_retrieval(query_embeddings, image_embeddings)
 
 print("Retrieval scores (query x image):")
 print(scores)
+```
+
+You can also use checkpoints for `ColQwen2.5` that are **compatible with the ColQwen2 architecture**. This version of the model uses [Qwen2_5_VL](./qwen2_5_vl) as the backbone.
+
+```python
+import torch
+from transformers import ColQwen2ForRetrieval, ColQwen2Processor
+from transformers.utils.import_utils import is_flash_attn_2_available
+
+model_name = "Sahil-Kabir/colqwen2.5-v0.2-hf" # An existing compatible checkpoint
+
+model = ColQwen2ForRetrieval.from_pretrained(
+    model_name,
+    dtype=torch.bfloat16,
+    device_map="auto",
+    attn_implementation="flash_attention_2" if is_flash_attn_2_available() else "sdpa"
+)
+processor = ColQwen2Processor.from_pretrained(model_name)
 ```
 
 ## Notes

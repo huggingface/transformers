@@ -187,25 +187,6 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert len(batch) == 2  # input_ids, attention_mask.
 
     def test_equivalence_to_orig_tokenizer(self):
-        """
-        To run with original TF tokenizer:
-
-        !wget https://github.com/google-research/bigbird/raw/master/bigbird/vocab/pegasus.model
-        !pip install tensorflow-text
-
-        import tensorflow.compat.v2 as tf
-        import tensorflow_text as tft
-
-        VOCAB_FILE = "./pegasus.model"
-
-        tf.enable_v2_behavior()
-
-        test_str = "This is an example string that is used to test the original TF implementation against the HF implementation"
-        tokenizer = tft.SentencepieceTokenizer(model=tf.io.gfile.GFile(VOCAB_FILE, "rb").read())
-
-        tokenizer.tokenize(test_str)
-        """
-
         test_str = (
             "This is an example string that is used to test the original TF implementation against the HF"
             " implementation"

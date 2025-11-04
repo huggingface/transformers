@@ -17,7 +17,7 @@ import inspect
 import os
 import textwrap
 from pathlib import Path
-from typing import Optional, Union, get_args
+from typing import get_args
 
 import regex as re
 
@@ -66,6 +66,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "kosmos2-5": "Kosmos2_5Config",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
+    "parakeet": "ParakeetCTCConfig",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
@@ -102,6 +103,13 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    size_divisor = {
+        "description": """
+    The size by which to make sure both the height and width can be divided.
+    """,
+        "shape": None,
+    }
+
     default_to_square = {
         "description": """
     Whether to default to a square image when resizing, if size is an int.
@@ -127,6 +135,23 @@ class ImageProcessorArgs:
     crop_size = {
         "description": """
     Size of the output image after applying `center_crop`.
+    """,
+        "shape": None,
+    }
+
+    do_pad = {
+        "description": """
+    Whether to pad the image. Padding is done either to the largest size in the batch
+    or to a fixed square size per image. The exact padding strategy depends on the model.
+    """,
+        "shape": None,
+    }
+
+    pad_size = {
+        "description": """
+    The size in `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+        height and width in the batch. Applied only when `do_pad=True.`
     """,
         "shape": None,
     }
@@ -270,42 +295,12 @@ class ModelArgs:
         "shape": "of shape `(batch_size, sequence_length)`",
     }
 
-    head_mask = {
-        "description": """
-    Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-    - 1 indicates the head is **not masked**,
-    - 0 indicates the head is **masked**.
-    """,
-        "shape": "of shape `(num_heads,)` or `(num_layers, num_heads)`",
-    }
-
-    cross_attn_head_mask = {
-        "description": """
-    Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-    - 1 indicates the head is **not masked**,
-    - 0 indicates the head is **masked**.
-    """,
-        "shape": "of shape `(num_layers, num_heads)`",
-    }
-
     decoder_attention_mask = {
         "description": """
     Mask to avoid performing attention on certain token indices. By default, a causal mask will be used, to
     make sure the model can only look at previous inputs in order to predict the future.
     """,
         "shape": "of shape `(batch_size, target_sequence_length)`",
-    }
-
-    decoder_head_mask = {
-        "description": """
-    Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
-    - 1 indicates the head is **not masked**,
-    - 0 indicates the head is **masked**.
-    """,
-        "shape": "of shape `(decoder_layers, decoder_attention_heads)`",
     }
 
     encoder_hidden_states = {
@@ -1089,7 +1084,7 @@ def parse_docstring(docstring, max_indent_level=0, return_intro=False):
     return params, remainder_docstring
 
 
-def contains_type(type_hint, target_type) -> tuple[bool, Optional[object]]:
+def contains_type(type_hint, target_type) -> tuple[bool, object | None]:
     """
     Check if a "nested" type hint contains a specific target type,
     return the first-level type containing the target_type if found.
@@ -1178,7 +1173,7 @@ def format_args_docstring(docstring, model_name):
     return docstring
 
 
-def get_args_doc_from_source(args_classes: Union[object, list[object]]) -> dict:
+def get_args_doc_from_source(args_classes: object | list[object]) -> dict:
     if isinstance(args_classes, (list, tuple)):
         args_classes_dict = {}
         for args_class in args_classes:
@@ -1198,8 +1193,7 @@ def get_checkpoint_from_config_class(config_class):
     # For example, `('google-bert/bert-base-uncased', 'https://huggingface.co/google-bert/bert-base-uncased')`
     for ckpt_name, ckpt_link in checkpoints:
         # allow the link to end with `/`
-        if ckpt_link.endswith("/"):
-            ckpt_link = ckpt_link[:-1]
+        ckpt_link = ckpt_link.removesuffix("/")
 
         # verify the checkpoint name corresponds to the checkpoint link
         ckpt_link_from_name = f"https://huggingface.co/{ckpt_name}"
@@ -1210,7 +1204,7 @@ def get_checkpoint_from_config_class(config_class):
     return checkpoint
 
 
-def add_intro_docstring(func, class_name, parent_class=None, indent_level=0):
+def add_intro_docstring(func, class_name, indent_level=0):
     intro_docstring = ""
     if func.__name__ == "forward":
         intro_docstring = rf"""The [`{class_name}`] forward method, overrides the `__call__` special method.
@@ -1452,9 +1446,7 @@ def find_sig_line(lines, line_end):
     return sig_line_end
 
 
-def _process_kwargs_parameters(
-    sig, func, parent_class, model_name_lowercase, documented_kwargs, indent_level, undocumented_parameters
-):
+def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters):
     """
     Process **kwargs parameters if needed.
 
@@ -1462,7 +1454,6 @@ def _process_kwargs_parameters(
         sig (`inspect.Signature`): Function signature
         func (`function`): Function the parameters belong to
         parent_class (`class`): Parent class of the function
-        model_name_lowercase (`str`): Lowercase model name
         documented_kwargs (`dict`): Dictionary of kwargs that are already documented
         indent_level (`int`): Indentation level
         undocumented_parameters (`list`): List to append undocumented parameters to
@@ -1493,7 +1484,7 @@ def _process_kwargs_parameters(
             # Extract documentation for kwargs
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
-                documented_kwargs, _ = parse_docstring(kwargs_documentation)
+                documented_kwargs = parse_docstring(kwargs_documentation)[0]
 
             # Process each kwarg parameter
             for param_name, param_type_annotation in kwarg_param.annotation.__args__[0].__annotations__.items():
@@ -1580,7 +1571,7 @@ def _process_parameters_section(
 
     # Process **kwargs parameters if needed
     kwargs_docstring = _process_kwargs_parameters(
-        sig, func, parent_class, model_name_lowercase, documented_kwargs, indent_level, undocumented_parameters
+        sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters
     )
     docstring += kwargs_docstring
 
@@ -1740,9 +1731,7 @@ def auto_method_docstring(
         if not docstring.strip().endswith("\n"):
             docstring += "\n"
     else:
-        docstring = add_intro_docstring(
-            func, class_name=class_name, parent_class=parent_class, indent_level=indent_level
-        )
+        docstring = add_intro_docstring(func, class_name=class_name, indent_level=indent_level)
 
     # Process Parameters section
     docstring += _process_parameters_section(

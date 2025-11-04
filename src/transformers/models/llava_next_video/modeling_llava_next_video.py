@@ -164,6 +164,7 @@ class LlavaNextVideoMultiModalProjector(nn.Module):
 class LlavaNextVideoPreTrainedModel(PreTrainedModel):
     config: LlavaNextVideoConfig
     base_model_prefix = ""
+    input_modalities = ["image", "video", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -461,8 +462,6 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 
         if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
 
@@ -659,8 +658,6 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 
         if vision_feature_select_strategy == "default":
             selected_video_features = selected_video_features[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_video_features = selected_video_features
 
         # Same as image features except that video has pooling layer
         video_features = self.vision_resampler(selected_video_features)

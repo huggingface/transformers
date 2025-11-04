@@ -18,7 +18,9 @@ rendered properly in your Markdown viewer.
 
 [FP-Quant](https://github.com/IST-DASLab/FP-Quant) is a family of quantization algorithms tailored for the Blackwell generation of Nvidia GPUs. The goal is to allow for efficient post-training quantization (PTQ) and quantization-aware training (QAT) of LLMs in the [MXFP4 and NVFP4 data-types](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf).
 
-Currently, only PTQ with MXFP4 is supported. Models can either be quantized on the fly with `quantization_config=FPQuantConfig()`:
+This integration accompanies the pre-print of the [**Bridging the Gap Between Promise and Performance for Microscaling FP4 Quantization**](https://arxiv.org/abs/2509.23202) pre-print.
+
+Currently, only QAT is only supported with `pseudoquantization=True`. Models can either be quantized on the fly with `quantization_config=FPQuantConfig()`:
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, FPQuantConfig
@@ -34,9 +36,11 @@ model = AutoModelForCausalLM.from_pretrained(
 
 or pre-processed with GPTQ for better quality (see [FP Format Quantization Harness](https://github.com/IST-DASLab/FP-Quant)).
 
+You can choose between MXFP4 and NVFP4 with `FPQuantConfig(forward_dtype="mxfp4")`. NVFP4 provides better quality but uses a little more memory.
+
 A **Blackwell-generation GPU is required** to run the kernels. Runtime support for FP-Quant is implemented through the [QuTLASS](https://github.com/IST-DASLab/qutlass) library and a lightweight PyTorch interface lib [`fp_quant`](https://github.com/IST-DASLab/FP-Quant/tree/master/inference_lib). We recommend installing the former **from source** and the latter with  `pip install fp_quant`.
 
-Users **without a Blackwell-generation GPU** , can use the method with `quantization_config=FPQuantConfig(pseudoquant=True)` without having to install [QuTLASS](https://github.com/IST-DASLab/qutlass). This would provide no speedups but would fully emulate the effect of quantization.
+Users **without a Blackwell-generation GPU** , can use the method with `quantization_config=FPQuantConfig(pseudoquantization=True)` without having to install [QuTLASS](https://github.com/IST-DASLab/qutlass). This would provide no speedups but would fully emulate the effect of quantization.
 
 > [!TIP]
 > Find models pre-quantized with FP-Quant in the official ISTA-DASLab [collection](https://huggingface.co/collections/ISTA-DASLab/fp-quant-6877c186103a21d3a02568ee).

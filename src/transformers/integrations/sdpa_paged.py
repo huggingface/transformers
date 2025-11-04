@@ -2,6 +2,8 @@ from typing import Optional
 
 import torch
 
+from ..generation.continuous_batching.cache import PagedAttentionCache
+
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -26,10 +28,16 @@ def sdpa_attention_paged_forward(
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     # Add KV cache to the key and value tensors
-    cache = kwargs.pop("cache", None)
+    cache: Optional[PagedAttentionCache] = kwargs.pop("cache", None)
     if cache is not None:
         # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
-        key, value = cache.update(key, value, module.layer_idx, **kwargs)
+        key, value = cache.update(
+            key_states=key,
+            value_states=value,
+            layer_idx=module.layer_idx,
+            read_index=kwargs["read_index"],
+            write_index=kwargs["write_index"],
+        )
         key = key.transpose(0, 1).unsqueeze(0)
         value = value.transpose(0, 1).unsqueeze(0)
 
@@ -39,12 +47,7 @@ def sdpa_attention_paged_forward(
         value = repeat_kv(value, module.num_key_value_groups)
 
     # Get the right causal mask for the current layer
-    if isinstance(attention_mask, dict):
-        sliding_window = getattr(module, "sliding_window", 1)
-        layer_type = "full_attention" if sliding_window == 1 or sliding_window is None else "sliding_attention"
-        causal_mask = attention_mask[layer_type]
-    else:
-        causal_mask = attention_mask
+    causal_mask = attention_mask
 
     # Run the actual attention
     query = query.contiguous()

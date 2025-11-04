@@ -26,17 +26,18 @@ We present DeepSeek-V3, a strong Mixture-of-Experts (MoE) language model with 67
 
 ## Limitations and call for contribution!
 
-We are super happy to make this code community-powered, and would love to see how you can best optimize the following: 
+We are super happy to make this code community-powered, and would love to see how you can best optimize the following:
 
 - current implementation uses the "naive" attention compution (so not really MLA)
-- current implementation loops through the experts. This should be replaced. Pointers to use `get_packed_weights` from `integrations/tensor_parallel`. 
+- current implementation loops through the experts. This should be replaced. Pointers to use `get_packed_weights` from `integrations/tensor_parallel`.
 - current implementation uses the eleuther formula for ROPE, using the original one would be more efficient! (should still follow our API)
 - static cache is not supported (this should be just a generation config issue / config shape issues)
 
 ### Usage tips
+
 The model uses Multi-head Latent Attention (MLA) and DeepSeekMoE architectures for efficient inference and cost-effective training. It employs an auxiliary-loss-free strategy for load balancing and multi-token prediction training objective. The model can be used for various language tasks after being pre-trained on 14.8 trillion tokens and going through Supervised Fine-Tuning and Reinforcement Learning stages.
 
-You can run the model in `FP8` automatically, using 2 nodes of 8 H100 should be more than enough! 
+You can run the model in `FP8` automatically, using 2 nodes of 8 H100 should be more than enough!
 
 ```python
 # `run_deepseek_v1.py`
@@ -61,9 +62,10 @@ outputs = model.generate(inputs, max_new_tokens=50)
 print(tokenizer.batch_decode(outputs))
 print(time.time()-start)
 ```
-This generated: 
 
-``````
+This generated:
+
+``````text
 <｜Assistant｜><think>
 Okay, the user wants to demonstrate how chat templating works. Let me break down what that means. Chat templating is about structuring the conversation data, especially for models that need specific input formats. Maybe they're referring to something like how messages are formatted with roles (user, assistant, system) in APIs like OpenAI.
 
@@ -137,7 +139,7 @@ Applying the template to our `messages` list would produce:
 
 This tells the model:  
 1. The conversation history (user/assistant turns).  
-2. The model’s turn to generate a response (`<|assistant|>` at the end).  
+2. The model's turn to generate a response (`<|assistant|>` at the end).  
 
 ---
 
@@ -157,18 +159,20 @@ Want to dive deeper or see a specific framework’s implementation (e.g., OpenAI
 ``````
 
 Use the following to run it
+
 ```bash
 torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0|1 --rdzv-id an_id --rdzv-backend c10d --rdzv-endpoint master_addr:master_port run_deepseek_r1.py
 ```
 
-If you have: 
+If you have:
+
 ```bash
 [rank0]: ncclInternalError: Internal check failed.
 [rank0]: Last error:
 [rank0]: Bootstrap : no socket interface found
 ```
-error, it means NCCL was probably not loaded. 
 
+error, it means NCCL was probably not loaded.
 
 ## DeepseekV3Config
 

@@ -223,6 +223,7 @@ class LlavaNextMultiModalProjector(nn.Module):
 class LlavaNextPreTrainedModel(PreTrainedModel):
     config: LlavaNextConfig
     base_model_prefix = ""
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -409,8 +410,6 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
 
         if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_image_feature = selected_image_feature
 
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)

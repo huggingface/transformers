@@ -18,7 +18,6 @@ import math
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
@@ -248,6 +247,7 @@ class ResNetPreTrainedModel(PreTrainedModel):
     config: ResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["ResNetConvLayer", "ResNetShortCut"]
 
     def _init_weights(self, module):

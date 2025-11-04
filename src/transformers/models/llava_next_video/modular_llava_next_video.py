@@ -25,12 +25,13 @@ from transformers.models.llava_next.modeling_llava_next import (
     LlavaNextModel,
     LlavaNextModelOutputWithPast,
     LlavaNextMultiModalProjector,
+    LlavaNextPreTrainedModel,
     TransformersKwargs,
     image_size_to_num_patches,
 )
 
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ...utils import logging
@@ -40,14 +41,14 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class LlavaNextVideoConfig(PretrainedConfig):
+class LlavaNextVideoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlavaNextVideoForConditionalGeneration`]. It is used to instantiate an
     Llava-NeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the [llava-hf/LLaVA-NeXT-Video-7B-hf](https://huggingface.co/llava-hf/LLaVA-NeXT-Video-7B-hf)
     model.
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
@@ -258,6 +259,10 @@ class LlavaNextVideoMultiModalProjector(LlavaNextMultiModalProjector):
     pass
 
 
+class LlavaNextVideoPreTrainedModel(LlavaNextPreTrainedModel):
+    input_modalities = ["image", "video", "text"]
+
+
 class LlavaNextVideoModel(LlavaNextModel):
     def __init__(self, config: LlavaNextVideoConfig, **super_kwargs):
         super().__init__(config, **super_kwargs)
@@ -327,8 +332,6 @@ class LlavaNextVideoModel(LlavaNextModel):
 
         if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
 
@@ -386,8 +389,6 @@ class LlavaNextVideoModel(LlavaNextModel):
 
         if vision_feature_select_strategy == "default":
             selected_video_features = selected_video_features[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_video_features = selected_video_features
 
         # Same as image features except that video has pooling layer
         video_features = self.vision_resampler(selected_video_features)
@@ -717,5 +718,5 @@ __all__ = [
     "LlavaNextVideoConfig",
     "LlavaNextVideoForConditionalGeneration",
     "LlavaNextVideoModel",
-    "LlavaNextVideoPreTrainedModel",  # noqa: F822
+    "LlavaNextVideoPreTrainedModel",
 ]

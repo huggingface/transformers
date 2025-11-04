@@ -32,6 +32,7 @@ from .configuration_colpali import ColPaliConfig
 class ColPaliPreTrainedModel(PreTrainedModel):
     config: ColPaliConfig
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     _no_split_modules = []
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -156,7 +157,8 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
         last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
-        embeddings = self.embedding_proj_layer(last_hidden_states)  # (batch_size, sequence_length, dim)
+        proj_dtype = self.embedding_proj_layer.weight.dtype
+        embeddings = self.embedding_proj_layer(last_hidden_states.to(proj_dtype))  # (batch_size, sequence_length, dim)
 
         # L2 normalization
         embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)

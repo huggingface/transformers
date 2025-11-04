@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -112,6 +111,7 @@ class LlavaMultiModalProjector(nn.Module):
 class LlavaPreTrainedModel(PreTrainedModel):
     config: LlavaConfig
     base_model_prefix = ""
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 

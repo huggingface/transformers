@@ -34,6 +34,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -53,6 +54,25 @@ if is_pytesseract_available():
     import pytesseract
 
 logger = logging.get_logger(__name__)
+
+
+class LayoutLMv3ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    apply_ocr (`bool`, *optional*, defaults to `True`):
+        Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
+        the `apply_ocr` parameter in the `preprocess` method.
+    ocr_lang (`str`, *optional*):
+        The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
+        used. Can be overridden by the `ocr_lang` parameter in the `preprocess` method.
+    tesseract_config (`str`, *optional*):
+        Any additional custom configuration flags that are forwarded to the `config` parameter when calling
+        Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
+        `preprocess` method.
+    """
+
+    apply_ocr: bool
+    ocr_lang: Optional[str]
+    tesseract_config: Optional[str]
 
 
 def normalize_box(box, width, height):
@@ -143,6 +163,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = LayoutLMv3ImageProcessorKwargs
 
     def __init__(
         self,
@@ -279,10 +300,8 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -309,10 +328,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
