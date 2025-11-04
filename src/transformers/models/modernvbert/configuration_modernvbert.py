@@ -9,12 +9,8 @@ import os
 from typing import Any, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
 from ..modernbert import ModernBertConfig
 from ..siglip import SiglipConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class ModernVBertTextConfig(PretrainedConfig):
@@ -172,14 +168,14 @@ class ModernVBertConfig(PretrainedConfig):
     >>> configuration = ModernVBertConfig()
     >>> # Initializing a model from the configuration (model class is implemented in
     >>> # `modernvbert.modeling_modernvbert`)
-    >>> # from modernvbert import ModernVBertModel
-    >>> # model = ModernVBertModel(configuration)
+    >>> from modernvbert import ModernVBertModel
+    >>> model = ModernVBertModel(configuration)
     >>> # Accessing the model configuration
-    >>> # cfg = model.config
+    >>> cfg = model.config
     ```"""
 
     model_type = "modernvbert"
-    is_composition = True
+    sub_configs = {"text_config": ModernVBertTextConfig, "vision_config": ModernVBertVisionConfig}
 
     def __init__(
         self,
@@ -205,18 +201,12 @@ class ModernVBertConfig(PretrainedConfig):
         self.additional_vocab_size = additional_vocab_size
 
         if text_config is None:
-            logger.warning(
-                "You are instantiating a ModernVBertConfig without providing a text_config. Defaulting to jhu-clsp/ettin-encoder-150m."
-            )
             text_config = ModernVBertTextConfig.from_base_model("jhu-clsp/ettin-encoder-150m")
         elif isinstance(text_config, dict):
             text_config = ModernVBertTextConfig.from_dict(text_config)
         self.text_config = text_config
 
         if vision_config is None:
-            logger.warning(
-                "You are instantiating a ModernVBertConfig without providing a vision_config. Defaulting to google/siglip2-base-patch16-512."
-            )
             vision_config = ModernVBertVisionConfig.from_base_model("google/siglip2-base-patch16-512")
         elif isinstance(vision_config, dict):
             vision_config = ModernVBertVisionConfig.from_dict(vision_config)
@@ -259,3 +249,6 @@ class ModernVBertConfig(PretrainedConfig):
             vision_config=vision_model_config,
             **kwargs,
         )
+
+
+__all__ = ["ModernVBertConfig", "ModernVBertTextConfig", "ModernVBertVisionConfig"]

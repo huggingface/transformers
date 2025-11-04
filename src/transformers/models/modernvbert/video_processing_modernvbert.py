@@ -327,3 +327,6 @@ class ModernVBertVideoProcessor(BaseVideoProcessor):
                 else pixel_attention_mask
             )
         return BatchFeature(data, tensor_type=return_tensors)
+
+
+__all__ = ["ModernVBertVideoProcessor"]
