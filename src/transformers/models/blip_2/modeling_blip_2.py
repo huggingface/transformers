@@ -1612,10 +1612,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
 
-        # Update _tied_weights_keys using the base model used.
-        if language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
-
         self.language_model = language_model
 
         # Initialize weights and apply final processing
