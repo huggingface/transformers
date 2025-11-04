@@ -32,7 +32,11 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
 from ...video_utils import VideoInput
+
+
+logger = logging.get_logger(__name__)
 
 
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
@@ -135,10 +139,25 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
             image_grid_thw = image_inputs["image_grid_thw"]
 
         if videos is not None:
-            fps = output_kwargs["videos_kwargs"].get("fps", 2.0)
+            if "do_sample_frames" not in output_kwargs["videos_kwargs"] and (
+                output_kwargs["videos_kwargs"].get("fps") is not None
+            ):
+                output_kwargs["videos_kwargs"]["do_sample_frames"] = True
+                logger.info(
+                    "User specified 'fps' without 'do_sample_frames'; "
+                    "'do_sample_frames' has been automatically enabled."
+                )
+
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 
+            # Get video metadata
+            if "return_metadata" not in kwargs:
+                video_metadata = videos_inputs.pop("video_metadata")
+            else:
+                video_metadata = videos_inputs["video_metadata"]
+
+            fps = output_kwargs["videos_kwargs"].get("fps", [metadata.fps if metadata.fps is not None else 24 for metadata in video_metadata])
             if isinstance(fps, (int, float)):
                 second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
             elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
