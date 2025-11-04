@@ -722,7 +722,9 @@ class BloomModel(BloomPreTrainedModel):
     """
 )
 class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "transformer.word_embeddings.weight"
+    }
 
     def __init__(self, config: BloomConfig):
         super().__init__(config)

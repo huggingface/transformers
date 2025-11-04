@@ -760,7 +760,7 @@ class AriaTextModel(AriaTextPreTrainedModel):
 
 @auto_docstring
 class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
@@ -1053,7 +1053,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)

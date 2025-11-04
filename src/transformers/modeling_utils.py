@@ -27,7 +27,7 @@ import time
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from enum import Enum
@@ -468,11 +468,39 @@ def _end_ptr(tensor: torch.Tensor) -> int:
     return stop
 
 
+def _as_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        result: list[str] = []
+        for subvalue in value.values():
+            result.extend(_as_list(subvalue))
+        return result
+    if isinstance(value, Iterable):
+        return list(value)
+    return [value]
+
+
+def _extract_tied_value_names(tied_weight_keys) -> list[str]:
+    if tied_weight_keys is None:
+        return []
+    if isinstance(tied_weight_keys, dict):
+        names: list[str] = []
+        for tied in tied_weight_keys.values():
+            names.extend(_as_list(tied))
+        return names
+    return _as_list(tied_weight_keys)
+
+
 def _get_tied_weight_keys(module: nn.Module, prefix=""):
     tied_weight_keys = []
     if getattr(module, "_tied_weights_keys", None) is not None:
-        names = [f"{prefix}.{k}" if prefix else k for k in module._tied_weights_keys]
+        value_names = _extract_tied_value_names(list(module._tied_weights_keys.keys()))
+        names = [f"{prefix}.{k}" if prefix else k for k in value_names]
         tied_weight_keys.extend(names)
+        tied_weight_keys.extend(value_names)
     if getattr(module, "_dynamic_tied_weights_keys", None) is not None:
         names = [f"{prefix}.{k}" if prefix else k for k in module._dynamic_tied_weights_keys]
         tied_weight_keys.extend(names)
@@ -2525,133 +2553,74 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Let the magic happen with this simple call
         self.smart_apply(self._initialize_weights)
 
-    def tie_embeddings_and_encoder_decoder(self):
+    def tie_weight_source_and_target(
+        self, top_level:"PreTrainedModel", missing_keys: Optional[set[str]] = None, module_prefix: str = "", _tied_weights_keys = None
+    ):
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
-        and the encoder and decoder.
+        and the encoder and decoder. This relies on the `_tied_weights_keys` dict.
         """
-        if getattr(self.config.get_text_config(decoder=True), "tie_word_embeddings", True):
-            output_embeddings = self.get_output_embeddings()
-            if output_embeddings is not None:
-                self._tie_embedding_weights(output_embeddings, self.get_input_embeddings())
+        missing_keys = missing_keys or set()
+        mapping = getattr(self, "_tied_weights_keys", None)
+        if not isinstance(mapping, dict):
+            return
+        for target_name, source_name in mapping.items():
+            source_name = f"{module_prefix}.{source_name}" if module_prefix else source_name
+            try:
+                if source_name.endswith(".bias") or source_name.endswith(".weight"):
+                    source_tensor = top_level.get_parameter_or_buffer(source_name)
+                else:
+                    source_tensor = top_level.get_submodule(source_name)
+            except AttributeError:
+                continue
 
-        if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
-            if hasattr(self, self.base_model_prefix):
-                self = getattr(self, self.base_model_prefix)
-            tied_weights = self._tie_encoder_decoder_weights(
-                self.encoder, self.decoder, self.base_model_prefix, "encoder"
-            )
-            # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
-            # attributed not an instance member, therefore modifying it will modify the entire class
-            # Leading to issues on subsequent calls by different tests or subsequent calls.
-            self._dynamic_tied_weights_keys = tied_weights
+            target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
+            if missing_keys != set() and not re.search( "|".join(map(re.escape, missing_keys)), target_name) and not top_level.config.get_text_config().tie_encoder_decoder:
+                continue # `can_use_safetensors` goes against this one
+            try:
+                if source_name.endswith(".bias") or source_name.endswith(".weight"):
+                    target_tensor = top_level.get_parameter_or_buffer(target_name)
+                else:
+                    target_tensor = top_level.get_submodule(target_name)
+            except AttributeError:
+                continue
+            top_level._tie_embedding_weights(target_tensor, source_tensor)
 
-    def tie_weights(self):
+            if missing_keys and source_name not in missing_keys: # and not top_level.config.get_text_config().tie_encoder_decoder:
+                if isinstance(target_tensor, nn.Module):
+                    for k,_ in target_tensor.named_parameters():
+                        missing_keys.discard(f"{target_name}.{k}")
+                else:
+                    missing_keys.discard(target_name)
+
+    def tie_weights(self, missing_keys: Optional[set[str]] = None):
         """
         Recursively (for all submodels) tie all the weights of the model.
         """
         # Note that `self` is included in `self.modules` so we also apply to current PreTrainedModel with this call
-        for module in self.modules():
-            # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
-            if isinstance(module, PreTrainedModel):
-                module.tie_embeddings_and_encoder_decoder()
-            # Additionally, if it has a custom `_tie_weights`, honor it
-            if hasattr(module, "_tie_weights"):
-                module._tie_weights()
+        if missing_keys is None:
+            # called from `post_init`
+            # if self.config.get_text_config().tie_word_embeddings or self.config.get_text_config().tie_encoder_decoder: # is this even true? no cuz resize?
+            self.tie_weight_source_and_target(self, missing_keys, "", self._tied_weights_keys)
+        else:
+            for module_prefix, module in self.named_modules():
+                # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
+                if isinstance(module, PreTrainedModel) and (missing_keys != set() or self.config.tie_word_embeddings or self.config.tie_encoder_decoder):
+                    module.tie_weight_source_and_target(self, missing_keys, module_prefix, self._tied_weights_keys)
+                # Additionally, if it has a custom `_tie_weights`, honor it
+                if hasattr(module, "_tie_weights"):
+                    module._tie_weights()
 
-    @staticmethod
-    def _tie_encoder_decoder_weights(
-        encoder: nn.Module, decoder: nn.Module, base_model_prefix: str, base_encoder_name: str
-    ):
-        uninitialized_encoder_weights: list[str] = []
-        tied_weights: list[str] = []
-        if decoder.__class__ != encoder.__class__:
-            logger.info(
-                f"{decoder.__class__} and {encoder.__class__} are not equal. In this case make sure that all encoder"
-                " weights are correctly initialized."
-            )
-
-        def tie_encoder_to_decoder_recursively(
-            decoder_pointer: nn.Module,
-            encoder_pointer: nn.Module,
-            module_name: str,
-            base_encoder_name: str,
-            uninitialized_encoder_weights: list[str],
-            depth=0,
-            total_decoder_name="",
-            total_encoder_name="",
-        ):
-            assert isinstance(decoder_pointer, nn.Module) and isinstance(encoder_pointer, nn.Module), (
-                f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
-            )
-            if hasattr(decoder_pointer, "weight"):
-                assert hasattr(encoder_pointer, "weight")
-                encoder_pointer.weight = decoder_pointer.weight
-                tied_weights.append(f"{base_encoder_name}{total_encoder_name}.weight")
-                if hasattr(decoder_pointer, "bias"):
-                    assert hasattr(encoder_pointer, "bias")
-                    tied_weights.append(f"{base_encoder_name}{total_encoder_name}.bias")
-                    encoder_pointer.bias = decoder_pointer.bias
-                return
-
-            encoder_modules = encoder_pointer._modules
-            decoder_modules = decoder_pointer._modules
-            if len(decoder_modules) > 0:
-                assert len(encoder_modules) > 0, (
-                    f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
-                )
-
-                all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules}
-                encoder_layer_pos = 0
-                for name in decoder_modules:
-                    if name.isdigit():
-                        encoder_name = str(int(name) + encoder_layer_pos)
-                        decoder_name = name
-                        if not isinstance(decoder_modules[decoder_name], type(encoder_modules[encoder_name])) and len(
-                            encoder_modules
-                        ) != len(decoder_modules):
-                            # this can happen if the name corresponds to the position in a list module list of layers
-                            # in this case the decoder has added a cross-attention that the encoder does not have
-                            # thus skip this step and subtract one layer pos from encoder
-                            encoder_layer_pos -= 1
-                            continue
-                    elif name not in encoder_modules:
-                        continue
-                    elif depth > 500:
-                        raise ValueError(
-                            "Max depth of recursive function `tie_encoder_to_decoder` reached. It seems that there is"
-                            " a circular dependency between two or more `nn.Modules` of your model."
-                        )
-                    else:
-                        decoder_name = encoder_name = name
-                    tie_encoder_to_decoder_recursively(
-                        decoder_modules[decoder_name],
-                        encoder_modules[encoder_name],
-                        module_name + "/" + name,
-                        base_encoder_name,
-                        uninitialized_encoder_weights,
-                        depth=depth + 1,
-                        total_encoder_name=f"{total_encoder_name}.{encoder_name}",
-                        total_decoder_name=f"{total_decoder_name}.{decoder_name}",
-                    )
-                    all_encoder_weights.remove(module_name + "/" + encoder_name)
-
-                uninitialized_encoder_weights += list(all_encoder_weights)
-
-        # tie weights recursively
-        tie_encoder_to_decoder_recursively(
-            decoder, encoder, base_model_prefix, base_encoder_name, uninitialized_encoder_weights
-        )
-
-        if len(uninitialized_encoder_weights) > 0:
-            logger.warning(
-                f"The following encoder weights were not tied to the decoder {uninitialized_encoder_weights}"
-            )
-        return tied_weights
 
     def _tie_embedding_weights(self, output_embeddings, input_embeddings):
         """Tie weights, and add hooks and flags if using TP."""
-        output_embeddings.weight = input_embeddings.weight
+        if isinstance(input_embeddings, nn.Module):
+            for k, v in input_embeddings.named_parameters():
+                if hasattr(output_embeddings, k):
+                    setattr(output_embeddings, k, v)
+        else:
+            output_embeddings.data = input_embeddings.data
+            output_embeddings = input_embeddings
 
         # Passing hooks over to the embeddings if needed
         # (currently limited to tensor parallel hooks and flags only)
@@ -4483,16 +4452,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
         loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
 
-        # TODO last TODO here is to tie the weights once and only. If they are missing and False, and if true
-        
-        # TODO TODO TODO
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
+        # Remove tied weights keys and etc
         miss_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
         model._move_missing_keys_from_meta_to_cpu(miss_and_mismatched, dtype, hf_quantizer)
 
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(miss_and_mismatched, is_quantized)
+        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
+            missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model
+        )
 
         # Post-processing for tensor parallelism
         if device_mesh is not None:
@@ -4527,10 +4497,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         device_mesh,
                     )
 
-        # Remove tied weights keys and etc
-        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
-            missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model
-        )
+
         logger.warning(f"Loading the checkpoint files into the model took {end - start}")
         log_state_dict_report(
             model=model,
@@ -4812,13 +4779,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # `_keys_to_ignore_on_load_unexpected` as it touches many models -> we add it manually to the existing patterns
         has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer, _ in self.named_buffers())
         additional_unexpected_patterns = [r"rotary_emb\.inv_freq"] if has_inv_freq_buffers else []
-        tied_param_names = "|".join(model._tied_weights_keys or [])
-        if tied_param_names:
-            model.tie_weights()
-            if model.config.tie_word_embeddings:
-                for k in missing_keys.copy():
-                    if re.match(tied_param_names, k):
-                        missing_keys.discard(k)
+        model.tie_weights(missing_keys)
 
         missing_patterns = self._keys_to_ignore_on_load_missing or []
         unexpected_patterns = (self._keys_to_ignore_on_load_unexpected or []) + additional_unexpected_patterns

@@ -240,3 +240,4 @@ def log_state_dict_report(
         raise RuntimeError(
             "You set `ignore_mismatched_sizes` to `False`, thus raising an error. For details look at the above report!"
         )
+    return prelude + table + tips

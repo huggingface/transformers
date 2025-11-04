@@ -745,7 +745,10 @@ class CamembertModel(CamembertPreTrainedModel):
 
 @auto_docstring
 class CamembertForMaskedLM(CamembertPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "roberta.embedding.weight",
+        "lm_head.decoder.bias": "lm_head.bias"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1191,7 +1194,10 @@ class CamembertForQuestionAnswering(CamembertPreTrainedModel):
     """
 )
 class CamembertForCausalLM(CamembertPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "roberta.embedding.weight",
+        "lm_head.decoder.bias": "lm_head.bias"
+    }
 
     def __init__(self, config):
         super().__init__(config)

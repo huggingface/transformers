@@ -852,7 +852,10 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
 
 @auto_docstring
 class BlenderbotModel(BlenderbotPreTrainedModel):
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
@@ -1001,7 +1004,9 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
 class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
@@ -1184,7 +1189,9 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot, facebook/bart-base->facebook/blenderbot-400M-distill
 class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config):
         config.is_decoder = True

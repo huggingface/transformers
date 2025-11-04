@@ -698,7 +698,9 @@ class CpmAntModel(CpmAntPreTrainedModel):
     """
 )
 class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "cpmant.input_embedding.weight"
+    }
 
     def __init__(self, config: CpmAntConfig):
         super().__init__(config)
