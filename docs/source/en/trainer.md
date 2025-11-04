@@ -187,7 +187,7 @@ from torch import nn
 from transformers import Trainer
 
 class CustomTrainer(Trainer):
-    def compute_loss(self, model: nn.Module, inputs: dict[str, Union[torch.Tensor, Any]], return_outputs: bool = False num_items_in_batch: Optional[torch.Tensor] = None):
+    def compute_loss(self, model: nn.Module, inputs: dict[str, Union[torch.Tensor, Any]], return_outputs: bool = False, num_items_in_batch: Optional[torch.Tensor] = None):
         labels = inputs.pop("labels")
         # forward pass
         outputs = model(**inputs)
