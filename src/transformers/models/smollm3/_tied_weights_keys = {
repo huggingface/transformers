@@ -132,7 +132,4 @@ tests/models/encoder_decoder/test_modeling_encoder_decoder.py : 12 failures
 tests/models/longt5/test_modeling_longt5.py : 12 failures
 tests/models/mt5/test_modeling_mt5.py : 12 failures
 tests/models/idefics/test_modeling_idefics.py : 14 failures
-tests/models/moshi/test_modeling_moshi.py : 15 failures
-tests/models/blip/test_modeling_blip.py : 16 failures
-tests/models/seamless_m4t/test_modeling_seamless_m4t.py : 16 failures
-tests/models/seamless_m4t_v2/test_modeling_seamless_m4t_v2.py : 16 failures
+

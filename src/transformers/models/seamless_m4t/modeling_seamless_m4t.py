@@ -2456,10 +2456,9 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
     main_input_name = "input_ids"
 
     _tied_weights_keys = {
-        "text_decoder.embed_tokens.weight": [
-            "lm_head.weight",
-            "text_encoder.shared.text_decoder.embed_tokens.weight"
-        ]
+        "lm_head.weight": "text_decoder.embed_tokens.weight",
+        "text_encoder.embed_tokens.weight": "shared.weight",
+        "text_decoder.embed_tokens.weight": "shared.weight",
     }
 
     def __init__(self, config: SeamlessM4TConfig):
@@ -2976,10 +2975,9 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
     main_input_name = "input_ids"
 
     _tied_weights_keys = {
-        "text_decoder.embed_tokens.weight": [
-            "lm_head.weight",
-            "text_encoder.shared.text_decoder.embed_tokens.weight"
-        ]
+        "lm_head.weight": "text_decoder.embed_tokens.weight",
+        "text_encoder.embed_tokens.weight": "shared.weight",
+        "text_decoder.embed_tokens.weight": "shared.weight",
     }
 
     def __init__(self, config: SeamlessM4TConfig):
@@ -3302,7 +3300,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
     main_input_name = "input_features"
 
     _tied_weights_keys = {
-        "text_decoder.embed_tokens.weight": "lm_head.weight"
+        "lm_head.weight": "text_decoder.embed_tokens.weight"
     }
 
     def __init__(self, config):
@@ -3631,10 +3629,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
     input_modalities = ["audio", "text"]
     output_modalities = ["audio", "text"]
     _tied_weights_keys = {
-        "text_decoder.embed_tokens.weight": [
-            "lm_head.weight",
-            "text_encoder.shared.text_decoder.embed_tokens.weight"
-        ]
+        "lm_head.weight": "text_decoder.embed_tokens.weight",
+        "text_encoder.embed_tokens.weight": "shared.weight",
+        "text_decoder.embed_tokens.weight": "shared.weight",
     }
 
     def __init__(self, config, current_modality="text"):
