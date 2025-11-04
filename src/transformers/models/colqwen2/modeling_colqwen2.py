@@ -118,7 +118,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             self.config.vlm_config.text_config.hidden_size,
             self.embedding_dim,
         )
-        self._tied_weights_keys = [f"vlm.{k}" for k in (self.vlm._tied_weights_keys or [])]
 
         self.post_init()
 
@@ -222,9 +221,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
-
-    def tie_weights(self):
-        return self.vlm.tie_weights()
 
     def resize_token_embeddings(
         self,

@@ -430,7 +430,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
     """
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
-    _tied_weights_keys = ["vocab_projector.weight"]
+    _tied_weights_keys = {"vocab_projector.weight": "distilbert.embeddings.word_embeddings.weight"}
 
     def __init__(self, config: PreTrainedConfig):
         super().__init__(config)

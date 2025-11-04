@@ -430,7 +430,7 @@ class MarianDecoderLayer(GradientCheckpointingLayer):
         outputs = (hidden_states,)
 
         if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
+            outputs += (self_attn_weights,)
 
         return outputs
 
@@ -986,9 +986,9 @@ class MarianModel(MarianPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # If encoder_outputs are not given, pass the inputs to the encoder
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1050,9 +1050,7 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
     ]
     _keys_to_ignore_on_save = ["model.encoder.embed_positions.weight", "model.decoder.embed_positions.weight"]
     _tied_weights_keys = {
-        "lm_head.weight": "model.shared.weight",
-        "model.decoder.embed_tokens.weight": "model.shared.weight",
-        "model.encoder.embed_tokens.weight": "model.shared.weight"
+        "lm_head.weight": "model.decoder.embed_tokens.weight"
     }
 
     def __init__(self, config: MarianConfig):
@@ -1147,7 +1145,7 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings: nn.Embedding):
         self.lm_head = new_embeddings
 
-    def tie_weights(self):
+    def tie_weights(self, missing_keys=None) -> None:
         """
         Tie the weights between the input embeddings and the output embeddings.
         """
@@ -1300,9 +1298,7 @@ class MarianDecoderWrapper(MarianPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Marian, facebook/bart-base->Helsinki-NLP/opus-mt-fr-en
 class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {
-        "lm_head.weight": "model.shared.weight",
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config):
         config.is_decoder = True

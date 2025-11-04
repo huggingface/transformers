@@ -1662,7 +1662,6 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
 )
 class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixin):
     config_class = Kosmos2_5Config
-    _tied_weights_keys = ["text_model.lm_head.weight"]
 
     def __init__(self, config: Kosmos2_5Config):
         super().__init__(config)

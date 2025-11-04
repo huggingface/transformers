@@ -1609,7 +1609,7 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
 
 @auto_docstring
 class MT5ForTokenClassification(MT5PreTrainedModel):
-    _tied_weights_keys = ["transformer.encoder.embed_tokens.weight"]
+
 
     # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.__init__ with T5->MT5
     def __init__(self, config: MT5Config):

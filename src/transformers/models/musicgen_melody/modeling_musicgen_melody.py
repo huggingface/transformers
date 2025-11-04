@@ -1314,7 +1314,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             if module.bias is not None:
                 module.bias.data.zero_()
 
-    def tie_weights(self):
+    def tie_weights(self, missing_keys=None):
         # tie text encoder & decoder if needed
         if self.config.tie_encoder_decoder:
             # tie text encoder and decoder base model

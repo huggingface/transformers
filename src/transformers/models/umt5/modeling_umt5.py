@@ -1549,7 +1549,6 @@ class UMT5ForSequenceClassification(UMT5PreTrainedModel):
 @auto_docstring
 class UMT5ForTokenClassification(UMT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
-    _tied_weights_keys = ["transformer.encoder.embed_tokens.weight"]
 
     # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.__init__ with T5->UMT5
     def __init__(self, config: UMT5Config):

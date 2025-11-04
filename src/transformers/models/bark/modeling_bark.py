@@ -16,7 +16,7 @@
 
 import math
 import warnings
-from typing import Optional, Union
+from typing import Optional, Union, cast
 
 import numpy as np
 import torch
@@ -1027,14 +1027,15 @@ class BarkFineModel(BarkPreTrainedModel):
 
     def _tie_weights(self):
         if getattr(self.config, "tie_word_embeddings", True):
-            self._tied_weights_keys = []
+            object.__setattr__(self, "_tied_weights_keys", {})
+            tied_weights = cast(dict[str, str], self._tied_weights_keys)
             output_embeddings = self.get_output_embeddings()
             input_embeddings = self.get_input_embeddings()
 
             for i in range(self.config.n_codes_total - self.config.n_codes_given):
                 # self.input_embeds_layers[i + 1].weight = self.lm_heads[i].weight
                 self._tie_embedding_weights(output_embeddings[i], input_embeddings[i + 1])
-                self._tied_weights_keys.append(f"lm_heads.{i}.weight")
+                tied_weights[f"lm_heads.{i}.weight"] = f"input_embeds_layers.{i + 1}.weight"
 
     def tie_weights(self):
         """
