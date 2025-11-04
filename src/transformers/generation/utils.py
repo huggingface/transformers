@@ -2677,11 +2677,6 @@ class GenerationMixin(ContinuousMixin):
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
 
-        # 8b. Prefill pass
-        # Some decoding methods (e.g. assisted generation) do not admit the prefill pass
-        if "prefill_outputs" in inspect.signature(decoding_method).parameters:
-            generation_mode_kwargs["prefill_outputs"] = self._prefill(input_ids, generation_config, model_kwargs)
-
         # 9. Call generation mode
         result = decoding_method(
             self,
@@ -2806,7 +2801,6 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
-        prefill_outputs: dict = None,  # noqa: RUF013
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
@@ -2873,7 +2867,7 @@ class GenerationMixin(ContinuousMixin):
         model_forward = self._check_and_get_compiled_call(generation_config, model_kwargs)
 
         prefill_consumed = False
-        outputs = prefill_outputs
+        outputs = self._prefill(input_ids, generation_config, model_kwargs)
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
@@ -3212,7 +3206,6 @@ class GenerationMixin(ContinuousMixin):
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
-        prefill_outputs: dict = None,  # noqa: RUF013
         **model_kwargs,
     ) -> Union[GenerateBeamOutput, torch.LongTensor]:
         r"""
@@ -3353,7 +3346,7 @@ class GenerationMixin(ContinuousMixin):
 
         prefill_consumed = False
         flat_running_sequences = input_ids
-        model_outputs = prefill_outputs
+        model_outputs = self._prefill(input_ids, generation_config, model_kwargs)
 
         # 4. run the generation loop
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
@@ -3845,6 +3838,7 @@ class GenerationMixin(ContinuousMixin):
         else:
             return input_ids
 
+    # TODO: v5.1: make public once API stabilized
     def _prefill(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, model_kwargs):
         if generation_config.prefill_chunk_size is None:
             model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
