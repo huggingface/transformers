@@ -102,8 +102,10 @@ jobs:
         working-directory: /transformers/tests
         run: |
           if [ "${{ inputs.job }}" = "run_models_gpu" ]; then
-            echo "folder_slices=$(python3 ../utils/split_model_tests.py --subdirs '${{ inputs.subdirs }}' --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
-            echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
+            python3 ../utils/split_model_tests.py --subdirs '${{ inputs.subdirs }}' --num_splits ${{ env.NUM_SLICES }} > folder_slices.txt
+            echo "folder_slices=$(cat folder_slices.txt)" >> $GITHUB_OUTPUT
+            python3 -c "import ast; folder_slices = ast.literal_eval(open('folder_slices.txt').read()); open('slice_ids.txt', 'w').write(str(list(range(len(folder_slices)))))"
+            echo "slice_ids=$(cat slice_ids.txt)" >> $GITHUB_OUTPUT
           elif [ "${{ inputs.job }}" = "run_trainer_and_fsdp_gpu" ]; then
             echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
             echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
