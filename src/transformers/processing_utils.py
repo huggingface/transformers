@@ -1439,7 +1439,7 @@ class ProcessorMixin(PushToHubMixin):
                         )
                 else:
                     use_fast = kwargs.get("use_fast", True)
-                if use_fast and classes[1] is not None:
+                if use_fast and len(classes) > 1 and classes[1] is not None:
                     attribute_class = classes[1]
                 else:
                     attribute_class = classes[0]
@@ -1477,12 +1477,14 @@ class ProcessorMixin(PushToHubMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please
         refer to the docstring of this method for more information.
+        
+        Note: `decode` now handles batch decoding natively, so this method simply calls `decode`.
         """
         if not hasattr(self, "tokenizer"):
             raise ValueError(f"Cannot batch decode text: {self.__class__.__name__} has no tokenizer.")
-        return self.tokenizer.batch_decode(*args, **kwargs)
+        return self.tokenizer.decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """

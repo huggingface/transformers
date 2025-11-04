@@ -219,7 +219,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         token.special = True
                 tokens.append(token)
             if tokens:
-                self.add_tokens(tokens)
+                # These tokens are from the special tokens map
+                self.add_tokens(tokens, special_tokens=True)
 
     @property
     def is_fast(self) -> bool:
@@ -326,7 +327,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     tokens_to_add.append(AddedToken(token, special=True, normalized=False))
 
         if tokens_to_add:
-            self.add_tokens(tokens_to_add)
+            # Ensure special tokens are added as such to the backend
+            self.add_tokens(tokens_to_add, special_tokens=True)
 
         if hasattr(self, "_add_bos_token") or hasattr(self, "_add_eos_token"):
             self.update_post_processor()

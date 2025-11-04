@@ -1013,9 +1013,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 value = kwargs.pop(key)
                 if value is None:
                     continue
-                if not isinstance(value, (list, tuple)) or not all(isinstance(t, (str, AddedToken)) for t in value):
-                    raise TypeError("extra_special_tokens must be a list/tuple of str or AddedToken")
-                self._extra_special_tokens = list(value)
+                # If dict: treat as model specific named special tokens (attributes)
+                if isinstance(value, dict):
+                    self._set_model_specific_special_tokens(special_tokens=value)
+                else:
+                    if not isinstance(value, (list, tuple)) or not all(isinstance(t, (str, AddedToken)) for t in value):
+                        raise TypeError("extra_special_tokens must be a list/tuple of str or AddedToken, or a dict mapping names to tokens")
+                    self._extra_special_tokens = list(value)
 
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
@@ -1814,6 +1818,20 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
 
+        # V5: Get model-specific special tokens from config (saved as individual keys in special_tokens_map)
+        # These need to be groupes as extra_special_tokens dict so __init__ can save them to attributes
+        if "extra_special_tokens" not in init_kwargs or not isinstance(init_kwargs.get("extra_special_tokens"), dict):
+            default_attrs = set(cls.SPECIAL_TOKENS_ATTRIBUTES)
+            model_specific_tokens = {
+                key: init_kwargs.pop(key)
+                for key in list(init_kwargs.keys())
+                if key not in default_attrs
+                and key.endswith("_token")
+                and isinstance(init_kwargs[key], (str, AddedToken))
+            }
+            if model_specific_tokens:
+                init_kwargs["extra_special_tokens"] = model_specific_tokens
+
         # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
@@ -1855,16 +1873,22 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         if isinstance(value, dict):
                             value["special"] = True
                             value = AddedToken(**value)
-                        elif key == "extra_special_tokens" and isinstance(value, list):
-                            # Handle list of extra tokens
+                        elif key == "extra_special_tokens":
+                            # Handle extra_special_tokens (list or dict format)
+                            if isinstance(value, dict):
+                                # Keep as dict so __init__ can promote them to named tokens
+                                init_kwargs[key] = value
+                                continue
+                            # Otherwise treat as list of extra tokens
                             extra_special_tokens = init_kwargs.pop("extra_special_tokens", []) or []
-                            for token in value:
-                                if isinstance(token, dict):
-                                    token["special"] = True
-                                    token = AddedToken(**token)
-                                if token not in extra_special_tokens:
-                                    extra_special_tokens.append(token)
-                            value = extra_special_tokens
+                            if isinstance(value, list):
+                                for token in value:
+                                    if isinstance(token, dict):
+                                        token["special"] = True
+                                        token = AddedToken(**token)
+                                    if token not in extra_special_tokens:
+                                        extra_special_tokens.append(token)
+                                value = extra_special_tokens
                         init_kwargs[key] = value
 
             # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.

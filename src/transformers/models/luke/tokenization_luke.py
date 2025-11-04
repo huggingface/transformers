@@ -357,7 +357,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         elif task == "entity_pair_classification":
             self.max_entity_length = 2
         else:
-            # Be permissive with unexpected values (e.g. coming from configs) and default to no-task behavior
+            # allow unexpected values (coming from configs) and default to no-task behavior
             logger.warning(
                 f"Task {task} not supported. Falling back to no specific task (entity_span_classification-like)."
             )
