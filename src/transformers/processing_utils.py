@@ -219,6 +219,9 @@ class ImagesKwargs(TypedDict, total=False):
             - `'np'`: Return NumPy `np.ndarray` objects.
         disable_grouping (`bool`, *optional*):
             Whether to group images by shapes when processing or not, only relevant for fast image processing.
+        image_seq_length (`int`, *optional*):
+            The number of image tokens to be used for each image in the input.
+            Added for backward compatibility but this should be set as a processor attribute in future models.
     """
 
     do_convert_rgb: Optional[bool]
@@ -239,6 +242,7 @@ class ImagesKwargs(TypedDict, total=False):
     device: Annotated[Optional[str], device_validator()]
     return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
     disable_grouping: Optional[bool]
+    image_seq_length: Optional[int]
 
 
 class VideosKwargs(TypedDict, total=False):
