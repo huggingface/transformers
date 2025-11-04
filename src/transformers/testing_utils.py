@@ -1306,7 +1306,6 @@ def require_hqq(test_case):
     """
     return unittest.skipUnless(is_hqq_available(), "test requires hqq")(test_case)
 
-
 def require_auto_awq(test_case):
     """
     Decorator for auto_awq dependency
