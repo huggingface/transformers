@@ -75,11 +75,11 @@ A processor requires an image_processor and a tokenizer. Hence, inputs can be lo
 from PIL import Image
 from transformers import AutoTokenizer
 from transformers.models.fuyu.processing_fuyu import FuyuProcessor
-from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
+from transformers.models.fuyu.image_processing_fuyu_fast import FuyuImageProcessorFast
 
 
 tokenizer = AutoTokenizer.from_pretrained('adept-hf-collab/fuyu-8b')
-image_processor = FuyuImageProcessor()
+image_processor = FuyuImageProcessorFast()
 
 
 processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
@@ -116,6 +116,11 @@ The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece.
 ## FuyuImageProcessor
 
 [[autodoc]] FuyuImageProcessor
+    - __call__
+
+## FuyuImageProcessor
+
+[[autodoc]] FuyuImageProcessorFast
     - __call__
 
 ## FuyuProcessor
