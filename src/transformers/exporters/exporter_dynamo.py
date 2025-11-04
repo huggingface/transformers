@@ -45,29 +45,32 @@ class DynamoExporter(HfExporter):
         super().validate_environment(*args, **kwargs)
 
         if not is_torch_greater_or_equal("2.6.0"):
-            raise ImportError("DynamoExporter requires torch>=2.6.0 for stable Dynamo based export.")
+            raise ImportError(f"{self.__class__.__name__} requires torch>=2.6.0 for stable Dynamo based export.")
 
     def export(self, model: "PreTrainedModel"):
         if self.export_config.sample_inputs is None:
             raise NotImplementedError(
-                "OnnxExporter can't automatically generate export inptus. Please provide sample_inputs in the exporter_config as a dictionary. "
+                f"{self.__class__.__name__} can't automatically generate export inptus. Please provide sample_inputs in the exporter_config as a dictionary. "
                 "You can do so by using the tokenizer/processor to prepare a batch of inputs as you would do for a normal forward pass. "
-                "OnnxExporter can automatically generate past_key_values and its dynamic shapes if the model is "
+                f"{self.__class__.__name__} can automatically generate past_key_values and its dynamic shapes if the model is "
                 "auto-regressive and model.config.use_cache is set to True."
             )
 
         args = ()
         kwargs = self.export_config.sample_inputs
         if isinstance(model, GenerationMixin) and model.config.use_cache:
-            register_dynamic_cache_for_export()
             if "past_key_values" not in kwargs:
                 logger.info(
-                    "OnnxExporter detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
+                    f"{self.__class__.__name__} detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
                     "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
                     "You can also provide past_key_values in sample_inputs to avoid this step."
                 )
-                sample_outputs = model(**kwargs)
-                kwargs["past_key_values"] = sample_outputs.past_key_values
+                if model.generation_config.cache_implementation == "static":
+                    # TODO: wrap with static cache wrapper or register static cache for export
+                    raise NotImplementedError("Static cache implementation is not yet supported for Dynamo export.")
+                else:
+                    register_dynamic_cache_for_export()
+                    kwargs["past_key_values"] = model(**kwargs).past_key_values
 
         dynamic_shapes = self.export_config.dynamic_shapes
         if self.export_config.dynamic and dynamic_shapes is None:

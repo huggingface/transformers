@@ -95,15 +95,27 @@ class DynamoConfig(ExportConfigMixin):
 
 
 @dataclass
-class OnnxConfig(ExportConfigMixin):
+class OnnxConfig(DynamoConfig):
     """
     Configuration class for exporting models to ONNX format.
 
     Args:
-        opset_version (`int`, *optional*, defaults to 23):
+        f (`str` or `PathLike`, *optional*):
+            The file path where the ONNX model will be saved.
+        dynamic_shapes (`dict[str, Any]`, *optional*):
+            Dynamic shapes for the model inputs.
+        opset_version (`int`, *optional*):
             The ONNX opset version to use for export.
-        sample_inputs (`dict[str, Any]`, *optional*):
-            Sample inputs to be used during export.
+        external_data (`bool`, *optional*, defaults to `True`):
+            Whether to store large initializers in external data files.
+        optimize (`bool`, *optional*, defaults to `True`):
+            Whether to optimize the ONNX model after export.
+        export_params (`bool`, *optional*, defaults to `True`):
+            Whether to export the model parameters with the ONNX model.
+        keep_initializers_as_inputs (`bool`, *optional*, defaults to `False`):
+            Whether to keep initializers as inputs in the ONNX graph.
+        do_constant_folding (`bool`, *optional*, defaults to `True`):
+            Whether to apply constant folding optimization during export.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
