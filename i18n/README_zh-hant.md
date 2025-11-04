@@ -45,7 +45,7 @@ Python data structures (e.g., list, set, dict): 翻譯為串列，集合，字�
 repository: repository（不翻譯）
 summary: 概覽
 token-: token-（不翻譯）
-Trainer: Trainer（不翻譯）
+Trainer: 訓練器。當作為類名出現時不翻譯。
 transformer: transformer（不翻譯）
 tutorial: 教學
 user: 使用者
@@ -182,7 +182,7 @@ user: 使用者
 
 Tokenizer 為所有的預訓練模型提供了預處理，並可以直接轉換單一字串（比如上面的例子）或串列 (list)。它會輸出一個的字典 (dict) 讓你可以在下游程式碼裡使用或直接藉由 `**` 運算式傳給模型。
 
-模型本身是一個常規的 [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) 或 [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model)（取決於你的後端），可依常規方式使用。 [這個教學](https://huggingface.co/transformers/training.html)解釋了如何將這樣的模型整合到一般的 PyTorch 或 TensorFlow 訓練迴圈中，或是如何使用我們的 `Trainer` API 在一個新的資料集上快速進行微調。
+模型本身是一個常規的 [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) 或 [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model)（取決於你的後端），可依常規方式使用。 [這個教學](https://huggingface.co/transformers/training.html)解釋了如何將這樣的模型整合到經典的 PyTorch 或 TensorFlow 訓練迴圈中，或是如何使用我們的 `Trainer` API 在一個新的資料集上快速進行微調。
 
 ## 為什麼要用 transformers？
 
