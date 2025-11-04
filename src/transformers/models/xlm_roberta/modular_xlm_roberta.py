@@ -66,6 +66,7 @@ class XLMRobertaForCausalLM(RobertaForCausalLM):
     }
     def __init__(self, config):
         super().__init__(config)
+        del self.xlm_roberta
         self.roberta = XLMRobertaModel(config, add_pooling_layer=False)
 
     @can_return_tuple

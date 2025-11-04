@@ -118,6 +118,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             self.config.vlm_config.text_config.hidden_size,
             self.embedding_dim,
         )
+        
 
         self.post_init()
 
@@ -221,6 +222,9 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
+
+    def tie_weights(self):
+        return self.vlm.tie_weights()
 
     def resize_token_embeddings(
         self,

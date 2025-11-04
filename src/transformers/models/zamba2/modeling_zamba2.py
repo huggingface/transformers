@@ -20,7 +20,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-import re
 from collections.abc import Callable
 from itertools import cycle
 from typing import Any, Optional, Union

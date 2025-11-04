@@ -430,7 +430,7 @@ class MarianDecoderLayer(GradientCheckpointingLayer):
         outputs = (hidden_states,)
 
         if output_attentions:
-            outputs += (self_attn_weights,)
+            outputs += (self_attn_weights, cross_attn_weights)
 
         return outputs
 
@@ -1298,7 +1298,9 @@ class MarianDecoderWrapper(MarianPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Marian, facebook/bart-base->Helsinki-NLP/opus-mt-fr-en
 class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config):
         config.is_decoder = True
