@@ -388,12 +388,6 @@ class BenchmarkRunner:
 
         n_configs = len(benchmark_configs)
         for i, config in enumerate(benchmark_configs):
-            # Handle SDPA backend if not determined by the config (needs to be done before skipping duplicates)
-            if config.attn_implementation == "sdpa" and config.sdpa_backend is None:
-                default_backend = "flash_attention"  # FIXME: torch has a _cur_sdpa_kernel_backends but it fails
-                self.logger.warning(f"No SDPA backend provided, using {default_backend} instead.")
-                config.sdpa_backend = default_backend
-
             # Skip if already run
             if config.hash in all_results:
                 self.logger.info(f"Skipping duplicate config {config.name} for model {model_id} ({i + 1}/{n_configs})")
@@ -431,7 +425,11 @@ class BenchmarkRunner:
             for result in all_results.values():
                 print("=" * 100)
                 print(f"Config: {result['config'].infer_name(compact=False)}\n")
-                result["measurements"].pprint(batch_size=result["config"].batch_size, tabs=1)
+                result["measurements"].pprint(
+                    batch_size=result["config"].batch_size,
+                    num_generated_tokens=result["config"].num_tokens_to_generate,
+                    tabs=1,
+                )
             print("=" * 100)
 
         return (timestamp, all_results)
