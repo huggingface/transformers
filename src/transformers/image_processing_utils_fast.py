@@ -185,6 +185,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     input_data_format = None
     device = None
     model_input_names = ["pixel_values"]
+    image_seq_length = None
     valid_kwargs = ImagesKwargs
     unused_kwargs = None
 
