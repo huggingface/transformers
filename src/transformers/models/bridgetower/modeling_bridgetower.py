@@ -1497,7 +1497,7 @@ class BridgeTowerITMHead(nn.Module):
     """
 )
 class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
-    _tied_weights_keys = ["mlm_score.decoder.weight"]
+    _tied_weights_keys = {"mlm_score.decoder.weight": "bridgetower.text_model.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

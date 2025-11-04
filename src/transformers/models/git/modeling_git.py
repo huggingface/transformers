@@ -1119,7 +1119,7 @@ class GitModel(GitPreTrainedModel):
     """
 )
 class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["output.weight"]
+    _tied_weights_keys = {"output.weight": "git.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

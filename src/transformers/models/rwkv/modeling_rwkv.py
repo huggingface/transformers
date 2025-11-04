@@ -666,7 +666,7 @@ class RwkvModel(RwkvPreTrainedModel):
     """
 )
 class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["head.weight"]
+    _tied_weights_keys = {"head.weight": "rwkv.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

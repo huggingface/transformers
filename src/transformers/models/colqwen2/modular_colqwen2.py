@@ -307,7 +307,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         del self._tied_weights_keys
-        
+
 
     @can_return_tuple
     @auto_docstring

@@ -947,7 +947,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
     """
 )
 class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["pred_layer.proj.weight"]
+    _tied_weights_keys = {"pred_layer.proj.weight": "transformer.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

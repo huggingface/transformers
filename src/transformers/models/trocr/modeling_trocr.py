@@ -657,7 +657,7 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
     """
 )
 class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["output_projection.weight"]
+    _tied_weights_keys = {"output_projection.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config):
         config.is_decoder = True

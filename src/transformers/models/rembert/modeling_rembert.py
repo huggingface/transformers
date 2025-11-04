@@ -638,7 +638,10 @@ class RemBertModel(RemBertPreTrainedModel):
 
 @auto_docstring
 class RemBertForMaskedLM(RemBertPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.weight": "rembert.embeddings.word_embeddings.weight",
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -745,7 +748,10 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
     """
 )
 class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["cls.predictions.decoder.weight"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.weight": "rembert.embeddings.word_embeddings.weight",
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)

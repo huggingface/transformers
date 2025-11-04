@@ -527,7 +527,10 @@ class NystromformerModel(NystromformerPreTrainedModel):
 
 @auto_docstring
 class NystromformerForMaskedLM(NystromformerPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.weight": "nystromformer.embeddings.word_embeddings.weight",
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)

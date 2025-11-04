@@ -851,7 +851,7 @@ class LxmertModel(LxmertPreTrainedModel):
 
 @auto_docstring
 class LxmertForPreTraining(LxmertPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight"]
+    _tied_weights_keys = {"cls.predictions.decoder.weight": "lxmert.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

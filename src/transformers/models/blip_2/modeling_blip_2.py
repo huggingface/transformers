@@ -1034,7 +1034,11 @@ class Blip2Model(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn = False  # because self.qformer does not support FA2
-
+    _tied_weights_keys = {
+        "language_model.decoder.embed_tokens.weight": "language_model.shared.weight",
+        "language_model.encoder.embed_tokens.weight": "language_model.shared.weight",
+        "language_model.lm_head.weight": "language_model.shared.weight",
+    }
     def __init__(self, config: Blip2Config):
         super().__init__(config)
 
@@ -1048,10 +1052,6 @@ class Blip2Model(Blip2PreTrainedModel):
             language_model = AutoModelForCausalLM.from_config(config.text_config)
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
-
-        # Update _tied_weights_keys using the base model used.
-        if language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
 
         self.language_model = language_model
 
@@ -1076,10 +1076,10 @@ class Blip2Model(Blip2PreTrainedModel):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
+    # def _tie_weights(self):
+    #     if not self.config.use_decoder_only_language_model:
+    #         self.language_model.encoder.embed_tokens = self.language_model.shared
+    #         self.language_model.decoder.embed_tokens = self.language_model.shared
 
     @filter_out_non_signature_kwargs()
     @auto_docstring

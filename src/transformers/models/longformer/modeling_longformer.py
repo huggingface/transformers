@@ -1557,7 +1557,10 @@ class LongformerModel(LongformerPreTrainedModel):
 
 @auto_docstring
 class LongformerForMaskedLM(LongformerPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "longformer.embeddings.word_embeddings.weight",
+        "lm_head.decoder.bias": "lm_head.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)

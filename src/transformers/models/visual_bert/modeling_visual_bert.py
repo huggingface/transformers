@@ -1344,7 +1344,10 @@ class VisualBertRegionToPhraseAttention(nn.Module):
     """
 )
 class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "visual_bert.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)

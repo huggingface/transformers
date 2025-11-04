@@ -707,7 +707,7 @@ class ConvBertGeneratorPredictions(nn.Module):
 
 @auto_docstring
 class ConvBertForMaskedLM(ConvBertPreTrainedModel):
-    _tied_weights_keys = ["generator.lm_head.weight"]
+    _tied_weights_keys = {"generator_lm_head.weight": "convbert.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

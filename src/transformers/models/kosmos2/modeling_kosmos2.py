@@ -1619,7 +1619,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
 class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
     config: Kosmos2Config
     main_input_name = "pixel_values"
-    _tied_weights_keys = ["text_model.lm_head.weight"]
+    _tied_weights_keys = {"text_model.lm_head.weight": "text_model.model.embed_tokens.weight"}
 
     def __init__(self, config: Kosmos2Config):
         super().__init__(config)

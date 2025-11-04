@@ -656,7 +656,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
     """
 )
 class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["embed_out.weight"]
+    _tied_weights_keys = {"embed_out.weight": "gpt_neox_japanese.embed_in.weight"}
 
     def __init__(self, config):
         super().__init__(config)

@@ -934,7 +934,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
     """
 )
 class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = []
+    _tied_weights_keys = {}
 
     def __init__(self, config):
         super().__init__(config)
