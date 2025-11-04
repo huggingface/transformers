@@ -839,6 +839,7 @@ class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        "video_kwargs": {"return_metadata": True},
     }
 
 
