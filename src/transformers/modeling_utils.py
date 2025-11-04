@@ -4033,7 +4033,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if use_kernels:
             if not is_kernels_available():
                 raise ValueError(
-                    "Kernels are not available or uses an incompatible version. To use kernels, please install the latest version with `pip install -U kernels`"
+                    "`use_kernels=True` requires kernels>=0.9.0. Please install the latest version with `pip install -U kernels`"
                 )
             from kernels import use_kernel_mapping
 
