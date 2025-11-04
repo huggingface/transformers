@@ -18,85 +18,31 @@ except Exception:  # pragma: no cover
     logger = None
 
 # ------------------------------------------------------------------------------------
-# HF I/O autopatch (lazy import)
+# HF I/O autopatch (handled by startup hook)
 # ------------------------------------------------------------------------------------
-
-_PATCHED_HF_IO: bool = False          # True once patch is applied (idempotent)
-_patch_func: Optional[Callable] = None
-_unpatch_func: Optional[Callable] = None
-
-def _env_truthy(name: str, default: str = "1") -> bool:
-    v = os.getenv(name, default)
-    return str(v).strip().lower() not in ("0", "false", "no", "off", "")
-
-def _resolve_patchers(cfg: Optional[SinqConfig]) -> None:
-    """
-    Lazily import a module that exports:
-      - patch_hf_pretrained_io()
-      - unpatch_hf_pretrained_io()
-    Priority:
-      1) cfg.hf_io_module (if provided)
-      2) env SINQ_HF_IO_MODULE (default: "sinq.hf_io")
-    We DO NOT mark failure as final; future calls may succeed (avoids one-shot dead-end).
-    """
-    global _patch_func, _unpatch_func
-    if _patch_func is not None and _unpatch_func is not None:
-        return  # already resolved successfully
-
-    module_name = None
-    if cfg is not None and getattr(cfg, "hf_io_module", None):
-        module_name = cfg.hf_io_module
-    if module_name is None:
-        module_name = os.getenv("SINQ_HF_IO_MODULE", "sinq.hf_io")
-
-    try:
-        mod = importlib.import_module(module_name)
-        _patch_func = getattr(mod, "patch_hf_pretrained_io", None)
-        _unpatch_func = getattr(mod, "unpatch_hf_pretrained_io", None)
-        if _patch_func is None:
-            raise AttributeError(f"{module_name} lacks patch_hf_pretrained_io")
-        if _unpatch_func is None and logger:
-            logger.info(f"[SINQ] {module_name} has no unpatch function; continuing.")
-    except Exception as e:
-        # leave funcs as None so we can retry next time
-        if logger:
-            logger.debug(f"[SINQ] Could not resolve HF I/O patchers from {module_name}: {e}")
 
 def _maybe_patch_hf_io(auto: Optional[bool], cfg: Optional[SinqConfig]) -> bool:
     """
-    Ensure the HF I/O patch is applied.
-    Returns True if HF is (now or already) patched; False if disabled or still unavailable.
+    Compatibility shim: the actual HF save/load routing is applied at interpreter
+    startup by the SINQ autopatch (via sitecustomize/.pth). We keep this function
+    so callers elsewhere in this file don't need to change.
+
+    Returns:
+        True (indicating "HF is ready") without doing anything.
     """
-    global _PATCHED_HF_IO, _patch_func
-
-    if _PATCHED_HF_IO:
-        return True  # already patched
-
-    # Decide whether we're allowed to patch
-    enabled = auto if auto is not None else _env_truthy("SINQ_PATCH_HF_IO", "1")
-    if not enabled:
-        if logger:
-            logger.info("[SINQ] Autopatch disabled (config/env).")
-        return False
-
-    # Try to resolve patchers now (lazy)
-    _resolve_patchers(cfg)
-    if _patch_func is None:
-        if logger:
-            logger.info("[SINQ] HF I/O patchers not found yet; will retry later.")
-        return False
-
-    # Apply once
     try:
-        _patch_func()
-        _PATCHED_HF_IO = True
-        if logger:
-            logger.info("[SINQ] Applied HF I/O patch (save/load/push routed conditionally to SINQ).")
-        return True
-    except Exception as e:
-        if logger:
-            logger.warning(f"[SINQ] Failed to apply HF I/O patch: {e}")
-        return False
+        # Optional: notice whether the startup marker from _autopatch.py is present.
+        # (_autopatch.py sets: os.environ["SINQ_PTH_LOADED"] = "1")
+        if os.getenv("SINQ_PTH_LOADED"):
+            if logger:
+                logger.debug("[SINQ] Startup autopatch marker detected (SINQ_PTH_LOADED=1).")
+        else:
+            if logger:
+                logger.debug("[SINQ] Startup autopatch marker not detected; continuing anyway.")
+    except Exception:
+        # Never block quantization if the env check/logging fails.
+        pass
+    return True
 
 
 # ------------------------------------------------------------------------------------
