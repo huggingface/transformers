@@ -841,7 +841,9 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     TRANSFO_XL_START_DOCSTRING,
 )
 class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
-    _tied_weights_keys = [r"crit\.out_projs\.\d+", r"crit\.out_layers\.\d+\.weight"]
+    _tied_weights_keys = {
+        "crit\.out_projs\.\d+": "crit\.out_layers\.\d+\.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)

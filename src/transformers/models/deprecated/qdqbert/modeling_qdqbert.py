@@ -853,7 +853,9 @@ class QDQBertModel(QDQBertPreTrainedModel):
     """QDQBERT Model with a `language modeling` head on top for CLM fine-tuning.""", QDQBERT_START_DOCSTRING
 )
 class QDQBertLMHeadModel(QDQBertPreTrainedModel):
-    _tied_weights_keys = ["predictions.decoder.weight", "predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "predictions.decoder.weight": "predictions.decoder.bias"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1007,7 +1009,9 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
 
 @add_start_docstrings("""QDQBERT Model with a `language modeling` head on top.""", QDQBERT_START_DOCSTRING)
 class QDQBertForMaskedLM(QDQBertPreTrainedModel):
-    _tied_weights_keys = ["predictions.decoder.weight", "predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "predictions.decoder.weight": "predictions.decoder.bias"
+    }
 
     def __init__(self, config):
         super().__init__(config)

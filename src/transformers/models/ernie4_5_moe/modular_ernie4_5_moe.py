@@ -149,7 +149,7 @@ class Ernie4_5_MoeExperts(nn.Module):
 class Ernie4_5_MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.weight = nn.Parameter(torch.zeros(config.hidden_size, config.moe_num_experts, dtype=torch.float32))
+        self.weight = nn.Parameter(torch.zeros(config.moe_num_experts, config.hidden_size, dtype=torch.float32))
         self.moe_statics = Ernie4_5_MoeStatics(config)
         self.top_k = config.moe_k
         self.norm_min = config.moe_norm_min
@@ -200,7 +200,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
             final_hidden_states = final_hidden_states + shared_output
 
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, self.hidden_dim)
-        return final_hidden_states
+        return final_hidden_states.to(hidden_states.dtype)
 
 
 class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer):
@@ -227,15 +227,14 @@ class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer):
 class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
     config: Ernie4_5_MoeConfig
     _no_split_modules = ["Ernie4_5_MoeDecoderLayer"]
-    _keep_in_fp32_modules_strict = ["router"]
     # Not supporting multi-token prediction (MTP) atm
     _keys_to_ignore_on_load_unexpected = ["mtp"]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Ernie4_5_MoeTopKRouter, layer_name="mlp.router", index=0),
+        "router_logits": OutputRecorder(Ernie4_5_MoeTopKRouter, layer_name="mlp.gate", index=0),
         "hidden_states": Ernie4_5_MoeDecoderLayer,
         "attentions": Ernie4_5_MoeAttention,
     }
-
+    _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Ernie4_5_MoeStatics):

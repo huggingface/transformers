@@ -764,7 +764,7 @@ class Data2VecTextClassificationHead(nn.Module):
 class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "lm_head.decoder.weight": "data2vec_text.embedding.weight",
-        "lm_head.decoder.bias": "lm_head.bias"
+        "lm_head.decoder.bias": "lm_head.bias",
     }
 
     def __init__(self, config):
@@ -866,7 +866,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
 class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
     _tied_weights_keys = {
         "lm_head.decoder.weight": "data2vec_text.embedding.weight",
-        "lm_head.decoder.bias": "lm_head.bias"
+        "lm_head.decoder.bias": "lm_head.bias",
     }
 
     def __init__(self, config):

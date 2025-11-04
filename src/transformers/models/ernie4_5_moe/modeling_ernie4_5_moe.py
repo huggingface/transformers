@@ -491,9 +491,9 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
         "hidden_states": Ernie4_5_MoeDecoderLayer,
         "attentions": Ernie4_5_MoeAttention,
     }
-    _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
     # Not supporting multi-token prediction (MTP) atm
     _keys_to_ignore_on_load_unexpected = ["mtp"]
+    _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -667,7 +667,7 @@ def load_balancing_loss_func(
 
 @auto_docstring
 class Ernie4_5_MoeForCausalLM(Ernie4_5_MoePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

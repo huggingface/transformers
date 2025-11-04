@@ -2386,12 +2386,13 @@ def build_text_mask(logits, attention_mask):
     """
 )
 class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
-    _tied_weights_keys = [
-        r"bbox_embed\.[1-9]\d*",
-        r"model\.decoder\.bbox_embed\.[0-9]\d*",
-        r"class_embed\.[1-9]\d*",
-        r"model\.decoder\.class_embed\.[0-9]\d*",
-    ]
+    _tied_weights_keys = {
+        r"bbox_embed\.[1-9]\d*": [
+            r"model\.decoder\.bbox_embed\.[0-9]\d*",
+            r"class_embed\.[1-9]\d*",
+            r"model\.decoder\.class_embed\.[0-9]\d*",
+        ]
+    }
 
     def __init__(self, config: MMGroundingDinoConfig):
         super().__init__(config)
