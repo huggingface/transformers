@@ -113,12 +113,14 @@ class Phi3VProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
 
-        image_proc_out = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-        num_image_tokens_list = image_proc_out["num_img_tokens"]
+        if images is not None:
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+        else:
+            image_inputs = {"pixel_values": None, "image_shapes": None, "num_img_tokens": []}
+
+        num_image_tokens = image_inputs["num_img_tokens"]
         max_length = output_kwargs["text_kwargs"]["max_length"]
         padding = output_kwargs["text_kwargs"]["padding"]
-
-        print(num_image_tokens_list)
 
         if text is not None:
             if isinstance(text, str):
@@ -135,9 +137,9 @@ class Phi3VProcessor(ProcessorMixin):
             tokenized_outputs = []
             for split in prompt_splits:
                 if split == "<|image|>":
-                    if image_token_counter >= len(num_image_tokens_list):
+                    if image_token_counter >= len(num_image_tokens):
                         raise ValueError("More image placeholders in the text than images provided.")
-                    image_tokens = [self.image_token_id] * num_image_tokens_list[image_token_counter]
+                    image_tokens = [self.image_token_id] * num_image_tokens[image_token_counter]
                     tokenized_outputs.extend(image_tokens)
                     image_token_counter += 1
                 else:
@@ -146,7 +148,9 @@ class Phi3VProcessor(ProcessorMixin):
 
             tokenized_prompts.append(tokenized_outputs)
 
-        max_length = min(max_length, max([len(tokenized_input) for tokenized_input in tokenized_prompts]))
+        if padding!="max_length":
+            max_length = min(max_length, max([len(tokenized_input) for tokenized_input in tokenized_prompts]))
+
         pad_token_id = self.tokenizer.pad_token_id
         padded_input_ids = []
         attention_masks = []
@@ -170,11 +174,31 @@ class Phi3VProcessor(ProcessorMixin):
         data = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "pixel_values": image_proc_out["pixel_values"],
-            "image_sizes": image_proc_out["image_shapes"],
+            "pixel_values": image_inputs["pixel_values"],
+            "image_sizes": image_inputs["image_shapes"],
         }
 
         return BatchFeature(data=data)
+
+    def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
+        """
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
+    def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
+        """
+        return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names)) + ["image_sizes"]
 
 
 __all__ = ["Phi3VProcessor"]

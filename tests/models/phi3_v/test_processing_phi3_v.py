@@ -82,3 +82,33 @@ class Phi3VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
+
+    @unittest.skip("Not possible as processor creates a custom attention mask.")
+    def test_apply_chat_template_assistant_mask(self):
+        pass
+
+    def test_unstructured_kwargs_batched(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = ['lower newer |image|', ' |image| upper older longer string']
+        image_input = self.prepare_image_inputs(batch_size=2)
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            do_rescale=True,
+            rescale_factor=-1.0,
+            padding="longest",
+            max_length=76,
+        )
+
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertTrue(
+            len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
+            and len(inputs[self.text_input_name][1]) < 76
+        )
