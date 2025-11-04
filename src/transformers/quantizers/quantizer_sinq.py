@@ -157,7 +157,7 @@ class SinqHfQuantizer(HfQuantizer):
             tiling_mode=str(cfg.tiling_mode),
             method=str(getattr(cfg, "method", "sinq")).lower(),
         )
-
+        
     # ---------------- pre-load: install placeholders ----------------
 
     def _process_model_before_weight_loading(self, model: nn.Module, **kwargs) -> Tuple[nn.Module, dict]:
@@ -375,7 +375,7 @@ class SinqHfQuantizer(HfQuantizer):
                 del_orig=True,
                 compute_dtype=ph._compute_dtype,
                 device=ph._device_str,
-                use_unpack_kernel=False,
+                use_unpack_kernel=True,
                 layer_activations=acts,
             )
             setattr(parent, full.split(".")[-1], sinq)
