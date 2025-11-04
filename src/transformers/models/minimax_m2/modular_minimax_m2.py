@@ -181,7 +181,7 @@ class MiniMaxM2Config(PreTrainedConfig):
         router_aux_loss_coef: Optional[float] = 0.001,
         router_jitter_noise: Optional[float] = 0.0,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        rotary_dim: Optional[int] = 64,
+        rotary_dim: Optional[int] = None,
         use_qk_norm: Optional[bool] = True,
         **kwargs,
     ):
@@ -213,13 +213,18 @@ class MiniMaxM2Config(PreTrainedConfig):
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
-        self.rotary_dim = rotary_dim
-        self.use_qk_norm = use_qk_norm
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 1000000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
+
+        self.rotary_dim = rotary_dim if rotary_dim is not None else head_dim
+        self.use_qk_norm = use_qk_norm
+        self.partial_rotary_factor = kwargs.pop("partial_rotary_factor", 1.0)
+
+        if self.head_dim is not None:
+            self.partial_rotary_factor = self.rotary_dim / self.head_dim
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -261,35 +266,7 @@ class MiniMaxM2RMSNorm(MixtralRMSNorm):
 
 
 class MiniMaxM2RotaryEmbedding(Glm4MoeRotaryEmbedding):
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Optional[MiniMaxM2Config] = None,
-        device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "rotary_dim", None)
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+    pass
 
 
 class MiniMaxM2Attention(Glm4MoeAttention):
