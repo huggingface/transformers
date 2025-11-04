@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import math
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -479,6 +480,10 @@ class DeepseekOcrSamVisionEncoder(SamVisionEncoder):
     Wraps the SAM vision encoder and adds downsampling convolutions.
     """
 
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
+
     def __init__(self, config):
         super().__init__(config)
         out_channels = config.out_channels
@@ -493,7 +498,15 @@ class DeepseekOcrSamVisionEncoder(SamVisionEncoder):
     def forward(self, pixel_values):
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
-            hidden_states = hidden_states + self.pos_embed
+            pos_embed = self.pos_embed
+            if pos_embed.shape[1:3] != hidden_states.shape[1:3]:
+                pos_embed = nn.functional.interpolate(
+                    pos_embed.permute(0, 3, 1, 2),
+                    size=hidden_states.shape[1:3],
+                    mode="bicubic",
+                    align_corners=False,
+                ).permute(0, 2, 3, 1)
+            hidden_states = hidden_states + pos_embed
         for layer_module in self.layers:
             hidden_states = layer_module(hidden_states)
         hidden_states = self.neck(hidden_states)
@@ -636,6 +649,9 @@ class DeepseekOcrCLIPVisionTransformer(CLIPVisionTransformer):
 
 
 class DeepseekOcrCLIPVisionModel(CLIPVisionModel):
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
     config_class = DeepseekOcrCLIPVisionConfig
 
     def __init__(self, config):
@@ -874,6 +890,10 @@ class DeepseekOcrModel(LlavaNextModel):
     Deepseek OCR model with dual vision encoders (SAM + CLIP) and a projector.
     """
 
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
+
     def __init__(self, config: DeepseekOcrConfig):
         super().__init__(config)
         del self.vision_tower
@@ -938,9 +958,7 @@ class DeepseekOcrModel(LlavaNextModel):
 
             patch_features = patch_features[:valid_patch_count]
             if len(patch_features) == 0:
-                new_image_features.append(
-                    torch.empty(0, self.config.hidden_size, device=self.image_newline.device)
-                )
+                new_image_features.append(torch.empty(0, self.config.hidden_size, device=self.image_newline.device))
                 feature_lens.append(0)
                 continue
 
@@ -1189,11 +1207,7 @@ class DeepseekOcrModel(LlavaNextModel):
             patch_features = []
             local_count = num_local_crops[batch_idx].item()
 
-            if (
-                local_count > 0
-                and pixel_values_local is not None
-                and pixel_values_local.shape[1] >= local_count
-            ):
+            if local_count > 0 and pixel_values_local is not None and pixel_values_local.shape[1] >= local_count:
                 local_pixels = pixel_values_local[batch_idx, :local_count]
                 local_patch_features = self._project_image_patches(
                     local_pixels,
@@ -1266,11 +1280,7 @@ class DeepseekOcrModel(LlavaNextModel):
             image_sizes = image_spatial_crop
 
         image_hidden_states = None
-        if (
-            pixel_values is not None
-            and pixel_values.abs().sum().item() != 0
-            or pixel_values_global is not None
-        ):
+        if pixel_values is not None and pixel_values.abs().sum().item() != 0 or pixel_values_global is not None:
             if image_sizes is None:
                 raise ValueError("image_sizes must be provided when pixel values are passed to the model.")
             image_hidden_states, feature_lens = self.get_image_features(
@@ -1285,14 +1295,17 @@ class DeepseekOcrModel(LlavaNextModel):
             if image_attention_mask is not None:
                 token_mask = image_attention_mask.to(inputs_embeds.device)
             else:
-                token_mask = self.get_placeholder_mask(
-                    input_ids, inputs_embeds, self.config.image_token_index
-                ).squeeze(-1)
+                token_mask = self.get_placeholder_mask(input_ids, inputs_embeds, self.config.image_token_index).any(
+                    dim=-1
+                )
 
             batch_size = token_mask.shape[0]
             start_idx = 0
             for batch_idx in range(batch_size):
-                valid_len = feature_lens[batch_idx].item()
+                if batch_idx >= feature_lens.shape[0]:
+                    valid_len = 0
+                else:
+                    valid_len = feature_lens[batch_idx].item()
                 if valid_len == 0:
                     continue
                 mask_positions = token_mask[batch_idx].nonzero(as_tuple=True)[0]
@@ -1348,6 +1361,9 @@ class DeepseekOcrModel(LlavaNextModel):
 )
 class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
     _tied_weights_keys = ["lm_head.weight"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
 
     def __init__(self, config):
         super().__init__(config)
@@ -1415,6 +1431,9 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
+        pixel_values_local=None,
+        pixel_values_global=None,
+        num_local_crops=None,
         image_sizes=None,
         image_attention_mask=None,
         image_spatial_crop=None,
@@ -1436,6 +1455,12 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
 
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
+            if pixel_values_local is not None:
+                model_inputs["pixel_values_local"] = pixel_values_local
+            if pixel_values_global is not None:
+                model_inputs["pixel_values_global"] = pixel_values_global
+            if num_local_crops is not None:
+                model_inputs["num_local_crops"] = num_local_crops
             model_inputs["image_sizes"] = image_sizes
             if image_attention_mask is not None:
                 model_inputs["image_attention_mask"] = image_attention_mask

@@ -204,9 +204,9 @@ class DeepseekOcrPatchEmbeddings(nn.Module):
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        if height % self.patch_size[0] != 0 or width % self.patch_size[1] != 0:
+        if height != self.image_size[0] or width != self.image_size[1]:
             raise ValueError(
-                f"Input image size ({height}*{width}) is not divisible by the patch size {self.patch_size}."
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
         embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
         return embeddings
@@ -534,6 +534,10 @@ class DeepseekOcrSamVisionEncoder(DeepseekOcrPreTrainedModel):
     """
 
     _can_record_outputs = {"hidden_states": DeepseekOcrVisionLayer, "attentions": DeepseekOcrVisionAttention}
+
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
 
     def __init__(self, config):
         super().__init__(config)
@@ -940,6 +944,9 @@ class DeepseekOcrCLIPVisionModel(DeepseekOcrPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "image"
     _no_split_modules = ["DeepseekOcrCLIPEncoderLayer"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
     config_class = DeepseekOcrCLIPVisionConfig
 
     def __init__(self, config):
@@ -1500,6 +1507,10 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
     _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
+
     def __init__(self, config: DeepseekOcrConfig):
         super().__init__(config)
 
@@ -1582,9 +1593,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
             patch_features = patch_features[:valid_patch_count]
             if len(patch_features) == 0:
-                new_image_features.append(
-                    torch.empty(0, self.config.hidden_size, device=self.image_newline.device)
-                )
+                new_image_features.append(torch.empty(0, self.config.hidden_size, device=self.image_newline.device))
                 feature_lens.append(0)
                 continue
 
@@ -1782,6 +1791,132 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         concatenated_features = torch.cat(new_image_features, dim=0)
         return concatenated_features, feature_lens
 
+    def get_placeholder_mask(self, input_ids, inputs_embeds, image_token_id):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            tok_embed = self.get_input_embeddings()(torch.tensor(image_token_id, device=inputs_embeds.device))
+            mask = (inputs_embeds == tok_embed).all(dim=-1)
+        else:
+            mask = input_ids == self.config.image_token_id
+        return mask.unsqueeze(-1).expand_as(inputs_embeds)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values_local: Optional[torch.FloatTensor] = None,
+        pixel_values_global: Optional[torch.FloatTensor] = None,
+        num_local_crops: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[tuple, BaseModelOutputWithPast]:
+        r"""
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
+            If `"full"`, the full vision features are used.
+        pixel_values_local (`torch.FloatTensor`, *optional*):
+            Local high-resolution image crops of shape `(batch_size, num_crops, num_channels, height, width)`.
+        pixel_values_global (`torch.FloatTensor`, *optional*):
+            Global image views of shape `(batch_size, 1, num_channels, height, width)`.
+        num_local_crops (`torch.LongTensor`, *optional*):
+            Number of valid local crops per image of shape `(batch_size,)`.
+        """
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        image_spatial_crop = kwargs.pop("image_spatial_crop", None)
+        image_sizes = kwargs.pop("image_sizes", None)
+        image_attention_mask = kwargs.pop("image_attention_mask", None)
+        pixel_values_local = kwargs.pop("pixel_values_local", pixel_values_local)
+        pixel_values_global = kwargs.pop("pixel_values_global", pixel_values_global)
+        num_local_crops = kwargs.pop("num_local_crops", num_local_crops)
+        # num_img_tokens = kwargs.pop("num_img_tokens", None)
+        if image_sizes is None and image_spatial_crop is not None:
+            image_sizes = image_spatial_crop
+
+        image_hidden_states = None
+        if pixel_values is not None and pixel_values.abs().sum().item() != 0 or pixel_values_global is not None:
+            if image_sizes is None:
+                raise ValueError("image_sizes must be provided when pixel values are passed to the model.")
+            image_hidden_states, feature_lens = self.get_image_features(
+                pixel_values=pixel_values,
+                image_sizes=image_sizes,
+                image_spatial_crops=image_spatial_crop,
+                pixel_values_global=pixel_values_global,
+                pixel_values_local=pixel_values_local,
+                num_local_crops=num_local_crops,
+            )
+
+            if image_attention_mask is not None:
+                token_mask = image_attention_mask.to(inputs_embeds.device)
+            else:
+                token_mask = self.get_placeholder_mask(input_ids, inputs_embeds, self.config.image_token_index).any(
+                    dim=-1
+                )
+
+            batch_size = token_mask.shape[0]
+            start_idx = 0
+            for batch_idx in range(batch_size):
+                if batch_idx >= feature_lens.shape[0]:
+                    valid_len = 0
+                else:
+                    valid_len = feature_lens[batch_idx].item()
+                if valid_len == 0:
+                    continue
+                mask_positions = token_mask[batch_idx].nonzero(as_tuple=True)[0]
+                if mask_positions.numel() == 0:
+                    continue
+                if mask_positions.numel() > valid_len:
+                    # deactivate surplus placeholders so they won't interfere with autoregressive decoding
+                    extra_positions = mask_positions[valid_len:]
+                    token_mask[batch_idx, extra_positions] = False
+                    mask_positions = mask_positions[:valid_len]
+                scatter_mask = torch.zeros_like(token_mask[batch_idx], dtype=torch.bool)
+                scatter_mask[mask_positions] = True
+                scatter_mask_expanded = scatter_mask.unsqueeze(-1).expand(-1, inputs_embeds.shape[-1])
+                slice_features = image_hidden_states[start_idx : start_idx + valid_len].to(inputs_embeds.dtype)
+                inputs_embeds[batch_idx] = inputs_embeds[batch_idx].masked_scatter(
+                    scatter_mask_expanded, slice_features
+                )
+                start_idx += valid_len
+
+        outputs = self.language_model(
+            input_ids=None,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            **kwargs,
+        )
+
+        if not isinstance(outputs, BaseModelOutputWithPast):
+            last_hidden_state = outputs[0]
+            past = outputs[1] if len(outputs) > 1 else None
+            hidden = outputs[2] if len(outputs) > 2 else None
+            attn = outputs[3] if len(outputs) > 3 else None
+        else:
+            last_hidden_state = outputs.last_hidden_state
+            past = outputs.past_key_values
+            hidden = outputs.hidden_states
+            attn = outputs.attentions
+
+        return DeepseekOcrModelOutputWithPast(
+            last_hidden_state=last_hidden_state,
+            past_key_values=past,
+            hidden_states=hidden,
+            attentions=attn,
+            image_hidden_states=image_hidden_states,
+        )
+
     def _project_image_patches(
         self,
         pixel_batch: torch.Tensor,
@@ -1852,11 +1987,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
             patch_features = []
             local_count = num_local_crops[batch_idx].item()
 
-            if (
-                local_count > 0
-                and pixel_values_local is not None
-                and pixel_values_local.shape[1] >= local_count
-            ):
+            if local_count > 0 and pixel_values_local is not None and pixel_values_local.shape[1] >= local_count:
                 local_pixels = pixel_values_local[batch_idx, :local_count]
                 local_patch_features = self._project_image_patches(
                     local_pixels,
@@ -1890,133 +2021,6 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         concatenated_features = torch.cat(packed_features, dim=0)
         return concatenated_features, feature_lens
 
-    def get_placeholder_mask(self, input_ids, inputs_embeds, image_token_id):
-        """
-        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
-        """
-        if input_ids is None:
-            tok_embed = self.get_input_embeddings()(torch.tensor(image_token_id, device=inputs_embeds.device))
-            mask = (inputs_embeds == tok_embed).all(dim=-1)
-        else:
-            mask = input_ids == self.config.image_token_id
-        return mask.unsqueeze(-1).expand_as(inputs_embeds)
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_values_local: Optional[torch.FloatTensor] = None,
-        pixel_values_global: Optional[torch.FloatTensor] = None,
-        num_local_crops: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPast]:
-        r"""
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
-        pixel_values_local (`torch.FloatTensor`, *optional*):
-            Local high-resolution image crops of shape `(batch_size, num_crops, num_channels, height, width)`.
-        pixel_values_global (`torch.FloatTensor`, *optional*):
-            Global image views of shape `(batch_size, 1, num_channels, height, width)`.
-        num_local_crops (`torch.LongTensor`, *optional*):
-            Number of valid local crops per image of shape `(batch_size,)`.
-        """
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        image_spatial_crop = kwargs.pop("image_spatial_crop", None)
-        image_sizes = kwargs.pop("image_sizes", None)
-        image_attention_mask = kwargs.pop("image_attention_mask", None)
-        pixel_values_local = kwargs.pop("pixel_values_local", pixel_values_local)
-        pixel_values_global = kwargs.pop("pixel_values_global", pixel_values_global)
-        num_local_crops = kwargs.pop("num_local_crops", num_local_crops)
-        # num_img_tokens = kwargs.pop("num_img_tokens", None)
-        if image_sizes is None and image_spatial_crop is not None:
-            image_sizes = image_spatial_crop
-
-        image_hidden_states = None
-        if (
-            pixel_values is not None
-            and pixel_values.abs().sum().item() != 0
-            or pixel_values_global is not None
-        ):
-            if image_sizes is None:
-                raise ValueError("image_sizes must be provided when pixel values are passed to the model.")
-            image_hidden_states, feature_lens = self.get_image_features(
-                pixel_values=pixel_values,
-                image_sizes=image_sizes,
-                image_spatial_crops=image_spatial_crop,
-                pixel_values_global=pixel_values_global,
-                pixel_values_local=pixel_values_local,
-                num_local_crops=num_local_crops,
-            )
-
-            if image_attention_mask is not None:
-                token_mask = image_attention_mask.to(inputs_embeds.device)
-            else:
-                token_mask = self.get_placeholder_mask(
-                    input_ids, inputs_embeds, self.config.image_token_index
-                ).squeeze(-1)
-
-            batch_size = token_mask.shape[0]
-            start_idx = 0
-            for batch_idx in range(batch_size):
-                valid_len = feature_lens[batch_idx].item()
-                if valid_len == 0:
-                    continue
-                mask_positions = token_mask[batch_idx].nonzero(as_tuple=True)[0]
-                if mask_positions.numel() == 0:
-                    continue
-                if mask_positions.numel() > valid_len:
-                    # deactivate surplus placeholders so they won't interfere with autoregressive decoding
-                    extra_positions = mask_positions[valid_len:]
-                    token_mask[batch_idx, extra_positions] = False
-                    mask_positions = mask_positions[:valid_len]
-                scatter_mask = torch.zeros_like(token_mask[batch_idx], dtype=torch.bool)
-                scatter_mask[mask_positions] = True
-                scatter_mask_expanded = scatter_mask.unsqueeze(-1).expand(-1, inputs_embeds.shape[-1])
-                slice_features = image_hidden_states[start_idx : start_idx + valid_len].to(inputs_embeds.dtype)
-                inputs_embeds[batch_idx] = inputs_embeds[batch_idx].masked_scatter(
-                    scatter_mask_expanded, slice_features
-                )
-                start_idx += valid_len
-
-        outputs = self.language_model(
-            input_ids=None,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            **kwargs,
-        )
-
-        if not isinstance(outputs, BaseModelOutputWithPast):
-            last_hidden_state = outputs[0]
-            past = outputs[1] if len(outputs) > 1 else None
-            hidden = outputs[2] if len(outputs) > 2 else None
-            attn = outputs[3] if len(outputs) > 3 else None
-        else:
-            last_hidden_state = outputs.last_hidden_state
-            past = outputs.past_key_values
-            hidden = outputs.hidden_states
-            attn = outputs.attentions
-
-        return DeepseekOcrModelOutputWithPast(
-            last_hidden_state=last_hidden_state,
-            past_key_values=past,
-            hidden_states=hidden,
-            attentions=attn,
-            image_hidden_states=image_hidden_states,
-        )
-
 
 @auto_docstring(
     custom_intro="""
@@ -2032,6 +2036,9 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
         "^language_model.lm_head": "lm_head",
     }
     _tied_weights_keys = ["lm_head.weight"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
 
     def __init__(self, config):
         super().__init__(config)
@@ -2191,10 +2198,6 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
         logits_to_keep=None,
         **kwargs,
     ):
-        pixel_values_local = kwargs.pop("pixel_values_local", pixel_values_local)
-        pixel_values_global = kwargs.pop("pixel_values_global", pixel_values_global)
-        num_local_crops = kwargs.pop("num_local_crops", num_local_crops)
-
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -2207,10 +2210,10 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
 
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
-            if pixel_values_global is not None:
-                model_inputs["pixel_values_global"] = pixel_values_global
             if pixel_values_local is not None:
                 model_inputs["pixel_values_local"] = pixel_values_local
+            if pixel_values_global is not None:
+                model_inputs["pixel_values_global"] = pixel_values_global
             if num_local_crops is not None:
                 model_inputs["num_local_crops"] = num_local_crops
             model_inputs["image_sizes"] = image_sizes

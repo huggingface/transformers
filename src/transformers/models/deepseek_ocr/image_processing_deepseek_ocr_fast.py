@@ -73,13 +73,17 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         "num_local_crops",
         "image_attention_mask",
         "image_spatial_crop",
+        "num_img_tokens",
     ]
 
     def __init__(self, **kwargs: Unpack[DeepseekOcrImageProcessorKwargs]):
-        patch_size_side = kwargs.get("patch_size_side", None)
+        patch_size_side = kwargs.get("patch_size_side")
         super().__init__(**kwargs)
         if patch_size_side is not None:
             self.patch_size_side = patch_size_side
+        #original implementation capped the number of local crops to 9 tiles.
+        if self.dynamic_hd is None or self.dynamic_hd > 9:
+            self.dynamic_hd = 9
 
     def find_closest_aspect_ratio(self, aspect_ratio, target_ratios, width, height, image_size):
         best_ratio_diff = float("inf")
@@ -372,7 +376,9 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
             "num_img_tokens": images_tokens,
         }
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        batch = BatchFeature(data=data, tensor_type=return_tensors)
+        batch["num_img_tokens"] = images_tokens
+        return batch
 
     def extract_coordinates_and_label(self, ref_text, image_width, image_height):
         """Extract bounding box coordinates and label from model output."""
@@ -390,7 +396,7 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         Visualize results by drawing bounding boxes on the image.
         """
         try:
-            from PIL import Image, ImageDraw, ImageFont, ImageOps
+            from PIL import Image, ImageDraw, ImageFont
         except ImportError:
             logger.error("PIL is required for visualization. Install it with `pip install pillow`")
             return None

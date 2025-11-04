@@ -63,9 +63,9 @@ class DeepseekOcrModelTester:
             "use_mla": False,
             "first_k_dense_replace": 1,
             "moe_intermediate_size": 32,
-            "n_routed_experts": 0,
+            "n_routed_experts": 2,
             "n_shared_experts": 0,
-            "num_experts_per_tok": 0,
+            "num_experts_per_tok": 1,
         },
         sam_config={
             "num_hidden_layers": 2,
