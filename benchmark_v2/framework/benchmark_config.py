@@ -87,6 +87,11 @@ class BenchmarkConfig:
         if is_fa:
             logger.warning("Flash attention does not support compile mode. Turning off compile mode.")
             self.compile_mode = None
+        # Handle SDPA backend if not determined by the config (needs to be done before skipping duplicates)
+        if self.attn_implementation == "sdpa" and self.sdpa_backend is None:
+            default_backend = "flash_attention"  # FIXME: torch has a _cur_sdpa_kernel_backends but it fails
+            logger.warning(f"No SDPA backend provided, using {default_backend} instead.")
+            self.sdpa_backend = default_backend
         if self.continuous_batching:
             if self.attn_implementation == "flex_attention":
                 logger.error(
@@ -97,7 +102,7 @@ class BenchmarkConfig:
                 logger.warning(
                     "when continuous batching is enabled, sdpa_backend must be None because of the attention mask, setting it to None"
                 )
-                self.sdpa_backend = None
+                self.sdpa_backend = "math"
 
     @property
     def hash(self) -> str:
@@ -229,14 +234,14 @@ def get_config_by_level(level: int) -> list[BenchmarkConfig]:
         configs.append(BenchmarkConfig(attn_implementation="flash_attention_2"))
         configs.append(BenchmarkConfig(attn_implementation="eager", compile_mode="default"))
         configs.append(
-            BenchmarkConfig(attn_implementation="sdpa|paged", compile_mode="default", continuous_batching=True)
+            BenchmarkConfig(attn_implementation="paged|sdpa", compile_mode="default", continuous_batching=True)
         )
     if level >= 2:
         configs.append(BenchmarkConfig(attn_implementation="sdpa", compile_mode="default"))
         configs.append(BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", kernelize=True))
         configs.append(BenchmarkConfig(attn_implementation="flash_attention_2", kernelize=True))
         configs.append(
-            BenchmarkConfig(attn_implementation="sdpa|paged", compile_mode="default", continuous_batching=True)
+            BenchmarkConfig(attn_implementation="paged|sdpa", compile_mode="default", continuous_batching=True)
         )
         configs.append(
             BenchmarkConfig(attn_implementation="flash_attention_2", kernelize=True, continuous_batching=True)

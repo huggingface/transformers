@@ -142,13 +142,10 @@ class BenchmarkResult:
     def get_measured_itl(self) -> list[float]:
         return [(dt[-1] - dt[0]) / (len(dt) - 1) for dt in self.token_generation_times if len(dt) > 1]
 
-    def get_throughput(self, batch_size: int) -> list[float]:
-        return [
-            batch_size * len(dt) / e2e_latency
-            for e2e_latency, dt in zip(self.e2e_latency, self.token_generation_times)
-        ]
+    def get_throughput(self, total_generated_tokens: int) -> list[float]:
+        return [total_generated_tokens / e2e_latency for e2e_latency in self.e2e_latency]
 
-    def pprint(self, batch_size: int = 0, tabs: int = 0) -> None:
+    def pprint(self, batch_size: int = 0, num_generated_tokens: int = 0, tabs: int = 0) -> None:
         measurements = {
             "E2E Latency": add_unit_to_duration(compute_basic_statistics(self.e2e_latency)),
             "Time to First Token": add_unit_to_duration(compute_basic_statistics(self.get_measured_ttft())),
@@ -157,7 +154,7 @@ class BenchmarkResult:
         if len(itl_values) > 0:
             measurements["Inter-Token Latency"] = add_unit_to_duration(compute_basic_statistics(itl_values))
         if batch_size > 0:
-            throughput_stats = compute_basic_statistics(self.get_throughput(batch_size))
+            throughput_stats = compute_basic_statistics(self.get_throughput(batch_size * num_generated_tokens))
             measurements["Throughput"] = {key: f"{value:.2f}tok/s" for key, value in throughput_stats.items()}
         dict_to_pprint = equalize_lengths_and_collate(measurements)
         pretty_print_dict(dict_to_pprint, tabs=tabs)

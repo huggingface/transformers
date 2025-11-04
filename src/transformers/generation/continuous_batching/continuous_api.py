@@ -818,14 +818,15 @@ class ContinuousBatchingManager:
             logger.warning("Manager not started.")
             return
 
+        stop_trigger_time = perf_counter()
         if not self.stop_event.is_set():
             self.stop_event.set()
             logger.info("Stopping continuous batching manager...")
 
         if block:
-            self.join(timeout)
+            self.join(stop_trigger_time, timeout)
 
-    def join(self, timeout: Optional[float] = None) -> None:
+    def join(self, stop_trigger_time: float, timeout: Optional[float] = None) -> None:
         """Wait for the background thread to finish.
 
         Args:
@@ -834,9 +835,10 @@ class ContinuousBatchingManager:
         if self._generation_thread is not None:
             self._generation_thread.join(timeout=timeout)
             if self._generation_thread.is_alive():
-                logger.warning("Generation thread did not exit after join timeout.")
+                logger.warning(f"Generation thread did not exit after join timeout ({timeout}).")
             else:
-                logger.info("Continuous Batching Manager stopped.")
+                end = perf_counter()
+                logger.info(f"Continuous Batching Manager stopped after {end - stop_trigger_time:.2f}s.")
                 self._generation_thread = None
 
     def add_request(
