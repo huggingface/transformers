@@ -536,7 +536,10 @@ class FNetModel(FNetPreTrainedModel):
     """
 )
 class FNetForPreTraining(FNetPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "fnet.embeddings.word_embeddings.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -626,7 +629,10 @@ class FNetForPreTraining(FNetPreTrainedModel):
 
 @auto_docstring
 class FNetForMaskedLM(FNetPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "fnet.embeddings.word_embeddings.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)

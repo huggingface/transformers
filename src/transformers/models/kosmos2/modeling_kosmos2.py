@@ -1277,7 +1277,9 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
 )
 class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
     config: Kosmos2TextConfig
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.embed_tokens.weight"
+    }
 
     def __init__(self, config: Kosmos2TextConfig):
         super().__init__(config)

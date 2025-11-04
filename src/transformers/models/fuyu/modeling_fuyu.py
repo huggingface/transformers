@@ -257,7 +257,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         "^vision_embed_tokens": "model.vision_embed_tokens",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.embed_tokens.weight"
+    }
 
     def __init__(self, config: FuyuConfig):
         super().__init__(config)

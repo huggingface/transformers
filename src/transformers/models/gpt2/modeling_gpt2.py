@@ -752,7 +752,9 @@ class GPT2Model(GPT2PreTrainedModel):
     """
 )
 class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "transformer.wte.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -855,7 +857,9 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
     """
 )
 class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "transformer.wte.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)

@@ -722,7 +722,9 @@ class GPTJModel(GPTJPreTrainedModel):
     """
 )
 class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "transformer.wte.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)

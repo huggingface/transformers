@@ -298,7 +298,9 @@ class HunYuanMoEV1Moe(nn.Module):
         routing_weights = F.softmax(hidden_states, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = torch.zeros_like(hidden_states, dtype=torch.float32).scatter_(1, selected_experts, routing_weights)
+        routing_weights = torch.zeros_like(hidden_states, dtype=torch.float32).scatter_(
+            1, selected_experts, routing_weights
+        )
         return selected_experts, routing_weights.to(hidden_states.dtype)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -542,7 +544,7 @@ class HunYuanMoEV1Model(HunYuanMoEV1PreTrainedModel):
 
 @auto_docstring
 class HunYuanMoEV1ForCausalLM(HunYuanMoEV1PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

@@ -788,7 +788,10 @@ class ErniePreTrainingHeads(nn.Module):
     """
 )
 class ErnieForPreTraining(ErniePreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "ernie.embeddings.word_embeddings.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -899,7 +902,10 @@ class ErnieOnlyMLMHead(nn.Module):
     """
 )
 class ErnieForCausalLM(ErniePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.weight": "ernie.embeddings.word_embeddings.weight",
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -990,7 +996,7 @@ class ErnieForCausalLM(ErniePreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class ErnieForMaskedLM(ErniePreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
+    _tied_weights_keys = {"cls.predictions.decoder.bias": "cls.predictions.decoder.weight"}
 
     def __init__(self, config):
         super().__init__(config)
