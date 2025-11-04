@@ -412,6 +412,63 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             check_post_processed_output(tensor_post_processed_outputs, tensor_image_sizes)
 
+    @require_torch
+    def test_post_processing_keypoint_matching_with_padded_match_indices(self):
+        """
+        Test that post_process_keypoint_matching correctly handles matches pointing to padded keypoints.
+        This tests the edge case where a match index points beyond the actual number of real keypoints,
+        which would cause an out-of-bounds error without proper filtering.
+        """
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+
+            # Create a specific scenario with intentional padding issues
+            batch_size = 1
+            max_number_keypoints = 50
+
+            # Image 0 has 10 real keypoints, image 1 has only 5 real keypoints
+            num_keypoints0 = 10
+            num_keypoints1 = 5
+
+            mask = torch.zeros((batch_size, 2, max_number_keypoints), dtype=torch.int)
+            keypoints = torch.zeros((batch_size, 2, max_number_keypoints, 2))
+            matches = torch.full((batch_size, 2, max_number_keypoints), -1, dtype=torch.int)
+            scores = torch.zeros((batch_size, 2, max_number_keypoints))
+
+            # Set up real keypoints
+            mask[0, 0, :num_keypoints0] = 1
+            mask[0, 1, :num_keypoints1] = 1
+            keypoints[0, 0, :num_keypoints0] = torch.rand((num_keypoints0, 2))
+            keypoints[0, 1, :num_keypoints1] = torch.rand((num_keypoints1, 2))
+
+            # Create a match that points to a padded keypoint in image 1
+            # This would cause IndexError before the fix
+            matches[0, 0, 0] = 8  # Points to index 8, but image 1 only has 5 real keypoints (indices 0-4)
+            scores[0, 0, 0] = 0.9  # High confidence score
+
+            # Create a valid match for comparison
+            matches[0, 0, 1] = 2  # Points to index 2, which is valid
+            scores[0, 0, 1] = 0.8
+
+            outputs = KeypointMatchingOutput(mask=mask, keypoints=keypoints, matches=matches, matching_scores=scores)
+
+            image_sizes = [((480, 640), (480, 640))]
+
+            # This should not raise an IndexError and should filter out the invalid match
+            post_processed = image_processor.post_process_keypoint_matching(outputs, image_sizes)
+
+            # Check that we got results
+            self.assertEqual(len(post_processed), 1)
+            result = post_processed[0]
+
+            # Should only have 1 valid match (index 1), the out-of-bounds match (index 0) should be filtered out
+            self.assertEqual(result["keypoints0"].shape[0], 1)
+            self.assertEqual(result["keypoints1"].shape[0], 1)
+            self.assertEqual(result["matching_scores"].shape[0], 1)
+
+            # Verify the match score corresponds to the valid match
+            self.assertAlmostEqual(result["matching_scores"][0].item(), 0.8, places=5)
+
     @unittest.skip(reason="Many failing cases. This test needs a more deep investigation.")
     def test_fast_is_faster_than_slow(self):
         """Override the generic test since EfficientLoFTR requires image pairs."""
