@@ -2,14 +2,14 @@ import enum
 import warnings
 from typing import Any
 
-from ..generation import GenerationConfig
-from ..tokenization_utils import TruncationStrategy
-from ..utils import add_end_docstrings, is_torch_available, logging
-from .base import Pipeline, build_pipeline_init_args
+from ...generation import GenerationConfig
+from ...tokenization_utils import TruncationStrategy
+from ...utils import add_end_docstrings, is_torch_available, logging
+from ..base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
+    from ...models.auto.modeling_auto import MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -77,6 +77,12 @@ class Text2TextGenerationPipeline(Pipeline):
     return_name = "generated"
 
     def __init__(self, *args, **kwargs):
+        if self.return_name == "generated":  # Check this isn't summarization/translation instead
+            logger.warning_once(
+                "The `Text2TextGenerationPipeline` is deprecated and no longer maintained. For most "
+                "purposes, we recommend using newer models with causal pipelines like "
+                "`TextGenerationPipeline` or `ImageTextToTextPipeline`."
+            )
         super().__init__(*args, **kwargs)
 
         self.check_model_type(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
@@ -254,6 +260,14 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     # Used in the return key of the pipeline.
     return_name = "summary"
 
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "The `SummarizationPipeline` is deprecated and no longer maintained. For most "
+            "summarization tasks, we recommend appropriately prompting modern general-purpose LLMs "
+            "via pipelines like `TextGenerationPipeline` or `ImageTextToTextPipeline`."
+        )
+        super().__init__(*args, **kwargs)
+
     def __call__(self, *args, **kwargs):
         r"""
         Summarize the text(s) given as inputs.
@@ -322,6 +336,14 @@ class TranslationPipeline(Text2TextGenerationPipeline):
 
     # Used in the return key of the pipeline.
     return_name = "translation"
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "The `TranslationPipeline` is deprecated and no longer maintained. For most "
+            "translation tasks, we recommend appropriately prompting modern general-purpose LLMs "
+            "via pipelines like `TextGenerationPipeline` or `ImageTextToTextPipeline`."
+        )
+        super().__init__(*args, **kwargs)
 
     def check_inputs(self, input_length: int, min_length: int, max_new_tokens: int):
         """
