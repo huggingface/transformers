@@ -286,8 +286,8 @@ class Idefics3Processor(ProcessorMixin):
                         f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
                     )
 
-                image_rows = inputs.pop("rows", [[0] * len(text)])
-                image_cols = inputs.pop("cols", [[0] * len(text)])
+                image_rows = inputs.pop("rows", [[0] * n_images for n_images in n_images_in_text])
+                image_cols = inputs.pop("cols", [[0] * n_images for n_images in n_images_in_text])
 
                 fake_image_token = self.fake_image_token
                 image_token = self.image_token
