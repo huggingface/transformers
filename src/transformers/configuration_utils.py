@@ -419,6 +419,49 @@ class PreTrainedConfig(PushToHubMixin):
 
     @property
     def rope_scaling(self):
+        if self.rope_parameters is None:
+            return None
+        
+        # Backward compatibility for v4
+        if set(self.rope_parameters.keys()).issubset(ALLOWED_LAYER_TYPES):
+            def __getitem__(self, key):
+                if key in self.keys():
+                    return super().__getitem__(key)
+                # Try getting it from the nested key
+                values = set()
+                for subdict in self.values():
+                    values.add(subdict.get(key))
+                assert len(values) == 1, (
+                    "v4 backwards compatibility requires all sub-dicts to "
+                    "have the same values when not accessing per layer type."
+                )
+                return values.pop()
+
+            def __contains__(self, key):
+                if key in self.keys():
+                    return super().__contains__(key)
+                # Try checking in the nested keys
+                values = set()
+                for subdict in self.values():
+                    values.add(key in subdict)
+                assert len(values) == 1, (
+                    "v4 backwards compatibility requires all sub-dicts "
+                    "to have the same keys when checking for key presence."
+                )
+                return values.pop()
+
+            def __setitem__(self, key, value):
+                if key in self.keys():
+                    return super().__setitem__(key, value)
+                # If key is not present, we need to update all subdicts
+                for subdict in self.values():
+                    if isinstance(subdict, dict):
+                        subdict[key] = value
+
+            self.rope_parameters.__getitem__ = __getitem__
+            self.rope_parameters.__contains__ = __contains__
+            self.rope_parameters.__setitem__ = __setitem__
+
         return self.rope_parameters
 
     @rope_scaling.setter
