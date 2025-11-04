@@ -350,7 +350,7 @@ class ContinuousBatchingTest(unittest.TestCase):
 
         messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
 
-        inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
+        inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True, return_dict=False).to(
             model.device
         )[0]
 
@@ -382,7 +382,7 @@ class ContinuousBatchingTest(unittest.TestCase):
 
         messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
 
-        inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
+        inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True, return_dict=False).to(
             model.device
         )[0]
 
@@ -409,7 +409,7 @@ class ContinuousBatchingTest(unittest.TestCase):
 
         messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
 
-        inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
+        inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True, return_dict=False).to(
             model.device
         )[0]
 
