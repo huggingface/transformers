@@ -306,6 +306,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
+            antialias (`bool`, *optional*, defaults to `True`):
+                Whether to use antialiasing.
 
         Returns:
             `torch.Tensor`: The resized image.
