@@ -45,7 +45,7 @@ from ..deepseek_v2.modeling_deepseek_v2 import (
 )
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
 from ..llava_next.modeling_llava_next import LlavaNextForConditionalGeneration, LlavaNextModel
-from ..sam.modeling_sam import SamVisionEncoder, SamVisionNeck
+from ..sam.modeling_sam import SamVisionAttention, SamVisionEncoder, SamVisionNeck
 
 
 logger = logging.get_logger(__name__)
@@ -418,12 +418,25 @@ class DeepseekOcrProjector(PreTrainedModel):
     Projector that maps concatenated SAM + CLIP features to language model space.
     """
 
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
+
     def __init__(self, config):
         super().__init__(config)
         self.layers = nn.Linear(config.input_dim, config.n_embed)
 
     def forward(self, x):
         return self.layers(x)
+
+    def set_attention_implementation(self, *_args, **_kwargs):
+        return self
+
+
+class DeepseekOcrVisionAttention(SamVisionAttention):
+    def __init__(self, config, window_size):
+        super().__init__(config, window_size)
+        self.config = config
 
 
 class DeepseekOcrSamVisionNeck(SamVisionNeck):
@@ -771,7 +784,7 @@ class DeepseekOcrTextMoe(nn.Module):
         self.config = config
         self.experts = DeepseekOcrTextExperts(config)
         self.gate = nn.Linear(config.hidden_size, config.n_routed_experts, bias=False)
-        if config.n_shared_experts is not None:
+        if config.n_shared_experts is not None and config.n_shared_experts > 0:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
             self.shared_experts = DeepseekOcrTextMLP(config=config, intermediate_size=intermediate_size)
         self.routed_scaling_factor = config.routed_scaling_factor
@@ -1275,8 +1288,34 @@ class DeepseekOcrModel(LlavaNextModel):
         pixel_values_global = kwargs.pop("pixel_values_global", pixel_values_global)
         num_local_crops = kwargs.pop("num_local_crops", num_local_crops)
         # num_img_tokens = kwargs.pop("num_img_tokens", None)
-        if image_sizes is None and image_spatial_crop is not None:
-            image_sizes = image_spatial_crop
+        if image_sizes is None:
+            if image_spatial_crop is not None:
+                image_sizes = image_spatial_crop
+            else:
+                inferred_sizes = None
+                if pixel_values_global is not None:
+                    height, width = pixel_values_global.shape[-2:]
+                    inferred_sizes = torch.tensor(
+                        [[height, width]] * pixel_values_global.shape[0],
+                        dtype=torch.long,
+                        device=pixel_values_global.device,
+                    )
+                elif pixel_values is not None:
+                    if pixel_values.dim() == 5:
+                        batch = pixel_values.shape[0]
+                        height, width = pixel_values.shape[-2:]
+                    elif pixel_values.dim() == 4:
+                        batch = pixel_values.shape[0]
+                        height, width = pixel_values.shape[-2:]
+                    else:
+                        batch = 0
+                        height = width = 0
+                    if batch > 0:
+                        inferred_sizes = torch.tensor(
+                            [[height, width]] * batch, dtype=torch.long, device=pixel_values.device
+                        )
+                if inferred_sizes is not None:
+                    image_sizes = inferred_sizes
 
         image_hidden_states = None
         if pixel_values is not None and pixel_values.abs().sum().item() != 0 or pixel_values_global is not None:

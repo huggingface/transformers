@@ -65,7 +65,12 @@ class DeepseekOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        image_processor = DeepseekOcrImageProcessorFast()
+        image_processor = DeepseekOcrImageProcessorFast(
+            base_size={"height": 256, "width": 256},
+            size={"height": 256, "width": 256},
+            patch_size_side=256,
+            dynamic_hd=1,
+        )
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
         processor_kwargs = self.prepare_processor_dict()
         processor = self.processor_class(

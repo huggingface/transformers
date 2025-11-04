@@ -108,6 +108,8 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         return image
 
     def to_uint8_image(self, image: "torch.Tensor") -> "torch.Tensor":
+        if image.numel() == 0:
+            return image.to(torch.uint8)
         if image.dtype == torch.uint8:
             return image
         if torch.is_floating_point(image):

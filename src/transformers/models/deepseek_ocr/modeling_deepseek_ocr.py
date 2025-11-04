@@ -62,12 +62,153 @@ class DeepseekOcrProjector(PreTrainedModel):
     Projector that maps concatenated SAM + CLIP features to language model space.
     """
 
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
+
     def __init__(self, config):
         super().__init__(config)
         self.layers = nn.Linear(config.input_dim, config.n_embed)
 
     def forward(self, x):
         return self.layers(x)
+
+    def set_attention_implementation(self, *_args, **_kwargs):
+        return self
+
+
+class DeepseekOcrVisionAttention(nn.Module):
+    """Multi-head Attention block with relative position embeddings."""
+
+    def __init__(self, config, window_size):
+        super().__init__()
+        input_size = (
+            (config.image_size // config.patch_size, config.image_size // config.patch_size)
+            if window_size == 0
+            else (window_size, window_size)
+        )
+
+        self.num_attention_heads = config.num_attention_heads
+        head_dim = config.hidden_size // config.num_attention_heads
+        self.scale = head_dim**-0.5
+        self.dropout = config.attention_dropout
+
+        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(config.hidden_size, config.hidden_size)
+
+        self.use_rel_pos = config.use_rel_pos
+        if self.use_rel_pos:
+            if input_size is None:
+                raise ValueError("Input size must be provided if using relative positional encoding.")
+
+            # initialize relative positional embeddings
+            self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
+            self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
+        self.config = config
+
+    def get_rel_pos(self, q_size: int, k_size: int, rel_pos: torch.Tensor) -> torch.Tensor:
+        """
+        Get relative positional embeddings according to the relative positions of
+            query and key sizes.
+
+        Args:
+            q_size (int):
+                size of the query.
+            k_size (int):
+                size of key k.
+            rel_pos (`torch.Tensor`):
+                relative position embeddings (L, channel).
+
+        Returns:
+            Extracted positional embeddings according to relative positions.
+        """
+        max_rel_dist = int(2 * max(q_size, k_size) - 1)
+        # Interpolate rel pos.
+        rel_pos_resized = F.interpolate(
+            rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
+            size=max_rel_dist,
+            mode="linear",
+        )
+        rel_pos_resized = rel_pos_resized.reshape(-1, max_rel_dist).permute(1, 0)
+
+        # Scale the coords with short length if shapes for q and k are different.
+        q_coords = torch.arange(q_size)[:, None] * max(k_size / q_size, 1.0)
+        k_coords = torch.arange(k_size)[None, :] * max(q_size / k_size, 1.0)
+        relative_coords = (q_coords - k_coords) + (k_size - 1) * max(q_size / k_size, 1.0)
+
+        return rel_pos_resized[relative_coords.long()]
+
+    def get_decomposed_rel_pos(
+        self,
+        query: torch.Tensor,
+        rel_pos_h: torch.Tensor,
+        rel_pos_w: torch.Tensor,
+        q_size: tuple[int, int],
+        k_size: tuple[int, int],
+    ) -> torch.Tensor:
+        """
+        Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
+        https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
+
+        Args:
+            query (`torch.Tensor`):
+                query q in the attention layer with shape (batch_size, query_height * query_width, channel).
+            rel_pos_h (`torch.Tensor`):
+                relative position embeddings (Lh, channel) for height axis.
+            rel_pos_w (`torch.Tensor`):
+                relative position embeddings (Lw, channel) for width axis.
+            q_size (tuple):
+                spatial sequence size of query q with (query_height, query_width).
+            k_size (tuple):
+                spatial sequence size of key k with (key_height, key_width).
+
+        Returns:
+            decomposed_rel_pos (`torch.Tensor`):
+                decomposed relative position embeddings.
+        """
+        query_height, query_width = q_size
+        key_height, key_width = k_size
+        relative_position_height = self.get_rel_pos(query_height, key_height, rel_pos_h)
+        relative_position_width = self.get_rel_pos(query_width, key_width, rel_pos_w)
+
+        batch_size, _, dim = query.shape
+        reshaped_query = query.reshape(batch_size, query_height, query_width, dim)
+        rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
+        rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
+
+        decomposed_rel_pos = rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
+
+        return decomposed_rel_pos
+
+    def forward(self, hidden_states: torch.Tensor, output_attentions=None) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, height, width, _ = hidden_states.shape
+        # qkv with shape (3, batch_size, nHead, height * width, channel)
+        qkv = (
+            self.qkv(hidden_states)
+            .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
+            .permute(2, 0, 3, 1, 4)
+        )
+        # q, k, v with shape (batch_size * nHead, height * width, channel)
+        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
+
+        attn_weights = (query * self.scale) @ key.transpose(-2, -1)
+
+        if self.use_rel_pos:
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
+                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            )
+            decomposed_rel_pos = decomposed_rel_pos.reshape_as(attn_weights)
+            attn_weights = attn_weights + decomposed_rel_pos
+
+        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
+
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+
+        attn_output = (attn_probs @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
+        attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
+
+        attn_output = self.proj(attn_output)
+        return attn_output, attn_weights
 
 
 class DeepseekOcrLayerNorm(nn.LayerNorm):
@@ -224,139 +365,6 @@ class DeepseekOcrMLPBlock(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.lin2(hidden_states)
         return hidden_states
-
-
-class DeepseekOcrVisionAttention(nn.Module):
-    """Multi-head Attention block with relative position embeddings."""
-
-    def __init__(self, config, window_size):
-        super().__init__()
-        input_size = (
-            (config.image_size // config.patch_size, config.image_size // config.patch_size)
-            if window_size == 0
-            else (window_size, window_size)
-        )
-
-        self.num_attention_heads = config.num_attention_heads
-        head_dim = config.hidden_size // config.num_attention_heads
-        self.scale = head_dim**-0.5
-        self.dropout = config.attention_dropout
-
-        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
-        self.proj = nn.Linear(config.hidden_size, config.hidden_size)
-
-        self.use_rel_pos = config.use_rel_pos
-        if self.use_rel_pos:
-            if input_size is None:
-                raise ValueError("Input size must be provided if using relative positional encoding.")
-
-            # initialize relative positional embeddings
-            self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
-            self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
-
-    def get_rel_pos(self, q_size: int, k_size: int, rel_pos: torch.Tensor) -> torch.Tensor:
-        """
-        Get relative positional embeddings according to the relative positions of
-            query and key sizes.
-
-        Args:
-            q_size (int):
-                size of the query.
-            k_size (int):
-                size of key k.
-            rel_pos (`torch.Tensor`):
-                relative position embeddings (L, channel).
-
-        Returns:
-            Extracted positional embeddings according to relative positions.
-        """
-        max_rel_dist = int(2 * max(q_size, k_size) - 1)
-        # Interpolate rel pos.
-        rel_pos_resized = F.interpolate(
-            rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
-            size=max_rel_dist,
-            mode="linear",
-        )
-        rel_pos_resized = rel_pos_resized.reshape(-1, max_rel_dist).permute(1, 0)
-
-        # Scale the coords with short length if shapes for q and k are different.
-        q_coords = torch.arange(q_size)[:, None] * max(k_size / q_size, 1.0)
-        k_coords = torch.arange(k_size)[None, :] * max(q_size / k_size, 1.0)
-        relative_coords = (q_coords - k_coords) + (k_size - 1) * max(q_size / k_size, 1.0)
-
-        return rel_pos_resized[relative_coords.long()]
-
-    def get_decomposed_rel_pos(
-        self,
-        query: torch.Tensor,
-        rel_pos_h: torch.Tensor,
-        rel_pos_w: torch.Tensor,
-        q_size: tuple[int, int],
-        k_size: tuple[int, int],
-    ) -> torch.Tensor:
-        """
-        Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
-        https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
-
-        Args:
-            query (`torch.Tensor`):
-                query q in the attention layer with shape (batch_size, query_height * query_width, channel).
-            rel_pos_h (`torch.Tensor`):
-                relative position embeddings (Lh, channel) for height axis.
-            rel_pos_w (`torch.Tensor`):
-                relative position embeddings (Lw, channel) for width axis.
-            q_size (tuple):
-                spatial sequence size of query q with (query_height, query_width).
-            k_size (tuple):
-                spatial sequence size of key k with (key_height, key_width).
-
-        Returns:
-            decomposed_rel_pos (`torch.Tensor`):
-                decomposed relative position embeddings.
-        """
-        query_height, query_width = q_size
-        key_height, key_width = k_size
-        relative_position_height = self.get_rel_pos(query_height, key_height, rel_pos_h)
-        relative_position_width = self.get_rel_pos(query_width, key_width, rel_pos_w)
-
-        batch_size, _, dim = query.shape
-        reshaped_query = query.reshape(batch_size, query_height, query_width, dim)
-        rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
-        rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
-
-        decomposed_rel_pos = rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
-
-        return decomposed_rel_pos
-
-    def forward(self, hidden_states: torch.Tensor, output_attentions=None) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, height, width, _ = hidden_states.shape
-        # qkv with shape (3, batch_size, nHead, height * width, channel)
-        qkv = (
-            self.qkv(hidden_states)
-            .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
-            .permute(2, 0, 3, 1, 4)
-        )
-        # q, k, v with shape (batch_size * nHead, height * width, channel)
-        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
-
-        attn_weights = (query * self.scale) @ key.transpose(-2, -1)
-
-        if self.use_rel_pos:
-            decomposed_rel_pos = self.get_decomposed_rel_pos(
-                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
-            )
-            decomposed_rel_pos = decomposed_rel_pos.reshape_as(attn_weights)
-            attn_weights = attn_weights + decomposed_rel_pos
-
-        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = (attn_probs @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
-        attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
-
-        attn_output = self.proj(attn_output)
-        return attn_output, attn_weights
 
 
 class DeepseekOcrVisionSdpaAttention(DeepseekOcrVisionAttention):
@@ -1068,7 +1076,7 @@ class DeepseekOcrTextMoe(nn.Module):
         self.config = config
         self.experts = DeepseekOcrTextExperts(config)
         self.gate = nn.Linear(config.hidden_size, config.n_routed_experts, bias=False)
-        if config.n_shared_experts is not None:
+        if config.n_shared_experts is not None and config.n_shared_experts > 0:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
             self.shared_experts = DeepseekOcrTextMLP(config=config, intermediate_size=intermediate_size)
         self.routed_scaling_factor = config.routed_scaling_factor
@@ -1840,8 +1848,34 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         pixel_values_global = kwargs.pop("pixel_values_global", pixel_values_global)
         num_local_crops = kwargs.pop("num_local_crops", num_local_crops)
         # num_img_tokens = kwargs.pop("num_img_tokens", None)
-        if image_sizes is None and image_spatial_crop is not None:
-            image_sizes = image_spatial_crop
+        if image_sizes is None:
+            if image_spatial_crop is not None:
+                image_sizes = image_spatial_crop
+            else:
+                inferred_sizes = None
+                if pixel_values_global is not None:
+                    height, width = pixel_values_global.shape[-2:]
+                    inferred_sizes = torch.tensor(
+                        [[height, width]] * pixel_values_global.shape[0],
+                        dtype=torch.long,
+                        device=pixel_values_global.device,
+                    )
+                elif pixel_values is not None:
+                    if pixel_values.dim() == 5:
+                        batch = pixel_values.shape[0]
+                        height, width = pixel_values.shape[-2:]
+                    elif pixel_values.dim() == 4:
+                        batch = pixel_values.shape[0]
+                        height, width = pixel_values.shape[-2:]
+                    else:
+                        batch = 0
+                        height = width = 0
+                    if batch > 0:
+                        inferred_sizes = torch.tensor(
+                            [[height, width]] * batch, dtype=torch.long, device=pixel_values.device
+                        )
+                if inferred_sizes is not None:
+                    image_sizes = inferred_sizes
 
         image_hidden_states = None
         if pixel_values is not None and pixel_values.abs().sum().item() != 0 or pixel_values_global is not None:

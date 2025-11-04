@@ -110,7 +110,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaModel"),
         ("deberta-v2", "DebertaV2Model"),
         ("decision_transformer", "DecisionTransformerModel"),
-        ("deepseek_ocr", "DeepseekOcrForConditionalGeneration"),
+        ("deepseek_ocr", "DeepseekOcrModel"),
         ("deepseek_v2", "DeepseekV2Model"),
         ("deepseek_v3", "DeepseekV3Model"),
         ("deepseek_vl", "DeepseekVLModel"),

@@ -15,13 +15,15 @@
 import re
 from typing import Optional, Union
 
-import torch
-
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, TextInput
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_torch_available, logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -203,7 +205,7 @@ class DeepseekOcrProcessor(ProcessorMixin):
             tensor_type = "pt"
         if isinstance(outputs, BatchFeature) and tensor_type == "pt" and "num_img_tokens" in outputs:
             num_img_tokens = outputs["num_img_tokens"]
-            if not torch.is_tensor(num_img_tokens):
+            if not isinstance(num_img_tokens, torch.Tensor):
                 outputs["num_img_tokens"] = torch.tensor(num_img_tokens)
         return outputs
 
