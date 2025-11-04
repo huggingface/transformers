@@ -531,7 +531,7 @@ class RagRetriever:
             for j in range(n_docs)
         ]
 
-        contextualized_inputs = self.generator_tokenizer.batch_encode_plus(
+        contextualized_inputs = self.generator_tokenizer(
             rag_input_strings,
             max_length=self.config.max_combined_length,
             return_tensors=return_tensors,
