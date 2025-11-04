@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -239,6 +239,15 @@ class PLBartTokenizer(TokenizersBackend):
 
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
+        
+        # Mark language codes as special tokens in the Rust backend
+        # Since they're in the base vocabulary, we need to explicitly mark them as special
+        # so that skip_special_tokens=True works correctly in the Rust decoder
+        lang_code_tokens = [
+            AddedToken(lang_code, special=True, normalized=False) 
+            for lang_code in fairseq_language_codes
+        ]
+        self._tokenizer.add_special_tokens(lang_code_tokens)
 
     @property
     def src_lang(self) -> str:
@@ -325,6 +334,41 @@ class PLBartTokenizer(TokenizersBackend):
         """Convert Language Codes to format tokenizer uses if required"""
         lang = FAIRSEQ_LANGUAGE_CODES_MAP.get(lang, lang)
         return lang
+
+    def _decode(
+        self,
+        token_ids: Union[int, list[int]],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: Optional[bool] = None,
+        **kwargs,
+    ) -> str:
+        """Decode token ids to string with cleanup support"""
+        # Call parent _decode method - Rust backend now handles language codes as special tokens
+        text = super()._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+        
+        # Apply cleanup if requested (TokenizersBackend doesn't apply it by default)
+        # Note: decode() with batched input sets clean_up_tokenization_spaces=False, so we apply cleanup when skip_special_tokens=True
+        should_cleanup = skip_special_tokens or (clean_up_tokenization_spaces if clean_up_tokenization_spaces is not None else self.clean_up_tokenization_spaces)
+        if should_cleanup:
+            text = (
+                text.replace(" .", ".")
+                .replace(" ?", "?")
+                .replace(" !", "!")
+                .replace(" ,", ",")
+                .replace(" ' ", "'")
+                .replace(" n't", "n't")
+                .replace(" 'm", "'m")
+                .replace(" 's", "'s")
+                .replace(" 've", "'ve")
+                .replace(" 're", "'re")
+            )
+        
+        return text
 
 
 __all__ = ["PLBartTokenizer"]

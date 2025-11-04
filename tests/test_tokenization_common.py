@@ -2573,5 +2573,4 @@ class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTest
     Uses T5Tokenizer as a representative SentencePiece tokenizer.
     """
 
-    tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
     from_pretrained_kwargs = {}
