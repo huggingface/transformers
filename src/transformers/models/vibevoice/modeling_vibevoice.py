@@ -102,22 +102,18 @@ class TimestepEmbedder(nn.Module):
     # Original: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_diffusion_head.py#L66
     @staticmethod
     def timestep_embedding(timesteps, dim, max_period=10000):
-        half = dim // 2
-
-        # NOTE (ebezzam) Use Llama's device handling pattern
+        # NOTE (ebezzam) `LlamaRotaryEmbedding` device handling: https://github.com/huggingface/transformers/blob/5b6c209bc5a19b80c866279ee0c8e124ff7e4e49/src/transformers/models/llama/modeling_llama.py#L128
         device_type = (
             timesteps.device.type
             if isinstance(timesteps.device.type, str) and timesteps.device.type != "mps"
             else "cpu"
         )
-
-        with torch.autocast(device_type=device_type, enabled=False):  # NOTE (ebezzam) Force float32 like Llama
-            freqs = torch.exp(-math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half).to(
-                timesteps.device
-            )
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = torch.exp(
+                -math.log(max_period) * torch.arange(start=0, end=dim // 2, dtype=torch.float32) / (dim // 2)
+            ).to(timesteps.device)
             args = timesteps[:, None].float() * freqs[None]
             embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-
         if dim % 2:
             embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
         return embedding.to(timesteps.dtype)
