@@ -549,7 +549,7 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
     """
 )
 class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["decoder.weight"]
+    _tied_weights_keys = {"lm_head.weight":"decoder.weight"}
 
     def __init__(self, config: ModernBertDecoderConfig):
         super().__init__(config)
