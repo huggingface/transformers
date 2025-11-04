@@ -157,7 +157,7 @@ def write_model(
     original_config = json.loads((Path(input_base_path) / "config.json").read_text())
 
     num_local_experts = original_config.pop("num_experts")
-    
+
     # Handle both old and new config formats for rope_parameters
     if "rope_parameters" in original_config:
         # New format: rope_parameters already exists as a dict
