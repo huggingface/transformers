@@ -104,15 +104,7 @@ jobs:
           if [ "${{ inputs.job }}" = "run_models_gpu" ]; then
             python3 ../utils/split_model_tests.py --subdirs '${{ inputs.subdirs }}' --num_splits ${{ env.NUM_SLICES }} > folder_slices.txt
             echo "folder_slices=$(cat folder_slices.txt)" >> $GITHUB_OUTPUT
-
-            python3 <<-'EOF'
-            import ast
-            with open("folder_slices.txt") as f:
-                folder_slices = ast.literal_eval(f.read())
-            with open("slice_ids.txt", "w") as f:
-                f.write(str(list(range(len(folder_slices)))))
-          EOF
-
+            python3 -c "import ast; folder_slices = ast.literal_eval(open('folder_slices.txt').read()); open('slice_ids.txt', 'w').write(str(list(range(len(folder_slices)))))"
             echo "slice_ids=$(cat slice_ids.txt)" >> $GITHUB_OUTPUT
 
           elif [ "${{ inputs.job }}" = "run_trainer_and_fsdp_gpu" ]; then
