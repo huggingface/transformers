@@ -97,7 +97,7 @@ jobs:
   latest-torch-deepspeed-docker:
     name: "Latest PyTorch + DeepSpeed"
     runs-on:
-      group: aws-g4dn-2xlarge-cache
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
