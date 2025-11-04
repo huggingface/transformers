@@ -81,7 +81,7 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         super().__init__(**kwargs)
         if patch_size_side is not None:
             self.patch_size_side = patch_size_side
-        #original implementation capped the number of local crops to 9 tiles.
+        # original implementation capped the number of local crops to 9 tiles.
         if self.dynamic_hd is None or self.dynamic_hd > 9:
             self.dynamic_hd = 9
 

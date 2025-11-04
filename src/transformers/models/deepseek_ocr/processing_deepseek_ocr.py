@@ -201,14 +201,11 @@ class DeepseekOcrProcessor(ProcessorMixin):
             tensor_type = tensor_type.value
         if tensor_type == TensorType.PYTORCH:
             tensor_type = "pt"
-        if (
-            isinstance(outputs, BatchFeature)
-            and tensor_type == "pt"
-            and "num_img_tokens" in outputs
-        ):
+        if isinstance(outputs, BatchFeature) and tensor_type == "pt" and "num_img_tokens" in outputs:
             num_img_tokens = outputs["num_img_tokens"]
             if not torch.is_tensor(num_img_tokens):
                 outputs["num_img_tokens"] = torch.tensor(num_img_tokens)
         return outputs
+
 
 __all__ = ["DeepseekOcrProcessor"]
