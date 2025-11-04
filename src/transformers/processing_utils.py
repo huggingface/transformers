@@ -1603,7 +1603,7 @@ class ProcessorMixin(PushToHubMixin):
             conversations = [conversation]
 
         tokenize = processed_kwargs["template_kwargs"].pop("tokenize", False)
-        return_dict = processed_kwargs["template_kwargs"].pop("return_dict", False)
+        return_dict = processed_kwargs["template_kwargs"].pop("return_dict", True)
         mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
 
         if tokenize:
