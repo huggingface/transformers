@@ -1,4 +1,5 @@
 import hashlib
+import itertools
 import json
 import logging
 from typing import Any
@@ -146,60 +147,68 @@ class BenchmarkConfig:
         )
 
 
-def cross_generate_configs(
-    attn_impl_and_sdpa_backend: list[tuple[str, str | None]],
-    compiled_mode: list[str | None],
-    kernelized: list[bool],
-    warmup_iterations: int = 5,
-    measurement_iterations: int = 20,
-    batch_size: int = 1,
-    sequence_length: int = 128,
-    num_tokens_to_generate: int = 128,
-    gpu_monitoring: bool = True,
+def adapt_configs(
+    configs: list[BenchmarkConfig],
+    warmup_iterations: int | list[int] = 5,
+    measurement_iterations: int | list[int] = 20,
+    batch_size: int | list[int] = 1,
+    sequence_length: int | list[int] = 128,
+    num_tokens_to_generate: int | list[int] = 128,
+    gpu_monitoring: bool | list[bool] = True,
 ) -> list[BenchmarkConfig]:
-    # Create kwargs common to all configs
-    kwargs = {
-        "warmup_iterations": warmup_iterations,
-        "measurement_iterations": measurement_iterations,
-        "batch_size": batch_size,
-        "sequence_length": sequence_length,
-        "num_tokens_to_generate": num_tokens_to_generate,
-        "gpu_monitoring": gpu_monitoring,
-    }
-    # Cross-generate all combinations of attn_implementation, compiled_mode, and kernelized
+    parameters = (
+        x if isinstance(x, list) else [x]
+        for x in [
+            warmup_iterations,
+            measurement_iterations,
+            batch_size,
+            sequence_length,
+            num_tokens_to_generate,
+            gpu_monitoring,
+        ]
+    )
+    iterator = itertools.product(*parameters)
+
+    adapted_configs = []
+    for warmup_iters, measurement_iters, bs, seqlen, ntok, monitor in iterator:
+        for config in configs:
+            config = config.to_dict()
+            config["warmup_iterations"] = warmup_iters
+            config["measurement_iterations"] = measurement_iters
+            config["batch_size"] = bs
+            config["sequence_length"] = seqlen
+            config["num_tokens_to_generate"] = ntok
+            config["gpu_monitoring"] = monitor
+            adapted_configs.append(BenchmarkConfig.from_dict(config))
+    return adapted_configs
+
+
+def get_config_by_level(level: int) -> list[BenchmarkConfig]:
     configs = []
-    for attn_implementation, sdpa_backend in list(dict.fromkeys(attn_impl_and_sdpa_backend)):
-        for cm in list(dict.fromkeys(compiled_mode)):
-            for kernelize_on in list(dict.fromkeys(kernelized)):
-                config = BenchmarkConfig(
-                    attn_implementation=attn_implementation,
-                    sdpa_backend=sdpa_backend,
-                    compile_mode=cm,
-                    kernelize=kernelize_on,
-                    **kwargs,
-                )
-                configs.append(config)
+    # Early return if level is greater than 3: we generate all combinations of configs, maybe even w/ all compile modes
+    if level >= 3:
+        for attn_implementation, sdpa_backend in BenchmarkConfig.all_attn_implementations:
+            # Usually there is not much to gain by compiling with other modes, but we allow it for level 4
+            compile_modes = BenchmarkConfig.all_compiled_modes if level >= 4 else [None, "default"]
+            for cm in compile_modes:
+                for kernelize_on in [False, KERNELIZATION_AVAILABLE]:
+                    configs.append(
+                        BenchmarkConfig(
+                            attn_implementation=attn_implementation,
+                            sdpa_backend=sdpa_backend,
+                            compile_mode=cm,
+                            kernelize=kernelize_on,
+                        )
+                    )
+        return configs
+    # Otherwise, we add the configs for the given level
+    if level >= 0:
+        configs.append(BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default"))
+    if level >= 1:
+        configs.append(BenchmarkConfig(attn_implementation="flash_attention_2"))
+        configs.append(BenchmarkConfig(attn_implementation="eager", compile_mode="default"))
+    if level >= 2:
+        configs.append(BenchmarkConfig(attn_implementation="sdpa", compile_mode="default"))
+        configs.append(BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", kernelize=True))
+        configs.append(BenchmarkConfig(attn_implementation="flash_attention_2", kernelize=True))
     return configs
-
-
-def generate_main_configs(
-    warmup_iterations: int = 5,
-    measurement_iterations: int = 20,
-    batch_size: int = 1,
-    sequence_length: int = 128,
-    num_tokens_to_generate: int = 128,
-) -> list[BenchmarkConfig]:
-    # Create kwargs common to all configs
-    kwargs = {
-        "warmup_iterations": warmup_iterations,
-        "measurement_iterations": measurement_iterations,
-        "batch_size": batch_size,
-        "sequence_length": sequence_length,
-        "num_tokens_to_generate": num_tokens_to_generate,
-    }
-    return [  # TODO: test max-autotune instead of default
-        BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", gpu_monitoring=False, **kwargs),
-        BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", gpu_monitoring=True, **kwargs),
-        BenchmarkConfig(attn_implementation="eager", compile_mode="default", gpu_monitoring=True, **kwargs),
-        BenchmarkConfig(attn_implementation="flash_attention_2", gpu_monitoring=True, **kwargs),
-    ]
