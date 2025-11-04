@@ -261,11 +261,15 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "text",
-                        "text": "What is surprising about the relationship between the barking and the music?",
+                        "text": "Why is the philosopher's name mentioned in the lyrics? "
+                        "(A) To express a sense of nostalgia "
+                        "(B) To indicate that language cannot express clearly, satirizing the inversion of black and white in the world "
+                        "(C) To add depth and complexity to the lyrics "
+                        "(D) To showcase the wisdom and influence of the philosopher",
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
                     },
                 ],
             }
@@ -306,11 +310,15 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "text",
-                            "text": "What is surprising about the relationship between the barking and the music?",
+                            "text": "Why is the philosopher's name mentioned in the lyrics? "
+                            "(A) To express a sense of nostalgia "
+                            "(B) To indicate that language cannot express clearly, satirizing the inversion of black and white in the world "
+                            "(C) To add depth and complexity to the lyrics "
+                            "(D) To showcase the wisdom and influence of the philosopher",
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
                         },
                     ],
                 }
