@@ -290,6 +290,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         speech_masks: Optional[torch.BoolTensor] = None,        # TODO rename, this is to ignore padded parts
         speech_input_mask: Optional[torch.BoolTensor] = None,   # TODO rename, this is to know where is speech in script
         cfg_scale: float = 1.0,
+        ddpm_inference_steps: int = 10,
+        noise_scheduler=None,
         **kwargs,
     ) -> Union[torch.LongTensor, VibeVoiceGenerateOutput]:
         """
@@ -325,6 +327,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             `torch.LongTensor` containing the generated token sequences. When speech synthesis
             is performed, also includes the generated audio waveforms.
         """
+
+        if noise_scheduler is None:
+            raise ValueError("`noise_scheduler` must be provided for VibeVoice generation.")
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
@@ -554,18 +559,18 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 negative_condition = negative_outputs.last_hidden_state[diffusion_indices, -1, :]
 
                 # Sample speech tokens from Diffusion model with classifier-free guidance (CFG)
-                self.model.noise_scheduler.set_timesteps(self.ddpm_inference_steps)
+                noise_scheduler.set_timesteps(num_inference_steps=ddpm_inference_steps)
                 condition = torch.cat([positive_condition, negative_condition], dim=0).to(self.model.diffusion_head.device)
                 speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
                 with torch.no_grad():
-                    for t in self.model.noise_scheduler.timesteps:
+                    for t in noise_scheduler.timesteps:
                         half = speech[: len(speech) // 2]
                         combined = torch.cat([half, half], dim=0)
                         eps = self.model.diffusion_head(combined, t.repeat(combined.shape[0]).to(combined), condition=condition)
                         cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
                         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
                         eps = torch.cat([half_eps, half_eps], dim=0)
-                        speech = self.model.noise_scheduler.step(eps, t, speech).prev_sample
+                        speech = noise_scheduler.step(eps, t, speech).prev_sample
                 speech_latent = speech[: len(speech) // 2].unsqueeze(1)
 
                 # Decode acoustic latent to audio using acoustic streaming cache

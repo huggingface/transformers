@@ -25,8 +25,7 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, is_diffusers_available, logging
-from ...utils.import_utils import requires_backends
+from ...utils import auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
@@ -36,9 +35,6 @@ from .generation_vibevoice import VibeVoiceGenerationMixin
 
 
 logger = logging.get_logger(__name__)
-
-if is_diffusers_available():
-    import diffusers
 
 
 # TODO (ebezzam) update rest of generated docstrings
@@ -310,22 +306,13 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         # TODO (ebezzam) freeze tokenizer as mentioned in paper (p3)? Move to processor? although needed in generation method
         self.acoustic_tokenizer = AutoModel.from_config(config.acoustic_tokenizer_config).eval()
         self.semantic_tokenizer = AutoModel.from_config(config.semantic_tokenizer_config).eval()
-
         self.acoustic_connector = VibeVoiceSpeechConnector(config.acoustic_hidden_size, config.text_config.hidden_size)
         self.semantic_connector = VibeVoiceSpeechConnector(config.semantic_hidden_size, config.text_config.hidden_size)
-
-        # Register scaling factors as buffers - use 1D tensors for FSDP compatibility
-        self.register_buffer('speech_scaling_factor', torch.tensor(float('nan')))
-        self.register_buffer('speech_bias_factor', torch.tensor(float('nan')))
-
-        # Initialize prediction head for speech generation
         self.diffusion_head = AutoModel.from_config(config.diffusion_head_config)
-        requires_backends(self, ["diffusers"])
-        self.noise_scheduler = diffusers.DPMSolverMultistepScheduler(
-            num_train_timesteps=config.diffusion_head_config.ddpm_num_steps,
-            beta_schedule=config.diffusion_head_config.ddpm_beta_schedule,
-            prediction_type=config.diffusion_head_config.prediction_type
-        )
+
+        # TODO (ebezzam) cleaner way? Register scaling factors as buffers - use 1D tensors for FSDP compatibility
+        self.register_buffer('speech_scaling_factor', torch.tensor(float('nan')))
+        self.register_buffer('speech_bias_factor', torch.tensor(float('nan')))        
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -415,7 +402,6 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
 
         self.model = VibeVoiceModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.ddpm_inference_steps = config.diffusion_head_config.ddpm_num_inference_steps
         self.post_init()
 
     @property
@@ -462,9 +448,6 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
 
     def get_output_embeddings(self):
         return self.lm_head
-
-    def set_ddpm_inference_steps(self, num_steps=None):
-        self.ddpm_inference_steps = num_steps or self.config.diffusion_head_config.ddpm_num_inference_steps
 
     # TODO (ebezzam) clean up this method like `get_speech_features` (or combine)
     # atm this method is just for diffusion loss computation
