@@ -29,7 +29,7 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
     configuration with the defaults will yield a similar configuration to that of the audio encoder of the AudioFlamingo3
     architecture.
 
-    e.g. [nvidia/audio-flamingo-3](https://huggingface.co/nvidia/audio-flamingo-3)
+    e.g. [nvidia/audio-flamingo-3-hf](https://huggingface.co/nvidia/audio-flamingo-3-hf)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -131,7 +131,7 @@ class AudioFlamingo3Config(PretrainedConfig):
     AudioFlamingo3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the AudioFlamingo3.
 
-    e.g. [nvidia/audio-flamingo-3](https://huggingface.co/nvidia/audio-flamingo-3)
+    e.g. [nvidia/audio-flamingo-3-hf](https://huggingface.co/nvidia/audio-flamingo-3-hf)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

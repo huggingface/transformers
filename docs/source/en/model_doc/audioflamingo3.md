@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was released on 2025-07-10 and added to Hugging Face Transformers on 2025-11-03.*
+*This model was released on 2025-07-10 and added to Hugging Face Transformers on 2025-11-04.*
 
 # Audio Flamingo 3
 
@@ -36,7 +36,7 @@ Highlights:
 - **Long-audio support via windowing and post-pool alignment (up to 10 minutes maximum).** The model processes audio in 30-second windows with a hard limit of 20 windows (10 minutes total). Audio longer than 10 minutes will be truncated.
 - Deterministic fusion that preserves sequence length by replacing `<sound>` tokens with audio embeddings.
 
-This model was contributed by [Lasha Koroshinadze](https://hf.co/lashahub) and [Eric Bezzam](https://hf.co/bezzam).
+This model was contributed by [Lasha Koroshinadze](https://huggingface.co/lashahub) and [Eric Bezzam](https://huggingface.co/bezzam).
 
 ### Paper
 

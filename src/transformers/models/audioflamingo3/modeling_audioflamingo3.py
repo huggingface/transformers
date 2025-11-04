@@ -419,6 +419,15 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
         self.linear_2 = nn.Linear(
             config.text_config.hidden_size, config.text_config.hidden_size, bias=config.projector_bias
         )
+        projector_dtype = (
+            getattr(config, "dtype", None)
+            or getattr(config.text_config, "dtype", None)
+            or getattr(config.audio_config, "dtype", None)
+        )
+        if isinstance(projector_dtype, str):
+            projector_dtype = getattr(torch, projector_dtype)
+        if isinstance(projector_dtype, torch.dtype):
+            self.to(dtype=projector_dtype)
 
     def forward(self, audio_features):
         hidden_states = self.linear_1(audio_features)

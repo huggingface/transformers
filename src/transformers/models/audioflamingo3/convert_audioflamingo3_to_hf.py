@@ -29,6 +29,7 @@ from safetensors.torch import safe_open
 
 from transformers import (
     AudioFlamingo3Config,
+    AudioFlamingo3EncoderConfig,
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3Processor,
     AutoTokenizer,
@@ -172,7 +173,8 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path):
         use_cache=False,
         vocab_size=151672,
     )
-    config = AudioFlamingo3Config(text_config=text_config)
+    audio_config = AudioFlamingo3EncoderConfig(dtype="bfloat16")
+    config = AudioFlamingo3Config(text_config=text_config, audio_config=audio_config, dtype="bfloat16")
     model = AudioFlamingo3ForConditionalGeneration(config)
 
     # Update state dict to new key names if necessary
