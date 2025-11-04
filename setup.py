@@ -104,7 +104,7 @@ _deps = [
     "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
-    "evaluate>=0.2.0",
+    "evaluate>=0.4.6",
     "faiss-cpu",
     "fastapi",
     "filelock",
@@ -392,6 +392,7 @@ extras["torchhub"] = deps_list(
 extras["benchmark"] = deps_list("optimum-benchmark")
 
 # OpenTelemetry dependencies for metrics collection in continuous batching
+# TODO: refactor this to split API and SDK; SDK and exporter should only be needed to run code that collects metrics whereas API is what people will need to instrument their code and handle exporter themselves
 extras["open-telemetry"] = deps_list("opentelemetry-api") + ["opentelemetry-exporter-otlp", "opentelemetry-sdk"]
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
