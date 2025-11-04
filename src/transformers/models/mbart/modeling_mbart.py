@@ -898,7 +898,10 @@ class MBartDecoder(MBartPreTrainedModel):
 
 @auto_docstring
 class MBartModel(MBartPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "decoder.embed_tokens.weight": "shared.weight",
+        "encoder.embed_tokens.weight": "shared.weight"
+    }
 
     def __init__(self, config: MBartConfig):
         super().__init__(config)
@@ -1034,7 +1037,9 @@ class MBartModel(MBartPreTrainedModel):
 class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
-    _tied_weights_keys = ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight"
+    }
 
     def __init__(self, config: MBartConfig):
         super().__init__(config)
@@ -1207,7 +1212,6 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
     """
 )
 class MBartForSequenceClassification(MBartPreTrainedModel):
-    _tied_weights_keys = ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight"]
 
     def __init__(self, config: MBartConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -1342,7 +1346,6 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
 
 @auto_docstring
 class MBartForQuestionAnswering(MBartPreTrainedModel):
-    _tied_weights_keys = ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1479,7 +1482,9 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->MBart, facebook/bart-base->facebook/mbart-large-cc25
 class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config):
         config.is_decoder = True

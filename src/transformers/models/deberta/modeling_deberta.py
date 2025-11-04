@@ -828,7 +828,10 @@ class DebertaOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class DebertaForMaskedLM(DebertaPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "deberta.embeddings.word_embeddings.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -837,7 +840,9 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         if self.legacy:
             self.cls = LegacyDebertaOnlyMLMHead(config)
         else:
-            self._tied_weights_keys = ["lm_predictions.lm_head.weight", "deberta.embeddings.word_embeddings.weight"]
+            self._tied_weights_keys = {
+                "lm_predictions.lm_head.weight": "deberta.embeddings.word_embeddings.weight",
+            }
             self.lm_predictions = DebertaOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
