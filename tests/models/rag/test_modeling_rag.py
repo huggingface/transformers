@@ -948,7 +948,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             attention_mask=attention_mask,
         )
 
-        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        outputs = tokenizer.decode(output_ids, skip_special_tokens=True)
 
         # PR #31938 cause the output being changed from `june 22, 2018` to `june 22 , 2018`.
         EXPECTED_OUTPUTS = [
@@ -1002,7 +1002,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             do_deduplication=True,
         )
 
-        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        outputs = tokenizer.decode(output_ids, skip_special_tokens=True)
 
         EXPECTED_OUTPUTS = [
             " albert einstein",
@@ -1044,7 +1044,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             attention_mask=attention_mask,
         )
 
-        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        outputs = tokenizer.decode(output_ids, skip_special_tokens=True)
 
         EXPECTED_OUTPUTS = [
             " albert einstein",

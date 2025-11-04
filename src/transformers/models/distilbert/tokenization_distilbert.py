@@ -27,7 +27,10 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 
 class DistilBertTokenizer(BertTokenizer):
-    pass
+    model_input_names = ["input_ids", "attention_mask"]
 
 
-__all__ = ["DistilBertTokenizer"]
+# DistilBertTokenizerFast is an alias for DistilBertTokenizer (since BertTokenizer is already a fast tokenizer)
+DistilBertTokenizerFast = DistilBertTokenizer
+
+__all__ = ["DistilBertTokenizer", "DistilBertTokenizerFast"]

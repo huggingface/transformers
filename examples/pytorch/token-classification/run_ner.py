@@ -49,7 +49,6 @@ from transformers import (
     DataCollatorForTokenClassification,
     HfArgumentParser,
     PretrainedConfig,
-    PreTrainedTokenizerFast,
     Trainer,
     TrainingArguments,
     set_seed,
@@ -409,7 +408,7 @@ def main():
     )
 
     # Tokenizer check: this script requires a fast tokenizer.
-    if not isinstance(tokenizer, PreTrainedTokenizerFast):
+    if not getattr(tokenizer, "is_fast", False):
         raise TypeError(
             "This example script only works for models that have a fast tokenizer. Check out the big table of models at"
             " https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet"

@@ -1,4 +1,5 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+# coding=utf-8
+# Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,18 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+"""Tokenization classes for MobileBERT model."""
 
-from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
+from ..bert.tokenization_bert import BertTokenizer
 
+# MobileBertTokenizer is an alias for BertTokenizer
+MobileBertTokenizer = BertTokenizer
 
-if TYPE_CHECKING:
-    from .configuration_distilbert import *
-    from .modeling_distilbert import *
-    from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
-else:
-    import sys
+# MobileBertTokenizerFast is an alias for MobileBertTokenizer (since BertTokenizer is already a fast tokenizer)
+MobileBertTokenizerFast = MobileBertTokenizer
 
-    _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+__all__ = ["MobileBertTokenizer", "MobileBertTokenizerFast"]
+
