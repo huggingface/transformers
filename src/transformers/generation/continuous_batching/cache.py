@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections import deque
 from math import floor, gcd, sqrt
 from typing import Optional
 
@@ -21,7 +20,7 @@ import torch
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.metrics import attach_tracer, traced
-from .cache_manager import CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
+from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .requests import get_device_and_memory_breakdown, logger
 
 
@@ -218,7 +217,7 @@ class PagedAttentionCache:
         logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
         # Block management data structures
-        self._free_blocks = deque(range(num_blocks))
+        self._block_manager = BlockManager(num_blocks)
         self.group_cache_managers: list[CacheAllocator] = []
         for i, group_type in enumerate(group_types):
             if group_type == "full_attention":
@@ -235,7 +234,7 @@ class PagedAttentionCache:
         managers, and this method only returns the maximum number of blocks actually allocated across all managers."""
         max_allocated = 0
         for cm in self.group_cache_managers:
-            allocated = cm.allocate_blocks(n_blocks, request_id, self._free_blocks)
+            allocated = cm.allocate_blocks(n_blocks, request_id, self._block_manager)
             if allocated is None:
                 return None
             max_allocated = max(max_allocated, allocated)
@@ -246,11 +245,11 @@ class PagedAttentionCache:
         """Free all allocated cache blocks for a given request across all layer groups. Actual deallocation is done
         by the cache managers."""
         for cm in self.group_cache_managers:
-            cm.free_blocks(request_id, self._free_blocks)
+            cm.free_blocks(request_id, self._block_manager)
 
     def get_num_free_blocks(self) -> int:
         """Get the current number of unallocated blocks available for new requests."""
-        return len(self._free_blocks)
+        return self._block_manager.num_free_blocks
 
     @traced
     def extend_read_indices(

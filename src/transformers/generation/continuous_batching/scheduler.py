@@ -198,7 +198,7 @@ class FIFOScheduler(Scheduler):
             if not self._allocate_blocks_if_needed(
                 state, len(state.prompt_ids)
             ):  # don't schedule if we can't allocate blocks
-                if len(self.cache._free_blocks) == 0:
+                if self.cache.get_num_free_blocks() == 0:
                     break
                 continue
 
@@ -262,7 +262,7 @@ class PrefillFirstScheduler(Scheduler):
             if not self._allocate_blocks_if_needed(
                 state, len(state.prompt_ids)
             ):  # don't schedule if we can't allocate blocks
-                if len(self.cache._free_blocks) == 0:
+                if self.cache.get_num_free_blocks() == 0:
                     break
                 continue
 

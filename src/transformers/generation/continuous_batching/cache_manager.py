@@ -20,6 +20,28 @@ from typing import Optional
 from .requests import logger
 
 
+class BlockManager:
+    """A class to manage the number of free blocks and block re-use."""
+
+    def __init__(self, num_blocks: int) -> None:
+        """Initializes the block manager with a given number of blocks (num_blocks)"""
+        self.num_blocks = num_blocks
+        self._free_blocks = deque(range(num_blocks))
+
+    @property
+    def num_free_blocks(self) -> int:
+        """Returns the number of free blocks left."""
+        return len(self._free_blocks)
+
+    def get_free_block(self) -> int:
+        """Returns a free block and mark it as used by removing it from the free blocks queue."""
+        return self._free_blocks.popleft()
+
+    def free_blocks(self, blocks: list[int]) -> None:
+        """Frees a list of blocks by adding them back to the free blocks queue."""
+        self._free_blocks.extend(blocks)
+
+
 class CacheAllocator(ABC):
     """Abstract base class for cache managers. Cache managers keep track of per-request cache allocations, determine
     when a new physical block needs to be allocated and compute physical indices for reading or writing to the cache."""
@@ -28,15 +50,15 @@ class CacheAllocator(ABC):
     _block_table: dict[str, list[int]]  # request_id -> list of block_ids allocated to the request
 
     @abstractmethod
-    def allocate_blocks(self, n_blocks: int, request_id: str, free_blocks: deque[int]) -> Optional[int]:
+    def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
         """Allocates n_blocks for a given request_id. Returns the num of blocks allocated if successful and None
         otherwise."""
 
-    def free_blocks(self, request_id: str, free_blocks: deque[int]) -> None:
+    def free_blocks(self, request_id: str, block_manager: BlockManager) -> None:
         """Frees all blocks associated with a request_id."""
         if request_id in self._block_table:
             blocks_to_free = self._block_table.pop(request_id)
-            free_blocks.extend(blocks_to_free)
+            block_manager.free_blocks(blocks_to_free)
         else:
             logger.warning(
                 f"CacheAllocator {self._index} attempted to free blocks for non-existent request_id: {request_id}"
@@ -68,14 +90,14 @@ class FullAttentionCacheAllocator(CacheAllocator):
         self.block_size = block_size
         self._block_table = {}
 
-    def allocate_blocks(self, n_blocks: int, request_id: str, free_blocks: deque[int]) -> Optional[int]:
+    def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
         """Allocate blocks for a given request_id. Returns the number of blocks allocated if successful and None
         otherwise. For group of full attention layers, we always allocate the number of requested blocks."""
-        if len(free_blocks) < n_blocks:
+        if block_manager.num_free_blocks < n_blocks:
             return None
         if request_id not in self._block_table:
             self._block_table[request_id] = []
-        self._block_table[request_id].extend(free_blocks.popleft() for _ in range(n_blocks))
+        self._block_table[request_id].extend(block_manager.get_free_block() for _ in range(n_blocks))
         return n_blocks
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
@@ -131,7 +153,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         self._max_blocks_per_request = ceil(self.sliding_window / self.block_size)
         self._block_table = {}
 
-    def allocate_blocks(self, n_blocks: int, request_id: str, free_blocks: deque[int]) -> Optional[int]:
+    def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
         """Allocate blocks for a given request_id. Returns the number of blocks allocated if successful and None
         otherwise. For group of sliding window attention layers, we only allocate up to the point where we can fit an
         entire sliding window in the cache tensor."""
@@ -145,9 +167,9 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         after_allocation = min(already_allocated + n_blocks, self._max_blocks_per_request)
         actual_n_blocks = after_allocation - already_allocated
         # Classic allocation
-        if len(free_blocks) < actual_n_blocks:
+        if block_manager.num_free_blocks < actual_n_blocks:
             return None
-        self._block_table[request_id].extend(free_blocks.popleft() for _ in range(actual_n_blocks))
+        self._block_table[request_id].extend(block_manager.get_free_block() for _ in range(actual_n_blocks))
         return actual_n_blocks
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
