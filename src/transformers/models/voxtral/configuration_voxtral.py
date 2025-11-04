@@ -65,7 +65,8 @@ class VoxtralEncoderConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "voxtral_encoder"
 
@@ -136,6 +137,10 @@ class VoxtralConfig(PreTrainedConfig):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function (function or string) in the multi-modal projector.
+        no_timestamps_token_id (`int`, *optional*):
+            Token ID used to signal no timestamp. If None, the model uses its default setting.
+        time_precision (`float`, *optional*, defaults to 0.02):
+            The time precision for timestamp decoding. This controls the granularity of timestamp generation.
 
     ```python
     >>> from transformers import VoxtralForConditionalGeneration, VoxtralConfig
@@ -148,7 +153,8 @@ class VoxtralConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "voxtral"
     sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
@@ -172,6 +178,8 @@ class VoxtralConfig(PreTrainedConfig):
         text_config=None,
         audio_token_id=None,
         projector_hidden_act="gelu",
+        no_timestamps_token_id=None,
+        time_precision=0.02,
         **kwargs,
     ):
         if isinstance(audio_config, dict):
@@ -194,6 +202,10 @@ class VoxtralConfig(PreTrainedConfig):
         self.hidden_size = text_config.hidden_size
         self.audio_token_id = audio_token_id
         self.projector_hidden_act = projector_hidden_act
+        
+        # Timestamp-related configuration
+        self.no_timestamps_token_id = no_timestamps_token_id
+        self.time_precision = time_precision
 
         super().__init__(**kwargs)
 
