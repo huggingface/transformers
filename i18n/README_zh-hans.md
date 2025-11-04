@@ -100,7 +100,7 @@ checkpoint: 检查点
 
 这里是一些例子：
 - [用 BERT 做掩码填词](https://huggingface.co/google-bert/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
-- [用 Electra 做命名实体识别](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
+- [用 Electra 做专有名词辨识](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
 - [用 GPT-2 做文本生成](https://huggingface.co/openai-community/gpt2?text=A+long+time+ago%2C+)
 - [用 RoBERTa 做自然语言推理](https://huggingface.co/FacebookAI/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
 - [用 BART 做文本摘要](https://huggingface.co/facebook/bart-large-cnn?text=The+tower+is+324+metres+%281%2C063+ft%29+tall%2C+about+the+same+height+as+an+81-storey+building%2C+and+the+tallest+structure+in+Paris.+Its+base+is+square%2C+measuring+125+metres+%28410+ft%29+on+each+side.+During+its+construction%2C+the+Eiffel+Tower+surpassed+the+Washington+Monument+to+become+the+tallest+man-made+structure+in+the+world%2C+a+title+it+held+for+41+years+until+the+Chrysler+Building+in+New+York+City+was+finished+in+1930.+It+was+the+first+structure+to+reach+a+height+of+300+metres.+Due+to+the+addition+of+a+broadcasting+aerial+at+the+top+of+the+tower+in+1957%2C+it+is+now+taller+than+the+Chrysler+Building+by+5.2+metres+%2817+ft%29.+Excluding+transmitters%2C+the+Eiffel+Tower+is+the+second+tallest+free-standing+structure+in+France+after+the+Millau+Viaduct)
@@ -128,7 +128,7 @@ checkpoint: 检查点
 [{'label': 'POSITIVE', 'score': 0.9996980428695679}]
 ```
 
-第二行代码下载并缓存了 pipeline 使用的预训练模型，而第三行代码则在给定的文本上进行了评估。这里的答案"正面" (positive) 具有 99 的置信度。
+第二行代码下载并缓存了 pipeline 使用的预训练模型，而第三行代码则在给定的文本上进行了评估。这里的答案"正面" (positive) 具有 99.97% 的置信度。
 
 许多的 NLP 任务都有开箱即用的预训练 `pipeline`。比如说，我们可以轻松的从给定文本中抽取问题答案：
 
@@ -211,7 +211,7 @@ checkpoint: 检查点
 
 首先，用你打算使用的版本的 Python 创建一个虚拟环境并激活。
 
-然后，你需要安装 Flax、PyTorch 或 TensorFlow 其中之一。关于在你使用的平台上安装这些框架，请参阅 [TensorFlow 安装页](https://www.tensorflow.org/install/), [PyTorch 安装页](https://pytorch.org/get-started/locally/#start-locally) 或 [Flax 安装页](https://github.com/google/flax#quick-install)。
+然后，你需要安装 Flax、PyTorch 或 TensorFlow 其中之一。关于如何在你使用的平台上安装这些框架，请参阅 [TensorFlow 安装页面](https://www.tensorflow.org/install/), [PyTorch 安装页面](https://pytorch.org/get-started/locally/#start-locally) 或 [Flax 安装页面](https://github.com/google/flax#quick-install)。
 
 当这些后端之一安装成功后， 🤗 Transformers 可依此安装：
 
