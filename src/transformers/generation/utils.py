@@ -3798,7 +3798,7 @@ class GenerationMixin(ContinuousMixin):
                     kwargs[arg] = (kwargs[arg],)
 
         for key, value in kwargs.items():
-            if key in generate_output and generate_output[key] is not None:
+            if key in generate_output and not key.startswith("encoder_") and generate_output[key] is not None:
                 generate_output[key] += value
 
     def _finalize_generate_output(
