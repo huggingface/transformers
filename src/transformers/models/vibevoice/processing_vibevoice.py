@@ -66,17 +66,10 @@ class VibeVoiceProcessor(ProcessorMixin):
             The tokenizer for text processing.
         feature_extractor (`VibeVoiceFeatureExtractor`):
             The audio processor for speech processing.
-        audio_tokenizer (`VibeVoiceAcousticTokenizerModel`):
-            The audio tokenizer for encoding/decoding audio tokens.
     """
 
     feature_extractor_class = "VibeVoiceFeatureExtractor"
     tokenizer_class = "VibeVoiceTokenizer"
-    # TODO (ebezzam) add this? Only Dia as such as a usage
-    # audio_tokenizer_class = "VibeVoiceAcousticTokenizerModel"
-
-    # def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
-    #     super().__init__(feature_extractor, tokenizer, audio_tokenizer)
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
@@ -195,7 +188,7 @@ class VibeVoiceProcessor(ProcessorMixin):
                     audio_select_mask[i, spk] = True
             processed_audio["audio_select_mask"] = audio_select_mask
             processed_audio = BatchFeature(data=processed_audio, tensor_type=return_tensors)
-            # needed by tokenizer: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L146
+            # Unsqueeze needed by tokenizer: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L146
             processed_audio["input_features"] = processed_audio["input_features"].unsqueeze(1)
 
         # Build text sequences with placeholders for speech tokens
