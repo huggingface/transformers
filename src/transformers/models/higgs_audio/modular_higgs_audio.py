@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -123,8 +123,6 @@ class HiggsAudioConfig(LlamaConfig):
 
 
 class HiggsAudioDecoderProjector(nn.Module):
-    """Projection layers that map hidden states from the LLM component to audio / text logits."""
-
     def __init__(self, config: HiggsAudioConfig):
         super().__init__()
         self.text_lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -386,15 +384,14 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         attention_mask: Optional[torch.BoolTensor] = None,
         audio_input_ids: Optional[torch.LongTensor] = None,
         audio_input_ids_mask: Optional[torch.LongTensor] = None,
-        audio_in_ids_start: Optional[torch.LongTensor] = None,
-        audio_out_ids: Optional[torch.LongTensor] = None,
-        audio_out_ids_start: Optional[torch.LongTensor] = None,
-        label_ids: Optional[torch.LongTensor] = None,
-        label_audio_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        audio_labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        cache_audio_discrete_codes_mask: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ):
         outputs = self.model(
@@ -402,17 +399,44 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
             attention_mask=attention_mask,
             audio_input_ids=audio_input_ids,
             audio_input_ids_mask=audio_input_ids_mask,
+            position_ids=position_ids,
             past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
         )
 
-        last_hidden_state = outputs.last_hidden_state
-        # TODO: add lost computation back
+        hidden_state = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.audio_decoder_proj.audio_lm_head(hidden_state[:, slice_indices, :])
+
+        loss = None
+        if audio_labels is not None:
+            audio_logits = logits[input_ids == self.config.audio_token_id]
+            audio_logits = audio_logits.reshape(-1, self.config.num_codebooks, self.config.codebook_size)
+            audio_labels = audio_labels[audio_input_ids_mask]
+
+            codebook_losses = []
+            for codebook_idx in range(self.config.num_codebooks):
+                codebook_logits = audio_logits[:, codebook_idx, :]
+                codebook_labels = audio_labels[:, codebook_idx]
+                codebook_losses.append(self.loss_function(codebook_logits, codebook_labels, self.config.codebook_size, **kwargs))
+
+            loss = sum(codebook_losses)
+
+        if labels is not None:
+            text_logits = self.audio_decoder_proj.text_lm_head(hidden_state)
+            text_loss = self.loss_function(text_logits, labels, self.config.vocab_size, **kwargs)
+            loss = text_loss if loss is None else loss + text_loss
 
         return CausalLMOutputWithPast(
-            logits=self.audio_decoder_proj.audio_lm_head(last_hidden_state),
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

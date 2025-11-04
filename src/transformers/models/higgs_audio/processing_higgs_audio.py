@@ -191,6 +191,19 @@ class HiggsAudioProcessor(ProcessorMixin):
                 }
             )
 
+        if output_labels:
+            labels = data["input_ids"].clone()
+            labels[labels == self.audio_token_id] = -100
+            labels[labels == self.tokenizer.pad_token_id] = -100
+            labels[labels == self.audio_bos_token_id] = -100
+            data["labels"] = labels
+    
+            if audio is not None:
+                audio_labels = audio_input_ids.clone()
+                audio_labels[audio_labels == self.audio_stream_bos_id] = -100
+                audio_labels[audio_labels == self.audio_stream_eos_id] = -100
+                data.update({"audio_labels": audio_labels})
+
         return BatchFeature(data=data, tensor_type="pt")
 
     def batch_decode(self, decoder_input_ids):

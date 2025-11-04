@@ -87,7 +87,7 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                 audio_bos_token_id=self.config.audio_bos_token_id,
                 audio_eos_token_id=self.config.audio_delay_token_id,
                 audio_stream_bos_id=self.config.audio_stream_bos_id,
-                audio_stream_eos_id=self.config.eos_token_id,
+                audio_stream_eos_id=self.config.audio_stream_eos_id,
                 num_codebooks=self.config.num_codebooks,
                 codebook_size=self.config.codebook_size,
             )
@@ -211,15 +211,14 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                 if hasattr(generation_config, "ras_win_max_num_repeat")
                 else None
             )
-            if ras_win_len is not None and ras_win_max_num_repeat is not None:
+            audio_input_ids = model_kwargs.get("audio_input_ids")
+            if ras_win_len is not None and ras_win_max_num_repeat is not None and audio_input_ids is not None:
                 # check if there are repetitions over a window of tokens.
-                generated_audio_inputs_ids = model_kwargs["audio_input_ids"][:, -ras_win_len:, :]
-                repetition_mask = generated_audio_inputs_ids[:, -ras_win_len:, :] == next_tokens.unsqueeze(1)
+                audio_inputs_ids_window = audio_input_ids[:, -ras_win_len:, :]
+                repetition_mask = audio_inputs_ids_window == next_tokens.unsqueeze(1)
 
                 # avoid counting the repetition of the audio stream EOS and BOS tokens
-                not_excluded_mask = (
-                    generated_audio_inputs_ids[:, -ras_win_len:, :] != self.config.audio_stream_bos_id
-                ) & (generated_audio_inputs_ids[:, -ras_win_len:, :] != self.config.audio_stream_eos_id)
+                not_excluded_mask = (audio_inputs_ids_window != self.config.audio_stream_bos_id) & (audio_inputs_ids_window != self.config.audio_stream_eos_id)
                 repetition_mask = repetition_mask & not_excluded_mask
                 rep_num = repetition_mask.sum(dim=1)
 
@@ -240,24 +239,23 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             has_all_audio_stream_eos = (next_tokens == self.config.audio_stream_eos_id).all(dim=-1)
             next_tokens = next_tokens[:, None, :]
 
-            if model_kwargs.get("audio_input_ids") is not None:
-                model_kwargs["audio_input_ids"] = torch.cat([model_kwargs["audio_input_ids"], next_tokens], dim=1)
+            if audio_input_ids is not None:
+                model_kwargs["audio_input_ids"] = torch.cat([audio_input_ids, next_tokens], dim=1)
             else:
                 model_kwargs["audio_input_ids"] = next_tokens
 
             next_audio_input_ids_mask = torch.ones((batch_size, 1), dtype=torch.bool, device=next_tokens.device)
             next_audio_input_ids_mask[has_all_audio_stream_eos] = 0
-            if model_kwargs.get("audio_input_ids_mask") is not None:
-                model_kwargs["audio_input_ids_mask"] = torch.cat(
-                    [model_kwargs["audio_input_ids_mask"], next_audio_input_ids_mask], dim=1
-                )
+            audio_input_ids_mask = model_kwargs.get("audio_input_ids_mask")
+            if audio_input_ids_mask is not None:
+                model_kwargs["audio_input_ids_mask"] = torch.cat([audio_input_ids_mask, next_audio_input_ids_mask], dim=1)
             else:
                 model_kwargs["audio_input_ids_mask"] = next_audio_input_ids_mask
 
             # generation of a stream eos audio token will start delay pattern masking in the logits processor
             # for that, we need to set next text token to audio_eos_start_delay_token_id
             next_tokens_flat = input_ids.new_ones(batch_size) * self.config.audio_token_id
-            next_tokens_flat[has_audio_stream_eos] = self.config.audio_delay_token_id
+            next_tokens_flat[has_audio_stream_eos | (input_ids[:, -1] == self.config.audio_delay_token_id)] = self.config.audio_delay_token_id
             next_tokens_flat[has_all_audio_stream_eos] = self.config.eos_token_id
             next_tokens = next_tokens_flat
             # ============================
