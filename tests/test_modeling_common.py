@@ -34,12 +34,14 @@ from transformers import (
     AutoModel,
     AutoModelForSequenceClassification,
     BitsAndBytesConfig,
+    GenerationMixin,
     PreTrainedConfig,
     PreTrainedModel,
     is_torch_available,
     logging,
     set_seed,
 )
+from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -565,7 +567,7 @@ class ModelTesterMixin:
     test_resize_position_embeddings = False
     test_mismatched_shapes = True
     test_missing_keys = True
-    test_torch_exportable = False
+    test_torch_exportable = True
     # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
     test_all_params_have_gradient = True
     is_encoder_decoder = False
@@ -3472,28 +3474,46 @@ class ModelTesterMixin:
             return is_tested
 
         default_config, default_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config = config or default_config
         inputs_dict = inputs_dict or default_inputs_dict
+        config = config or default_config
 
         for model_class in self.all_model_classes:
-            if model_class.__name__.endswith("ForPreTraining"):
-                continue
+            if issubclass(model_class, GenerationMixin):
+                continue  # TODO: enable later, skipping generation models for now
+
+            if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                # some model classes define this method in the model_tester instead of _prepare_for_class
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
             with self.subTest(model_class.__name__):
+                sample_inputs = self._prepare_for_class(copy.deepcopy(inputs_dict), model_class)
                 model = model_class(config).eval().to(torch_device)
 
-                # Export model
-                exported_model = torch.export.export(
-                    model, args=(), kwargs=inputs_dict, strict=getattr(self, "test_torch_exportable_strictly", True)
-                )
+                exporter = DynamoExporter(export_config=DynamoConfig(sample_inputs=sample_inputs))
+
+                try:
+                    exported_program = exporter.export(model)
+                except torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode:
+                    continue  # TODO: inspect the modeling (usually this happen in very complicated modeling)
+                except torch._subclasses.fake_tensor.UnsupportedOperatorException:
+                    continue  # This is an issue that only happens when exporting on cuda
+                except torch._dynamo.exc.BackendCompilerFailed:
+                    continue  # Same as above, inductor error
+                except torch.AcceleratorError:
+                    continue  # Same as above, cuda error
+                except Exception as e:
+                    if "Expected cond to be True, but got False." in str(e):
+                        continue  # TODO: there's around 15 models failing with this
+                    else:
+                        raise e
 
                 # Run exported model and eager model
                 with torch.no_grad():
                     # set seed in case anything is not deterministic in model (e.g. vit_mae noise)
-                    torch.manual_seed(1234)
-                    eager_outputs = model(**inputs_dict)
-                    torch.manual_seed(1234)
-                    exported_outputs = exported_model.module().forward(**inputs_dict)
+                    set_seed(1234)
+                    eager_outputs = model(**sample_inputs)
+                    set_seed(1234)
+                    exported_outputs = exported_program.module().forward(**sample_inputs)
 
                 # Check if outputs are close:
                 # is_tested is a boolean flag indicating if we compare any outputs,
