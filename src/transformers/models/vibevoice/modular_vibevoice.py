@@ -18,9 +18,7 @@ from typing import Optional, Union
 
 import math
 import torch
-import torch.distributed as dist
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
@@ -297,11 +295,8 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         # dtype = config.getattr("dtype", torch.float32)
 
         self.language_model = AutoModel.from_config(config.text_config)
-
-        # Initialize speech components if needed
-        # TODO (ebezzam) freeze tokenizer as mentioned in paper (p3)? Move to processor? although needed in generation method
-        self.acoustic_tokenizer = AutoModel.from_config(config.acoustic_tokenizer_config).eval()
-        self.semantic_tokenizer = AutoModel.from_config(config.semantic_tokenizer_config).eval()
+        self.acoustic_tokenizer = AutoModel.from_config(config.acoustic_tokenizer_config)
+        self.semantic_tokenizer = AutoModel.from_config(config.semantic_tokenizer_config)
         self.acoustic_connector = VibeVoiceSpeechConnector(config.acoustic_hidden_size, config.text_config.hidden_size)
         self.semantic_connector = VibeVoiceSpeechConnector(config.semantic_hidden_size, config.text_config.hidden_size)
         self.diffusion_head = AutoModel.from_config(config.diffusion_head_config)
@@ -319,21 +314,37 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    # TODO (ebezzam) move to processor since tokenizer is pretrained?
-    def get_speech_features(self, speech_tensors, speech_masks):
-        """Process speech inputs through tokenizers and connectors."""
+    def get_audio_features(self, input_features, input_features_mask):
+        """
+        This method is used to get the audio embeddings from the input features (normalized audio).
+
+        Args:
+            input_features (`torch.FloatTensor`):
+                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
+                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+            input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+                Padding mask to remove padded parts of computed audio features.
+
+        Returns:
+            `torch.FloatTensor`:
+                The audio embeddings.
+        """
+
         # TODO (ebezzam) can remove unsqueeze since if we keep batch dim in processor?
         with torch.no_grad():
-            # NOTE (ebezzam) shifted no_grad from model def to when actually calling: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L1062
-            acoustic_latents = self.acoustic_tokenizer.encode(speech_tensors.unsqueeze(1), sample=True).latents
+            # NOTE (ebezzam) original model freezes acoustic tokenizer (p3 of paper https://hf.co/papers/2508.19205)
+            acoustic_latents = self.acoustic_tokenizer.encode(input_features.unsqueeze(1), sample=True).latents
 
         # Apply scaling and bias
-        acoustic_features = (acoustic_latents + self.speech_bias_factor.to(acoustic_latents.device)) * self.speech_scaling_factor.to(acoustic_latents.device)
+        acoustic_features = (
+            acoustic_latents + self.speech_bias_factor.to(acoustic_latents.device)
+        ) * self.speech_scaling_factor.to(acoustic_latents.device)
 
-        # Connect to language model space
-        acoustic_connected = self.acoustic_connector(acoustic_features)[speech_masks.cpu()]
-
-        return acoustic_connected
+        # Connect to language model space and remove padded parts
+        return self.acoustic_connector(acoustic_features)[input_features_mask]
 
     @can_return_tuple
     # @auto_docstring   # TODO (ebezzam) make work
@@ -348,27 +359,24 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        # TODO (ebezzam) determine correct usage/names for below
-        speech_tensors: Optional[torch.FloatTensor] = None,
-        speech_masks: Optional[torch.BoolTensor] = None,
-        speech_input_mask: Optional[torch.BoolTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
+        input_features_mask: Optional[torch.BoolTensor] = None,
         **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
-
-        # TODO (ebezzam) copied from Llava but failing here
-        # if (input_ids is None) ^ (inputs_embeds is not None):
-        #     raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
+        
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # TODO (ebezzam) second condition necessary? see Llava
-        if speech_tensors is not None and speech_masks is not None:
-            speech_embeds = self.get_speech_features(speech_tensors.to(self.dtype), speech_masks)
-            if speech_input_mask is not None:
-                inputs_embeds[speech_input_mask] = speech_embeds
+        if input_features is not None and input_ids is not None:
+            audio_embeds = self.get_audio_features(input_features, input_features_mask)
 
-        outputs = self.language_model(
+            # replace text-audio token placeholders with audio embeddings
+            audio_token_mask = (input_ids == self.config.speech_diffusion_id).unsqueeze(-1)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            )
+
+        return self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -378,13 +386,6 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             **kwargs,
-        )
-
-        return BaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
 
 
@@ -399,10 +400,6 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         self.model = VibeVoiceModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    @property
-    def noise_scheduler(self):
-        return self.model.noise_scheduler
 
     @property
     def diffusion_head(self):
@@ -445,49 +442,6 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     def get_output_embeddings(self):
         return self.lm_head
 
-    # TODO (ebezzam) clean up this method like `get_speech_features` (or combine)
-    # atm this method is just for diffusion loss computation
-    def forward_speech_features(
-            self,
-            speech_tensors=None,
-            speech_masks=None,
-        ):
-
-        if speech_tensors is None:
-            # Use config to get vae_dim instead of non-existent self.args
-            vae_dim = self.config.acoustic_tokenizer_config.vae_dim
-            audio_features = torch.zeros(1, 1, vae_dim).to(self.get_input_embeddings().weight)
-            connect_features = self.model.acoustic_connector(audio_features)
-            return audio_features, connect_features
-        else:
-            with torch.no_grad():
-                # TODO (ebezzam) original: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L285
-                # -- see if works when computing diffusion loss
-                audio_tokens = self.model.acoustic_tokenizer.encode(speech_tensors.unsqueeze(1), sample=True).latents
-
-                if torch.isnan(self.model.speech_scaling_factor) or torch.isnan(self.model.speech_bias_factor):
-                    scaling_factor = 1. / audio_tokens[speech_masks].flatten().std()
-                    bias_factor = -audio_tokens[speech_masks].flatten().mean()
-
-                    # Only use distributed operations if the process group is initialized
-                    if dist.is_available() and dist.is_initialized():
-                        dist.all_reduce(scaling_factor, op=dist.ReduceOp.SUM)
-                        dist.all_reduce(bias_factor, op=dist.ReduceOp.SUM)
-                        world_size = dist.get_world_size()
-                        self.model.speech_scaling_factor.copy_(scaling_factor / world_size)
-                        self.model.speech_bias_factor.copy_(bias_factor / world_size)
-                        print(f"Speech scaling factor (distributed): {self.model.speech_scaling_factor}, bias factor: {self.model.speech_bias_factor}", flush=True)
-                    else:
-                        # Single process case
-                        self.model.speech_scaling_factor.copy_(scaling_factor)
-                        self.model.speech_bias_factor.copy_(bias_factor)
-                        print(f"Speech scaling factor (single process): {self.model.speech_scaling_factor}, bias factor: {self.model.speech_bias_factor}", flush=True)
-
-                audio_features = (audio_tokens + self.model.speech_bias_factor) * self.model.speech_scaling_factor
-
-            connect_features = self.model.acoustic_connector(audio_features)
-            return audio_features[speech_masks], connect_features[speech_masks]
-
     @can_return_tuple
     def forward(
         self,
@@ -498,30 +452,22 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        speech_tensors: Optional[torch.FloatTensor] = None,
-        speech_masks: Optional[torch.BoolTensor] = None,
-        speech_input_mask: Optional[torch.BoolTensor] = None,
         logits_to_keep: Union[int, slice] = 0,
+        input_features: Optional[torch.FloatTensor] = None,
+        input_features_mask: Optional[torch.BoolTensor] = None,
         acoustic_loss_mask: Optional[torch.BoolTensor] = None,
-        ddpm_batch_mul: int = 1,
         **kwargs,
     ) -> Union[tuple, VibeVoiceCausalLMOutputWithPast]:
         """
         Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-            speech_tensors (`torch.FloatTensor`, *optional*):
-                Input speech waveforms for voice cloning or speech understanding.
-            speech_masks (`torch.BoolTensor`, *optional*):
-                Masks indicating valid speech frames.
-            speech_input_mask (`torch.BoolTensor`, *optional*):
-                Positions in the input sequence where speech embeddings should be inserted.
-        
+            input_features (`torch.FloatTensor`, *optional*):
+                Input features for voice cloning or speech understanding.
+            input_features_mask (`torch.BoolTensor`, *optional*):
+                Masks indicating valid input frames.
+            acoustic_loss_mask (`torch.BoolTensor`, *optional*):
+                Mask to compute diffusion loss only on specific acoustic tokens. Diffusion loss calculation is not supported yet.
+
         """
 
         outputs = self.model(
@@ -531,12 +477,9 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            speech_tensors=speech_tensors,
-            speech_masks=speech_masks,
-            speech_input_mask=speech_input_mask,
+            input_features=input_features,
+            input_features_mask=input_features_mask,
             **kwargs,
         )
 
@@ -549,75 +492,15 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         loss = None
         if labels is not None:
             # TODO (ebezzam) add loss according to original implementation
-            # Their comment: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L400
-            # "The custom CE loss with masking is calculated in the training script.
-            # We leave the standard loss calculation here as None."
-            pass
+            # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L400
+            raise ValueError("Language modeling loss computation not implemented yet.")
 
         # Diffusion loss
         diffusion_loss = None
-        # TODO (ebezzam) for now, copy from original implementation: https://github.com/vibevoice-community/VibeVoice/blob/db4cad072368df79f628cb4a6a3cd7bf3d60b685/vibevoice/modular/modeling_vibevoice.py#L415
+        # TODO (ebezzam) original has an implementation which should be verified (would need noise scheduler from `diffusers`): 
+        # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L407
         if acoustic_loss_mask is not None:
-            acoustic_loss_mask_sum = acoustic_loss_mask.sum().item()
-            if speech_tensors is not None and acoustic_loss_mask_sum > 0:
-                condition_features = hidden_states[acoustic_loss_mask]
-
-                x = self.get_input_embeddings()(input_ids)
-
-                speech_features, speech_connect_features = self.forward_speech_features(
-                        speech_tensors=speech_tensors.type_as(x) if speech_tensors is not None else None,
-                        speech_masks=speech_masks,
-                    )
-                if speech_tensors is not None:
-                    x[speech_input_mask] = speech_connect_features
-                speech_len, latent_size = speech_features.shape
-
-                noise = torch.randn(
-                    (speech_len * ddpm_batch_mul, latent_size),
-                    device=hidden_states.device,
-                    dtype=hidden_states.dtype
-                )
-
-                timesteps = torch.multinomial(
-                    torch.ones(self.config.diffusion_head_config.ddpm_num_steps),
-                    speech_len * ddpm_batch_mul,
-                    replacement=True,
-                ).to(hidden_states.device)
-
-                speech_features_repeated = speech_features.repeat_interleave(ddpm_batch_mul, dim=0)
-                condition_features_repeated = condition_features.repeat_interleave(ddpm_batch_mul, dim=0)
-
-                noisy_speech_features = self.model.noise_scheduler.add_noise(
-                    speech_features_repeated, noise, timesteps
-                )
-
-                model_output = self.model.diffusion_head(
-                    noisy_speech_features,
-                    timesteps.type_as(x),
-                    condition_features_repeated
-                )
-
-                prediction_type = self.config.diffusion_head_config.prediction_type
-                if prediction_type == "epsilon":
-                    target_for_loss = noise
-                elif prediction_type == "v_prediction":
-                    target_for_loss = self.model.noise_scheduler.get_velocity(
-                        speech_features_repeated, noise, timesteps
-                    )
-                else:
-                    raise NotImplementedError(f"Prediction type {prediction_type} not implemented")
-
-                diffusion_loss = F.mse_loss(model_output.float(), target_for_loss.float(), reduction='sum')
-                if latent_size > 0 and ddpm_batch_mul > 0:
-                    diffusion_loss = diffusion_loss / latent_size / ddpm_batch_mul
-                else:
-                    diffusion_loss = torch.tensor(0.0, device=diffusion_loss.device)
-            else:
-                # Dummy loss for DDP to work when there are no speech samples in a batch,
-                # but we are in a speech context.
-                diffusion_loss = sum(p.sum() for p in self.model.diffusion_head.parameters()) * 0.0
-                diffusion_loss += sum(p.sum() for p in self.model.acoustic_connector.parameters()) * 0.0
-                diffusion_loss += sum(p.sum() for p in self.model.semantic_connector.parameters()) * 0.0
+            raise ValueError("Diffusion loss computation not implemented yet.")
 
         return VibeVoiceCausalLMOutputWithPast(
             loss=loss,

@@ -87,13 +87,6 @@ class VibeVoiceProcessor(ProcessorMixin):
         self._text_input_text = ' Text input:\n'
         self._speech_output_text = ' Speech output:\n'
         self._newline_text = '\n'
-        
-        # Pre-compute token lengths for fixed text parts (for building the speech mask)
-        self._prompt_tokens_len = len(self.tokenizer.encode(self.system_prompt))
-        self._voice_input_tokens_len = len(self.tokenizer.encode(self._voice_input_text, add_special_tokens=False))
-        self._text_input_tokens_len = len(self.tokenizer.encode(self._text_input_text, add_special_tokens=False))
-        self._speech_output_tokens_len = len(self.tokenizer.encode(self._speech_output_text, add_special_tokens=False))
-        self._newline_tokens_len = len(self.tokenizer.encode(self._newline_text, add_special_tokens=False))
 
     def __call__(
         self,
@@ -126,9 +119,8 @@ class VibeVoiceProcessor(ProcessorMixin):
             `BatchFeature`: A BatchFeature with the following fields:
                 - **input_ids** -- Token ID sequences ready for the model
                 - **attention_mask** -- Attention masks for the sequences
-                - **speech_tensors** -- Processed audio tensors (if voice_samples provided)
-                - **speech_masks** -- Masks for valid speech tokens (if voice_samples provided)
-                - **speech_input_mask** -- Boolean masks indicating speech token positions in input_ids
+                - **input_features** -- Processed audio tensors (if voice_samples provided)
+                - **input_features_mask** -- Masks for valid speech tokens (if voice_samples provided)
                 - **audio_select_mask** -- Mask indicating which audio samples are used by each script (if voice_samples provided)
         """
         # Merge defaults with user kwargs
@@ -184,15 +176,15 @@ class VibeVoiceProcessor(ProcessorMixin):
             # Process audio samples
             voices = [voice for _voices in voice_samples_list for voice in _voices]
             processed_audio = self.feature_extractor(voices, **audio_kwargs)
-            processed_audio["speech_tensors"] = processed_audio.pop("audio")
+            processed_audio["input_features"] = processed_audio.pop("audio")
 
             # Create speech masks for audio tokenizer based on its compression ratio
             padding_masks = processed_audio["padding_mask"]
             vae_tok_seqlens = torch.ceil(padding_masks.sum(dim=-1) / speech_tok_compress_ratio).int().tolist()
-            speech_masks = torch.zeros((len(padding_masks), max(vae_tok_seqlens)), dtype=torch.bool)
+            input_features_mask = torch.zeros((len(padding_masks), max(vae_tok_seqlens)), dtype=torch.bool)
             for i, seq_len in enumerate(vae_tok_seqlens):
-                speech_masks[i, :seq_len] = True
-            processed_audio["speech_masks"] = speech_masks
+                input_features_mask[i, :seq_len] = True
+            processed_audio["input_features_mask"] = input_features_mask
             del processed_audio["padding_mask"]
 
             # TODO (ebezzam) not used by model
@@ -206,20 +198,17 @@ class VibeVoiceProcessor(ProcessorMixin):
 
         # Build text sequences with placeholders for speech tokens
         text_sequences = []
-        speech_input_masks = []
         for i, _script in enumerate(scripts):
             # Start with system prompt
             text_parts = [self.system_prompt]
-            speech_input_mask = [False] * self._prompt_tokens_len
 
             # Add voice section if audio provided
             if processed_audio is not None:
                 script_speakers = speakers_per_script[i]
                 text_parts.append(self._voice_input_text)
-                speech_input_mask.extend([False] * self._voice_input_tokens_len)
 
                 # Build speaker voice sections with placeholders
-                vae_tok_lens = processed_audio["speech_masks"][script_speakers].sum(dim=-1).int().tolist()
+                vae_tok_lens = processed_audio["input_features_mask"][script_speakers].sum(dim=-1).int().tolist()
                 for speaker_id, vae_tok_len in zip(script_speakers, vae_tok_lens):
                     # Use the actual speech tokens from the tokenizer
                     speech_placeholder = self.tokenizer._speech_diffusion_token * vae_tok_len
@@ -229,48 +218,26 @@ class VibeVoiceProcessor(ProcessorMixin):
                     # Track where speech tokens will be in the mask
                     prefix_text = f" Speaker {speaker_id}:"
                     prefix_len = len(self.tokenizer.encode(prefix_text, add_special_tokens=False))
-                    speech_input_mask.extend([False] * prefix_len)  # prefix
-                    speech_input_mask.extend([False])  # speech_start_id
-                    speech_input_mask.extend([True] * vae_tok_len)  # speech tokens
-                    speech_input_mask.extend([False])  # speech_end_id
-                    speech_input_mask.extend([False] * self._newline_tokens_len)  # newline
 
             # Add text input section
             text_parts.append(self._text_input_text)
-            speech_input_mask.extend([False] * self._text_input_tokens_len)
 
             # Add script text
             for speaker_id, speaker_text in _script:
                 speaker_line = f" Speaker {speaker_id}:{speaker_text}{self._newline_text}"
                 text_parts.append(speaker_line)
                 speaker_tokens_len = len(self.tokenizer.encode(speaker_line, add_special_tokens=False))
-                speech_input_mask.extend([False] * speaker_tokens_len)
 
             # Add speech output section
             speech_output_text = f'{self._speech_output_text}{self.tokenizer._speech_start_token}'
             text_parts.append(speech_output_text)
-            # Use precomputed length for fixed part + 1 for the speech start token
-            speech_input_mask.extend([False] * (self._speech_output_tokens_len + 1))
 
             # Join all text parts
             full_text = ''.join(text_parts)
             text_sequences.append(full_text)
-            speech_input_masks.append(speech_input_mask)
 
         # Tokenize the complete text sequences
         batch_encoding = self.tokenizer(text_sequences, **text_kwargs)
-
-        # Handle speech input mask alignment (same logic as before but simpler)
-        padded_length = batch_encoding["input_ids"].shape[1]
-        padded_speech_masks = []
-        for mask in speech_input_masks:
-            if len(mask) < padded_length:
-                padding_needed = padded_length - len(mask)
-                padded_mask = [False] * padding_needed + mask
-            else:
-                padded_mask = mask[:padded_length]
-            padded_speech_masks.append(padded_mask)
-        batch_encoding["speech_input_mask"] = torch.tensor(padded_speech_masks, dtype=torch.bool)
 
         # Add audio data if provided
         if processed_audio:
@@ -339,7 +306,7 @@ class VibeVoiceProcessor(ProcessorMixin):
         """
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["speech_tensors", "speech_masks", "speech_input_mask"]))
+        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["input_features", "input_features_mask"]))
 
     def save_audio(
         self,

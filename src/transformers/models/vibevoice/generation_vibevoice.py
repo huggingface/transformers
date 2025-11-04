@@ -215,9 +215,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         inputs: Optional[torch.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         audio_streamer: Optional[Union[AudioStreamer]] = None,
-        speech_tensors: Optional[torch.FloatTensor] = None,
-        speech_masks: Optional[torch.BoolTensor] = None,        # TODO rename, this is to ignore padded parts
-        speech_input_mask: Optional[torch.BoolTensor] = None,   # TODO rename, this is to know where is speech in script
+        input_features: Optional[torch.FloatTensor] = None,
+        input_features_mask: Optional[torch.BoolTensor] = None,
         cfg_scale: float = 1.0,
         ddpm_inference_steps: int = 10,
         noise_scheduler=None,
@@ -239,12 +238,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 Custom logits processors that complement the default logits processors.
             audio_streamer (`AudioStreamer`, *optional*):
                 Streamer object for real-time audio generation streaming.
-            speech_tensors (`torch.FloatTensor`, *optional*):
+            input_features (`torch.FloatTensor`, *optional*):
                 Input speech tensors for voice cloning or conditioning.
-            speech_masks (`torch.BoolTensor`, *optional*):
+            input_features_mask (`torch.BoolTensor`, *optional*):
                 Masks for speech tensors to ignore padded parts.
-            speech_input_mask (`torch.BoolTensor`, *optional*):
-                Mask indicating positions where speech tokens should be inserted.
             cfg_scale (`float`, *optional*, defaults to 1.0):
                 Classifier-free guidance scale for speech generation quality control.
             **kwargs:
@@ -429,9 +426,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             if is_prefill:
                 # we process the speech inputs only during the first generation step
                 prefill_inputs = {
-                    "speech_tensors": speech_tensors.to(device=device),
-                    "speech_masks": speech_masks.to(device),
-                    "speech_input_mask": speech_input_mask.to(device),
+                    "input_features": input_features.to(device=device),
+                    "input_features_mask": input_features_mask.to(device),
                 }
                 is_prefill = False
             else:
