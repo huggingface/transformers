@@ -81,6 +81,8 @@ if __name__ == "__main__":
     for idx in range(args.num_splits):
         start = end
         end = start + num_jobs_per_splits + (1 if idx < num_jobs % args.num_splits else 0)
-        model_splits.append(d[start:end])
+        # Only add the slice if it is not an empty list
+        if len(d[start:end]) > 0:
+            model_splits.append(d[start:end])
 
     print(model_splits)
