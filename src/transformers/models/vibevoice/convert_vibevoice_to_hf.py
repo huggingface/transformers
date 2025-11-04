@@ -336,11 +336,9 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     print("Diffusion head dtype : ", vibevoice_model.diffusion_head.noisy_images_proj.weight.dtype)
 
     # -- load into HF model
-    # add "model." prefix
-    updated_state_dict = {f"model.{k}": v for k, v in updated_state_dict.items()}
     # add lm_head weights
     # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L123
-    updated_state_dict["lm_head.weight"] = updated_state_dict["model.language_model.embed_tokens.weight"]
+    updated_state_dict["lm_head.weight"] = updated_state_dict["language_model.embed_tokens.weight"]
 
     missing, unexpected = vibevoice_model.load_state_dict(updated_state_dict, strict=False)
     if len(unexpected) != 0:

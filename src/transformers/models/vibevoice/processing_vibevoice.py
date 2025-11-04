@@ -187,7 +187,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             processed_audio["input_features_mask"] = input_features_mask
             del processed_audio["padding_mask"]
 
-            # TODO (ebezzam) not used by model
+            # TODO (ebezzam) not used by model, but could be used to process less audio by `get_audio_features`
             # Create mask to know which audio is used by a particular script
             audio_select_mask = np.zeros((len(scripts), len(speaker_to_audio)), dtype=np.bool_)
             for i, speakers in enumerate(speakers_per_script):
@@ -195,6 +195,8 @@ class VibeVoiceProcessor(ProcessorMixin):
                     audio_select_mask[i, spk] = True
             processed_audio["audio_select_mask"] = audio_select_mask
             processed_audio = BatchFeature(data=processed_audio, tensor_type=return_tensors)
+            # needed by tokenizer: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L146
+            processed_audio["input_features"] = processed_audio["input_features"].unsqueeze(1)
 
         # Build text sequences with placeholders for speech tokens
         text_sequences = []
@@ -214,10 +216,6 @@ class VibeVoiceProcessor(ProcessorMixin):
                     speech_placeholder = self.tokenizer._speech_diffusion_token * vae_tok_len
                     speaker_voice_text = f" Speaker {speaker_id}:{self.tokenizer._speech_start_token}{speech_placeholder}{self.tokenizer._speech_end_token}{self._newline_text}"
                     text_parts.append(speaker_voice_text)
-                    
-                    # Track where speech tokens will be in the mask
-                    prefix_text = f" Speaker {speaker_id}:"
-                    prefix_len = len(self.tokenizer.encode(prefix_text, add_special_tokens=False))
 
             # Add text input section
             text_parts.append(self._text_input_text)
@@ -226,7 +224,6 @@ class VibeVoiceProcessor(ProcessorMixin):
             for speaker_id, speaker_text in _script:
                 speaker_line = f" Speaker {speaker_id}:{speaker_text}{self._newline_text}"
                 text_parts.append(speaker_line)
-                speaker_tokens_len = len(self.tokenizer.encode(speaker_line, add_special_tokens=False))
 
             # Add speech output section
             speech_output_text = f'{self._speech_output_text}{self.tokenizer._speech_start_token}'

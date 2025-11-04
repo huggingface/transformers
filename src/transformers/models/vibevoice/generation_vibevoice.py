@@ -501,7 +501,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # Prepare inputs_embeds for next iteration
             # Initialize with default embeddings for all tokens
-            next_inputs_embeds = self.model.get_input_embeddings()(next_tokens).unsqueeze(1)  # [batch_size, 1, hidden_size]
+            next_inputs_embeds = self.get_input_embeddings()(next_tokens).unsqueeze(1)  # [batch_size, 1, hidden_size]
 
             # forward diffusion
             # Diffusion indices are those that are not finished and not special tokens
@@ -564,12 +564,12 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
                 # Sample speech tokens from Diffusion model with classifier-free guidance (CFG)
                 noise_scheduler.set_timesteps(num_inference_steps=ddpm_inference_steps)
-                condition = torch.cat([positive_condition, negative_condition], dim=0).to(self.model.diffusion_head.device)
+                condition = torch.cat([positive_condition, negative_condition], dim=0).to(self.diffusion_head.device)
                 speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
                 for t in noise_scheduler.timesteps:
                     half = speech[: len(speech) // 2]
                     combined = torch.cat([half, half], dim=0)
-                    eps = self.model.diffusion_head(combined, t.repeat(combined.shape[0]).to(combined), condition=condition)
+                    eps = self.diffusion_head(combined, t.repeat(combined.shape[0]).to(combined), condition=condition)
                     cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
                     half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
                     eps = torch.cat([half_eps, half_eps], dim=0)
@@ -577,11 +577,11 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 speech_latent = speech[: len(speech) // 2].unsqueeze(1)
 
                 # Decode acoustic latent to audio using acoustic streaming cache
-                scaled_latent = speech_latent / self.model.speech_scaling_factor.to(speech_latent.device) - self.model.speech_bias_factor.to(speech_latent.device)
-                audio_output = self.model.acoustic_tokenizer.decode(
-                    scaled_latent.to(self.model.acoustic_tokenizer.device),
+                scaled_latent = speech_latent / self.speech_scaling_factor.to(speech_latent.device) - self.speech_bias_factor.to(speech_latent.device)
+                audio_output = self.acoustic_tokenizer.decode(
+                    scaled_latent.to(self.acoustic_tokenizer.device),
                     padding_cache=acoustic_cache,
-                    batch_mask=diffusion_indices.to(self.model.acoustic_tokenizer.device),
+                    batch_mask=diffusion_indices.to(self.acoustic_tokenizer.device),
                     use_cache=True
                 )
                 audio_chunk = audio_output.audio
@@ -600,7 +600,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     audio_streamer.put(audio_chunk, diffusion_indices)
 
                 # Encode audio to semantic features using semantic streaming cache
-                semantic_outputs = self.model.semantic_tokenizer.encode(
+                semantic_outputs = self.semantic_tokenizer.encode(
                     audio_chunk,
                     padding_cache=semantic_cache,
                     batch_mask=diffusion_indices,
@@ -610,8 +610,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 semantic_cache = semantic_outputs.padding_cache
 
                 # Combine acoustic and semantic features for next input
-                acoustic_embed = self.model.acoustic_connector(speech_latent)
-                semantic_embed = self.model.semantic_connector(semantic_features)
+                acoustic_embed = self.acoustic_connector(speech_latent)
+                semantic_embed = self.semantic_connector(semantic_features)
                 diffusion_embeds = acoustic_embed + semantic_embed
 
                 # Update embeddings for diffusion indices

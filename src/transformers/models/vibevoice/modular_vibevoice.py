@@ -21,7 +21,7 @@ import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
@@ -35,7 +35,7 @@ from .generation_vibevoice import VibeVoiceGenerationMixin
 logger = logging.get_logger(__name__)
 
 
-# TODO (ebezzam) update rest of generated docstrings
+# TODO (ebezzam) Manually create tokenizer_vibevoice_fast? since only seems to generate for tokenization_vibevoice.py
 # # original: https://github.com/pengzhiliang/transformers/blob/main/src/transformers/models/vibevoice/tokenization_vibevoice.py
 @auto_docstring(
     custom_intro="""
@@ -104,8 +104,13 @@ class VibeVoiceTokenizer(Qwen2TokenizerFast):
 
 
 @dataclass
-class VibeVoiceCausalLMOutputWithPast(ModelOutput):
+@auto_docstring(
+    custom_intro="""
+    Base class for VibeVoice causal language model outputs.
     """
+)
+class VibeVoiceCausalLMOutputWithPast(ModelOutput):
+    r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
     diffusion_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` for diffusion are provided):
@@ -285,14 +290,17 @@ class VibeVoiceSpeechConnector(nn.Module):
         return x
 
 
-@auto_docstring
-class VibeVoiceModel(VibeVoicePreTrainedModel):
+@auto_docstring(
+    custom_intro="""
+    The VibeVoice model, which consists of a language model, speech tokenizers, connectors, and a diffusion head.
+    """
+)
+class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
+
     def __init__(self, config):
         super().__init__(config)
-
-        # # TODO (ebezzam) original would set dtype internally: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L107
-        # # is this something we do?
-        # dtype = config.getattr("dtype", torch.float32)
 
         self.language_model = AutoModel.from_config(config.text_config)
         self.acoustic_tokenizer = AutoModel.from_config(config.acoustic_tokenizer_config)
@@ -300,10 +308,11 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         self.acoustic_connector = VibeVoiceSpeechConnector(config.acoustic_hidden_size, config.text_config.hidden_size)
         self.semantic_connector = VibeVoiceSpeechConnector(config.semantic_hidden_size, config.text_config.hidden_size)
         self.diffusion_head = AutoModel.from_config(config.diffusion_head_config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         # TODO (ebezzam) cleaner way? Register scaling factors as buffers - use 1D tensors for FSDP compatibility
-        self.register_buffer('speech_scaling_factor', torch.tensor(float('nan')))
-        self.register_buffer('speech_bias_factor', torch.tensor(float('nan')))        
+        self.register_buffer("speech_scaling_factor", torch.tensor(float("nan")))
+        self.register_buffer("speech_bias_factor", torch.tensor(float("nan")))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -313,6 +322,12 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     def get_audio_features(self, input_features, input_features_mask):
         """
@@ -333,10 +348,10 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
                 The audio embeddings.
         """
 
-        # TODO (ebezzam) can remove unsqueeze since if we keep batch dim in processor?
+        # NOTE (ebezzam) original model freezes acoustic tokenizer (p3 of paper https://hf.co/papers/2508.19205)
         with torch.no_grad():
-            # NOTE (ebezzam) original model freezes acoustic tokenizer (p3 of paper https://hf.co/papers/2508.19205)
-            acoustic_latents = self.acoustic_tokenizer.encode(input_features.unsqueeze(1), sample=True).latents
+            # combined encoding and sampling: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L146
+            acoustic_latents = self.acoustic_tokenizer.encode(input_features, sample=True).latents
 
         # Apply scaling and bias
         acoustic_features = (
@@ -347,102 +362,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         return self.acoustic_connector(acoustic_features)[input_features_mask]
 
     @can_return_tuple
-    # @auto_docstring   # TODO (ebezzam) make work
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        input_features_mask: Optional[torch.BoolTensor] = None,
-        **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPast]:
-        
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask)
-
-            # replace text-audio token placeholders with audio embeddings
-            audio_token_mask = (input_ids == self.config.speech_diffusion_id).unsqueeze(-1)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
-            )
-
-        return self.language_model(
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-
-class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGenerationMixin):
-    # TODO (ebezzam) needed?
-    _tied_weights_keys = ["lm_head.weight"]
-    _tp_plan = {"lm_head": "colwise_rep"}
-
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.model = VibeVoiceModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
-
-    @property
-    def diffusion_head(self):
-        return self.model.diffusion_head
-
-    @property
-    def speech_scaling_factor(self):
-        return self.model.speech_scaling_factor
-
-    @property
-    def speech_bias_factor(self):
-        return self.model.speech_bias_factor
-
-    @property
-    def acoustic_tokenizer(self):
-        return self.model.acoustic_tokenizer
-
-    @property
-    def semantic_tokenizer(self):
-        return self.model.semantic_tokenizer
-
-    @property
-    def acoustic_connector(self):
-        return self.model.acoustic_connector
-
-    @property
-    def semantic_connector(self):
-        return self.model.semantic_connector
-
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -469,17 +389,25 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
                 Mask to compute diffusion loss only on specific acoustic tokens. Diffusion loss calculation is not supported yet.
 
         """
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        outputs = self.model(
-            input_ids=input_ids,
-            inputs_embeds=inputs_embeds,
+        if input_features is not None and input_ids is not None:
+            audio_embeds = self.get_audio_features(input_features, input_features_mask)
+
+            # replace text-audio token placeholders with audio embeddings
+            audio_token_mask = (input_ids == self.config.speech_diffusion_id).unsqueeze(-1)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            )
+
+        outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
-            input_features=input_features,
-            input_features_mask=input_features_mask,
             **kwargs,
         )
 
@@ -491,13 +419,13 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         # Language model loss
         loss = None
         if labels is not None:
-            # TODO (ebezzam) add loss according to original implementation
+            # TODO (ebezzam) loss according to original implementation
             # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L400
             raise ValueError("Language modeling loss computation not implemented yet.")
 
         # Diffusion loss
         diffusion_loss = None
-        # TODO (ebezzam) original has an implementation which should be verified (would need noise scheduler from `diffusers`): 
+        # TODO (ebezzam) original has an implementation which should be verified (would need noise scheduler from `diffusers`):
         # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L407
         if acoustic_loss_mask is not None:
             raise ValueError("Diffusion loss computation not implemented yet.")
@@ -512,10 +440,4 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         )
 
 
-__all__ = [
-    "VibeVoiceModel",
-    "VibeVoicePreTrainedModel",
-    "VibeVoiceForConditionalGeneration",
-    "VibeVoiceDiffusionHead",
-    "VibeVoiceTokenizer"
-]
+__all__ = ["VibeVoicePreTrainedModel", "VibeVoiceForConditionalGeneration", "VibeVoiceDiffusionHead", "VibeVoiceTokenizer"]

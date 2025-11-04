@@ -401,7 +401,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("univnet", "UnivNetModel"),
         ("van", "VanModel"),
         ("vaultgemma", "VaultGemmaModel"),
-        ("vibevoice", "VibeVoiceModel"),
+        ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
         ("vibevoice_diffusion_head", "VibeVoiceDiffusionHead"),
         ("vibevoice_semantic_tokenizer", "VibeVoiceSemanticTokenizerModel"),
