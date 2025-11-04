@@ -1379,7 +1379,9 @@ class MT5EncoderModel(MT5PreTrainedModel):
 
     model_type = "mt5"
     config: MT5Config
-    _tied_weights_keys = ["encoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+    }
 
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.__init__ with T5->MT5
     def __init__(self, config: MT5Config):

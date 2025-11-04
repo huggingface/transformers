@@ -922,7 +922,9 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
 
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+    }
     _can_record_outputs = {
         "hidden_states": SwitchTransformersBlock,
         "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),

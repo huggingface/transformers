@@ -1233,7 +1233,7 @@ class XLNetModel(XLNetPreTrainedModel):
     """
 )
 class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_loss.weight"]
+    _tied_weights_keys = {"lm_loss.weight": "transformer.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

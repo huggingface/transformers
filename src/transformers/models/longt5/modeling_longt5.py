@@ -1959,7 +1959,9 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class LongT5EncoderModel(LongT5PreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+    }
     _keys_to_ignore_on_load_unexpected = [r"decoder"]
 
     def __init__(self, config: LongT5Config):
