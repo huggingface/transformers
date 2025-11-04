@@ -167,7 +167,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         max_window_layers: Optional[int] = 80,
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size

@@ -209,7 +209,6 @@ if is_peft_available():
 
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
-    from accelerate import __version__ as accelerate_version
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
         DataLoaderConfiguration,
@@ -4967,7 +4966,18 @@ class Trainer:
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
-        args = {"deepspeed_plugin": self.args.deepspeed_plugin, "dataloader_config": dataloader_config}
+        fsdp_plugin = None
+        if self.args.fsdp_plugin_args is not None:
+            from accelerate.utils import FullyShardedDataParallelPlugin
+
+            fsdp_plugin = FullyShardedDataParallelPlugin(**self.args.fsdp_plugin_args)
+
+        args = {
+            "mixed_precision": self.args.mixed_precision,
+            "dataloader_config": dataloader_config,
+            "fsdp_plugin": fsdp_plugin,
+            "deepspeed_plugin": self.args.deepspeed_plugin,
+        }
 
         # We defer compatibility checks to accelerator
         if self.args.parallelism_config is not None:
@@ -4981,13 +4991,22 @@ class Trainer:
         if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
             self.is_tp_enabled = True
             if self.args.parallelism_config is not None:
-                if version.parse(accelerate_version) > version.parse("1.10.1"):
+                if is_accelerate_available("1.10.1"):
                     if self.args.parallelism_config is not None:
                         from accelerate import ParallelismConfig
 
                         args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
                 else:
                     raise ValueError("Requires accelerate>1.10.1 to use Tensor Parallelism.")
+
+        if is_accelerate_available("1.2.0"):
+            # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
+            from accelerate.utils import TorchDynamoPlugin
+
+            dynamo_plugin = TorchDynamoPlugin(
+                backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode
+            )
+            args["dynamo_plugin"] = dynamo_plugin
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
