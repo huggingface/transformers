@@ -105,7 +105,7 @@ jobs:
             python3 ../utils/split_model_tests.py --subdirs '${{ inputs.subdirs }}' --num_splits ${{ env.NUM_SLICES }} > folder_slices.txt
             echo "folder_slices=$(cat folder_slices.txt)" >> $GITHUB_OUTPUT
 
-            python3 << 'EOF'
+            python3 <<-'EOF'
             import ast
             with open("folder_slices.txt") as f:
                 folder_slices = ast.literal_eval(f.read())
