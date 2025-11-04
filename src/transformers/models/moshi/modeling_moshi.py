@@ -1485,9 +1485,6 @@ class MoshiModel(MoshiPreTrainedModel):
 )
 class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     input_modalities = "text"
-    _tied_weights_keys = {
-        "lm_head.weight": "model.embed_tokens.weight"
-    }
 
     # Copied from transformers.models.gemma.modeling_gemma.GemmaForCausalLM.__init__ with Gemma->Moshi
     def __init__(self, config):
