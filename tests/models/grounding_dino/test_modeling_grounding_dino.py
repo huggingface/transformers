@@ -247,7 +247,6 @@ class GroundingDinoModelTester:
 class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GroundingDinoModel, GroundingDinoForObjectDetection) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_torchscript = False
 
     test_missing_keys = False
     pipeline_model_mapping = (
@@ -683,7 +682,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [[0.4526, 0.4082]],
+                (None, None): [0.4526, 0.4082],
                 ("cuda", 8): [0.4524, 0.4074],
             }
         )

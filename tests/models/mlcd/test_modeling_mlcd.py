@@ -124,7 +124,6 @@ class MLCDVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (MLCDVisionModel,) if is_torch_available() else ()
 
-    test_torchscript = False
     test_resize_embeddings = False
     test_torch_exportable = True
 
@@ -147,7 +146,7 @@ class MLCDVisionModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "DeepGlint-AI/mlcd-vit-bigG-patch14-448"
-        model = MLCDVisionModel.from_pretrained(model_name).to(torch_device)
+        model = MLCDVisionModel.from_pretrained(model_name, attn_implementation="eager").to(torch_device)
         processor = AutoProcessor.from_pretrained(model_name)
 
         # process single image

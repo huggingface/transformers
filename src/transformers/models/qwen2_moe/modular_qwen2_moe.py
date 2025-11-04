@@ -39,7 +39,8 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..gemma.modeling_gemma import GemmaMLP
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm, LlamaRotaryEmbedding
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
@@ -53,7 +54,7 @@ class Qwen2MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Qwen2MoeRotaryEmbedding(LlamaRotaryEmbedding):
+class Qwen2MoeRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
@@ -106,7 +107,7 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         routing_weights, selected_experts = torch.topk(routing_weights, self.num_experts_per_tok, dim=-1)
         if self.norm_topk_prob:
             routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(hidden_states.dtype)
+        routing_weights = routing_weights.to(router_logits.dtype)
         return selected_experts, routing_weights
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -207,8 +208,6 @@ class Qwen2MoeModel(MixtralModel):
             }
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
