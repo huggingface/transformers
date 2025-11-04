@@ -209,77 +209,6 @@ class AudioBatchIterator:
 
 class VibeVoiceGenerationMixin(GenerationMixin):
 
-    def _build_generate_config_model_kwargs(self, generation_config, inputs, tokenizer, return_processors=False, **kwargs):
-        if generation_config is None:
-            generation_config = GenerationConfig(
-                # bos_token_id=tokenizer.bos_token_id,
-                # eos_token_id=tokenizer.eos_token_id,
-                # pad_token_id = tokenizer.pad_token_id
-            )
-        else:
-            generation_config = GenerationConfig(
-                **generation_config,
-                # bos_token_id=tokenizer.bos_token_id,
-                # eos_token_id=tokenizer.eos_token_id,
-                # pad_token_id = tokenizer.pad_token_id
-            )
-
-        generation_config, model_kwargs = self._prepare_generation_config(
-            generation_config,
-            True,
-            # speech_start_id=tokenizer.speech_start_id,
-            # speech_end_id=tokenizer.speech_end_id,
-            # speech_diffusion_id=tokenizer.speech_diffusion_id,
-            **kwargs
-        )
-
-        # generation_config.speech_start_id = tokenizer.speech_start_id
-        # generation_config.speech_end_id = tokenizer.speech_end_id
-        # generation_config.speech_diffusion_id = tokenizer.speech_diffusion_id
-        
-        inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(inputs, generation_config.bos_token_id, model_kwargs)
-        batch_size = inputs_tensor.shape[0]
-        device = self.device
-
-        self._prepare_special_tokens(generation_config, True, device=device)
-        generation_config.use_cache = True
-        model_kwargs["use_cache"] = True
-        input_ids = inputs_tensor.to(self.device)
-
-        input_ids_length = input_ids.shape[1]
-        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
-        generation_config = self._prepare_generated_length(
-            generation_config=generation_config,
-            has_default_max_length=has_default_max_length,
-            has_default_min_length=has_default_min_length,
-            model_input_name=model_input_name,
-            inputs_tensor=inputs_tensor,
-            input_ids_length=input_ids_length,
-        )
-
-        max_cache_length = generation_config.max_length - 1
-        self._prepare_cache_for_generation(generation_config, model_kwargs, None, batch_size, max_cache_length)
-        model_kwargs['cache_position'] = torch.arange(input_ids_length, device=device, dtype=torch.long)
-        for k, v in model_kwargs.items():
-            if isinstance(v, torch.Tensor):
-                model_kwargs[k] = v.to(device=device)
-
-        if return_processors:
-            logits_processor = self._get_logits_processor(
-                generation_config=generation_config,
-                input_ids_seq_length=input_ids_length,
-                encoder_input_ids=inputs_tensor,
-                prefix_allowed_tokens_fn=None,
-                logits_processor=LogitsProcessorList(),
-                device=inputs_tensor.device,
-                model_kwargs=model_kwargs,
-            )
-
-            return generation_config, model_kwargs, input_ids, logits_processor
-        else:
-            return generation_config, model_kwargs, input_ids
-
     @torch.no_grad()
     def generate(
         self,
@@ -332,24 +261,103 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             raise ValueError("`noise_scheduler` must be provided for VibeVoice generation.")
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
-        tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         max_length_times = kwargs.pop("max_length_times", 2)
 
         if kwargs.get('max_new_tokens') is None:
             kwargs['max_new_tokens'] = self.config.text_config.max_position_embeddings - kwargs['input_ids'].shape[-1]
 
-        generation_config, model_kwargs, input_ids, logits_processor = self._build_generate_config_model_kwargs(
-            generation_config, inputs, tokenizer, return_processors=True, **kwargs
+        # === Positive generation config setup (main generation) ===
+        if generation_config is None:
+            generation_config = GenerationConfig()
+        else:
+            generation_config = GenerationConfig(**generation_config)
+
+        generation_config, model_kwargs = self._prepare_generation_config(
+            generation_config,
+            True,
+            **kwargs
+        )
+        
+        inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(inputs, generation_config.bos_token_id, model_kwargs)
+        batch_size = inputs_tensor.shape[0]
+        device = self.device
+
+        self._prepare_special_tokens(generation_config, True, device=device)
+        generation_config.use_cache = True
+        model_kwargs["use_cache"] = True
+        input_ids = inputs_tensor.to(self.device)
+
+        input_ids_length = input_ids.shape[1]
+        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
+        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
+        generation_config = self._prepare_generated_length(
+            generation_config=generation_config,
+            has_default_max_length=has_default_max_length,
+            has_default_min_length=has_default_min_length,
+            model_input_name=model_input_name,
+            inputs_tensor=inputs_tensor,
+            input_ids_length=input_ids_length,
         )
 
+        max_cache_length = generation_config.max_length - 1
+        self._prepare_cache_for_generation(generation_config, model_kwargs, None, batch_size, max_cache_length)
+        model_kwargs['cache_position'] = torch.arange(input_ids_length, device=device, dtype=torch.long)
+        for k, v in model_kwargs.items():
+            if isinstance(v, torch.Tensor):
+                model_kwargs[k] = v.to(device=device)
+
+        logits_processor = self._get_logits_processor(
+            generation_config=generation_config,
+            input_ids_seq_length=input_ids_length,
+            encoder_input_ids=inputs_tensor,
+            prefix_allowed_tokens_fn=None,
+            logits_processor=LogitsProcessorList(),
+            device=inputs_tensor.device,
+            model_kwargs=model_kwargs,
+        )
+
+        # === Negative generation config setup (for classifier-free guidance) ===
         negative_kwargs = {
-            'input_ids': torch.full((kwargs['input_ids'].shape[0], 1), tokenizer.speech_start_id, dtype=torch.long, device=kwargs['input_ids'].device),
+            'input_ids': torch.full((kwargs['input_ids'].shape[0], 1), generation_config.speech_start_id, dtype=torch.long, device=kwargs['input_ids'].device),
             'attention_mask':  torch.ones((kwargs['input_ids'].shape[0], 1), dtype=torch.long, device=kwargs['input_ids'].device),
             'max_new_tokens': kwargs.get('max_new_tokens', 100)
         }
-        _, negative_model_kwargs, negative_input_ids = self._build_generate_config_model_kwargs(
-            None, None, tokenizer, return_processors=False, **negative_kwargs
+        
+        negative_generation_config = GenerationConfig()
+        negative_generation_config, negative_model_kwargs = self._prepare_generation_config(
+            negative_generation_config,
+            True,
+            **negative_kwargs
         )
+        
+        negative_inputs_tensor, negative_model_input_name, negative_model_kwargs = self._prepare_model_inputs(
+            None, negative_generation_config.bos_token_id, negative_model_kwargs
+        )
+        negative_batch_size = negative_kwargs['input_ids'].shape[0]
+
+        self._prepare_special_tokens(negative_generation_config, True, device=device)
+        negative_generation_config.use_cache = True
+        negative_model_kwargs["use_cache"] = True
+        negative_input_ids = negative_kwargs['input_ids'].to(self.device)
+
+        negative_input_ids_length = negative_input_ids.shape[1]
+        negative_has_default_max_length = negative_kwargs.get("max_length") is None and negative_generation_config.max_length is not None
+        negative_has_default_min_length = negative_kwargs.get("min_length") is None and negative_generation_config.min_length is not None
+        negative_generation_config = self._prepare_generated_length(
+            generation_config=negative_generation_config,
+            has_default_max_length=negative_has_default_max_length,
+            has_default_min_length=negative_has_default_min_length,
+            model_input_name=negative_model_input_name,
+            inputs_tensor=negative_kwargs['input_ids'],
+            input_ids_length=negative_input_ids_length,
+        )
+
+        negative_max_cache_length = negative_generation_config.max_length - 1
+        self._prepare_cache_for_generation(negative_generation_config, negative_model_kwargs, None, negative_batch_size, negative_max_cache_length)
+        negative_model_kwargs['cache_position'] = torch.arange(negative_input_ids_length, device=device, dtype=torch.long)
+        for k, v in negative_model_kwargs.items():
+            if isinstance(v, torch.Tensor):
+                negative_model_kwargs[k] = v.to(device=device)
 
         acoustic_cache = None
         semantic_cache = None
@@ -562,26 +570,24 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 noise_scheduler.set_timesteps(num_inference_steps=ddpm_inference_steps)
                 condition = torch.cat([positive_condition, negative_condition], dim=0).to(self.model.diffusion_head.device)
                 speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
-                with torch.no_grad():
-                    for t in noise_scheduler.timesteps:
-                        half = speech[: len(speech) // 2]
-                        combined = torch.cat([half, half], dim=0)
-                        eps = self.model.diffusion_head(combined, t.repeat(combined.shape[0]).to(combined), condition=condition)
-                        cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
-                        half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
-                        eps = torch.cat([half_eps, half_eps], dim=0)
-                        speech = noise_scheduler.step(eps, t, speech).prev_sample
+                for t in noise_scheduler.timesteps:
+                    half = speech[: len(speech) // 2]
+                    combined = torch.cat([half, half], dim=0)
+                    eps = self.model.diffusion_head(combined, t.repeat(combined.shape[0]).to(combined), condition=condition)
+                    cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
+                    half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
+                    eps = torch.cat([half_eps, half_eps], dim=0)
+                    speech = noise_scheduler.step(eps, t, speech).prev_sample
                 speech_latent = speech[: len(speech) // 2].unsqueeze(1)
 
                 # Decode acoustic latent to audio using acoustic streaming cache
                 scaled_latent = speech_latent / self.model.speech_scaling_factor.to(speech_latent.device) - self.model.speech_bias_factor.to(speech_latent.device)
-                with torch.no_grad():
-                    audio_output = self.model.acoustic_tokenizer.decode(
-                        scaled_latent.to(self.model.acoustic_tokenizer.device),
-                        padding_cache=acoustic_cache,
-                        batch_mask=diffusion_indices.to(self.model.acoustic_tokenizer.device),
-                        use_cache=True
-                    )
+                audio_output = self.model.acoustic_tokenizer.decode(
+                    scaled_latent.to(self.model.acoustic_tokenizer.device),
+                    padding_cache=acoustic_cache,
+                    batch_mask=diffusion_indices.to(self.model.acoustic_tokenizer.device),
+                    use_cache=True
+                )
                 audio_chunk = audio_output.audio
                 acoustic_cache = audio_output.padding_cache
 
@@ -598,13 +604,12 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     audio_streamer.put(audio_chunk, diffusion_indices)
 
                 # Encode audio to semantic features using semantic streaming cache
-                with torch.no_grad():
-                    semantic_outputs = self.model.semantic_tokenizer.encode(
-                        audio_chunk,
-                        padding_cache=semantic_cache,
-                        batch_mask=diffusion_indices,
-                        use_cache=True
-                    )
+                semantic_outputs = self.model.semantic_tokenizer.encode(
+                    audio_chunk,
+                    padding_cache=semantic_cache,
+                    batch_mask=diffusion_indices,
+                    use_cache=True
+                )
                 semantic_features = semantic_outputs.latents
                 semantic_cache = semantic_outputs.padding_cache
 
