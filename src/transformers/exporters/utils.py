@@ -26,21 +26,17 @@ from ..masking_utils import (
     prepare_padding_mask,
     sdpa_mask,
 )
-from ..utils import logging
-from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
+from ..utils.import_utils import is_torch_available
 
 
 if is_torch_available():
     import torch
 
 
-def _get_cache_dict(cache: DynamicCache):
+def _get_dynamic_cache_dict(cache: DynamicCache):
     """Convert cache to dictionary format for pytree operations."""
     if any(not isinstance(layer, DynamicLayer | DynamicSlidingWindowLayer) for layer in cache.layers):
         raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
-
-    if not is_torch_greater_or_equal("2.6.0"):
-        logging.warning("DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions.")
 
     return {
         "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
@@ -69,17 +65,17 @@ def register_dynamic_cache_for_export():
     try:
         torch.utils._pytree.register_pytree_node(
             DynamicCache,
-            lambda dynamic_cache: torch.utils._pytree._dict_flatten(_get_cache_dict(dynamic_cache)),
+            lambda dynamic_cache: torch.utils._pytree._dict_flatten(_get_dynamic_cache_dict(dynamic_cache)),
             _unflatten_dynamic_cache,
             serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
             flatten_with_keys_fn=lambda dynamic_cache: torch.utils._pytree._dict_flatten_with_keys(
-                _get_cache_dict(dynamic_cache)
+                _get_dynamic_cache_dict(dynamic_cache)
             ),
         )
         # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
         torch.fx._pytree.register_pytree_flatten_spec(
             DynamicCache,
-            lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_cache_dict(cache), spec),
+            lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_dynamic_cache_dict(cache), spec),
         )
     # Catching this in case there are multiple runs for some test runs
     except ValueError as e:
@@ -153,9 +149,9 @@ def patch_masks_for_export():
         ALL_MASK_ATTENTION_FUNCTIONS["eager"] = eager_mask
 
 
-def _get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str, dict[int, torch.export.Dim]]:
+def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str, dict[int, torch.export.Dim]]:
     """
-    Utility function to automatically generate dynamic shapes for model inputs.
+    Utility function to automatically generate dynamic shapes for a dictionary of model inputs.
 
     Args:
         inputs (`dict[str, torch.Tensor | Cache]`):
@@ -165,15 +161,18 @@ def _get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[st
     """
     from torch.export import Dim
 
-    dynamic_shapes: dict[str, dict[int, torch.export.Dim]] = {}
-
+    dynamic_shapes = {}
     for name, input in inputs.items():
         if isinstance(input, DynamicCache):
             dynamic_shapes[name] = [
                 [dict.fromkeys(range(len(layer.keys.shape)), Dim.AUTO) for layer in input.layers],
                 [dict.fromkeys(range(len(layer.values.shape)), Dim.AUTO) for layer in input.layers],
             ]
-        else:
+        elif isinstance(input, torch.Tensor):
             dynamic_shapes[name] = dict.fromkeys(range(len(input.shape)), Dim.AUTO)
+        else:
+            raise ValueError(
+                f"Input '{name}' is of unsupported type '{type(input)}'. Only 'torch.Tensor' and 'DynamicCache' are supported."
+            )
 
     return dynamic_shapes

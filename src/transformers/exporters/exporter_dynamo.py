@@ -20,7 +20,7 @@ from ..utils import logging
 from ..utils.export_config import DynamoConfig
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 from .base import HfExporter
-from .utils import _get_auto_dynamic_shapes, patch_masks_for_export, register_dynamic_cache_for_export
+from .utils import get_auto_dynamic_shapes, patch_masks_for_export, register_dynamic_cache_for_export
 
 
 if is_torch_available():
@@ -29,6 +29,9 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+
+    if is_torch_greater_or_equal("2.6.0"):
+        from torch.export import ExportedProgram
 
 logger = logging.get_logger(__file__)
 
@@ -45,8 +48,6 @@ class DynamoExporter(HfExporter):
             raise ImportError("DynamoExporter requires torch>=2.6.0 for stable Dynamo based export.")
 
     def export(self, model: "PreTrainedModel"):
-        from torch.export import ExportedProgram
-
         if self.export_config.sample_inputs is None:
             raise NotImplementedError(
                 "OnnxExporter can't automatically generate export inptus. Please provide sample_inputs in the exporter_config as a dictionary. "
@@ -57,23 +58,21 @@ class DynamoExporter(HfExporter):
 
         args = ()
         kwargs = self.export_config.sample_inputs
-        dynamic_shapes = self.export_config.dynamic_shapes
-
         if isinstance(model, GenerationMixin) and model.config.use_cache:
             register_dynamic_cache_for_export()
-
             if "past_key_values" not in kwargs:
                 logger.info(
                     "OnnxExporter detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
                     "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
                     "You can also provide past_key_values in sample_inputs to avoid this step."
                 )
-                # NOTE: for now i'm creating it here to reduce user burden
-                kwargs["past_key_values"] = model(**kwargs).past_key_values
+                sample_outputs = model(**kwargs)
+                kwargs["past_key_values"] = sample_outputs.past_key_values
 
+        dynamic_shapes = self.export_config.dynamic_shapes
         if self.export_config.dynamic and dynamic_shapes is None:
             # assigns AUTO to all axes to let torch.onnx decide
-            dynamic_shapes = _get_auto_dynamic_shapes(kwargs)
+            dynamic_shapes = get_auto_dynamic_shapes(kwargs)
 
         with patch_masks_for_export():
             exported_program: ExportedProgram = torch.export.export(

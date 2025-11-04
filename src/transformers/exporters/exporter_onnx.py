@@ -5,7 +5,7 @@ from ..utils import logging
 from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 from .base import HfExporter
-from .utils import _get_auto_dynamic_shapes, patch_masks_for_export, register_dynamic_cache_for_export
+from .utils import get_auto_dynamic_shapes, patch_masks_for_export, register_dynamic_cache_for_export
 
 
 if is_torch_available():
@@ -41,23 +41,21 @@ class OnnxExporter(HfExporter):
 
         args = ()
         kwargs = self.export_config.sample_inputs
-        dynamic_shapes = self.export_config.dynamic_shapes
-
         if isinstance(model, GenerationMixin) and model.config.use_cache:
             register_dynamic_cache_for_export()
-
             if "past_key_values" not in kwargs:
                 logger.info(
                     "OnnxExporter detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
                     "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
                     "You can also provide past_key_values in sample_inputs to avoid this step."
                 )
-                # NOTE: for now i'm creating it here to reduce user burden
-                kwargs["past_key_values"] = model(**kwargs).past_key_values
+                sample_outputs = model(**kwargs)
+                kwargs["past_key_values"] = sample_outputs.past_key_values
 
+        dynamic_shapes = self.export_config.dynamic_shapes
         if self.export_config.dynamic and dynamic_shapes is None:
             # assigns AUTO to all axes to let torch.onnx decide
-            dynamic_shapes = _get_auto_dynamic_shapes(kwargs)
+            dynamic_shapes = get_auto_dynamic_shapes(kwargs)
 
         with patch_masks_for_export():
             onnx_program: ONNXProgram = torch.onnx.export(
