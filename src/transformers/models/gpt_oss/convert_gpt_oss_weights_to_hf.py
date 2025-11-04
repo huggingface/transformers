@@ -157,14 +157,28 @@ def write_model(
     original_config = json.loads((Path(input_base_path) / "config.json").read_text())
 
     num_local_experts = original_config.pop("num_experts")
-    rope_parameters = {
-        "beta_fast": float(original_config.pop("rope_ntk_beta")),
-        "beta_slow": float(original_config.pop("rope_ntk_alpha")),
-        "factor": float(original_config.pop("rope_parameters_factor")),
-        "rope_type": "yarn",
-        "truncate": False,
-        "original_max_position_embeddings": 4096,
-    }
+    
+    # Handle both old and new config formats for rope_parameters
+    if "rope_parameters" in original_config:
+        # New format: rope_parameters already exists as a dict
+        rope_parameters = original_config.pop("rope_parameters")
+        # Ensure rope_type is set
+        if "rope_type" not in rope_parameters:
+            rope_parameters["rope_type"] = "yarn"
+    else:
+        # Old format: construct rope_parameters from individual keys
+        # Fallback to default values if rop_parameters is missing
+        rope_parameters = {
+            # "beta_fast": float(original_config.pop("rope_ntk_beta")),
+            # "beta_slow": float(original_config.pop("rope_ntk_alpha")),
+            # "factor": float(original_config.pop("rope_parameters_factor")),
+            "rope_type": "yarn",
+            "truncate": False,
+            "original_max_position_embeddings": 4096,
+            "beta_fast": 32.0,
+            "beta_slow": 1.0,
+            "factor": 32.0,
+        }
 
     config = GptOssConfig(
         num_local_experts=num_local_experts,
