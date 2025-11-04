@@ -194,7 +194,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         **kwargs,
     ):
         # set the model type so we can check we have the right pre- and post-processing parameters
-        if model.config.model_type == "whisper":
+        if model.config.model_type == "whisper" or model.config.model_type == "voxtral":
             self.type = "seq2seq_whisper"
         elif model.__class__.__name__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.values():
             self.type = "seq2seq"
@@ -289,7 +289,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 type_warning = (
                     "Using `chunk_length_s` is very experimental with seq2seq models. The results will not necessarily"
                     " be entirely accurate and will have caveats. More information:"
-                    " https://github.com/huggingface/transformers/pull/20104. Ignore this warning with pipeline(...,"
+                    " https://github.com/huggingface/transformers/pull/20104. Ignore this warning with pipeline("
                     " ignore_warning=True)."
                 )
                 if self.type == "seq2seq_whisper":
@@ -342,7 +342,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 )
             if self.type == "seq2seq_whisper" and return_timestamps == "char":
                 raise ValueError(
-                    "Whisper cannot return `char` timestamps, only word level or segment level timestamps. "
+                    "Whisper and Voxtral cannot return `char` timestamps, only word level or segment level timestamps. "
                     "Use `return_timestamps='word'` or `return_timestamps=True` respectively."
                 )
             forward_params["return_timestamps"] = return_timestamps
@@ -622,6 +622,15 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 return_language=return_language,
                 time_precision=time_precision,
             )
+        elif self.model.config.model_type == "voxtral":
+            # Voxtral timestamp processing
+            time_precision = 0.02  # Default time precision for Voxtral
+            processed_outputs = self.processor.decode_asr(
+                model_outputs,
+                return_timestamps=return_timestamps,
+                time_precision=time_precision,
+            )
+            return processed_outputs
         else:
             items = np.concatenate(final_items, axis=1)
             items = items.squeeze(0)
