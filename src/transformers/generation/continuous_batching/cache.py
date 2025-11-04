@@ -32,7 +32,7 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
         - All groups have the same number of layers
 
     For a model with the following layer types: ["sliding", "full", "full", "sliding", "full", "full", "full", "full"]
-    We would get two groups: [0, 3] and [1, 2], [4,5], [6,7].
+    We would get four groups: [0, 3], [1, 2], [4,5] and [6,7].
     """
     # If the config has no layer_type attribute, it means all layers are the same attention type
     layer_types = getattr(config, "layer_types", None)
@@ -173,10 +173,12 @@ class PagedAttentionCache:
         page_size = self.head_dim * self.num_key_value_heads
 
         if "flash" in self.config._attn_implementation:
-            num_attention_masks = 1  # only used to compute the default meme args
-        else:
+            num_attention_masks = 0  # only used to compute the default memory footprint args
+        elif "sliding_attention" in group_types:
             # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`
-            num_attention_masks = 2 if "sliding_attention" in group_types else 1
+            num_attention_masks = 2
+        else:
+            num_attention_masks = 1
 
         memory_handler = PagedAttentionMemoryHandler(
             block_size=self.block_size,
@@ -469,6 +471,8 @@ class PagedAttentionMemoryHandler:
             2N * (layer_group_size * page_size * cache_dtype + 2 * num_group),
             m * N * (peak_activation_per_token * activation_dtype + 28 + 4 * num_group),
         ])
+
+        If num_attention_masks is 0, the equation simplifies to a 1st degree polynomial.
         """
         cache_memory = self.get_available_memory(max_memory_percent)
         logger.info(f"Cache memory: {cache_memory}")
@@ -480,11 +484,16 @@ class PagedAttentionMemoryHandler:
         c = -cache_memory
         logger.debug(f"Coefficients of 2nd degree polynomial: {a = }, {b = }, {c = }")
 
-        # Compute discriminant and greatest solution
-        discriminant = b**2 - 4 * a * c
-        if discriminant < 0:
-            raise ValueError(f"Discriminant is negative: {discriminant = }")
-        greatest_solution = (-b + sqrt(discriminant)) / (2 * a)
+        # If num_attention_masks is 0, the equation simplifies to a 1st degree polynomial
+        if self.num_attention_masks == 0:
+            greatest_solution = -c / b
+        # Otherwise, we solve the quadratic equation
+        else:
+            discriminant = b**2 - 4 * a * c
+            if discriminant < 0:
+                raise ValueError(f"Discriminant is negative: {discriminant = }")
+            greatest_solution = (-b + sqrt(discriminant)) / (2 * a)
+
         if greatest_solution < 0:
             raise ValueError(f"Greatest solution is negative: {greatest_solution = }")
 
