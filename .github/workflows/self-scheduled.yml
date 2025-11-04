@@ -111,7 +111,7 @@ jobs:
                 folder_slices = ast.literal_eval(f.read())
             with open("slice_ids.txt", "w") as f:
                 f.write(str(list(range(len(folder_slices)))))
-            EOF
+          EOF
 
             echo "slice_ids=$(cat slice_ids.txt)" >> $GITHUB_OUTPUT
 
