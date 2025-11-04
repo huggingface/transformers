@@ -447,7 +447,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.language_model.embed_tokens.weight"
+    }
 
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)

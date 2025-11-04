@@ -943,7 +943,11 @@ class Pop2PianoConcatEmbeddingToMel(nn.Module):
     """
 )
 class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+        "lm_head.weight": "shared.weight",
+    }
 
     def __init__(self, config: Pop2PianoConfig):
         super().__init__(config)

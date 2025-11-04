@@ -611,7 +611,7 @@ def load_balancing_loss_func(
 
 @auto_docstring
 class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

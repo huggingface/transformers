@@ -827,7 +827,10 @@ class RoCBertModel(RoCBertPreTrainedModel):
     """
 )
 class RoCBertForPreTraining(RoCBertPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "roc_bert.embeddings.word_embeddings.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1020,7 +1023,10 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
 
 @auto_docstring
 class RoCBertForMaskedLM(RoCBertPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "roc_bert.embeddings.word_embeddings.weight"
+    }
 
     # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.__init__ with Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
@@ -1175,7 +1181,10 @@ class RoCBertForMaskedLM(RoCBertPreTrainedModel):
     """
 )
 class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "roc_bert.embeddings.word_embeddings.weight"
+    }
 
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.__init__ with BertLMHeadModel->RoCBertForCausalLM,Bert->RoCBert,bert->roc_bert
     def __init__(self, config):

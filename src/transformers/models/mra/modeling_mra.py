@@ -903,7 +903,10 @@ class MraModel(MraPreTrainedModel):
 
 @auto_docstring
 class MraForMaskedLM(MraPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "mra.embeddings.word_embeddings.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)

@@ -958,7 +958,9 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     config: Pix2StructTextConfig
     input_modalities = "text"
     _no_split_modules = ["Pix2StructTextBlock"]
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "embed_tokens.weight"
+    }
     supports_gradient_checkpointing = True
 
     def __init__(self, config):

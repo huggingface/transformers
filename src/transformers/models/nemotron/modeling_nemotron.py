@@ -881,7 +881,9 @@ class NemotronModel(NemotronPreTrainedModel):
 
 # TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.embed_tokens.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)

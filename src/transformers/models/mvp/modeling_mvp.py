@@ -887,7 +887,10 @@ class MvpDecoder(MvpPreTrainedModel):
 @auto_docstring
 class MvpModel(MvpPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["final_logits_bias"]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: MvpConfig):
         super().__init__(config)
@@ -1035,7 +1038,9 @@ class MvpModel(MvpPreTrainedModel):
     """
 )
 class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: MvpConfig):
         super().__init__(config)
@@ -1205,7 +1210,6 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
     """
 )
 class MvpForSequenceClassification(MvpPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: MvpConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -1366,7 +1370,6 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
 
 @auto_docstring
 class MvpForQuestionAnswering(MvpPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1537,7 +1540,9 @@ class MvpDecoderWrapper(MvpPreTrainedModel):
 
 
 class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.decoder.embed_tokens.weight"
+    }
 
     def __init__(self, config):
         config.is_decoder = True

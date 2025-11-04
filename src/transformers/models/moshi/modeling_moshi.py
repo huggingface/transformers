@@ -1485,7 +1485,9 @@ class MoshiModel(MoshiPreTrainedModel):
 )
 class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     input_modalities = "text"
-    _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.embed_tokens.weight"
+    }
 
     # Copied from transformers.models.gemma.modeling_gemma.GemmaForCausalLM.__init__ with Gemma->Moshi
     def __init__(self, config):
@@ -1602,7 +1604,9 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     """
 )
 class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["decoder.model.embed_tokens.weight", "decoder.lm_head.weight"]
+    _tied_weights_keys = {
+        "decoder.model.embed_tokens.weight": "decoder.lm_head.weight"
+    }
     config: MoshiConfig
     output_modalities = ["audio", "text"]
     main_input_name = "input_ids"

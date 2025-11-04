@@ -898,7 +898,10 @@ class PegasusDecoder(PegasusPreTrainedModel):
 
 @auto_docstring
 class PegasusModel(PegasusPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "decoder.embed_tokens.weight": "shared.weight",
+        "encoder.embed_tokens.weight": "shared.weight"
+    }
 
     def __init__(self, config: PegasusConfig):
         super().__init__(config)
@@ -1058,7 +1061,9 @@ class PegasusModel(PegasusPreTrainedModel):
 class PegasusForConditionalGeneration(PegasusPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: PegasusConfig):
         super().__init__(config)
@@ -1242,7 +1247,9 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
 
 
 class PegasusForCausalLM(PegasusPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config):
         config = copy.deepcopy(config)

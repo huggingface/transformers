@@ -396,7 +396,9 @@ class MptModel(MptPreTrainedModel):
     """
 )
 class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "transformer.wte.weight"
+    }
 
     def __init__(self, config: MptConfig):
         super().__init__(config)
