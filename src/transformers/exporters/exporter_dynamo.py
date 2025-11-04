@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
+import inspect
 from typing import TYPE_CHECKING
 
 from ..generation.utils import GenerationMixin
@@ -20,7 +22,12 @@ from ..utils import logging
 from ..utils.export_config import DynamoConfig
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 from .base import HfExporter
-from .utils import get_auto_dynamic_shapes, patch_masks_for_export, register_dynamic_cache_for_export
+from .utils import (
+    get_auto_dynamic_shapes,
+    patch_masks_for_export,
+    register_dynamic_cache_for_export,
+    register_encoder_decoder_cache_for_export,
+)
 
 
 if is_torch_available():
@@ -57,20 +64,26 @@ class DynamoExporter(HfExporter):
             )
 
         args = ()
-        kwargs = self.export_config.sample_inputs
-        if isinstance(model, GenerationMixin) and model.config.use_cache:
-            if "past_key_values" not in kwargs:
-                logger.info(
-                    f"{self.__class__.__name__} detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
-                    "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
-                    "You can also provide past_key_values in sample_inputs to avoid this step."
-                )
-                if model.generation_config.cache_implementation == "static":
-                    # TODO: wrap with static cache wrapper or register static cache for export
-                    raise NotImplementedError("Static cache implementation is not yet supported for Dynamo export.")
-                else:
-                    register_dynamic_cache_for_export()
-                    kwargs["past_key_values"] = model(**kwargs).past_key_values
+        kwargs = copy.deepcopy(self.export_config.sample_inputs)
+
+        register_dynamic_cache_for_export()
+        register_encoder_decoder_cache_for_export()
+        if (
+            isinstance(model, GenerationMixin)
+            and getattr(model.config, "use_cache", False)
+            and "past_key_values" in inspect.signature(model.forward).parameters
+            and "past_key_values" not in kwargs
+        ):
+            logger.info(
+                f"{self.__class__.__name__} detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
+                "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
+                "You can also provide past_key_values in sample_inputs to avoid this step."
+            )
+            if model.generation_config.cache_implementation == "static":
+                # TODO: wrap with static cache wrapper or register static cache for export
+                raise NotImplementedError("Static cache implementation is not yet supported for Dynamo export.")
+            else:
+                kwargs["past_key_values"] = model(**kwargs).past_key_values
 
         dynamic_shapes = self.export_config.dynamic_shapes
         if self.export_config.dynamic and dynamic_shapes is None:
@@ -87,3 +100,5 @@ class DynamoExporter(HfExporter):
             )
 
         model.exported_model = exported_program
+
+        return exported_program

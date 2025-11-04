@@ -15,7 +15,7 @@
 from collections.abc import Callable
 from contextlib import contextmanager
 
-from ..cache_utils import Cache, DynamicCache, DynamicLayer, DynamicSlidingWindowLayer
+from ..cache_utils import Cache, DynamicCache, DynamicLayer, DynamicSlidingWindowLayer, EncoderDecoderCache
 from ..masking_utils import (
     ALL_MASK_ATTENTION_FUNCTIONS,
     _ignore_causal_mask_sdpa,
@@ -34,13 +34,21 @@ if is_torch_available():
 
 
 def _get_dynamic_cache_dict(cache: DynamicCache):
-    """Convert cache to dictionary format for pytree operations."""
+    """Converts DynamicCache to dictionary format for pytree operations."""
     if any(not isinstance(layer, DynamicLayer | DynamicSlidingWindowLayer) for layer in cache.layers):
         raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
 
     return {
         "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
         "value_cache": [layer.values for layer in cache.layers if layer.values is not None],
+    }
+
+
+def get_encoder_decoder_cache_dict(cache: EncoderDecoderCache):
+    """Converts EncoderDecoderCache to dictionary format for pytree operations."""
+    return {
+        "self_attention_cache": _get_dynamic_cache_dict(cache.self_attention_cache),
+        "cross_attention_cache": _get_dynamic_cache_dict(cache.cross_attention_cache),
     }
 
 
@@ -61,6 +69,25 @@ def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
     return cache
 
 
+def _unflatten_encoder_decoder_cache(values, context: torch.utils._pytree.Context):
+    dictionary = torch.utils._pytree._dict_unflatten(values, context)
+    self_attention_cache = _unflatten_dynamic_cache(
+        [
+            dictionary.get("self_attention_cache", {}).get("key_cache", []),
+            dictionary.get("self_attention_cache", {}).get("value_cache", []),
+        ],
+        context,
+    )
+    cross_attention_cache = _unflatten_dynamic_cache(
+        [
+            dictionary.get("cross_attention_cache", {}).get("key_cache", []),
+            dictionary.get("cross_attention_cache", {}).get("value_cache", []),
+        ],
+        context,
+    )
+    return EncoderDecoderCache(self_attention_cache, cross_attention_cache)
+
+
 def register_dynamic_cache_for_export():
     try:
         torch.utils._pytree.register_pytree_node(
@@ -76,6 +103,28 @@ def register_dynamic_cache_for_export():
         torch.fx._pytree.register_pytree_flatten_spec(
             DynamicCache,
             lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_dynamic_cache_dict(cache), spec),
+        )
+    # Catching this in case there are multiple runs for some test runs
+    except ValueError as e:
+        if "already registered as pytree node" not in str(e):
+            raise
+
+
+def register_encoder_decoder_cache_for_export():
+    try:
+        torch.utils._pytree.register_pytree_node(
+            EncoderDecoderCache,
+            lambda cache: torch.utils._pytree._dict_flatten(get_encoder_decoder_cache_dict(cache)),
+            _unflatten_encoder_decoder_cache,
+            serialized_type_name=f"{EncoderDecoderCache.__module__}.{EncoderDecoderCache.__name__}",
+            flatten_with_keys_fn=lambda cache: torch.utils._pytree._dict_flatten_with_keys(
+                get_encoder_decoder_cache_dict(cache)
+            ),
+        )
+        # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
+        torch.fx._pytree.register_pytree_flatten_spec(
+            EncoderDecoderCache,
+            lambda cache, spec: torch.fx._pytree._dict_flatten_spec(get_encoder_decoder_cache_dict(cache), spec),
         )
     # Catching this in case there are multiple runs for some test runs
     except ValueError as e:
