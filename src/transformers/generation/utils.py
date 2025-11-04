@@ -2192,7 +2192,7 @@ class GenerationMixin(ContinuousMixin):
             has_disk_offload = "disk" in all_model_devices
             can_compile &= not has_disk_offload
 
-        # Finally: if the user has manually specified compilation options, but compilation is not possible, let's warn
+        # If the user has manually specified compilation options, but compilation is not possible, let's warn
         # them
         if generation_config.compile_config is not None and not can_compile:
             logger.warning_once(
@@ -2200,15 +2200,7 @@ class GenerationMixin(ContinuousMixin):
                 "will be skipped."
             )
 
-        return can_compile
-
-    def _check_and_get_compiled_call(self, generation_config: GenerationConfig, model_kwargs: dict) -> Callable:
-        """
-        Checks the auto-compilation criteria and returns either the compiled or the original forward call.
-        """
-        model_forward = self.__call__
-        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
-        if compile_forward:
+            # Finally: if we can compile, disable tokenizers parallelism and check for FA2 + static cache
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
             # If we use FA2 and a static cache, we cannot compile with fullgraph
             if self.config._attn_implementation == "flash_attention_2":
@@ -2219,8 +2211,8 @@ class GenerationMixin(ContinuousMixin):
                         "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
                     )
                     generation_config.compile_config.fullgraph = False
-            model_forward = self.get_compiled_call(generation_config.compile_config)
-        return model_forward
+
+        return can_compile
 
     def _get_deprecated_gen_repo(
         self,
@@ -2864,7 +2856,11 @@ class GenerationMixin(ContinuousMixin):
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
 
-        model_forward = self._check_and_get_compiled_call(generation_config, model_kwargs)
+        model_forward = (
+            self.get_compiled_call(generation_config.compile_config)
+            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            else self.__call__
+        )
 
         prefill_consumed = False
         outputs = self._prefill(input_ids, generation_config, model_kwargs)
@@ -3855,7 +3851,11 @@ class GenerationMixin(ContinuousMixin):
             if "past_key_values" not in model_kwargs:
                 raise ValueError("Cannot use prefill chunking without a cache")
 
-            model_forward = self._check_and_get_compiled_call(generation_config, model_kwargs)
+            model_forward = (
+                self.get_compiled_call(generation_config.compile_config)
+                if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+                else self.__call__
+            )
 
             attention_mask = model_kwargs.pop("attention_mask", None)
             past_length = 0

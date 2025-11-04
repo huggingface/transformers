@@ -203,7 +203,11 @@ class CsmGenerationMixin(GenerationMixin):
                     criterion.max_length -= cur_len
         # ============================================
 
-        model_forward = self._check_and_get_compiled_call(generation_config, model_kwargs)
+        model_forward = (
+            self.get_compiled_call(generation_config.compile_config)
+            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            else self.__call__
+        )
 
         is_prefill = True
         while self._has_unfinished_sequences(
