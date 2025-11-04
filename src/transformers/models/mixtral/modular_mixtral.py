@@ -333,7 +333,9 @@ class MixtralModel(MistralModel):
 
 
 class MixtralForCausalLM(MistralForCausalLM):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.embed_tokens.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)
