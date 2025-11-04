@@ -87,6 +87,7 @@ VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
+KERNELS_MIN_VERSION = "0.9.0"
 
 
 @lru_cache
@@ -513,8 +514,9 @@ def is_kenlm_available() -> bool:
 
 
 @lru_cache
-def is_kernels_available() -> bool:
-    return _is_package_available("kernels")
+def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION) -> bool:
+    is_available, kernels_version = _is_package_available("kernels", return_version=True)
+    return is_available and version.parse(kernels_version) >= version.parse(MIN_VERSION)
 
 
 @lru_cache
