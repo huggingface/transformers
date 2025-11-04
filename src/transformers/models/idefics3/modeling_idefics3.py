@@ -133,6 +133,8 @@ class Idefics3VisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
 
     def forward(self, pixel_values: torch.FloatTensor, patch_attention_mask: torch.BoolTensor) -> torch.Tensor:
+        torch._check(pixel_values.shape[0] > 0)
+
         batch_size, _, max_im_h, max_im_w = pixel_values.shape
 
         patch_embeds = self.patch_embedding(pixel_values)
