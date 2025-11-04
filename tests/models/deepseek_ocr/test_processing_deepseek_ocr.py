@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import tempfile
 import unittest
 
@@ -28,6 +29,34 @@ if is_vision_available():
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
+CHAT_TEMPLATE = """
+{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}
+{% macro render_content(content) -%}
+    {%- if content is string -%}
+        {{- content -}}
+    {%- else -%}
+        {%- for block in content -%}
+            {%- if block['type'] == 'text' -%}
+                {{- block['text'] -}}
+            {%- elif block['type'] == 'image' -%}
+                {{- '<image>' -}}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- endif -%}
+{%- endmacro %}
+{{ bos_token }}
+{%- for message in messages -%}
+    {%- set rendered = render_content(message['content']) -%}
+    {%- if message['role'] == 'system' -%}
+        {{ rendered + '\\n\\n' }}
+    {%- elif message['role'] == 'user' -%}
+        {{ 'User: ' + rendered + '\\n\\n' }}
+    {%- elif message['role'] == 'assistant' -%}
+        {{ 'Assistant: ' + rendered + eos_token }}
+    {%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}
+""".strip()
 
 
 @require_vision
@@ -46,11 +75,20 @@ class DeepseekOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         processor.save_pretrained(self.tmpdirname)
         self.image_token = processor.image_token
+        if is_vision_available():
+            from PIL import Image
+
+            from ...test_processing_common import MODALITY_INPUT_DATA
+
+            local_image_path = os.path.join(self.tmpdirname, "local_test_image.png")
+            Image.new("RGB", (32, 32), color="white").save(local_image_path)
+            MODALITY_INPUT_DATA["images"] = [local_image_path, local_image_path]
 
     @staticmethod
     def prepare_processor_dict():
         return {
             "image_token": "<image>",
+            "chat_template": CHAT_TEMPLATE,
         }
 
     def get_tokenizer(self, **kwargs):
