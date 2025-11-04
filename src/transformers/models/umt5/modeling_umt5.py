@@ -914,7 +914,11 @@ class UMT5Model(UMT5PreTrainedModel):
 
     model_type = "umt5"
     config: UMT5Config
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
+
 
     def __init__(self, config):
         super().__init__(config)
@@ -1096,7 +1100,11 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
     ```"""
 
     model_type = "umt5"
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1396,7 +1404,6 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
 )
 class UMT5ForSequenceClassification(UMT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     # Copied from transformers.models.t5.modeling_t5.T5ForSequenceClassification.__init__ with T5->UMT5
     def __init__(self, config: UMT5Config):
@@ -1614,7 +1621,6 @@ class UMT5ForTokenClassification(UMT5PreTrainedModel):
 
 @auto_docstring
 class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):
         super().__init__(config)

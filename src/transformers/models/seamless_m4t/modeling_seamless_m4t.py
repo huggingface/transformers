@@ -1978,7 +1978,9 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, 
         "text_encoder",
         "text_decoder",
     ]
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.decoder.embed_tokens.weight"
+    }
 
     def __init__(
         self,
@@ -2453,11 +2455,12 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["speech_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_ids"
 
-    _tied_weights_keys = [
-        "lm_head.weight",
-        "text_encoder.embed_tokens.weight",
-        "text_decoder.embed_tokens.weight",
-    ]
+    _tied_weights_keys = {
+        "text_decoder.embed_tokens.weight": [
+            "lm_head.weight",
+            "text_encoder.shared.text_decoder.embed_tokens.weight"
+        ]
+    }
 
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
@@ -2711,10 +2714,9 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["text_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
 
-    _tied_weights_keys = [
-        "lm_head.weight",
-        "text_decoder.embed_tokens.weight",
-    ]
+    _tied_weights_keys = {
+        "text_decoder.embed_tokens.weight": "lm_head.weight"
+    }
 
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
@@ -2973,11 +2975,12 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["speech_encoder"]
     main_input_name = "input_ids"
 
-    _tied_weights_keys = [
-        "lm_head.weight",
-        "text_encoder.embed_tokens.weight",
-        "text_decoder.embed_tokens.weight",
-    ]
+    _tied_weights_keys = {
+        "text_decoder.embed_tokens.weight": [
+            "lm_head.weight",
+            "text_encoder.shared.text_decoder.embed_tokens.weight"
+        ]
+    }
 
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
@@ -3298,10 +3301,9 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
 
-    _tied_weights_keys = [
-        "lm_head.weight",
-        "text_decoder.embed_tokens.weight",
-    ]
+    _tied_weights_keys = {
+        "text_decoder.embed_tokens.weight": "lm_head.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -3628,11 +3630,12 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
 class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
     input_modalities = ["audio", "text"]
     output_modalities = ["audio", "text"]
-    _tied_weights_keys = [
-        "lm_head.weight",
-        "text_encoder.embed_tokens.weight",
-        "text_decoder.embed_tokens.weight",
-    ]
+    _tied_weights_keys = {
+        "text_decoder.embed_tokens.weight": [
+            "lm_head.weight",
+            "text_encoder.shared.text_decoder.embed_tokens.weight"
+        ]
+    }
 
     def __init__(self, config, current_modality="text"):
         r"""

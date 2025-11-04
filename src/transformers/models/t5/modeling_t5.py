@@ -971,7 +971,10 @@ class T5Model(T5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         "decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: T5Config):
         super().__init__(config)
@@ -1135,7 +1138,11 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_unexpected = [
         "decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "shared.weight",
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: T5Config):
         super().__init__(config)
@@ -1327,7 +1334,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class T5EncoderModel(T5PreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight"]
+    _tied_weights_keys = {"encoder.embed_tokens.weight": "shared.weight"}
     _keys_to_ignore_on_load_unexpected = [r"decoder"]
 
     def __init__(self, config: T5Config):
@@ -1411,7 +1418,6 @@ class T5EncoderModel(T5PreTrainedModel):
 )
 class T5ForSequenceClassification(T5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: T5Config):
         super().__init__(config)
@@ -1553,7 +1559,6 @@ class T5ForSequenceClassification(T5PreTrainedModel):
 
 @auto_docstring
 class T5ForTokenClassification(T5PreTrainedModel):
-    _tied_weights_keys = ["transformer.encoder.embed_tokens.weight"]
 
     def __init__(self, config: T5Config):
         super().__init__(config)
@@ -1626,7 +1631,10 @@ class T5ForTokenClassification(T5PreTrainedModel):
 @auto_docstring
 class T5ForQuestionAnswering(T5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: T5Config):
         super().__init__(config)

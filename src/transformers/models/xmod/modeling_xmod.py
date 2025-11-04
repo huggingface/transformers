@@ -852,7 +852,10 @@ class XmodModel(XmodPreTrainedModel):
     """
 )
 class XmodForCausalLM(XmodPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "roberta.embedding.weight",
+        "lm_head.decoder.bias": "lm_head.bias"
+    }
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM.__init__ with Roberta->Xmod
     def __init__(self, config):
@@ -960,7 +963,10 @@ class XmodForCausalLM(XmodPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class XmodForMaskedLM(XmodPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "roberta.embedding.weight",
+        "lm_head.decoder.bias": "lm_head.bias"
+    }
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.__init__ with Roberta->Xmod
     def __init__(self, config):

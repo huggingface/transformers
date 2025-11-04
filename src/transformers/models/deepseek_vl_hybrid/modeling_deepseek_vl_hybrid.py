@@ -388,7 +388,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
 
 
 class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     output_modalities = "text"
     _can_compile_fullgraph = True
 

@@ -910,7 +910,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
 @auto_docstring
 class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {"encoder.embed_tokens.weight": "decoder.embed_tokens.weight"}
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -1063,7 +1063,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     """
 )
 class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {"shared.weight": ["decoder.embed_tokens.weight", "lm_head.weight"]}
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)

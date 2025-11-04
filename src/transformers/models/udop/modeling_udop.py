@@ -1426,14 +1426,13 @@ class UdopStack(UdopPreTrainedModel):
 
 @auto_docstring
 class UdopModel(UdopPreTrainedModel):
-    _tied_weights_keys = [
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-        "encoder.embed_patches.proj.weight",
-        "encoder.embed_patches.proj.bias",
-        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
-        "decoder.relative_bias.biases.0.relative_attention_bias.weight",
-    ]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+        "encoder.embed_patches.proj": "patch_embed.proj",
+        "encoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
+        "decoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1602,15 +1601,14 @@ class UdopModel(UdopPreTrainedModel):
     """
 )
 class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = [
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-        "encoder.embed_patches.proj.weight",
-        "encoder.embed_patches.proj.bias",
-        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
-        "decoder.relative_bias.biases.0.relative_attention_bias.weight",
-        "lm_head.weight",
-    ]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+        "encoder.embed_patches.proj": "patch_embed.proj",
+        "encoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
+        "decoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
+        "lm_head.weight": "shared.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1795,12 +1793,11 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class UdopEncoderModel(UdopPreTrainedModel):
-    _tied_weights_keys = [
-        "encoder.embed_tokens.weight",
-        "encoder.embed_patches.proj.weight",
-        "encoder.embed_patches.proj.bias",
-        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
-    ]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "encoder.embed_patches.proj": "patch_embed.proj",
+        "encoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
+    }
 
     def __init__(self, config: UdopConfig):
         super().__init__(config)
