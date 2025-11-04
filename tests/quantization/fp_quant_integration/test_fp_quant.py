@@ -164,6 +164,13 @@ class FPQuantMXFP4Test(FPQuantBaseTest):
 
 
 @require_qutlass
+class FPQuantNVFP4Test(FPQuantBaseTest):
+    @classmethod
+    def getQuantizationConfig(cls):
+        return FPQuantConfig(forward_dtype="nvfp4", pseudoquantization=False)
+
+
+@require_qutlass
 class FPQuantMXFP4GS128Test(FPQuantBaseTest):
     @classmethod
     def getQuantizationConfig(cls):

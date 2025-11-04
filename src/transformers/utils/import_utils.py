@@ -973,13 +973,13 @@ def is_quark_available() -> bool:
 @lru_cache
 def is_fp_quant_available():
     is_available, fp_quant_version = _is_package_available("fp_quant", return_version=True)
-    return is_available and version.parse(fp_quant_version) >= version.parse("0.2.0")
+    return is_available and version.parse(fp_quant_version) >= version.parse("0.3.2")
 
 
 @lru_cache
 def is_qutlass_available():
     is_available, qutlass_version = _is_package_available("qutlass", return_version=True)
-    return is_available and version.parse(qutlass_version) >= version.parse("0.1.0")
+    return is_available and version.parse(qutlass_version) >= version.parse("0.2.0")
 
 
 @lru_cache
