@@ -3486,8 +3486,12 @@ class ModelTesterMixin:
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
             with self.subTest(model_class.__name__):
-                sample_inputs = self._prepare_for_class(copy.deepcopy(inputs_dict), model_class)
                 model = model_class(config).eval().to(torch_device)
+                sample_inputs = self._prepare_for_class(copy.deepcopy(inputs_dict), model_class)
+
+                with torch.no_grad():
+                    set_seed(1234)
+                    eager_outputs = model(**sample_inputs)
 
                 exporter = DynamoExporter(export_config=DynamoConfig(sample_inputs=sample_inputs))
 
@@ -3507,13 +3511,9 @@ class ModelTesterMixin:
                     else:
                         raise e
 
-                # Run exported model and eager model
                 with torch.no_grad():
-                    # set seed in case anything is not deterministic in model (e.g. vit_mae noise)
                     set_seed(1234)
-                    eager_outputs = model(**sample_inputs)
-                    set_seed(1234)
-                    exported_outputs = exported_program.module().forward(**sample_inputs)
+                    exported_outputs = exported_program.module().forward(**copy.deepcopy(sample_inputs))
 
                 # Check if outputs are close:
                 # is_tested is a boolean flag indicating if we compare any outputs,
