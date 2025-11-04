@@ -14,6 +14,7 @@
 
 from ..utils import PushToHubMixin, is_torch_available
 
+
 if is_torch_available():
     import torch
 
@@ -54,7 +55,6 @@ def infer_device(model):
 
 
 def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
-
     from kernels import LayerRepository
 
     if device not in ["cuda", "rocm", "xpu"]:
@@ -75,13 +75,12 @@ class KernelConfig(PushToHubMixin):
     """
     Kernel configuration class. This class is used to configure the kernel mapping for a model.
     """
-    def __init__(self, kernel_mapping={}):
 
+    def __init__(self, kernel_mapping={}):
         self.kernel_mapping = kernel_mapping
         self.registered_layer_names = {}
 
     def update_kernel(self, repo_id, registered_name, layer_name, device, mode, revision=None):
-
         from kernels import LayerRepository
 
         self.kernel_mapping[registered_name] = {
