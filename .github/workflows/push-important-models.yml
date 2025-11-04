@@ -153,5 +153,5 @@ jobs:
       ci_event: push
       report_repo_id: hf-internal-testing/transformers_ci_push
       commit_sha: ${{ github.sha }}
-      models: ${{ needs.get_modified_models.outputs.matrix }}
+      subdirs: ${{ needs.get_modified_models.outputs.matrix }}
     secrets: inherit

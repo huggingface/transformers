@@ -59,6 +59,7 @@ from .base import (
     get_default_model_and_revision,
     load_model,
 )
+from .deprecated import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
@@ -74,7 +75,6 @@ from .mask_generation import MaskGenerationPipeline
 from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
-from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .text_classification import TextClassificationPipeline
 from .text_generation import TextGenerationPipeline
 from .text_to_audio import TextToAudioPipeline
