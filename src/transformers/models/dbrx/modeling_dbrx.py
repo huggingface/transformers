@@ -313,6 +313,7 @@ class DbrxExperts(nn.Module):
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
         split_expert_shape = (-1, self.ffn_hidden_size, self.hidden_size)
+
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
             with torch.no_grad():
