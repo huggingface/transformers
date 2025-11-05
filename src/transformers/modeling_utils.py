@@ -2510,11 +2510,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 continue
 
             target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
-            if (
-                missing_keys != set()
-                and not re.search(rf"{target_name}", "\n".join(missing_keys))  # regex for modules
-            ):
-                continue  # `can_use_safetensors` goes against this one
+            # if (
+            #     missing_keys != set()
+            #     and not re.search(rf"{target_name}", "\n".join(missing_keys))  # regex for modules
+            # ):
+            #     continue  # `can_use_safetensors` goes against this one
             try:
                 if source_name.endswith(".bias") or source_name.endswith(".weight"):
                     target_tensor = top_level.get_parameter_or_buffer(target_name)
@@ -2531,6 +2531,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         submodule, target_entity = target_n.rsplit(".", 1)
                         submodule = self.get_submodule(submodule)
                         setattr(submodule, target_entity, source_param_or_module)
+                        if not re.search(rf"{source_name}", "\n".join(missing_keys)):
+                            missing_keys.discard(target_n)
             else:
                 if "." in target_name:
                     submodule, weight = target_name.rsplit(".", 1)
@@ -2538,14 +2540,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     setattr(submodule, weight, source_param_or_module)
                 else:
                     setattr(self, target_name, source_param_or_module)
-
-            if missing_keys != set() and not re.search(
-                rf"{source_name}", "\n".join(missing_keys)
-            ):  # test_model_weights_reload_no_missing_tied_weights
-                if isinstance(target_tensor, nn.Module):
-                    for k, _ in target_tensor.named_parameters():
-                        missing_keys.discard(f"{target_name}.{k}")
-                else:
+                if not re.search(rf"{source_name}", "\n".join(missing_keys)):
                     missing_keys.discard(target_name)
 
     def tie_weights(self, missing_keys: Optional[set[str]] = None):
@@ -2563,7 +2558,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if isinstance(module, PreTrainedModel) and (
                     missing_keys != set() or self.config.tie_word_embeddings or self.config.tie_encoder_decoder
                 ):
-                    module.tie_weight_source_and_target(self, missing_keys, module_prefix, self._tied_weights_keys)
+                    # Use the module's own tied-weights mapping, not the top-level one
+                    module_mapping = getattr(module, "_tied_weights_keys", None)
+                    module.tie_weight_source_and_target(self, missing_keys, module_prefix, module_mapping)
                 # Additionally, if it has a custom `_tie_weights`, honor it
                 if hasattr(module, "_tie_weights"):
                     module._tie_weights()
