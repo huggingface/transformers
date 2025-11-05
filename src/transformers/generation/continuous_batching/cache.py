@@ -21,7 +21,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.metrics import attach_tracer, traced
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
-from .requests import get_device_and_memory_breakdown, logger
+from .requests import RequestState, get_device_and_memory_breakdown, logger
 
 
 def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str]]:
@@ -217,7 +217,6 @@ class PagedAttentionCache:
         logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
         # Block management data structures
-        self._block_manager = BlockManager(num_blocks)
         self.group_cache_managers: list[CacheAllocator] = []
         for i, group_type in enumerate(group_types):
             if group_type == "full_attention":
@@ -228,13 +227,18 @@ class PagedAttentionCache:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)
 
+        # We only use prefix sharing if the whole model has only full attention layers
+        self.use_prefix_sharing = (group_types == ["full_attention"])
+        self._block_manager = BlockManager(num_blocks, self.block_size, self.use_prefix_sharing)
+        self.blocks_to_complete: dict[str, int] = {}
+
     @traced
-    def allocate_blocks(self, n_blocks: int, request_id: str) -> int:
+    def allocate_blocks(self, n_blocks: int, state: RequestState) -> int:
         """Allocate cache blocks across all layer groups for a given request. Actual allocation is done by the cache
         managers, and this method only returns the maximum number of blocks actually allocated across all managers."""
         max_allocated = 0
         for cm in self.group_cache_managers:
-            allocated = cm.allocate_blocks(n_blocks, request_id, self._block_manager)
+            allocated = cm.allocate_blocks(n_blocks, state.request_id, self._block_manager)
             if allocated is None:
                 return None
             max_allocated = max(max_allocated, allocated)
@@ -335,6 +339,19 @@ class PagedAttentionCache:
 
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
+
+    def mark_blocks_as_completed(self, state: RequestState) -> None:
+        """Marks the blocks that have been computed in the forward pass as such. If prefix sharing is off, this is a
+        no-op."""
+        num_completed_blocks = 0 if not self.use_prefix_sharing else self.blocks_to_complete.pop(state.request_id)
+        if num_completed_blocks == 0:
+            return None
+        cm = self.group_cache_managers[0]  # if prefix sharing is on, there is only one group
+        self._block_manager.mark_blocks_as_computed(
+            num_completed_blocks,
+            cm.get_allocated_blocks(state.request_id),
+            state.full_prompt_ids + state.static_outputs,
+        )
 
 
 # TODO: rework computation with the groups and their sizes

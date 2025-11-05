@@ -565,17 +565,30 @@ class ContinuousBatchProcessor:
         """Update request states based on generated tokens."""
         out_tokens = self._sync()
         for i, state in enumerate(self.requests_in_batch):
+
+            # If the request has no remaining prompt ids, it means prefill has already or just finished
             if len(state.remaining_prompt_ids) == 0:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
                 token = out_tokens[self.logits_indices[i]]
                 state.prompt_ids = [token]
-                if state.update_with_token(token):
+                # Update the request and stop if it is complete
+                is_finished = state.update_and_check_completion(token)
+                # We mark the completed blocks as such
+                self.cache.mark_blocks_as_completed(state)
+                if is_finished:
                     self.metrics.record_request_completion(state.created_time, state.request_id)
                     self.scheduler.finish_request(state.request_id, evict_from_cache=(not self.manual_eviction))
                 self._maybe_send_output(state)
+            #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING_SPLIT:
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
+            # DEBUG: there is a dangling if, but idk if it ever happens. Adding an error to catch it.
+            else:
+                raise ValueError(f"Request {state.request_id} is in an unexpected state: {state.status}")
+
+
+        # We error out if the cache is full
         if self.cache.get_num_free_blocks() == 0:
             raise ValueError("No more free blocks")
 

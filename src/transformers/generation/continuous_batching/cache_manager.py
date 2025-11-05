@@ -20,27 +20,89 @@ from typing import Optional
 from .requests import logger
 
 
+class Block:
+    """A class to represent a block in the hash table of the block manager. We say that a block is computed when the KV
+    cache it points to is fully computed, otherwise it is partial. A block can have a parent, which is the block that
+    came before in the sequence. Once a block is computed, it is given a hash, which takes into account the tokens ids 
+    of the block and its parent's hash."""
+
+    def __init__(self, id_: int, parent_id: int | None) -> None:
+        self.id: int = id_
+        self.parent_id: int | None = parent_id
+        self.hash: int | None = None
+
+    @property
+    def is_complete(self) -> bool:
+        return self.hash is not None
+
+
 class BlockManager:
     """A class to manage the number of free blocks and block re-use."""
 
-    def __init__(self, num_blocks: int) -> None:
+    def __init__(self, num_blocks: int, block_size: int, use_prefix_sharing: bool) -> None:
         """Initializes the block manager with a given number of blocks (num_blocks)"""
         self.num_blocks = num_blocks
+        self.block_size = block_size
         self._free_blocks = deque(range(num_blocks))
+        self._use_prefix_sharing = use_prefix_sharing
+        # TODO: handle de-allocation for those strutures
+        self._hash_to_id: dict[int, int] = {}
+        self._id_to_block: dict[int, Block]= {}
+        # NOTE: one of those may be redundant
+        # TODO: handle case where the last block of a finshed request is not complete
 
     @property
     def num_free_blocks(self) -> int:
         """Returns the number of free blocks left."""
         return len(self._free_blocks)
 
-    def get_free_block(self) -> int:
+    def get_free_blocks(self, n_blocks: int, last_block_id: int | None) -> list[int] | None:
         """Returns a free block and mark it as used by removing it from the free blocks queue."""
-        return self._free_blocks.popleft()
+        if self.num_free_blocks < n_blocks:
+            return None
+        allocated_block_ids = [self._free_blocks.popleft() for _ in range(n_blocks)]
+        # If we use prefix caching, we keep track of the allocated blocks as partial blocks
+        if self._use_prefix_sharing:
+            for block_id in allocated_block_ids:
+                block = Block(block_id, last_block_id)
+                self._id_to_block[block_id] = block  # TODO: we can only store partial block here, and keep the parent referenced as a hash once the plck is complete
+                last_block_id = block_id
+        # In both cases, we return the allocated block ids
+        return allocated_block_ids
 
     def free_blocks(self, blocks: list[int]) -> None:
         """Frees a list of blocks by adding them back to the free blocks queue."""
         self._free_blocks.extend(blocks)
 
+    def mark_blocks_as_computed(
+        self,
+        num_completed_blocks: int,
+        allocated_blocks: list[int],
+        prompt_ids: list[int]
+    ) -> None:
+        # Look for the first complete block, starting from the last block
+        parent_hash = None
+        incomplete_blocks: list[Block] = []
+        block_start_position = self.block_size * (len(allocated_blocks) - 1)
+        for block_id in reversed(allocated_blocks):
+            block = self._id_to_block[block_id]
+            if block.is_complete:
+                parent_hash = block.hash
+                break
+            incomplete_blocks.append(block)
+            block_start_position -= self.block_size
+
+        # Now go through the incomplete blocks and mark them as computed
+        blocks_to_mark_as_complete = incomplete_blocks[:num_completed_blocks]
+        for block in blocks_to_mark_as_complete:
+            # Compute hash
+            tokens = prompt_ids[block_start_position : block_start_position + self.block_size]
+            block.hash = hash((parent_hash, tuple(tokens)))
+            # Keep track of the hash in the hash to id mapping
+            self._hash_to_id[block.hash] = block.id
+            # Update loop variables
+            parent_hash = block.hash
+            block_start_position += self.block_size
 
 class CacheAllocator(ABC):
     """Abstract base class for cache managers. Cache managers keep track of per-request cache allocations, determine
@@ -76,6 +138,10 @@ class CacheAllocator(ABC):
     def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
         """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
 
+    def get_allocated_blocks(self, request_id: str) -> list[int] | None:
+        """Returns the list of allocated blocks for the given request_id or None if the request_id is not in the 
+        block table."""
+        return self._block_table.get(request_id, None)
 
 class FullAttentionCacheAllocator(CacheAllocator):
     """Cache manager for a group of full attention layers."""
@@ -93,11 +159,17 @@ class FullAttentionCacheAllocator(CacheAllocator):
     def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
         """Allocate blocks for a given request_id. Returns the number of blocks allocated if successful and None
         otherwise. For group of full attention layers, we always allocate the number of requested blocks."""
-        if block_manager.num_free_blocks < n_blocks:
-            return None
+        # Make sure the request_id is in the block table and get the first block id
         if request_id not in self._block_table:
             self._block_table[request_id] = []
-        self._block_table[request_id].extend(block_manager.get_free_block() for _ in range(n_blocks))
+            last_block_id = None
+        else:
+            last_block_id = self._block_table[request_id][-1]
+        # Actual allocation, return early if failed
+        allocated_blocks = block_manager.get_free_blocks(n_blocks, last_block_id)
+        if allocated_blocks is None:
+            return None
+        self._block_table[request_id].extend(allocated_blocks)
         return n_blocks
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
@@ -167,9 +239,10 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         after_allocation = min(already_allocated + n_blocks, self._max_blocks_per_request)
         actual_n_blocks = after_allocation - already_allocated
         # Classic allocation
-        if block_manager.num_free_blocks < actual_n_blocks:
+        allocated_blocks = block_manager.get_free_blocks(actual_n_blocks, None)  # no prefix caching w/ sliding window
+        if allocated_blocks is None:
             return None
-        self._block_table[request_id].extend(block_manager.get_free_block() for _ in range(actual_n_blocks))
+        self._block_table[request_id].extend(allocated_blocks)
         return actual_n_blocks
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
