@@ -179,14 +179,6 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
 
         return processed_images, target_aspect_ratio
 
-    def pad_to_max_num_crops(self, images, max_crops=5):
-        """Pad images tensor to max_crops."""
-        B, _, H, W = images.shape
-        if B < max_crops:
-            pad_size = max_crops - B
-            images = torch.nn.functional.pad(images, (0, 0, 0, 0, 0, 0, 0, pad_size))
-        return images
-
     @auto_docstring
     def preprocess(
         self,
@@ -209,6 +201,7 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
+        disable_grouping: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
@@ -216,25 +209,25 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         base_image_size = base_size.height
         downsample_ratio = 4
 
-        resized_images = []
-        for image in images:
-            height, width = image.shape[-2:]
+        grouped_originals, grouped_orig_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+
+        for shape, stacked_images in grouped_originals.items():
+            height, width = shape
             scale = base_image_size / max(height, width)
             new_height = max(int(round(height * scale)), 1)
             new_width = max(int(round(width * scale)), 1)
 
-            resized = (
-                super()
-                .resize(
-                    image.unsqueeze(0),
-                    size=SizeDict(height=new_height, width=new_width),
-                    interpolation=interpolation,
-                )
-                .squeeze(0)
+            resized = super().resize(
+                stacked_images,
+                size=SizeDict(height=new_height, width=new_width),
+                interpolation=interpolation,
             )
-            resized_images.append(resized)
+            resized_images_grouped[shape] = resized
 
-        grouped_resized, grouped_index = group_images_by_shape(resized_images, disable_grouping=False)
+        resized_images = reorder_images(resized_images_grouped, grouped_orig_index)
+
+        grouped_resized, grouped_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
 
         padded_grouped = {}
         mean_fill_values = [int(x * 255) for x in image_mean]
@@ -306,7 +299,7 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
 
         if all_crops:
             grouped_crops, grouped_crop_idx, crops_index = group_images_by_shape(
-                all_crops, crop_to_image_idx, disable_grouping=False
+                all_crops, crop_to_image_idx, disable_grouping=disable_grouping
             )
 
             processed_crops_grouped = {}
@@ -391,9 +384,7 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
             "num_img_tokens": images_tokens,
         }
 
-        batch = BatchFeature(data=data, tensor_type=return_tensors)
-        batch["num_img_tokens"] = images_tokens
-        return batch
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
 
 __all__ = ["DeepseekOcrImageProcessorFast"]
