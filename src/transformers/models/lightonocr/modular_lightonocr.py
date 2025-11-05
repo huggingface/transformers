@@ -63,8 +63,6 @@ class LightOnOCRConfig(PretrainedConfig):
             The size of spatial merging for image patches.
         image_token_id (`int`, *optional*, defaults to 151655):
             The id of the image token in the vocabulary.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie input and output embeddings.
         vision_config (`dict` or `LightOnOCRVisionConfig`, *optional*):
             Custom vision configuration or dictionary with vision configuration values.
         text_config (`dict` or `LightOnOCRTextConfig`, *optional*):
@@ -93,7 +91,6 @@ class LightOnOCRConfig(PretrainedConfig):
         self,
         spatial_merge_size: int = 2,
         image_token_id: int = 151655,
-        tie_word_embeddings=False,
         vision_config: Optional[dict[str, Any]] = None,
         text_config: Optional[dict[str, Any]] = None,
         **kwargs,
@@ -148,7 +145,7 @@ class LightOnOCRConfig(PretrainedConfig):
         else:
             self.text_config = LightOnOCRTextConfig(**text_config)
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
     @property
     def vocab_size(self):
