@@ -921,7 +921,7 @@ class XLMPredLayer(nn.Module):
     """
 )
 class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"pred_layer.proj.weight": "transformer.word_embeddings.weight"}
+    _tied_weights_keys = {"pred_layer.proj.weight": "transformer.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
