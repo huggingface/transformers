@@ -102,27 +102,6 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
                     best_ratio = ratio
         return best_ratio
 
-    def ensure_three_channels(self, image: "torch.Tensor") -> "torch.Tensor":
-        if image.dim() == 2:
-            image = image.unsqueeze(0)
-        if image.shape[0] == 1:
-            image = image.repeat(3, 1, 1)
-        return image
-
-    def to_uint8_image(self, image: "torch.Tensor") -> "torch.Tensor":
-        if image.numel() == 0:
-            return image.to(torch.uint8)
-        if image.dtype == torch.uint8:
-            return image
-        if torch.is_floating_point(image):
-            image = image.clone()
-            max_value = image.max()
-            if max_value <= 1.0:
-                image = image * 255.0
-            image = image.round().clamp_(0, 255)
-            return image.to(torch.uint8)
-        return image.to(torch.uint8)
-
     def _resize_to_patches_grid(
         self,
         image: "torch.Tensor",
@@ -187,7 +166,7 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
 
         return processed_images
 
-    def dynamic_preprocess_torch(
+    def dynamic_preprocess(
         self,
         image: "torch.Tensor",
         patch_image_size: int,
@@ -210,7 +189,7 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
             images = torch.nn.functional.pad(images, (0, 0, 0, 0, 0, 0, 0, pad_size))
         return images
 
-    def pad_image_torch(
+    def pad_image(
         self,
         image: "torch.Tensor",
         target_size: int,
@@ -279,31 +258,23 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         images_tokens = []
         local_counts = []
 
-        interpolation_mode = interpolation
-        max_local_crops = max_crops
-
         for image in images:
-            image = self.ensure_three_channels(image)
-            image_uint8 = self.to_uint8_image(image)
-
-            height, width = image_uint8.shape[-2:]
+            height, width = image.shape[-2:]
 
             if width <= patch_image_size and height <= patch_image_size:
                 crop_ratio = (1, 1)
                 images_crop_raw = []
             else:
-                images_crop_raw, crop_ratio = self.dynamic_preprocess_torch(
-                    image_uint8,
+                images_crop_raw, crop_ratio = self.dynamic_preprocess(
+                    image,
                     patch_image_size,
-                    max_num=max_local_crops,
-                    interpolation_mode=interpolation_mode,
+                    max_num=max_crops,
+                    interpolation_mode=interpolation,
                 )
 
             mean_fill_values = [int(x * 255) for x in image_mean]
-            mean_fill = torch.tensor(mean_fill_values, dtype=image_uint8.dtype, device=image_uint8.device).view(
-                3, 1, 1
-            )
-            global_view = self.pad_image_torch(image_uint8, base_image_size, interpolation_mode, mean_fill)
+            mean_fill = torch.tensor(mean_fill_values, dtype=image.dtype, device=image.device).view(3, 1, 1)
+            global_view = self.pad_image(image, base_image_size, interpolation, mean_fill)
             global_view = global_view.to(torch.float32)
             global_view = self.rescale_and_normalize(
                 global_view,
@@ -318,16 +289,16 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
 
             processed_crops = []
             if width_crop_num > 1 or height_crop_num > 1:
-                for crop in images_crop_raw:
-                    crop_tensor = self.rescale_and_normalize(
-                        crop.to(torch.float32),
-                        do_rescale=do_rescale,
-                        rescale_factor=rescale_factor,
-                        do_normalize=do_normalize,
-                        image_mean=image_mean,
-                        image_std=image_std,
-                    )
-                    processed_crops.append(crop_tensor)
+                crops_batch = torch.stack(images_crop_raw, dim=0).to(torch.float32)
+                processed_batch = self.rescale_and_normalize(
+                    crops_batch,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                )
+                processed_crops = list(processed_batch)
 
             num_queries_base = math.ceil((base_image_size // 16) / downsample_ratio)
             num_queries = math.ceil((patch_image_size // 16) / downsample_ratio)

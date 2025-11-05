@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 from transformers import (
-    AutoModel,
     AutoProcessor,
     DeepseekOcrConfig,
     DeepseekOcrForConditionalGeneration,
@@ -296,8 +295,8 @@ class DeepseekOcrIntegrationTest(unittest.TestCase):
 
         inputs = processor.apply_chat_template(
             conversation, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt"
-        )
-        inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
+        ).to(device=torch_device, dtype=model.dtype)
+        # inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
         with torch.no_grad():
             generated = model.generate(**inputs, max_new_tokens=250)
