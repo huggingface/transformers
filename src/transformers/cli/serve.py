@@ -813,7 +813,7 @@ class Serve:
         # TODO (Joao, Lysandre): this should also work with tool support
         inputs = processor.apply_chat_template(req["messages"], return_tensors="pt", add_generation_prompt=True).to(
             model.device
-        )[0]
+        )["input_ids"][0]
 
         def stream_chat_completion(request_id, decode_stream):
             try:
@@ -1237,7 +1237,7 @@ class Serve:
         else:
             raise TypeError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")
+        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")["input_ids"]
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
@@ -1541,7 +1541,7 @@ class Serve:
         else:
             raise ValueError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")
+        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")["input_ids"]
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
