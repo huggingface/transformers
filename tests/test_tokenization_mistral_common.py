@@ -313,6 +313,14 @@ class TestMistralCommonBackend(unittest.TestCase):
         )
 
         # Test 3:
+        # decode one token
+        self.assertEqual(self.tokenizer.decode(tokens_ids[0], skip_special_tokens=False), "<s>")
+
+        # Test 4:
+        # decode numpy
+        self.assertEqual(self.tokenizer.decode(np.array(tokens_ids), skip_special_tokens=True), string)
+
+        # Test 5:
         # decode with unsupported kwargs
         with self.assertRaises(
             ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.decode`."
@@ -365,6 +373,15 @@ class TestMistralCommonBackend(unittest.TestCase):
         )
         self.assertEqual(
             self.tokenizer.batch_decode(batch_tokens_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True),
+            ["Hello, world!", "Hello, world!"],
+        )
+
+        # Test 3:
+        # decode numpy
+        self.assertEqual(
+            self.tokenizer.batch_decode(
+                np.array(batch_tokens_ids), skip_special_tokens=True, clean_up_tokenization_spaces=True
+            ),
             ["Hello, world!", "Hello, world!"],
         )
 

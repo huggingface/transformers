@@ -496,6 +496,9 @@ class MistralCommonBackend(PushToHubMixin):
         clean_up_tokenization_spaces = clean_up_tokenization_spaces or self.cleanup_tokenization_spaces
 
         # Convert inputs to python lists
+        if isinstance(token_ids, int):
+            token_ids = [token_ids]
+
         token_ids = to_py_obj(token_ids)
 
         special_token_policy = SpecialTokenPolicy.IGNORE if skip_special_tokens else SpecialTokenPolicy.KEEP
