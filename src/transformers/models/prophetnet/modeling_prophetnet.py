@@ -1544,7 +1544,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
 )
 class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "prophetnet.word_embeddings.weight": ["prophetnet.decoder.word_embeddings.weight", "lm_head.weight"]
+        "lm_head.weight": "prophetnet.word_embeddings.weight",
     }
 
     def __init__(self, config: ProphetNetConfig):
@@ -1724,7 +1724,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
 )
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.weight": "model.decoder.embed_tokens.weight",
+        "lm_head.weight": "prophetnet.decoder.word_embeddings.weight",
     }
 
     def __init__(self, config: ProphetNetConfig):
@@ -1748,10 +1748,6 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.prophetnet.decoder.word_embeddings = value
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.prophetnet.decoder.word_embeddings, self.lm_head)
 
     def set_decoder(self, decoder):
         self.prophetnet.decoder = decoder
@@ -1930,6 +1926,9 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
     This is a wrapper class, so that [`ProphetNetForCausalLM`] can correctly be loaded from pretrained prophetnet
     classes.
     """
+    _tied_weights_keys = {
+        "decoder.word_embeddings.weight": "word_embeddings.weight",
+    }
 
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
@@ -1940,8 +1939,6 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _tie_weights(self):
-        self._tie_embedding_weights(self.word_embeddings, self.decoder.get_input_embeddings())
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)

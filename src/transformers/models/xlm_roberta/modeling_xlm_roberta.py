@@ -746,7 +746,6 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
         if not config.is_decoder:
             logger.warning("If you want to use `XLMRobertaLMHeadModel` as a standalone, add `is_decoder=True.`")
         self.lm_head = XLMRobertaLMHead(config)
-
         self.roberta = XLMRobertaModel(config, add_pooling_layer=False)
 
         # Initialize weights and apply final processing
