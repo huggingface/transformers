@@ -2590,7 +2590,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             except AttributeError:
                 continue
 
-            _load_parameter_into_model(top_level, target_name, source_tensor.data)
+            module, param_type = get_module_from_name(top_level, target_name)
+            setattr(module, param_type, source_tensor)
             top_level._tie_embedding_weights(target_tensor, source_tensor)
 
             if (
@@ -2629,6 +2630,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if hasattr(output_embeddings, k):
                     output_embeddings.load_state_dict({k: v.data})
 
+        output_embeddings.requires_grad = input_embeddings.requires_grad
         # Passing hooks over to the embeddings if needed
         # (currently limited to tensor parallel hooks and flags only)
         if hasattr(input_embeddings, "_is_hooked") and getattr(input_embeddings, "_hf_tp_plan", None):
