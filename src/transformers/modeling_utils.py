@@ -2592,7 +2592,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             module, param_type = get_module_from_name(top_level, target_name)
             if isinstance(source_tensor, nn.Module):
-                target_tensor.load_state_dict(source_tensor.state_dict()) # TODO can we do better?
+                target_tensor.load_state_dict(source_tensor.state_dict())  # TODO can we do better?
             else:
                 setattr(module, param_type, source_tensor)
             top_level._tie_embedding_weights(target_tensor, source_tensor)
@@ -2628,7 +2628,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def _tie_embedding_weights(self, output_embeddings, input_embeddings):
         """Tie weights, and add hooks and flags if using TP."""
-
 
         # Passing hooks over to the embeddings if needed
         # (currently limited to tensor parallel hooks and flags only)

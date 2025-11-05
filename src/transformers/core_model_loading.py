@@ -551,62 +551,62 @@ def convert_and_load_state_dict_in_model(
     # 2. Actually convert the ckpt
     inverse_converters = {}
     keys = list(by_conversion_pattern.keys())
-    total_layers = sum(len(by_conversion_pattern[key].collected_tensors) for key in keys)
-    progress_bar = logging.tqdm(total=total_layers, desc="Converting weights", leave=False) if total_layers else None
 
-    for key in keys[::-1]:  # revert to process simple keys first
-        group = by_conversion_pattern.pop(key)
-        converter = group.weight_converter
-        operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
-        for layer_name, tensors_for_this_layer in group.collected_tensors.items():
-            concrete_target_keys = layer_name.split("|")
-            try:
-                if bool(set(concrete_target_keys) - unexpected_keys):
-                    with log_to_misc(layer_name, misc):
-                        values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
+    with logging.tqdm(total=len(keys), desc="Loading weights", leave=False) as pbar:
+        for key in keys[::-1]:  # revert to process simple keys first
+            group = by_conversion_pattern.pop(key)
+            converter = group.weight_converter
+            operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
+            for layer_name, tensors_for_this_layer in group.collected_tensors.items():
+                concrete_target_keys = layer_name.split("|")
+                try:
+                    if bool(set(concrete_target_keys) - unexpected_keys):
+                        with log_to_misc(layer_name, misc):
+                            values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
 
-                    for op in operations:
+                        for op in operations:
+                            with log_to_misc(layer_name, misc, (values, concrete_target_keys), operations):
+                                values = op.convert(values, model.config)
+
+                        values = [values] if not isinstance(values, list) else values
                         with log_to_misc(layer_name, misc, (values, concrete_target_keys), operations):
-                            values = op.convert(values, model.config)
+                            realized_value = {
+                                k: t for k, t in zip(concrete_target_keys, values) if k not in unexpected_keys
+                            }
 
-                    values = [values] if not isinstance(values, list) else values
-                    with log_to_misc(layer_name, misc, (values, concrete_target_keys), operations):
-                        realized_value = {
-                            k: t for k, t in zip(concrete_target_keys, values) if k not in unexpected_keys
-                        }
+                        for k in list(realized_value.keys()).copy():
+                            if op := converter.quantization_operation:
+                                with log_to_misc(layer_name, misc, op=op):
+                                    realized_value.update(
+                                        op.convert(
+                                            {k: realized_value.pop(k)}, quant_config=quantizer.quantization_config
+                                        )
+                                    )
 
-                    for k in list(realized_value.keys()).copy():
-                        if op := converter.quantization_operation:
-                            with log_to_misc(layer_name, misc, op=op):
-                                realized_value.update(
-                                    op.convert({k: realized_value.pop(k)}, quant_config=quantizer.quantization_config)
-                                )
+                        for k, output_value in realized_value.items():
+                            for src in converter.source_keys:  # what should happen to k when we meet k at saving
+                                inverse_converters[k] = {src: converter}
+                            set_param_for_module(
+                                model,
+                                k,
+                                output_value,
+                                meta_model_state_dict,
+                                empty_param,
+                                mismatch_keys,
+                                missing_keys,
+                                misc,
+                                converter.distributed_operation,
+                            )
+                except SkipLayer:
+                    continue
+            del group
+            for op in operations:
+                op.clear_cache()
 
-                    if progress_bar is not None:
-                        progress_bar.set_postfix_str(layer_name, refresh=False)
-                        progress_bar.update()
+        # Update progress bar
+        pbar.update()
+        pbar.refresh()
 
-                    for k, output_value in realized_value.items():
-                        for src in converter.source_keys:  # what should happen to k when we meet k at saving
-                            inverse_converters[k] = {src: converter}
-                        set_param_for_module(
-                            model,
-                            k,
-                            output_value,
-                            meta_model_state_dict,
-                            empty_param,
-                            mismatch_keys,
-                            missing_keys,
-                            misc,
-                            converter.distributed_operation,
-                        )
-            except SkipLayer:
-                continue
-        del group
-        for op in operations:
-            op.clear_cache()
-    if progress_bar is not None:
-        progress_bar.close()
     model.inverse_converters = inverse_converters
     thread_pool.shutdown(wait=True)
     return missing_keys, unexpected_keys, mismatch_keys, misc
