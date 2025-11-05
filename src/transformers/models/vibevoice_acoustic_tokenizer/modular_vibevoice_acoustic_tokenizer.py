@@ -24,11 +24,11 @@ from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..vibevoice_semantic_tokenizer.configuration_vibevoice_semantic_tokenizer import VibeVoiceSemanticTokenizerConfig
 from ..vibevoice_semantic_tokenizer.modeling_vibevoice_semantic_tokenizer import (
+    VibeVoiceCausalConv1d,
     VibeVoiceConvNext1dLayer,
     VibeVoiceSemanticTokenizerModel,
     VibeVoiceSemanticTokenizerOutput,
     VibeVoiceSemanticTokenizerPreTrainedModel,
-    VibeVoiceCausalConv1d,
 )
 
 

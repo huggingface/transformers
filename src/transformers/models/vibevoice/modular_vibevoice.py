@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from dataclasses import dataclass
 from typing import Optional, Union
 
-import math
 import torch
 import torch.nn as nn
 
@@ -151,9 +151,9 @@ class TimestepEmbedder(nn.Module):
         self.layer_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.frequency_embedding_size = config.frequency_embedding_size
 
-    # Original: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_diffusion_head.py#L66    
+    # Original: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_diffusion_head.py#L66
     @staticmethod
-    def timestep_embedding(timesteps, dim, max_period=10000):        
+    def timestep_embedding(timesteps, dim, max_period=10000):
         # NOTE (ebezzam) `LlamaRotaryEmbedding` device handling: https://github.com/huggingface/transformers/blob/5b6c209bc5a19b80c866279ee0c8e124ff7e4e49/src/transformers/models/llama/modeling_llama.py#L128
         device_type = timesteps.device.type if isinstance(timesteps.device.type, str) and timesteps.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):

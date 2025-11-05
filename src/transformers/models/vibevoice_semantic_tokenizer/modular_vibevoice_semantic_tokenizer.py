@@ -109,7 +109,7 @@ class VibeVoiceConv1dCache:
             current_cache = existing_cache[batch_mask]
 
         # Update the cache with full input as in original (otherwise not enough context):
-        # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L345 
+        # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L345
         input_with_context = torch.cat([current_cache, hidden_states], dim=-1)
         if context > 0:
             new_padding_states = input_with_context[..., -context:]

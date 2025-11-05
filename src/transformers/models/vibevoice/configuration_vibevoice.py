@@ -231,7 +231,7 @@ class VibeVoiceConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.speech_start_id = speech_start_id
         self.speech_end_id = speech_end_id
-        self.speech_diffusion_id = speech_diffusion_id        
+        self.speech_diffusion_id = speech_diffusion_id
 
         super().__init__(
             pad_token_id=pad_token_id,
