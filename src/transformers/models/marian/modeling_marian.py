@@ -1049,9 +1049,7 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
         "decoder.embed_positions.weight",
     ]
     _keys_to_ignore_on_save = ["model.encoder.embed_positions.weight", "model.decoder.embed_positions.weight"]
-    _tied_weights_keys = {
-        "lm_head.weight": "model.shared.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.shared.weight"}
 
     def __init__(self, config: MarianConfig):
         super().__init__(config)
@@ -1144,7 +1142,6 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings: nn.Embedding):
         self.lm_head = new_embeddings
-
 
     @auto_docstring
     def forward(

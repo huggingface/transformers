@@ -2592,7 +2592,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             module, param_type = get_module_from_name(top_level, target_name)
             if isinstance(source_tensor, nn.Module):
-                target_tensor.load_state_dict(source_tensor.state_dict()) # TODO can we do better?
+                target_tensor.load_state_dict(source_tensor.state_dict())  # TODO can we do better?
             else:
                 setattr(module, param_type, source_tensor)
             top_level._tie_embedding_weights(target_tensor, source_tensor)
@@ -2628,7 +2628,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def _tie_embedding_weights(self, output_embeddings, input_embeddings):
         """Tie weights, and add hooks and flags if using TP."""
-
 
         # Passing hooks over to the embeddings if needed
         # (currently limited to tensor parallel hooks and flags only)
@@ -4403,6 +4402,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         error_msgs = []
         misc = {}
 
+        # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
+        prefix = model.base_model_prefix
+        has_prefix_module = any(s.startswith(prefix) for s in model.state_dict().keys()) if len(prefix) > 0 else False
+        expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
+        loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
+        loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
+
         if is_deepspeed_zero3_enabled() and not is_quantized:
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
         else:
@@ -4444,21 +4450,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 dtype,
                 device_map,
                 model.dtype_plan,
-                device_mesh=device_mesh,
+                device_mesh,
+                loading_task_model_from_base_state_dict,
+                loading_base_model_from_task_state_dict,
             )
             end = time.perf_counter()
 
         for k in all_pointer:  # finally close all opened file pointers TODO async
             k.__exit__(None, None, None)
 
-        new_state_dict = model.state_dict()
-
         #!!!!!!!!!!!!!!!!!!!!!!! POST PROCESS!!!!!!!!!!!!!!!!!!
-        # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
-        prefix = model.base_model_prefix
-        has_prefix_module = any(s.startswith(prefix) for s in new_state_dict.keys()) if len(prefix) > 0 else False
-        expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
-        loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
         model.tie_weights(missing_keys)
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
