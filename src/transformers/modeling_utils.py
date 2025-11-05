@@ -2572,7 +2572,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
             if (
                 missing_keys != set()
-                and not re.search(rf"^{target_name}", "\n".join(missing_keys)) # regex for modules
+                and not re.search(rf"^{target_name}", "\n".join(missing_keys))  # regex for modules
                 and not top_level.config.get_text_config().tie_encoder_decoder
             ):
                 continue  # `can_use_safetensors` goes against this one
@@ -2591,8 +2591,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 setattr(module, param_type, source_tensor)
             top_level._tie_embedding_weights(target_tensor, source_tensor)
 
-            if (
-                missing_keys and not re.search(fr"^{source_name}", "\n".join(missing_keys))
+            if missing_keys and not re.search(
+                rf"^{source_name}", "\n".join(missing_keys)
             ):  # and not top_level.config.get_text_config().tie_encoder_decoder:
                 if isinstance(target_tensor, nn.Module):
                     for k, _ in target_tensor.named_parameters():

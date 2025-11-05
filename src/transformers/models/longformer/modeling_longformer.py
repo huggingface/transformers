@@ -1286,7 +1286,6 @@ class LongformerLMHead(nn.Module):
         return x
 
 
-
 @auto_docstring
 class LongformerPreTrainedModel(PreTrainedModel):
     config: LongformerConfig
