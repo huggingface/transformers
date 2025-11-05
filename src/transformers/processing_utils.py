@@ -219,6 +219,9 @@ class ImagesKwargs(TypedDict, total=False):
             - `'np'`: Return NumPy `np.ndarray` objects.
         disable_grouping (`bool`, *optional*):
             Whether to group images by shapes when processing or not, only relevant for fast image processing.
+        image_seq_length (`int`, *optional*):
+            The number of image tokens to be used for each image in the input.
+            Added for backward compatibility but this should be set as a processor attribute in future models.
     """
 
     do_convert_rgb: Optional[bool]
@@ -239,6 +242,7 @@ class ImagesKwargs(TypedDict, total=False):
     device: Annotated[Optional[str], device_validator()]
     return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
     disable_grouping: Optional[bool]
+    image_seq_length: Optional[int]
 
 
 class VideosKwargs(TypedDict, total=False):
@@ -1366,8 +1370,8 @@ class ProcessorMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
-        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
+        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod
