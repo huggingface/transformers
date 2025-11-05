@@ -496,8 +496,6 @@ jobs:
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        env:
-          matrix_folders: ${{ matrix.folders }}
         run: cat "/transformers/reports/${machine_type}_run_quantization_torch_gpu_${matrix_folders}_test_reports/failures_short.txt"
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports"
