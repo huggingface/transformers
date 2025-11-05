@@ -549,8 +549,7 @@ class MPNetLMHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
+
 
     def forward(self, features, **kwargs):
         x = self.dense(features)

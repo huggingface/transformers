@@ -1828,14 +1828,6 @@ class ReformerOnlyLMHead(nn.Module):
         hidden_states = self.decoder(hidden_states)
         return hidden_states
 
-    def _tie_weights(self) -> None:
-        # For accelerate compatibility and to not break backward compatibility
-        if self.decoder.bias.device.type == "meta":
-            self.decoder.bias = self.bias
-        else:
-            # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-            self.bias = self.decoder.bias
-
 
 @auto_docstring
 class ReformerPreTrainedModel(PreTrainedModel):

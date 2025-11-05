@@ -1972,10 +1972,6 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-
     def get_encoder(self):
         return self.encoder
 
