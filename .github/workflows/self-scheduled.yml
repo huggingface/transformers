@@ -489,9 +489,9 @@ jobs:
       - name: Run quantization tests on GPU
         working-directory: /transformers
         env:
-          matrix_folders: ${{ matrix.folders }}
+          folders: ${{ matrix.folders }}
         run: |
-          python3 -m pytest -v --make-reports="${machine_type}_run_quantization_torch_gpu_${matrix_folders}_test_reports" tests/${matrix_folders}
+          python3 -m pytest -v --make-reports="${machine_type}_run_quantization_torch_gpu_${matrix_folders}_test_reports" tests/${folders}
 
       - name: Failure short reports
         if: ${{ failure() }}
