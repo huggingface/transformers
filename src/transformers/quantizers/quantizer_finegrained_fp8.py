@@ -1,15 +1,12 @@
 from typing import TYPE_CHECKING, Optional
 
-from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, is_triton_available, logging
+from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
 
 if is_torch_available():
     import torch
-
-if is_triton_available():
-    from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -159,6 +156,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
+        from ..integrations.finegrained_fp8 import replace_with_fp8_linear
+
         # takes 2 fucking seconds
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
