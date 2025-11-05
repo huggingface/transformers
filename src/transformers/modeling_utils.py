@@ -2589,6 +2589,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     target_tensor = top_level.get_submodule(target_name)
             except AttributeError:
                 continue
+
+            _load_parameter_into_model(top_level, target_name, source_tensor.data)
             top_level._tie_embedding_weights(target_tensor, source_tensor)
 
             if (
@@ -2626,10 +2628,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for k, v in input_embeddings.named_parameters():
                 if hasattr(output_embeddings, k):
                     output_embeddings.load_state_dict({k: v.data})
-        else:
-            output_embeddings = input_embeddings
-            output_embeddings.data = input_embeddings.data
-            assert output_embeddings.data.data_ptr() == input_embeddings.data.data_ptr(), "Tying weights failed."
 
         # Passing hooks over to the embeddings if needed
         # (currently limited to tensor parallel hooks and flags only)
