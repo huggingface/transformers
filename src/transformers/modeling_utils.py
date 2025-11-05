@@ -2591,7 +2591,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 continue
 
             module, param_type = get_module_from_name(top_level, target_name)
-            setattr(module, param_type, source_tensor)
+            if isinstance(source_tensor, nn.Module):
+                target_tensor.load_state_dict(source_tensor.state_dict()) # TODO can we do better?
+            else:
+                setattr(module, param_type, source_tensor)
             top_level._tie_embedding_weights(target_tensor, source_tensor)
 
             if (
@@ -2625,9 +2628,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def _tie_embedding_weights(self, output_embeddings, input_embeddings):
         """Tie weights, and add hooks and flags if using TP."""
-        if isinstance(input_embeddings, nn.Module):
-            for k, v in input_embeddings.named_parameters():
-                setattr(output_embeddings, k, v)
+
 
         # Passing hooks over to the embeddings if needed
         # (currently limited to tensor parallel hooks and flags only)
@@ -4786,7 +4787,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # `_keys_to_ignore_on_load_unexpected` as it touches many models -> we add it manually to the existing patterns
         has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer, _ in self.named_buffers())
         additional_unexpected_patterns = [r"rotary_emb\.inv_freq"] if has_inv_freq_buffers else []
-
 
         missing_patterns = self._keys_to_ignore_on_load_missing or []
         unexpected_patterns = (self._keys_to_ignore_on_load_unexpected or []) + additional_unexpected_patterns
