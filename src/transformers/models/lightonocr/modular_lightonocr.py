@@ -17,7 +17,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, can_return_tuple, is_torch_available, is_vision_available
+from ...utils import auto_docstring, is_torch_available, is_vision_available
 from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..pixtral.configuration_pixtral import PixtralVisionConfig
 from ..pixtral.image_processing_pixtral import get_resize_output_image_size
@@ -692,12 +692,7 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
             **kwargs,
         )
 
-        return BaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        return outputs
 
 
 class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMixin):
@@ -723,7 +718,6 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
     def get_decoder(self):
         return self.model.language_model
 
-    @can_return_tuple
     @check_model_inputs()
     @auto_docstring
     def forward(
