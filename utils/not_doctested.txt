@@ -305,7 +305,6 @@ docs/source/en/tasks/visual_question_answering.md
 docs/source/en/tasks/zero_shot_image_classification.md
 docs/source/en/tasks/zero_shot_object_detection.md
 docs/source/en/tokenizer_summary.md
-docs/source/en/torchscript.md
 docs/source/en/training.md
 docs/source/en/troubleshooting.md
 src/transformers/activations.py
@@ -323,7 +322,6 @@ src/transformers/convert_slow_tokenizer.py
 src/transformers/convert_slow_tokenizers_checkpoints_to_fast.py
 src/transformers/data/data_collator.py
 src/transformers/data/datasets/glue.py
-src/transformers/data/datasets/language_modeling.py
 src/transformers/data/datasets/squad.py
 src/transformers/data/metrics/squad_metrics.py
 src/transformers/data/processors/glue.py
@@ -739,7 +737,6 @@ src/transformers/models/yoso/convert_yoso_pytorch_to_pytorch.py
 src/transformers/models/yoso/modeling_yoso.py
 src/transformers/models/zamba/configuration_zamba.py
 src/transformers/models/zamba/modeling_zamba.py
-src/transformers/onnx/config.py
 src/transformers/optimization.py
 src/transformers/pipelines/audio_classification.py
 src/transformers/pipelines/audio_utils.py
@@ -798,7 +795,6 @@ src/transformers/utils/dummy_sentencepiece_objects.py
 src/transformers/utils/dummy_speech_objects.py
 src/transformers/utils/dummy_tokenizers_objects.py
 src/transformers/utils/dummy_vision_objects.py
-src/transformers/utils/fx.py
 src/transformers/utils/generic.py
 src/transformers/utils/hp_naming.py
 src/transformers/utils/hub.py

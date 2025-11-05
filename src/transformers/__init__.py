@@ -129,8 +129,6 @@ _import_structure = {
     ],
     "loss": [],
     "modelcard": ["ModelCard"],
-    # Models
-    "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
@@ -374,13 +372,8 @@ else:
     _import_structure["data.datasets"] = [
         "GlueDataset",
         "GlueDataTrainingArguments",
-        "LineByLineTextDataset",
-        "LineByLineWithRefDataset",
-        "LineByLineWithSOPTextDataset",
         "SquadDataset",
         "SquadDataTrainingArguments",
-        "TextDataset",
-        "TextDatasetForNextSentencePrediction",
     ]
     _import_structure["generation"].extend(
         [
@@ -440,7 +433,7 @@ else:
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]
+    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update", "RopeParameters"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
     _import_structure["masking_utils"] = ["AttentionMaskInterface"]
     _import_structure["optimization"] = [
@@ -526,13 +519,8 @@ if TYPE_CHECKING:
     from .data.data_collator import default_data_collator as default_data_collator
     from .data.datasets import GlueDataset as GlueDataset
     from .data.datasets import GlueDataTrainingArguments as GlueDataTrainingArguments
-    from .data.datasets import LineByLineTextDataset as LineByLineTextDataset
-    from .data.datasets import LineByLineWithRefDataset as LineByLineWithRefDataset
-    from .data.datasets import LineByLineWithSOPTextDataset as LineByLineWithSOPTextDataset
     from .data.datasets import SquadDataset as SquadDataset
     from .data.datasets import SquadDataTrainingArguments as SquadDataTrainingArguments
-    from .data.datasets import TextDataset as TextDataset
-    from .data.datasets import TextDatasetForNextSentencePrediction as TextDatasetForNextSentencePrediction
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
     # Feature Extractor
@@ -619,6 +607,7 @@ if TYPE_CHECKING:
     from .modelcard import ModelCard as ModelCard
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
+    from .modeling_rope_utils import RopeParameters as RopeParameters
     from .modeling_rope_utils import dynamic_rope_update as dynamic_rope_update
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel

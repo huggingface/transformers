@@ -948,9 +948,6 @@ DEPRECATED_OBJECTS = [
     "DataCollatorForSOP",
     "GlueDataset",
     "GlueDataTrainingArguments",
-    "LineByLineTextDataset",
-    "LineByLineWithRefDataset",
-    "LineByLineWithSOPTextDataset",
     "NerPipeline",
     "OwlViTFeatureExtractor",
     "PretrainedBartModel",
@@ -962,8 +959,6 @@ DEPRECATED_OBJECTS = [
     "SquadFeatures",
     "SquadV1Processor",
     "SquadV2Processor",
-    "TextDataset",
-    "TextDatasetForNextSentencePrediction",
     "Wav2Vec2ForMaskedLM",
     "Wav2Vec2Tokenizer",
     "glue_compute_metrics",
@@ -1045,7 +1040,6 @@ def ignore_undocumented(name: str) -> bool:
         or name.endswith("Layer")
         or name.endswith("Embeddings")
         or name.endswith("Attention")
-        or name.endswith("OnnxConfig")
     ):
         return True
     # Submodules are not documented.

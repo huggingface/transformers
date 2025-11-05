@@ -92,7 +92,7 @@ def write_model(
     # prepare rope scaling args: the model uses originally
     # 1 - for the depth decoder
     # rope_theta=500000,
-    # rope_scaling={
+    # rope_parameters={
     # 	"factor": 32.0,
     # 	"high_freq_factor": 4.0,
     # 	"low_freq_factor": 1.0,
@@ -101,7 +101,7 @@ def write_model(
     # },
     # 2 - for the backbone
     # rope_theta=500000,
-    # rope_scaling={
+    # rope_parameters={
     # 	"factor": 32.0,
     # 	"high_freq_factor": 4.0,
     # 	"low_freq_factor": 1.0,
@@ -114,7 +114,7 @@ def write_model(
     # Therefore, we convert values to equivalent ones
 
     depth_decoder_config = CsmDepthDecoderConfig(
-        rope_scaling={
+        rope_parameters={
             "factor": 32.0,
             "high_freq_factor": 0.0078125,
             "low_freq_factor": 0.001953125,
@@ -126,7 +126,7 @@ def write_model(
     config = CsmConfig(
         codec_config=codec_model.config,
         depth_decoder_config=depth_decoder_config,
-        rope_scaling={
+        rope_parameters={
             "factor": 32.0,
             "high_freq_factor": 0.5,
             "low_freq_factor": 0.125,

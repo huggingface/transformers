@@ -737,7 +737,7 @@ class WandbCallback(TrainerCallback):
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
-                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+                combined_dict = {"peft_config": peft_config, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
             if trial_name is not None:
@@ -982,7 +982,7 @@ class TrackioCallback(TrainerCallback):
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
-                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+                combined_dict = {"peft_config": peft_config, **combined_dict}
 
             self._trackio.init(
                 project=project,
@@ -2246,7 +2246,7 @@ class SwanLabCallback(TrainerCallback):
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
-                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+                combined_dict = {"peft_config": peft_config, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
             if trial_name is not None and args.run_name is not None:
