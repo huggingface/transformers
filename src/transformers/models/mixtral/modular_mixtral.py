@@ -30,6 +30,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.generic import OutputRecorder
@@ -140,8 +141,8 @@ class MixtralExperts(nn.Module):
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(
@@ -178,7 +179,7 @@ class MixtralTopKRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
@@ -268,6 +269,15 @@ class MixtralPreTrainedModel(MistralPreTrainedModel):
         "hidden_states": MixtralDecoderLayer,
         "attentions": MixtralAttention,
     }
+
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        std = self.config.initializer_range
+        if isinstance(module, MixtralExperts):
+            module.gate_up_proj.data.normal_(mean=0.0, std=std)
+            module.down_proj.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, MixtralTopKRouter):
+            module.weight.data.normal_(mean=0.0, std=std)
 
 
 class MixtralModel(MistralModel):
