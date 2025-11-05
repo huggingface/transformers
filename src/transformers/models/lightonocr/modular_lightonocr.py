@@ -121,7 +121,6 @@ class LightOnOCRConfig(PretrainedConfig):
 
         if text_config is None:
             self.text_config = LightOnOCRTextConfig(
-                architectures=["Qwen3ForCausalLM"],
                 attention_dropout=0,
                 head_dim=128,
                 hidden_act="silu",
