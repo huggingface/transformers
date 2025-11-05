@@ -356,6 +356,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     vibevoice_model.generation_config.eos_token_id = tokenizer.eos_token_id
     vibevoice_model.generation_config.pad_token_id = tokenizer.pad_token_id
     vibevoice_model.generation_config.cfg_scale = 1.3
+    vibevoice_model.n_diffusion_steps = 10
     vibevoice_model.generation_config.do_sample = False
     vibevoice_model.generation_config.noise_scheduler = "DPMSolverMultistepScheduler"
     vibevoice_model.generation_config.noise_scheduler_config = {

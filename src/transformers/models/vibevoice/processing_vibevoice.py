@@ -180,13 +180,13 @@ class VibeVoiceProcessor(ProcessorMixin):
             processed_audio["input_features_mask"] = input_features_mask
             del processed_audio["padding_mask"]
 
-            # TODO (ebezzam) not used by model, but could be used to process less audio by `get_audio_features`
-            # Create mask to know which audio is used by a particular script
-            audio_select_mask = np.zeros((len(scripts), len(speaker_to_audio)), dtype=np.bool_)
-            for i, speakers in enumerate(speakers_per_script):
-                for spk in speakers:
-                    audio_select_mask[i, spk] = True
-            processed_audio["audio_select_mask"] = audio_select_mask
+            # # TODO (ebezzam) not used by model, but could be used to process less audio by `get_audio_features`
+            # # Create mask to know which audio is used by a particular script
+            # audio_select_mask = np.zeros((len(scripts), len(speaker_to_audio)), dtype=np.bool_)
+            # for i, speakers in enumerate(speakers_per_script):
+            #     for spk in speakers:
+            #         audio_select_mask[i, spk] = True
+            # processed_audio["audio_select_mask"] = audio_select_mask
             processed_audio = BatchFeature(data=processed_audio, tensor_type=return_tensors)
             # Unsqueeze needed by tokenizer: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L146
             processed_audio["input_features"] = processed_audio["input_features"].unsqueeze(1)
