@@ -15,7 +15,6 @@
 import math
 from typing import Optional, Union
 
-import numpy as np
 import torch
 from torchvision.transforms import InterpolationMode
 
@@ -23,6 +22,8 @@ from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
     Unpack,
+    group_images_by_shape,
+    reorder_images,
 )
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs
@@ -77,9 +78,6 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[DeepseekOcrImageProcessorKwargs]):
         super().__init__(**kwargs)
-        # original implementation capped the number of local crops to 9 tiles.
-        if self.max_crops is None or self.max_crops > 9:
-            self.max_crops = 9
 
     def _further_process_kwargs(self, base_size=None, **kwargs):
         kwargs = super()._further_process_kwargs(**kwargs)
@@ -189,40 +187,6 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
             images = torch.nn.functional.pad(images, (0, 0, 0, 0, 0, 0, 0, pad_size))
         return images
 
-    def pad_image(
-        self,
-        image: "torch.Tensor",
-        target_size: int,
-        interpolation_mode: InterpolationMode,
-        mean_fill: "torch.Tensor",
-    ) -> "torch.Tensor":
-        """Resize with preserved aspect ratio and pad to a square of target_size."""
-        height, width = image.shape[-2:]
-
-        if height == target_size and width == target_size:
-            return image
-
-        scale = target_size / max(height, width)
-        new_height = max(int(round(height * scale)), 1)
-        new_width = max(int(round(width * scale)), 1)
-
-        resized = (
-            super()
-            .resize(
-                image.unsqueeze(0),
-                size=SizeDict(height=new_height, width=new_width),
-                interpolation=interpolation_mode,
-            )
-            .squeeze(0)
-        )
-
-        canvas = mean_fill.repeat(1, target_size, target_size).clone()
-        y_offset = int(round((target_size - new_height) * 0.5))
-        x_offset = int(round((target_size - new_width) * 0.5))
-        canvas[:, y_offset : y_offset + new_height, x_offset : x_offset + new_width] = resized
-
-        return canvas
-
     @auto_docstring
     def preprocess(
         self,
@@ -252,18 +216,65 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         base_image_size = base_size.height
         downsample_ratio = 4
 
-        global_views = []
-        local_views = []
-        images_spatial_crop = []
-        images_tokens = []
-        local_counts = []
-
+        resized_images = []
         for image in images:
+            height, width = image.shape[-2:]
+            scale = base_image_size / max(height, width)
+            new_height = max(int(round(height * scale)), 1)
+            new_width = max(int(round(width * scale)), 1)
+
+            resized = (
+                super()
+                .resize(
+                    image.unsqueeze(0),
+                    size=SizeDict(height=new_height, width=new_width),
+                    interpolation=interpolation,
+                )
+                .squeeze(0)
+            )
+            resized_images.append(resized)
+
+        grouped_resized, grouped_index = group_images_by_shape(resized_images, disable_grouping=False)
+
+        padded_grouped = {}
+        mean_fill_values = [int(x * 255) for x in image_mean]
+        for shape, stacked_images in grouped_resized.items():
+            batch_size = stacked_images.shape[0]
+            height, width = shape
+
+            device = stacked_images.device
+            dtype = stacked_images.dtype
+
+            mean_fill = torch.tensor(mean_fill_values, dtype=dtype, device=device).view(1, 3, 1, 1)
+            canvas = mean_fill.repeat(batch_size, 1, base_image_size, base_image_size).clone()
+
+            y_offset = int(round((base_image_size - height) * 0.5))
+            x_offset = int(round((base_image_size - width) * 0.5))
+            canvas[:, :, y_offset : y_offset + height, x_offset : x_offset + width] = stacked_images
+
+            canvas = canvas.to(torch.float32)
+            canvas = self.rescale_and_normalize(
+                canvas,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+            )
+            padded_grouped[shape] = canvas
+
+        global_views = reorder_images(padded_grouped, grouped_index)
+
+        all_crops = []
+        crop_to_image_idx = []
+        crop_infos = []
+
+        for img_idx, image in enumerate(images):
             height, width = image.shape[-2:]
 
             if width <= patch_image_size and height <= patch_image_size:
                 crop_ratio = (1, 1)
-                images_crop_raw = []
+                num_local = 0
             else:
                 images_crop_raw, crop_ratio = self.dynamic_preprocess(
                     image,
@@ -271,35 +282,13 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
                     max_num=max_crops,
                     interpolation_mode=interpolation,
                 )
+                num_local = len(images_crop_raw)
 
-            mean_fill_values = [int(x * 255) for x in image_mean]
-            mean_fill = torch.tensor(mean_fill_values, dtype=image.dtype, device=image.device).view(3, 1, 1)
-            global_view = self.pad_image(image, base_image_size, interpolation, mean_fill)
-            global_view = global_view.to(torch.float32)
-            global_view = self.rescale_and_normalize(
-                global_view,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-            )
+                for crop in images_crop_raw:
+                    all_crops.append(crop)
+                    crop_to_image_idx.append(img_idx)
 
             width_crop_num, height_crop_num = crop_ratio
-
-            processed_crops = []
-            if width_crop_num > 1 or height_crop_num > 1:
-                crops_batch = torch.stack(images_crop_raw, dim=0).to(torch.float32)
-                processed_batch = self.rescale_and_normalize(
-                    crops_batch,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
-                    do_normalize=do_normalize,
-                    image_mean=image_mean,
-                    image_std=image_std,
-                )
-                processed_crops = list(processed_batch)
-
             num_queries_base = math.ceil((base_image_size // 16) / downsample_ratio)
             num_queries = math.ceil((patch_image_size // 16) / downsample_ratio)
 
@@ -307,32 +296,73 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
             if width_crop_num > 1 or height_crop_num > 1:
                 tokenized_image_len += (num_queries * width_crop_num + 1) * (num_queries * height_crop_num)
 
-            local_tensor = (
-                torch.stack(processed_crops, dim=0)
-                if processed_crops
-                else torch.empty(
-                    0, 3, patch_image_size, patch_image_size, dtype=global_view.dtype, device=global_view.device
-                )
+            crop_infos.append(
+                {
+                    "crop_ratio": (width_crop_num, height_crop_num),
+                    "num_local": num_local,
+                    "num_tokens": tokenized_image_len,
+                }
             )
 
-            global_views.append(global_view.unsqueeze(0))
+        if all_crops:
+            grouped_crops, grouped_crop_idx, crops_index = group_images_by_shape(
+                all_crops, crop_to_image_idx, disable_grouping=False
+            )
+
+            processed_crops_grouped = {}
+            for shape, stacked_crops in grouped_crops.items():
+                stacked_crops = stacked_crops.to(torch.float32)
+                processed = self.rescale_and_normalize(
+                    stacked_crops,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                )
+                processed_crops_grouped[shape] = processed
+
+            processed_crops_list = reorder_images(processed_crops_grouped, crops_index)
+        else:
+            processed_crops_list = []
+
+        local_views = []
+        crop_idx = 0
+        for img_idx in range(len(images)):
+            num_crops = crop_infos[img_idx]["num_local"]
+
+            if num_crops > 0:
+                img_crops = processed_crops_list[crop_idx : crop_idx + num_crops]
+                local_tensor = torch.stack(img_crops, dim=0)
+                crop_idx += num_crops
+            else:
+                local_tensor = torch.empty(
+                    0,
+                    3,
+                    patch_image_size,
+                    patch_image_size,
+                    dtype=global_views[0].dtype,
+                    device=global_views[0].device,
+                )
+
             local_views.append(local_tensor)
-            local_counts.append(local_tensor.shape[0])
-            images_spatial_crop.append([width_crop_num, height_crop_num])
-            images_tokens.append(tokenized_image_len)
 
-        pixel_values_global = torch.stack(global_views, dim=0)
+        global_views_unsqueezed = [view.unsqueeze(0) for view in global_views]
+        pixel_values_global = torch.stack(global_views_unsqueezed, dim=0)
 
+        local_counts = [info["num_local"] for info in crop_infos]
         max_local = max(local_counts) if local_counts else 0
+
         padded_locals = []
         for local_tensor in local_views:
             if max_local == 0:
                 padded_locals.append(local_tensor.unsqueeze(0))
-                continue
-            if local_tensor.shape[0] < max_local:
+            elif local_tensor.shape[0] < max_local:
                 pad_size = max_local - local_tensor.shape[0]
                 local_tensor = torch.nn.functional.pad(local_tensor, (0, 0, 0, 0, 0, 0, 0, pad_size))
-            padded_locals.append(local_tensor.unsqueeze(0))
+                padded_locals.append(local_tensor.unsqueeze(0))
+            else:
+                padded_locals.append(local_tensor.unsqueeze(0))
 
         if max_local > 0:
             pixel_values_local = torch.cat(padded_locals, dim=0)
@@ -348,8 +378,9 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
                 device=pixel_values_global.device,
             )
 
-        images_spatial_crop = torch.tensor(images_spatial_crop, dtype=torch.long)
+        images_spatial_crop = torch.tensor([info["crop_ratio"] for info in crop_infos], dtype=torch.long)
         num_local_crops = torch.tensor(local_counts, dtype=torch.long)
+        images_tokens = [info["num_tokens"] for info in crop_infos]
 
         data = {
             "pixel_values": pixel_values_global,
@@ -363,103 +394,6 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         batch = BatchFeature(data=data, tensor_type=return_tensors)
         batch["num_img_tokens"] = images_tokens
         return batch
-
-    def extract_coordinates_and_label(self, ref_text, image_width, image_height):
-        """Extract bounding box coordinates and label from model output."""
-        try:
-            label_type = ref_text[1]
-            cor_list = eval(ref_text[2])
-        except Exception as e:
-            logger.warning(f"Failed to extract coordinates: {e}")
-            return None
-
-        return (label_type, cor_list)
-
-    def visualize_results(self, image, ref_texts, output_path):
-        """
-        Visualize results by drawing bounding boxes on the image.
-        """
-        try:
-            from PIL import Image, ImageDraw, ImageFont
-        except ImportError:
-            logger.error("PIL is required for visualization. Install it with `pip install pillow`")
-            return None
-
-        if isinstance(image, torch.Tensor):
-            image = Image.fromarray((image.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8))
-
-        image_width, image_height = image.size
-
-        img_draw = image.copy()
-        draw = ImageDraw.Draw(img_draw)
-
-        overlay = Image.new("RGBA", img_draw.size, (0, 0, 0, 0))
-        draw2 = ImageDraw.Draw(overlay)
-
-        try:
-            font = ImageFont.load_default()
-        except Exception:
-            font = None
-
-        img_idx = 0
-
-        for i, ref in enumerate(ref_texts):
-            try:
-                result = self.extract_coordinates_and_label(ref, image_width, image_height)
-                if result:
-                    label_type, points_list = result
-
-                    color = (
-                        np.random.randint(0, 200),
-                        np.random.randint(0, 200),
-                        np.random.randint(0, 255),
-                    )
-                    color_a = color + (20,)
-
-                    for points in points_list:
-                        x1, y1, x2, y2 = points
-
-                        x1 = int(x1 / 999 * image_width)
-                        y1 = int(y1 / 999 * image_height)
-                        x2 = int(x2 / 999 * image_width)
-                        y2 = int(y2 / 999 * image_height)
-
-                        if label_type == "image":
-                            try:
-                                cropped = image.crop((x1, y1, x2, y2))
-                                cropped.save(f"{output_path}/images/{img_idx}.jpg")
-                            except Exception as e:
-                                logger.warning(f"Failed to save cropped image: {e}")
-                            img_idx += 1
-
-                        try:
-                            if label_type == "title":
-                                draw.rectangle([x1, y1, x2, y2], outline=color, width=4)
-                                draw2.rectangle([x1, y1, x2, y2], fill=color_a, outline=(0, 0, 0, 0), width=1)
-                            else:
-                                draw.rectangle([x1, y1, x2, y2], outline=color, width=2)
-                                draw2.rectangle([x1, y1, x2, y2], fill=color_a, outline=(0, 0, 0, 0), width=1)
-
-                            text_x = x1
-                            text_y = max(0, y1 - 15)
-
-                            if font:
-                                text_bbox = draw.textbbox((0, 0), label_type, font=font)
-                                text_width = text_bbox[2] - text_bbox[0]
-                                text_height = text_bbox[3] - text_bbox[1]
-                                draw.rectangle(
-                                    [text_x, text_y, text_x + text_width, text_y + text_height],
-                                    fill=(255, 255, 255, 30),
-                                )
-                                draw.text((text_x, text_y), label_type, font=font, fill=color)
-                        except Exception as e:
-                            logger.warning(f"Failed to draw bounding box: {e}")
-            except Exception as e:
-                logger.warning(f"Failed to process reference: {e}")
-                continue
-
-        img_draw.paste(overlay, (0, 0), overlay)
-        return img_draw
 
 
 __all__ = ["DeepseekOcrImageProcessorFast"]

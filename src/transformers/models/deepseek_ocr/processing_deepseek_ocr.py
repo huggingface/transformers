@@ -12,18 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import re
 from typing import Optional, Union
+
+import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, TextInput
-from ...utils import TensorType, is_torch_available, logging
+from ...utils import TensorType, is_torch_available, is_vision_available, logging
 
 
 if is_torch_available():
     import torch
+
+if is_vision_available():
+    from PIL import Image, ImageDraw, ImageFont
 
 
 logger = logging.get_logger(__name__)
@@ -208,6 +214,138 @@ class DeepseekOcrProcessor(ProcessorMixin):
             if not isinstance(num_img_tokens, torch.Tensor):
                 outputs["num_img_tokens"] = torch.tensor(num_img_tokens)
         return outputs
+
+    # All that follows is the original post-processing a bit tweaked that allows to have a nice OCR output on images.
+    # unsure to keep there, why not, still belongs to processing utils.
+
+    def _find_refs_with_spans(self, text: str):
+        """
+        Returns list of dicts:
+        {"label": str, "coords_literal": str, "triplet": ["<ref>", label, coords_literal],
+        "span": (start, end), "is_image": bool}
+        """
+        refs = []
+        pat = re.compile(
+            r"([A-Za-z_]\w*)\s*\[\[\s*"
+            r"(\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+"
+            r"(?:\s*\]\s*,\s*\[\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+)*"
+            r")\s*\]\]",
+            re.MULTILINE,
+        )
+        for m in pat.finditer(text):
+            label = m.group(1)
+            coords_literal = "[[" + m.group(2) + "]]"  # JSON-compatible
+            refs.append(
+                {
+                    "label": label,
+                    "coords_literal": coords_literal,
+                    "triplet": ["<ref>", label, coords_literal],
+                    "span": (m.start(), m.end()),
+                    "is_image": (label == "image"),
+                }
+            )
+        return refs
+
+    def extract_coordinates_and_label(self, ref_text):
+        label_type = ref_text[1]
+        cor_list = json.loads(ref_text[2])
+        cor_list = [[int(a), int(b), int(c), int(d)] for a, b, c, d in cor_list]
+        return (label_type, cor_list)
+
+    def build_ref_texts_from_output(self, text: str):
+        return [r["triplet"] for r in self._find_refs_with_spans(text)]
+
+    def visualize_results(self, image, ref_texts):
+        if isinstance(image, torch.Tensor):
+            image = Image.fromarray((image.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8))
+        width, height = image.size
+        img_draw = image.copy()
+        draw = ImageDraw.Draw(img_draw)
+        overlay = Image.new("RGBA", img_draw.size, (0, 0, 0, 0))
+        draw2 = ImageDraw.Draw(overlay)
+        try:
+            font = ImageFont.load_default()
+        except Exception:
+            font = None
+
+        for ref in ref_texts:
+            label_type, boxes = self.extract_coordinates_and_label(ref)
+            color = (np.random.randint(0, 200), np.random.randint(0, 200), np.random.randint(0, 255))
+            color_a = color + (20,)
+            for x1, y1, x2, y2 in boxes:
+                x1 = int(x1 / 999 * width)
+                y1 = int(y1 / 999 * height)
+                x2 = int(x2 / 999 * width)
+                y2 = int(y2 / 999 * height)
+                if label_type == "title":
+                    draw.rectangle([x1, y1, x2, y2], outline=color, width=4)
+                    draw2.rectangle([x1, y1, x2, y2], fill=color_a)
+                else:
+                    draw.rectangle([x1, y1, x2, y2], outline=color, width=2)
+                    draw2.rectangle([x1, y1, x2, y2], fill=color_a)
+                if font:
+                    text_x, text_y = x1, max(0, y1 - 15)
+                    textbox_width, textbox_height = draw.textbbox((0, 0), label_type, font=font)[2:]
+                    draw.rectangle(
+                        [text_x, text_y, text_x + textbox_width, text_y + textbox_height], fill=(255, 255, 255, 30)
+                    )
+                    draw.text((text_x, text_y), label_type, font=font, fill=color)
+        img_draw.paste(overlay, (0, 0), overlay)
+        return img_draw
+
+    def return_image_crops_from_output(self, text: str, image):
+        if isinstance(image, torch.Tensor):
+            image = Image.fromarray((image.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8))
+        W, H = image.size
+        crops = []
+        for triplet in self.build_ref_texts_from_output(text):
+            label_type, boxes = self.extract_coordinates_and_label(triplet)
+            if label_type != "image":
+                continue
+            for x1, y1, x2, y2 in boxes:
+                X1 = int(x1 / 999 * W)
+                Y1 = int(y1 / 999 * H)
+                X2 = int(x2 / 999 * W)
+                Y2 = int(y2 / 999 * H)
+                if X2 > X1 and Y2 > Y1:
+                    crops.append(image.crop((X1, Y1, X2, Y2)))
+        return crops
+
+    def extract_markdown_and_crops(self, text: str, image, image_placeholder_fmt="![](images/{i}.png)", cleanup=True):
+        """
+        Returns (markdown_text, crops). Replaces image refs with placeholders and emoves non-image refs.
+        """
+        refs = self._find_refs_with_spans(text)
+        i = 0
+        pieces = []
+        last = 0
+        crops = []
+        if isinstance(image, torch.Tensor):
+            image = Image.fromarray((image.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8))
+        W, H = image.size
+
+        for r in refs:
+            start, end = r["span"]
+            pieces.append(text[last:start])
+            if r["is_image"]:
+                _, boxes = self.extract_coordinates_and_label(r["triplet"])
+                for x1, y1, x2, y2 in boxes:
+                    X1 = int(x1 / 999 * W)
+                    Y1 = int(y1 / 999 * H)
+                    X2 = int(x2 / 999 * W)
+                    Y2 = int(y2 / 999 * H)
+                    if X2 > X1 and Y2 > Y1:
+                        crops.append(image.crop((X1, Y1, X2, Y2)))
+                        pieces.append(image_placeholder_fmt.format(i=i))
+                        i += 1
+            # non-image refs are dropped from text
+            last = end
+        pieces.append(text[last:])
+
+        md = "".join(pieces)
+        if cleanup:
+            md = md.replace("\\coloneqq", ":=").replace("\\eqqcolon", "=:")
+        return md, crops
 
 
 __all__ = ["DeepseekOcrProcessor"]
