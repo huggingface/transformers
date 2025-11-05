@@ -4663,21 +4663,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @classmethod
     def _load_pretrained_model(
-        cls,
-        model: "PreTrainedModel",
-        state_dict: Optional[dict],
-        checkpoint_files: Optional[list[str]],
-        pretrained_model_name_or_path: Optional[str],
-        ignore_mismatched_sizes: bool = False,
-        sharded_metadata: Optional[dict] = None,
-        device_map: Optional[dict] = None,
-        disk_offload_folder: Optional[str] = None,
-        dtype: Optional[torch.dtype] = None,
-        hf_quantizer: Optional[HfQuantizer] = None,
-        device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
-        key_mapping: Optional[dict[str, str]] = None,
-        weights_only: bool = True,
+    model,
+    state_dict,
+    loaded_keys,
+    resolved_archive_file,
+    pretrained_model_name_or_path,
+    ignore_mismatched_sizes=False,
+    sharded_metadata=None,
+    _fast_init=True,
     ):
+
         # TODO: we should only be calling hf_quantizer.skip_placement or something like that
         is_quantized = hf_quantizer is not None
         is_hqq_or_quark = is_quantized and hf_quantizer.quantization_config.quant_method in {
@@ -5145,14 +5140,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
-            # keep_vars=True as we need the original tensors, so that the "_is_hf_initialized" is present on them
-            not_initialized_parameters = list(
-                {v for v in self.state_dict(keep_vars=True).values() if not getattr(v, "_is_hf_initialized", False)}
-            )
-            with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
-                self.initialize_weights()
-        else:
-            self.initialize_weights()
+    # keep_vars=True as we need the original tensors, so that the "_is_hf_initialized" is present on them
+    not_initialized_parameters = list(
+        {v for v in self.state_dict(keep_vars=True).values() if not getattr(v, "_is_hf_initialized", False)}
+    )
+    with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
+        self.initialize_weights()
+    else:
+    # Skip reinitialization for quantized (int8) models
+    if not is_quantized:
+        self.initialize_weights()
+
 
     def _adjust_missing_and_unexpected_keys(
         self, missing_keys: list[str], unexpected_keys: list[str], loading_task_model_from_base_state_dict: bool
