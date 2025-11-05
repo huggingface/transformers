@@ -303,6 +303,8 @@ class HunYuanMoEV1Moe(nn.Module):
         )
         return selected_experts, routing_weights.to(hidden_states.dtype)
 
+        return selected_experts, routing_weights.to(hidden_states.dtype)
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_mlp = self.shared_mlp(hidden_states)

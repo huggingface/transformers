@@ -183,16 +183,9 @@ class Concatenate(ConversionOps):
         out_shape = list(tensors[0].shape)
         out_shape[self.dim] = sum([t.size(self.dim) for t in tensors])
 
-        with torch.no_grad():  # we use staging buffers
-            out = self._ensure_buffer(torch.Size(out_shape), dtype=tensors[0].dtype, device=tensors[0].device)
-            torch.cat(tuple(tensors), dim=self.dim, out=out)
-            # offset = 0
-            # for tensor in tensors:
-            #     index = [slice(None)] * tensor.ndim
-            #     index[self.dim] = slice(offset, offset + tensor.shape[self.dim])
-            #     out[tuple(index)].copy_(tensor, non_blocking=tensor.is_cuda)
-            #     offset += tensor.shape[self.dim]
-        return out.clone()  # need to say I can overwrite this storage now
+        with torch.no_grad():
+            out = torch.cat(tuple(tensors), dim=self.dim)
+        return out
 
 
 class MergeModulelist(Concatenate):
@@ -208,19 +201,15 @@ class MergeModulelist(Concatenate):
 
     def convert(self, value: Sequence[torch.Tensor], *args, **kwargs) -> list[torch.Tensor]:
         merged = []
-        with torch.no_grad():  # we use staging buffers
+        with torch.no_grad():
             for group in value:
                 if not isinstance(group, Sequence) or len(group) == 0:
                     raise ValueError("MergeModulelist requires non-empty sub-sequences.")
                 group = [k for k in group if k.ndim]
                 out_shape = list(group[0].shape)
                 out_shape.insert(self.dim, len(group))
-                out = self._ensure_buffer(torch.Size(out_shape), dtype=group[0].dtype, device=group[0].device)
-                torch.stack(tuple(group), dim=self.dim, out=out)
-                # for off, tensor in enumerate(group):
-                #     out[off].copy_(tensor, non_blocking=tensor.is_cuda)
-                # torch.as_tensor(numpy.stack(batch))
-                merged.append(out.clone())  # TODO have a single staging tensor here as well!
+                out = torch.stack(tuple(group), dim=self.dim)
+                merged.append(out)
         return merged
 
 

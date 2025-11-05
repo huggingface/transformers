@@ -1054,6 +1054,9 @@ class UdopStack(UdopPreTrainedModel):
     This class is based on `T5Stack`, but modified to take into account the image modality as well as 2D position
     embeddings.
     """
+    _tied_weights_keys = {
+        "relative_bias.biases.*.relative_attention_bias.weight": "block.0.layer.0.SelfAttention.relative_attention_bias.weight",
+    } # TODO IN THIS PR ARTHUR TODO support glob or re but better than iterating
 
     def __init__(self, config, embed_tokens=None, embed_patches=None):
         super().__init__(config)
@@ -1076,13 +1079,6 @@ class UdopStack(UdopPreTrainedModel):
 
         # get weights from encoder position bias
         self.relative_bias = self._get_relative_bias(config)
-
-    def _tie_weights(self):
-        for bias in self.relative_bias.biases:
-            if isinstance(bias, RelativePositionBias1D):
-                self._tie_embedding_weights(
-                    bias.relative_attention_bias, self.block[0].layer[0].SelfAttention.relative_attention_bias
-                )
 
     @staticmethod
     def _get_relative_bias(config: UdopConfig) -> RelativePositionBiasAggregated:
@@ -1429,9 +1425,7 @@ class UdopModel(UdopPreTrainedModel):
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
         "decoder.embed_tokens.weight": "shared.weight",
-        "encoder.embed_patches.proj": "patch_embed.proj",
-        "encoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
-        "decoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
+        "encoder.embed_patches.proj": "patch_embed.proj", # TODO tie weights for patch embeddings not working
     }
 
     def __init__(self, config):
