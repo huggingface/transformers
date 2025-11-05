@@ -467,39 +467,12 @@ def _end_ptr(tensor: torch.Tensor) -> int:
     return stop
 
 
-def _as_list(value) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, dict):
-        result: list[str] = []
-        for subvalue in value.values():
-            result.extend(_as_list(subvalue))
-        return result
-    if isinstance(value, Iterable):
-        return list(value)
-    return [value]
-
-
-def _extract_tied_value_names(tied_weight_keys) -> list[str]:
-    if tied_weight_keys is None:
-        return []
-    if isinstance(tied_weight_keys, dict):
-        names: list[str] = []
-        for tied in tied_weight_keys.values():
-            names.extend(_as_list(tied))
-        return names
-    return _as_list(tied_weight_keys)
-
-
 def _get_tied_weight_keys(module: nn.Module, prefix=""):
     tied_weight_keys = []
     if getattr(module, "_tied_weights_keys", None) is not None:
-        value_names = _extract_tied_value_names(list(module._tied_weights_keys.keys()))
+        value_names = list(module._tied_weights_keys.keys())
         names = [f"{prefix}.{k}" if prefix else k for k in value_names]
         tied_weight_keys.extend(names)
-        tied_weight_keys.extend(value_names)
     if getattr(module, "_dynamic_tied_weights_keys", None) is not None:
         names = [f"{prefix}.{k}" if prefix else k for k in module._dynamic_tied_weights_keys]
         tied_weight_keys.extend(names)
@@ -730,39 +703,6 @@ def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
         weights_name = f"{path}.{variant}.{name}"
     return weights_name
 
-
-def update_key_name(keys):
-    """
-    Updates a dictionary of keys to pack layers together as layer.{0, 1, 4} instead of layers.0, layers.1, layers.4.
-    """
-    key_dict = defaultdict(list)
-    for key in keys:
-        all_digits = re.findall(r".(\d+).", key)
-        for i, k in enumerate(all_digits):
-            if len(key_dict[re.sub(r".(\d+).", ".*.", key)]) <= i:
-                key_dict[re.sub(r".(\d+).", ".*.", key)].append(set())
-            key_dict[re.sub(r".(\d+).", ".*.", key)][i].add(int(k))
-
-    final_keys = set()
-    for key in keys:
-        text = re.sub(r".(\d+).", ".*.", key)
-        pattern = key_dict[text]
-        final_text = ""
-        for i, part in enumerate(text.split("*")):
-            if len(pattern) <= i:
-                final_text += part
-            else:
-                data = [str(i) for i in sorted(pattern[i])]
-                if len(data) > 10:
-                    result = f"{data[0]}...{data[-1]}"
-                else:
-                    result = ", ".join(data)  # If there are only 1 or 2 elements, show them all
-                if len(data) > 1:
-                    final_text += part + "{" + result + "}"
-                else:
-                    final_text += part + data[0]
-        final_keys.add(final_text)
-    return sorted(final_keys)
 
 
 def _get_resolved_checkpoint_files(
@@ -2544,6 +2484,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Let the magic happen with this simple call
         self.smart_apply(self._initialize_weights)
 
+    def tie_weights(self, missing_keys: Optional[set[str]] = None):
+        """
+        Recursively (for all submodels) tie all the weights of the model.
+        """
+        # Note that `self` is included in `self.modules` so we also apply to current PreTrainedModel with this call
+        for module in self.modules():
+            # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
+            if isinstance(module, PreTrainedModel):
+                module.tie_weight_source_and_target()
+            # Additionally, if it has a custom `_tie_weights`, honor it
+            if hasattr(module, "_tie_weights"):
+                module._tie_weights()
+
     def tie_weight_source_and_target(self):
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
@@ -2561,23 +2514,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             except Exception:
                 source_param_or_module = self.get_submodule(source_name)
 
-            target_module, target_entity = target_name.rsplit(".", 1)
-            target_module = self.get_submodule(target_module)
+            if "d+" in target_name:
+                reg = re.compile(target_name)
+                # if target_name is a re:
+                for target_n, _ in self.named_parameters():
+                    if reg.search(target_n):
+                        submodule, target_entity = target_n.rsplit(".", 1)
+                        submodule = self.get_submodule(submodule)
+                        setattr(submodule, target_entity, source_param_or_module)
+            else:
+                submodule, weight = target_name.rsplit(".", 1)
+                submodule = self.get_submodule(submodule)
+                setattr(submodule, weight, source_param_or_module)
 
-            setattr(target_module, target_entity, source_param_or_module)
 
-    def tie_weights(self, missing_keys: Optional[set[str]] = None):
-        """
-        Recursively (for all submodels) tie all the weights of the model.
-        """
-        # Note that `self` is included in `self.modules` so we also apply to current PreTrainedModel with this call
-        for module in self.modules():
-            # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
-            if isinstance(module, PreTrainedModel):
-                module.tie_weight_source_and_target()
-            # Additionally, if it has a custom `_tie_weights`, honor it
-            if hasattr(module, "_tie_weights"):
-                module._tie_weights()
 
     def _get_no_split_modules(self, device_map: str):
         """
@@ -3186,7 +3136,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         variant: Optional[str] = None,
         token: Optional[Union[str, bool]] = None,
         save_peft_format: bool = True,
-        save_original_format: bool = False,
+        save_original_format: bool = False, # TODO next PR will make it go to True
         **kwargs,
     ):
         """
@@ -4390,7 +4340,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         #!!!!!!!!!!!!!!!!!!!!!!! POST PROCESS!!!!!!!!!!!!!!!!!!
         if model.config.tie_word_embeddings or model.config.tie_encoder_decoder:
-            missing_keys = missing_keys - (getattr(model, "_tied_weights_keys", {}) or {}).keys()
+            tied = re.compile("|".join(_get_tied_weight_keys(model)))
+            missing_keys = missing_keys - {k for k in missing_keys if tied.search(k)} # TODO this is really not ideal :)
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)

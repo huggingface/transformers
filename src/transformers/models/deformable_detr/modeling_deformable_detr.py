@@ -1703,13 +1703,15 @@ class DeformableDetrMLPPredictionHead(nn.Module):
 )
 class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-
+    _tied_weights_keys = {
+        "model.decoder.bbox_embed": "bbox_embed",
+        "model.decoder.class_embed": "class_embed"
+    }
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
 
     def __init__(self, config: DeformableDetrConfig):
         super().__init__(config)
-        self._tied_weights_keys = {}
         # Deformable DETR encoder-decoder model
         self.model = DeformableDetrModel(config)
         # Detection heads on top
@@ -1728,19 +1730,13 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
             # hack implementation for iterative bounding box refinement
             self.model.decoder.bbox_embed = self.bbox_embed
-            self._tied_weights_keys.update(
-                {
-                    "model.decoder.bbox_embed ": "bbox_embed",
-                }
-            )
+
         else:
             self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
             self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
-            self.model.decoder.bbox_embed = None
         if config.two_stage:
             # hack implementation for two-stage
             self.model.decoder.class_embed = self.class_embed
-            self._tied_weights_keys.update({"model.decoder.class_embed": "class_embed"})
 
         # Initialize weights and apply final processing
         self.post_init()

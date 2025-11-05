@@ -1056,7 +1056,7 @@ class UdopStack(UdopPreTrainedModel):
     """
 
     _tied_weights_keys = {
-        "relative_bias.biases.*.relative_attention_bias.weight": "block.0.layer.0.SelfAttention.relative_attention_bias.weight",
+        r"relative_bias.biases.(\d+).relative_attention_bias.weight": "block.0.layer.0.SelfAttention.relative_attention_bias.weight",
     }  # TODO IN THIS PR ARTHUR TODO support glob or re but better than iterating
 
     def __init__(self, config, embed_tokens=None, embed_patches=None):
