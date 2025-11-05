@@ -17,6 +17,7 @@ import copy
 import inspect
 from typing import TYPE_CHECKING
 
+from ..cache_utils import DynamicCache
 from ..generation.utils import GenerationMixin
 from ..utils import logging
 from ..utils.export_config import DynamoConfig
@@ -63,8 +64,10 @@ class DynamoExporter(HfExporter):
                 "auto-regressive and model.config.use_cache is set to True."
             )
 
-        args = ()
-        kwargs = copy.deepcopy(self.export_config.sample_inputs)
+        if isinstance(model, GenerationMixin) and getattr(model.config, "is_encoder_decoder", False):
+            raise NotImplementedError(f"{self.__class__.__name__} does not yet support encoder-decoder models yet.")
+
+        sample_inputs = copy.deepcopy(self.export_config.sample_inputs)
 
         register_dynamic_cache_for_export()
         register_encoder_decoder_cache_for_export()
@@ -72,29 +75,37 @@ class DynamoExporter(HfExporter):
             isinstance(model, GenerationMixin)
             and getattr(model.config, "use_cache", False)
             and "past_key_values" in inspect.signature(model.forward).parameters
-            and "past_key_values" not in kwargs
+            and "past_key_values" not in sample_inputs
         ):
             logger.info(
                 f"{self.__class__.__name__} detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
                 "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
                 "You can also provide past_key_values in sample_inputs to avoid this step."
             )
-            if model.generation_config.cache_implementation == "static":
-                # TODO: wrap with static cache wrapper or register static cache for export
-                raise NotImplementedError("Static cache implementation is not yet supported for Dynamo export.")
-            else:
-                kwargs["past_key_values"] = model(**kwargs).past_key_values
+
+            dummy_outputs = model(**copy.deepcopy(sample_inputs))
+            if hasattr(dummy_outputs, "past_key_values"):
+                sample_inputs["past_key_values"] = dummy_outputs.past_key_values
+                if isinstance(sample_inputs["past_key_values"], DynamicCache):
+                    if "input_ids" in sample_inputs and "attention_mask" in sample_inputs:
+                        seq_length = sample_inputs["input_ids"].shape[1]
+                        past_length = sample_inputs["past_key_values"].get_seq_length()
+                        sample_inputs["attention_mask"] = torch.ones(
+                            (sample_inputs["attention_mask"].shape[0], past_length + seq_length),
+                            device=sample_inputs["attention_mask"].device,
+                            dtype=sample_inputs["attention_mask"].dtype,
+                        )
 
         dynamic_shapes = self.export_config.dynamic_shapes
         if self.export_config.dynamic and dynamic_shapes is None:
             # assigns AUTO to all axes to let torch.onnx decide
-            dynamic_shapes = get_auto_dynamic_shapes(kwargs)
+            dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
         with patch_masks_for_export():
             exported_program: ExportedProgram = torch.export.export(
                 model,
-                args=args,
-                kwargs=kwargs,
+                args=(),
+                kwargs=sample_inputs,
                 dynamic_shapes=dynamic_shapes,
                 strict=self.export_config.strict,
             )
