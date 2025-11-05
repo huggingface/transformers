@@ -32,7 +32,7 @@
 لتصدير نموذج 🤗 Transformers إلى ONNX، قم أولاً بتثبيت اعتماد إضافي:
 
 ```bash
-pip install optimum[exporters]
+pip install optimum-onnx
 ```
 
 للاطلاع على جميع المعامﻻت المتاحة، يرجى الرجوع إلى [وثائق 🤗 Optimum](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model#exporting-a-model-to-onnx-using-the-cli)، أو عرض المساعدة في سطر الأوامر:
@@ -111,60 +111,3 @@ optimum-cli export onnx --model keras-io/transformers-qa distilbert_base_cased_s
 ### تصدير نموذج لهندسة غير مدعومة
 
 إذا كنت ترغب في المساهمة من خلال إضافة دعم لنموذج لا يُمكن تصديره حاليًا، فيجب عليك أولاً التحقق مما إذا كان مدعومًا في [`optimum.exporters.onnx`](https://huggingface.co/docs/optimum/exporters/onnx/overview)، وإذا لم يكن مدعومًا، [فيمكنك المساهمة في 🤗 Optimum](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/contribute) مُباشرةً.
-
-### تصدير نموذج باستخدام `transformers.onnx`
-
-<Tip warning={true}>
-
-لم يعد يتم دعم `transformers.onnx`  يُرجى تصدير النماذج باستخدام 🤗 Optimum كما هو موضح أعلاه. سيتم إزالة هذا القسم في الإصدارات القادمة.
-
-</Tip>
-
-لتصدير نموذج 🤗 Transformers إلى ONNX باستخدام `transformers.onnx`، ثبّت التبعيات الإضافية:
-
-```bash
-pip install transformers[onnx]
-```
-
-استخدم حزمة `transformers.onnx` كنموذج Python لتصدير نقطة حفظ باستخدام تكوين جاهز:
-
-```bash
-python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
-```
-
-يُصدّر هذا رسمًا بيانيًا ONNX لنقطة الحفظ المُحددة بواسطة وسيطة `--model`. مرر أي نقطة حفظ على 🤗 Hub أو نقطة حفظ مُخزنة محليًا.
-يُمكن بعد ذلك تشغيل ملف `model.onnx` الناتج على أحد المُسرعات العديدة التي تدعم معيار ONNX. على سبيل المثال، قم بتحميل وتشغيل النموذج باستخدام ONNX Runtime كما يلي:
-
-```python
->>> from transformers import AutoTokenizer
->>> from onnxruntime import InferenceSession
-
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
->>> session = InferenceSession("onnx/model.onnx")
->>> # يتوقع ONNX Runtime مصفوفات NumPy كمدخلات
->>> inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")
->>> outputs = session.run(output_names=["last_hidden_state"], input_feed=dict(inputs))
-```
-
-يُمكن الحصول على أسماء المخرجات المطلوبة (مثل `["last_hidden_state"]`) من خلال إلقاء نظرة على تكوين ONNX لكل نموذج. على سبيل المثال، بالنسبة لـ DistilBERT، لدينا:
-
-```python
->>> from transformers.models.distilbert import DistilBertConfig, DistilBertOnnxConfig
-
->>> config = DistilBertConfig()
->>> onnx_config = DistilBertOnnxConfig(config)
->>> print(list(onnx_config.outputs.keys()))
-["last_hidden_state"]
-```
-
-العمليات مُتطابقة لنقاط الحفظ TensorFlow على Hub. على سبيل المثال، صدّر نقطة حفظ TensorFlow خالصة كما يلي:
-
-```bash
-python -m transformers.onnx --model=keras-io/transformers-qa onnx/
-```
-
-لتصدير نموذج مُخزن محليًا، احفظ أوزان النموذج ومجزىء اللغوى في نفس الدليل (على سبيل المثال `local-pt-checkpoint`)، ثم قم بتصديره إلى ONNX عن طريق توجيه وسيط `--model` لحزمة `transformers.onnx` إلى الدليل المطلوب:
-
-```bash
-python -m transformers.onnx --model=local-pt-checkpoint onnx/
-```

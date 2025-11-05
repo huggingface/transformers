@@ -41,7 +41,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
     Constructs an InstructBLIPVideo processor which wraps a InstructBLIP image processor and a LLaMa/T5 tokenizer into a single
     processor.
 
-    [`InstructBlipVideoProcessor`] offers all the functionalities of [`InstructBlipVideoImageProcessor`] and [`AutoTokenizer`]. See the
+    [`InstructBlipVideoProcessor`] offers all the functionalities of [`InstructBlipVideoVideoProcessor`] and [`AutoTokenizer`]. See the
     docstring of [`~InstructBlipVideoProcessor.__call__`] and [`~InstructBlipVideoProcessor.decode`] for more information.
 
     Args:

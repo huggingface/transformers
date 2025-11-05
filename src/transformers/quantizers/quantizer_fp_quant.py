@@ -20,7 +20,7 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_fp_quant_available, is_qutlass_available, is_torch_available, logging
+from ..utils import is_fp_quant_available, is_qutlass_available, is_torch_available, is_torch_xpu_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 
 
@@ -45,9 +45,9 @@ class FPQuantHfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, device_map, **kwargs):
-        if not torch.cuda.is_available():
+        if not torch.cuda.is_available() and not is_torch_xpu_available():
             raise NotImplementedError(
-                "FPQuant quantization is only supported on GPU. Please use a different quantizer."
+                "FPQuant quantization is only supported on GPU or Intel XPU. Please use a different quantizer."
             )
 
         if not is_qutlass_available() and not self.quantization_config.pseudoquantization:

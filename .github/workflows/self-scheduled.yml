@@ -34,10 +34,20 @@ on:
       runner_type:
         required: false
         type: string
-      models:
+      subdirs:
         default: ""
         required: false
         type: string
+      pytest_marker:
+        required: false
+        type: string
+      pr_number:
+        required: false
+        type: string
+    outputs:
+      report:
+        description: "Content of the report of new failures"
+        value: ${{ jobs.check_new_failures.outputs.report }}
 
 env:
   HF_HOME: /mnt/cache
@@ -72,6 +82,7 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         run: |
+          git fetch origin ${{ inputs.commit_sha || github.sha }}
           git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Cleanup
@@ -91,8 +102,10 @@ jobs:
         working-directory: /transformers/tests
         run: |
           if [ "${{ inputs.job }}" = "run_models_gpu" ]; then
-            echo "folder_slices=$(python3 ../utils/split_model_tests.py --models '${{ inputs.models }}' --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
-            echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
+            python3 ../utils/split_model_tests.py --subdirs '${{ inputs.subdirs }}' --num_splits ${{ env.NUM_SLICES }} > folder_slices.txt
+            echo "folder_slices=$(cat folder_slices.txt)" >> $GITHUB_OUTPUT
+            python3 -c "import ast; folder_slices = ast.literal_eval(open('folder_slices.txt').read()); open('slice_ids.txt', 'w').write(str(list(range(len(folder_slices)))))"
+            echo "slice_ids=$(cat slice_ids.txt)" >> $GITHUB_OUTPUT
           elif [ "${{ inputs.job }}" = "run_trainer_and_fsdp_gpu" ]; then
             echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
             echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
@@ -103,7 +116,7 @@ jobs:
         name: Identify quantization method to test
         working-directory: /transformers/tests
         run: |
-          echo "quantization_matrix=$(python3 -c 'import os; tests = os.getcwd(); quantization_tests = os.listdir(os.path.join(tests, "quantization")); d = sorted(list(filter(os.path.isdir, [f"quantization/{x}" for x in quantization_tests]))) ;  print(d)')" >> $GITHUB_OUTPUT
+          echo "quantization_matrix=$(python3 -c 'import ast; import os; tests = os.getcwd(); quantization_tests = os.listdir(os.path.join(tests, "quantization")); subdirs = ast.literal_eval(${{ inputs.subdirs || '"None"' }}); quantization_tests = [x.removeprefix("quantization/") for x in subdirs] if subdirs is not None else quantization_tests; d = sorted(list(filter(os.path.isdir, [f"quantization/{x}" for x in quantization_tests]))) ;  print(d)')" >> $GITHUB_OUTPUT
 
       - name: NVIDIA-SMI
         run: |
@@ -127,6 +140,7 @@ jobs:
       commit_sha: ${{ inputs.commit_sha || github.sha }}
       runner_type: ${{ inputs.runner_type }}
       report_repo_id: ${{ inputs.report_repo_id }}
+      pytest_marker: ${{ inputs.pytest_marker }}
     secrets: inherit
 
   run_trainer_and_fsdp_gpu:
@@ -160,7 +174,7 @@ jobs:
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
-      image: huggingface/transformers-pytorch-gpu
+      image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Update clone
@@ -324,7 +338,7 @@ jobs:
         working-directory: ${{ inputs.working-directory-prefix }}/
         run: |
           python3 -m pip uninstall -y deepspeed
-          DS_DISABLE_NINJA=1 DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          DS_DISABLE_NINJA=1 DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --no-build-isolation --config-settings="--build-option=build_ext" --config-settings="--build-option=-j8" --no-cache -v --disable-pip-version-check
 
       # To avoid unknown test failures
       - name: Pre build DeepSpeed *again* (for nightly & Past CI)
@@ -334,7 +348,7 @@ jobs:
           python3 -m pip uninstall -y deepspeed
           rm -rf DeepSpeed
           git clone https://github.com/deepspeedai/DeepSpeed && cd DeepSpeed && rm -rf build
-          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install . --no-build-isolation --config-settings="--build-option=build_ext" --config-settings="--build-option=-j8" --no-cache -v --disable-pip-version-check
 
       - name: NVIDIA-SMI
         run: |
@@ -463,6 +477,70 @@ jobs:
           name: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports
 
+  run_kernels_gpu:
+    if: ${{ inputs.job == 'run_kernels_gpu' }}
+    name: Kernel tests
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [aws-g5-4xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
+    container:
+      image: ${{ inputs.docker }}
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
+
+      - name: Reinstall transformers in edit mode
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[testing]
+  
+      - name: Install kernels
+        working-directory: /transformers
+        run: python3 -m pip install -U kernels
+  
+      - name: NVIDIA-SMI
+        run: nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
+            machine_type=single-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+    
+      - name: Run kernel tests on GPU
+        working-directory: /transformers
+        run: |
+          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_kernels_gpu_test_reports tests/kernels/test_kernels.py
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ env.machine_type }}_run_kernels_gpu_test_reports/failures_short.txt
+
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_kernels_gpu_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.machine_type }}_run_kernels_gpu_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_run_kernels_gpu_test_reports
+
   run_extract_warnings:
     # Let's only do this for the job `run_models_gpu` to simplify the (already complex) logic.
     if: ${{ always() && inputs.job == 'run_models_gpu' }}
@@ -515,6 +593,7 @@ jobs:
       run_examples_gpu,
       run_torch_cuda_extensions_gpu,
       run_quantization_torch_gpu,
+      run_kernels_gpu,
       run_extract_warnings
     ]
     if: always() && !cancelled()
@@ -534,16 +613,17 @@ jobs:
     secrets: inherit
 
   check_new_failures:
-    if: ${{ always() && inputs.ci_event == 'Daily CI' && needs.send_results.result == 'success' }}
+    if: ${{ always() && needs.send_results.result == 'success' }}
     name: Check new failures
     needs: send_results
     uses: ./.github/workflows/check_failed_tests.yml
     with:
       docker: ${{ inputs.docker }}
-      start_sha: ${{ inputs.commit_sha || github.sha }}
+      commit_sha: ${{ inputs.commit_sha || github.sha }}
       job: ${{ inputs.job }}
       slack_report_channel: ${{ inputs.slack_report_channel }}
       ci_event: ${{ inputs.ci_event }}
       report_repo_id: ${{ inputs.report_repo_id }}
+      pr_number: ${{ inputs.pr_number }}
 
     secrets: inherit

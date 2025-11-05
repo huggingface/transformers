@@ -167,7 +167,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         max_window_layers: Optional[int] = 80,
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -301,6 +301,8 @@ class Qwen2VLConfig(PreTrainedConfig):
 
     def __getattribute__(self, key):
         if "text_config" in super().__getattribute__("__dict__") and key not in [
+            "_name_or_path",
+            "model_type",
             "dtype",
             "_attn_implementation_internal",
         ]:

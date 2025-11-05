@@ -46,7 +46,8 @@ PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
 
 def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str] | bool:
     """Check if `pkg_name` exist, and optionally try to get its version"""
-    package_exists = importlib.util.find_spec(pkg_name) is not None
+    spec = importlib.util.find_spec(pkg_name)
+    package_exists = spec is not None
     package_version = "N/A"
     if package_exists and return_version:
         try:
@@ -86,6 +87,7 @@ VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
+KERNELS_MIN_VERSION = "0.9.0"
 
 
 @lru_cache
@@ -512,8 +514,9 @@ def is_kenlm_available() -> bool:
 
 
 @lru_cache
-def is_kernels_available() -> bool:
-    return _is_package_available("kernels")
+def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION) -> bool:
+    is_available, kernels_version = _is_package_available("kernels", return_version=True)
+    return is_available and version.parse(kernels_version) >= version.parse(MIN_VERSION)
 
 
 @lru_cache
@@ -970,13 +973,13 @@ def is_quark_available() -> bool:
 @lru_cache
 def is_fp_quant_available():
     is_available, fp_quant_version = _is_package_available("fp_quant", return_version=True)
-    return is_available and version.parse(fp_quant_version) >= version.parse("0.2.0")
+    return is_available and version.parse(fp_quant_version) >= version.parse("0.3.2")
 
 
 @lru_cache
 def is_qutlass_available():
     is_available, qutlass_version = _is_package_available("qutlass", return_version=True)
-    return is_available and version.parse(qutlass_version) >= version.parse("0.1.0")
+    return is_available and version.parse(qutlass_version) >= version.parse("0.2.0")
 
 
 @lru_cache
@@ -1130,6 +1133,11 @@ def is_cython_available() -> bool:
 @lru_cache
 def is_jinja_available() -> bool:
     return _is_package_available("jinja2")
+
+
+@lru_cache
+def is_jmespath_available() -> bool:
+    return _is_package_available("jmespath")
 
 
 @lru_cache
@@ -2159,7 +2167,7 @@ def create_import_structure_from_path(module_path):
     {
         'albert': {
             frozenset(): {
-                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+                'configuration_albert': {'AlbertConfig'}
             },
             frozenset({'tokenizers'}): {
                 'tokenization_albert_fast': {'AlbertTokenizerFast'}
@@ -2335,7 +2343,7 @@ def spread_import_structure(nested_import_structure):
     {
         'albert': {
             frozenset(): {
-                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+                'configuration_albert': {'AlbertConfig'}
             },
             frozenset({'tokenizers'}): {
                 'tokenization_albert_fast': {'AlbertTokenizerFast'}
@@ -2362,7 +2370,7 @@ def spread_import_structure(nested_import_structure):
             'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
         },
         frozenset(): {
-            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'albert.configuration_albert': {'AlbertConfig'},
             'align.processing_align': {'AlignProcessor'},
             'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
             'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
@@ -2463,7 +2471,7 @@ def define_import_structure(module_path: str, prefix: str | None = None) -> IMPO
             'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
         },
         frozenset(): {
-            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'albert.configuration_albert': {'AlbertConfig'},
             'align.processing_align': {'AlignProcessor'},
             'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
             'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
