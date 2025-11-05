@@ -727,7 +727,7 @@ class EsmModel(EsmPreTrainedModel):
 
 @auto_docstring
 class EsmForMaskedLM(EsmPreTrainedModel):
-    _tied_weights_keys = {"lm_head.decoder.weight": "model.embeddings.word_embeddings.weight"}
+    _tied_weights_keys = {"lm_head.decoder.weight": "esm.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

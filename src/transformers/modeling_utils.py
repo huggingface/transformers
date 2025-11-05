@@ -2523,11 +2523,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         submodule = self.get_submodule(submodule)
                         setattr(submodule, target_entity, source_param_or_module)
             else:
-                submodule, weight = target_name.rsplit(".", 1)
-                submodule = self.get_submodule(submodule)
-                setattr(submodule, weight, source_param_or_module)
-
-
+                if "." in target_name:
+                    submodule, weight = target_name.rsplit(".", 1)
+                    submodule = self.get_submodule(submodule)
+                    setattr(submodule, weight, source_param_or_module)
+                else:
+                    setattr(self, target_name, source_param_or_module)
 
     def _get_no_split_modules(self, device_map: str):
         """
