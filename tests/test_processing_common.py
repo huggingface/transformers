@@ -15,11 +15,11 @@
 
 import inspect
 import json
+import os
 import random
 import sys
 import tempfile
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -37,8 +37,9 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_vision_available
 
 
-sys.path.append(".")
-from utils.fetch_hub_objects_for_ci import url_to_local_path
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(os.path.join(parent_dir, "utils"))
+from fetch_hub_objects_for_ci import url_to_local_path  # noqa: E402
 
 
 global_rng = random.Random()
@@ -136,7 +137,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**components, **self.prepare_processor_dict())
         return processor
 
-    def prepare_text_inputs(self, batch_size: Optional[int] = None, modalities: Optional[Union[str, list]] = None):
+    def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):
         if isinstance(modalities, str):
             modalities = [modalities]
 
@@ -158,7 +159,7 @@ class ProcessorTesterMixin:
         ] * (batch_size - 2)
 
     @require_vision
-    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+    def prepare_image_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
         if batch_size is None:
             return prepare_image_inputs()[0]
@@ -167,7 +168,7 @@ class ProcessorTesterMixin:
         return prepare_image_inputs() * batch_size
 
     @require_vision
-    def prepare_video_inputs(self, batch_size: Optional[int] = None):
+    def prepare_video_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy videos."""
         video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
         video_input = np.array(video_input)
@@ -175,7 +176,7 @@ class ProcessorTesterMixin:
             return video_input
         return [video_input] * batch_size
 
-    def prepare_audio_inputs(self, batch_size: Optional[int] = None):
+    def prepare_audio_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy audio."""
         raw_speech = floats_list((1, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
@@ -222,8 +223,7 @@ class ProcessorTesterMixin:
         processor_first = self.get_processor()
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            # Save with `legacy_serialization=False` so that all attrbiutes are saved in one json file
-            saved_files = processor_first.save_pretrained(tmpdirname, legacy_serialization=False)
+            saved_files = processor_first.save_pretrained(tmpdirname)
             check_json_file_has_correct_format(saved_files[0])
 
             # Load it back and check if loaded correctly
@@ -944,17 +944,15 @@ class ProcessorTesterMixin:
         if "chat_template" not in {*signature.parameters.keys()}:
             self.skipTest("Processor doesn't accept chat templates at input")
 
-        existing_tokenizer_template = getattr(processor.tokenizer, "chat_template", None)
         processor.chat_template = "test template"
         with tempfile.TemporaryDirectory() as tmpdirname:
-            processor.save_pretrained(tmpdirname, save_jinja_files=False)
-            self.assertTrue(Path(tmpdirname, "chat_template.json").is_file())
-            self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
+            processor.save_pretrained(tmpdirname)
+            with open(Path(tmpdirname, "chat_template.json"), "w") as fp:
+                json.dump({"chat_template": processor.chat_template}, fp)
+            os.remove(Path(tmpdirname, "chat_template.jinja"))
+
             reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
             self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
-            # When we don't use single-file chat template saving, processor and tokenizer chat templates
-            # should remain separate
-            self.assertEqual(getattr(reloaded_processor.tokenizer, "chat_template", None), existing_tokenizer_template)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.save_pretrained(tmpdirname)
@@ -978,12 +976,6 @@ class ProcessorTesterMixin:
             # When we save as single files, tokenizers and processors share a chat template, which means
             # the reloaded tokenizer should get the chat template as well
             self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
-
-        with self.assertRaises(ValueError):
-            # Saving multiple templates in the legacy format is not permitted
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                processor.chat_template = {"default": "a", "secondary": "b"}
-                processor.save_pretrained(tmpdirname, save_jinja_files=False)
 
     @require_torch
     def _test_apply_chat_template(

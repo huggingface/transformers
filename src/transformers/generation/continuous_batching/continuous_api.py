@@ -30,7 +30,6 @@ from tqdm import tqdm
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...generation.logits_process import LogitsProcessor
-from ...integrations.hub_kernels import load_and_register_attn_kernel
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -743,7 +742,9 @@ class ContinuousBatchingManager:
             from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 
             if attn_implementation not in ALL_ATTENTION_FUNCTIONS._global_mapping:  # when its a kernel
+                # load_and_register_attn_kernel is imported here to avoid CUDA init
                 from ...integrations.flash_paged import paged_attention_forward
+                from ...integrations.hub_kernels import load_and_register_attn_kernel
 
                 load_and_register_attn_kernel(attn_implementation, paged_attention_forward)
 
@@ -907,7 +908,6 @@ class ContinuousBatchingManager:
             if request_id is not None and result.request_id != request_id:
                 self.output_queue.put(result)
                 return None
-            logger.debug(f"Retrieved result for request {result.request_id}")
             return result
         except queue.Empty:
             return None
@@ -919,6 +919,7 @@ class ContinuousBatchingManager:
             if result is not None:
                 yield result
 
+    # FIXME: stop iteration when request status is finished?
     def request_id_iter(self, request_id: str) -> Generator[GenerationOutput]:
         """Iterate over results matching a specific request id as they become available."""
         request_cancelled = False
@@ -928,14 +929,6 @@ class ContinuousBatchingManager:
                 yield result
             if self.batch_processor is not None:
                 request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
-
-    @staticmethod
-    def supported_attention_implementations() -> set[str]:
-        return {"eager_paged", "sdpa_paged", "flash_attention_2"}
-
-    @staticmethod
-    def default_attention_implementation() -> str:
-        return "sdpa_paged"
 
     @traced
     def warmup(self, batch_processor: ContinuousBatchProcessor) -> None:

@@ -164,7 +164,7 @@ image_pose_result = pose_results[0]
 
     ```py
     from transformers import AutoProcessor, VitPoseForPoseEstimation
-from accelerate import Accelerator
+    from accelerate import Accelerator
 
     device = Accelerator().device
 

@@ -645,7 +645,7 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
         self.pipe = pipeline(
             "text-generation",
             model=self.model_name,
-            model_kwargs={"device_map": "auto", "load_in_8bit": True},
+            model_kwargs={"device_map": "auto", "quantization_config": BitsAndBytesConfig(load_in_8bit=True)},
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
@@ -851,8 +851,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             model_8bit = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 device_map=device_map,
-                quantization_config=BitsAndBytesConfig(load_in_8bit=True),
-                llm_int8_enable_fp32_cpu_offload=True,
+                quantization_config=BitsAndBytesConfig(load_in_8bit=True, llm_int8_enable_fp32_cpu_offload=True),
                 offload_folder=tmpdirname,
             )
 

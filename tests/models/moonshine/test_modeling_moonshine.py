@@ -148,14 +148,6 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.model_tester = MoonshineModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MoonshineConfig)
 
-    @unittest.skip("failing. Will fix only when the community opens an issue for it.")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @unittest.skip("failing. Will fix only when the community opens an issue for it.")
-    def test_torchscript_simple(self):
-        pass
-
     def test_config(self):
         self.config_tester.run_common_tests()
 

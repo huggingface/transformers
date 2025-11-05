@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import unittest
-from typing import Optional
 
 import torch
 from parameterized import parameterized
@@ -43,8 +42,8 @@ class ContinuousBatchingTest(unittest.TestCase):
     )
     def test_group_layers(
         self,
-        layer_types_str: Optional[str],
-        sliding_window: Optional[int],
+        layer_types_str: str | None,
+        sliding_window: int | None,
         expected_groups: str,
     ) -> None:
         # Take a config and change the layer_types attribute to the mix we want
@@ -351,9 +350,9 @@ class ContinuousBatchingTest(unittest.TestCase):
 
         messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
 
-        inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
-            model.device
-        )[0]
+        inputs = tokenizer.apply_chat_template(
+            messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
+        ).to(model.device)[0]
 
         request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=True)
 
@@ -383,9 +382,9 @@ class ContinuousBatchingTest(unittest.TestCase):
 
         messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
 
-        inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
-            model.device
-        )[0]
+        inputs = tokenizer.apply_chat_template(
+            messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
+        ).to(model.device)[0]
 
         request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=False)
 
@@ -410,9 +409,9 @@ class ContinuousBatchingTest(unittest.TestCase):
 
         messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
 
-        inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
-            model.device
-        )[0]
+        inputs = tokenizer.apply_chat_template(
+            messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
+        ).to(model.device)[0]
 
         # Non-streaming request
         request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=False)

@@ -427,6 +427,7 @@ class UnivNetLvcBlock(nn.Module):
 class UnivNetModel(PreTrainedModel):
     config: UnivNetConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: UnivNetConfig):
         super().__init__(config)

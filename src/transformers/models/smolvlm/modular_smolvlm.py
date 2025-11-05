@@ -91,7 +91,6 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
     ```"""
 
     model_type = "smolvlm_vision"
-    pass
 
 
 class SmolVLMPreTrainedModel(Idefics3PreTrainedModel):
@@ -141,7 +140,6 @@ class SmolVLMConfig(Idefics3Config):
     ```"""
 
     model_type = "smolvlm"
-    pass
 
 
 class SmolVLMImageProcessor(Idefics3ImageProcessor):

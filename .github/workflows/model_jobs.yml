@@ -28,6 +28,9 @@ on:
       report_repo_id:
         required: false
         type: string
+      pytest_marker:
+        required: false
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -77,7 +80,9 @@ jobs:
 
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
+        run: |
+          git fetch origin ${{ inputs.commit_sha || github.sha }}
+          git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -137,7 +142,7 @@ jobs:
       - name: Run all tests on GPU
         working-directory: /transformers
         run: |
-          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports tests/${{ matrix.folders }}" test_outputs.txt
+          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports python3 -m pytest -rsfE -v -m '${{ inputs.pytest_marker }}' --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports tests/${{ matrix.folders }}" test_outputs.txt
           ls -la
           # Extract the exit code from the output file
           EXIT_CODE=$(tail -1 test_outputs.txt | grep -o 'COMMAND_EXIT_CODE="[0-9]*"' | cut -d'"' -f2)
@@ -171,7 +176,7 @@ jobs:
 
   collated_reports:
     name: Collated Reports
-    if: ${{ always() }}
+    if: ${{ always() && inputs.runner_type != '' }}
     needs: run_models_gpu
     uses: huggingface/transformers/.github/workflows/collated-reports.yml@main
     with:

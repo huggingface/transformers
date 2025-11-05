@@ -157,9 +157,7 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):

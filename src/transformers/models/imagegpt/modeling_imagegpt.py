@@ -362,6 +362,7 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
     config: ImageGPTConfig
     base_model_prefix = "transformer"
     main_input_name = "input_ids"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ImageGPTBlock"]
 

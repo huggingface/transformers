@@ -176,8 +176,6 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     pipeline_model_mapping = {"image-text-to-text": Ovis2ForConditionalGeneration} if is_torch_available() else {}
     _is_composite = True
 
-    test_torchscript = False
-
     def setUp(self):
         self.model_tester = Ovis2VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Ovis2Config, has_text_modality=False)

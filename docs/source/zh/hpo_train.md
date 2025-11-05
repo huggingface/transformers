@@ -87,7 +87,6 @@ Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direc
 ...         config=config,
 ...         cache_dir=model_args.cache_dir,
 ...         revision=model_args.model_revision,
-...         use_auth_token=True if model_args.use_auth_token else None,
 ...     )
 ```
 

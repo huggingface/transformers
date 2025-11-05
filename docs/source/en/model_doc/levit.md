@@ -36,7 +36,7 @@ in vision transformers. As a result, we propose LeVIT: a hybrid neural network f
 We consider different measures of efficiency on different hardware platforms, so as to best reflect a wide range of
 application scenarios. Our extensive experiments empirically validate our technical choices and show they are suitable
 to most architectures. Overall, LeViT significantly outperforms existing convnets and vision transformers with respect
-to the speed/accuracy tradeoff. For example, at 80% ImageNet top-1 accuracy, LeViT is 5 times faster than EfficientNet on CPU. *
+to the speed/accuracy tradeoff. For example, at 80% ImageNet top-1 accuracy, LeViT is 5 times faster than EfficientNet on CPU.*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/levit_architecture.png"
 alt="drawing" width="600"/>

@@ -436,11 +436,6 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 [[autodoc]] Llama4TextModel
     - forward
 
-## Llama4ForCausalLM
-
-[[autodoc]] Llama4ForCausalLM
-    - forward
-
 ## Llama4VisionModel
 
 [[autodoc]] Llama4VisionModel

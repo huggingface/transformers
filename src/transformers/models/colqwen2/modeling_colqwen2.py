@@ -40,6 +40,7 @@ if is_torch_available():
 class ColQwen2PreTrainedModel(PreTrainedModel):
     config: ColQwen2Config
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     _no_split_modules = []
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -171,7 +172,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             inputs_embeds = self.vlm.language_model.embed_tokens(input_ids)
 
             if pixel_values is not None:
-                pixel_values = pixel_values.type(self.vlm.visual.get_dtype())
                 image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw)
                 image_mask = (
                     (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)

@@ -47,7 +47,7 @@ Our large model is faster and ahead of its Swin counterpart by 1.5% box AP in CO
 Paired with new frameworks, our large variant is the new state of the art panoptic segmentation model on COCO (58.2 PQ)
 and ADE20K (48.5 PQ), and instance segmentation model on Cityscapes (44.5 AP) and ADE20K (35.4 AP) (no extra data).
 It also matches the state of the art specialized semantic segmentation models on ADE20K (58.2 mIoU),
-and ranks second on Cityscapes (84.5 mIoU) (no extra data). *
+and ranks second on Cityscapes (84.5 mIoU) (no extra data).*
 
 <img
 src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dilated-neighborhood-attention-pattern.jpg"

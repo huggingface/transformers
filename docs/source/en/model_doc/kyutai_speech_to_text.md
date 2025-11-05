@@ -16,6 +16,7 @@ rendered properly in your Markdown viewer.
 *This model was released on 2025-06-17 and added to Hugging Face Transformers on 2025-06-25.*
 
 # Kyutai Speech-To-Text
+
 ## Overview
 
 [Kyutai STT](https://kyutai.org/next/stt) is a speech-to-text model architecture based on the [Mimi codec](https://huggingface.co/docs/transformers/en/model_doc/mimi), which encodes audio into discrete tokens in a streaming fashion, and a [Moshi-like](https://huggingface.co/docs/transformers/en/model_doc/moshi) autoregressive decoder. Kyutai's lab has released two model checkpoints:

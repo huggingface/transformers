@@ -742,6 +742,7 @@ class DetrPreTrainedModel(PreTrainedModel):
     config: DetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = [r"DetrConvEncoder", r"DetrEncoderLayer", r"DetrDecoderLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
