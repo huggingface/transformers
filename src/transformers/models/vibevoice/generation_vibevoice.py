@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from queue import Queue
 from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-from tqdm import tqdm
 
 from ...generation import (
     BaseStreamer,
@@ -219,8 +219,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         input_features_mask: Optional[torch.BoolTensor] = None,
         cfg_scale: float = 1.3,
         ddpm_inference_steps: int = 10,
-        noise_scheduler=None,
-        max_length_times: int = 2,
+        noise_scheduler= None,
+        monitor_progress: Optional[Callable[[torch.Tensor], None]] = None,
         **kwargs,
     ) -> Union[torch.LongTensor, VibeVoiceGenerateOutput]:
         """
@@ -247,14 +247,67 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 Classifier-free guidance scale for speech generation quality control.
             ddpm_inference_steps (`int`, *optional*, defaults to 10):
                 Number of diffusion denoising steps for speech generation.
-            noise_scheduler (`SchedulerMixin`, *required*):
+            noise_scheduler (`SchedulerMixin` from `diffusers, *required*):
                 The noise scheduler to use for diffusion sampling.
-            max_length_times (`int`, *optional*, defaults to 2):
-                Maximum generation length multiplier relative to input length. The actual maximum 
-                generation steps will be min(generation_config.max_length, max_length_times * input_length).
-                This prevents runaway generation while allowing speech-heavy outputs to be longer than text-only outputs.
+            monitor_progress (`Callable[[torch.Tensor], None]`, *optional*):
+                If provided, this function can be called to report the progress of the audio generation. The function
+                takes a tensor argument `p` of shape `(n, 3)`, where `n` is the batch size. `p[i, 0]` contains the
+                current generation step for batch item `i`, `p[i, 1]` contains the maximum generation steps 
+                for batch item `i` (which may vary based on input length), and `p[i, 2]` contains the actual
+                completion step for finished samples. No return value is expected.
             **kwargs:
                 Additional model-specific kwargs that will be forwarded to the model.
+
+        Example:
+            Using `monitor_progress` to track generation progress:
+
+            ```python
+            >>> import torch
+            >>> from transformers import VibeVoiceForConditionalGeneration
+            >>> from tqdm import tqdm
+
+            >>> model = VibeVoiceForConditionalGeneration.from_pretrained("vibevoice-model")
+
+            >>> # Track which samples have completed to avoid duplicate logging
+            >>> completed_samples = set()
+
+            >>> # Define a callback to monitor the progress of the generation
+            >>> with tqdm(desc="Generating") as pbar:
+            >>>     def monitor_progress(p_batch):
+            >>>         # Check for newly completed samples
+            >>>         finished_samples = (p_batch[:, 0] == p_batch[:, 1]).nonzero(as_tuple=False).squeeze(1)
+            >>>         if finished_samples.numel() > 0:
+            >>>             for sample_idx in finished_samples.tolist():
+            >>>                 if sample_idx not in completed_samples:
+            >>>                     completed_samples.add(sample_idx)
+            >>>                     # Use the actual completion step from column 2
+            >>>                     completion_step = int(p_batch[sample_idx, 2])
+            >>>                     print(f"Sample {sample_idx} completed at step {completion_step}", flush=True)
+            >>>         
+            >>>         # Find the sample with the maximum progress (most advanced)
+            >>>         # This ensures the progress bar continues updating as long as any sample is generating
+            >>>         active_samples = p_batch[:, 0] < p_batch[:, 1]  # Samples that haven't finished
+            >>>         if active_samples.any():
+            >>>             # Use the most advanced active sample
+            >>>             active_progress = p_batch[active_samples]
+            >>>             max_active_idx = torch.argmax(active_progress[:, 0])
+            >>>             p = active_progress[max_active_idx].detach().cpu()
+            >>>         else:
+            >>>             # All samples finished, use any sample (they should all be at max)
+            >>>             p = p_batch[0].detach().cpu()
+            >>>         
+            >>>         pbar.total = int(p[1])
+            >>>         pbar.n = int(p[0])
+            >>>         pbar.update()
+
+            >>>     # Generate audio with progress monitoring
+            >>>     output = model.generate(
+            >>>         input_ids=input_ids,
+            >>>         input_features=input_features,
+            >>>         noise_scheduler=noise_scheduler,
+            >>>         monitor_progress=monitor_progress
+            >>>     )
+            ```
 
         Returns:
             [`VibeVoiceGenerateOutput`] or `torch.LongTensor`: A [`VibeVoiceGenerateOutput`] (if 
@@ -326,16 +379,13 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             'attention_mask': torch.ones((kwargs['input_ids'].shape[0], 1), dtype=torch.long, device=device),
             'max_new_tokens': kwargs.get('max_new_tokens', 100)
         }
-
         negative_generation_config = GenerationConfig()
         negative_generation_config, negative_model_kwargs = self._prepare_generation_config(
             negative_generation_config, True, **negative_kwargs
         )
-
         _, negative_model_input_name, negative_model_kwargs = self._prepare_model_inputs(
             None, negative_generation_config.bos_token_id, negative_model_kwargs
         )
-
         self._prepare_special_tokens(negative_generation_config, True, device=device)
         negative_generation_config.use_cache = self.config.use_cache
         negative_model_kwargs["use_cache"] = self.config.use_cache
@@ -361,6 +411,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             if isinstance(v, torch.Tensor):
                 negative_model_kwargs[k] = v.to(device=device)
 
+        # 2. Generation setup
         acoustic_cache = None
         semantic_cache = None
         finished_tags = torch.zeros(batch_size, dtype=torch.bool, device=device)
@@ -370,9 +421,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
         # Initialize audio chunks storage for each sample
         audio_chunks = [[] for _ in range(batch_size)]
-
-        initial_length = input_ids.shape[-1]
-        initial_length_per_sample = model_kwargs['attention_mask'].sum(dim=-1)
 
        # Define all valid tokens that can be generated
         valid_tokens = [
@@ -389,50 +437,29 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         token_constraint_processor = VibeVoiceTokenConstraintProcessor(valid_tokens, device=device)
         logits_processor.append(token_constraint_processor)
 
-        # Calculate maximum generation steps, TODO (ebezzam) simplify explanation?
-        # Use the minimum of configured max_length and relative max length (max_length_times * input_length)
-        # This prevents runaway generation while allowing longer outputs for speech-heavy content
-        max_steps = min(generation_config.max_length - initial_length, max_length_times * initial_length)
+        # Calculate maximum generation steps
+        initial_length = input_ids.shape[-1]
+        initial_length_per_sample = model_kwargs['attention_mask'].sum(dim=-1)
+        max_steps = generation_config.max_length - initial_length
+        max_step_per_sample = torch.min(generation_config.max_length - initial_length_per_sample, torch.full_like(initial_length_per_sample, max_steps))
+        completion_steps = torch.zeros(batch_size, dtype=torch.long, device=device)  # Track when each sample completed
 
-        # Calculate per-sample maximum steps based on actual input length (respecting attention masks)
-        # This accounts for varying input lengths within a batch
-        relative_max_per_sample = (max_length_times * initial_length_per_sample).long()
-        max_step_per_sample = torch.min(
-            generation_config.max_length - initial_length_per_sample,
-            relative_max_per_sample
-        )
-        reach_max_step_sample = torch.zeros(batch_size, dtype=torch.bool, device=device)
-
-        # Create progress iterator
-        # TODO (ebezzam) remove from final?
-        if kwargs.get("show_progress_bar", True):
-            progress_bar = tqdm(range(max_steps), desc="Generating", leave=False)
-        else:
-            progress_bar = range(max_steps)
-
-        for step in progress_bar:
-
+        # 3. Generation loop
+        for step in range(max_steps):
             # Check if audio_streamer has been ended (stopped externally)
             if audio_streamer is not None and hasattr(audio_streamer, 'finished_flags'):
                 if any(audio_streamer.finished_flags):
                     break
 
             if finished_tags.all():
-                if hasattr(progress_bar, 'set_description'):
-                    progress_bar.set_description("Generation complete")
                 break
 
-            if input_ids.shape[-1] >= generation_config.max_length:
-                print(f"Reached maximum generation length {generation_config.max_length}, stopped it.")
-                reached_samples = torch.arange(batch_size, device=device)[~finished_tags]
-                if reached_samples.numel() > 0:
-                    reach_max_step_sample[reached_samples] = True
-                break
-
-            # Update progress bar description with active samples
-            if hasattr(progress_bar, 'set_description'):
-                active_samples = (~finished_tags).sum().item()
-                progress_bar.set_description(f"Generating (active: {active_samples}/{batch_size})")
+            # Report progress if monitor_progress callback is provided
+            if monitor_progress is not None:
+                current_steps = torch.full((batch_size,), step, dtype=torch.long, device=device)
+                current_steps[finished_tags] = completion_steps[finished_tags]
+                progress_tensor = torch.stack((current_steps, max_step_per_sample, completion_steps), dim=1)
+                monitor_progress(progress_tensor)
 
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
             if is_prefill:
@@ -475,20 +502,27 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 new_eos_indices = eos_mask & ~finished_tags
                 if new_eos_indices.any():
                     finished_tags[new_eos_indices] = True
+                    completion_steps[new_eos_indices] = step + 1  # Record actual completion step
                     new_eos_idx_list = new_eos_indices.nonzero(as_tuple=False).squeeze(1)
-                    # TODO (ebezzam) for debugging, remove for final
-                    print(f"Samples {new_eos_idx_list.tolist()} reached EOS token at step {step + 1}.", flush=True)
                     if audio_streamer is not None:
                         audio_streamer.end(new_eos_idx_list)
+
+                    # Report progress immediately after samples complete
+                    if monitor_progress is not None:
+                        current_steps = torch.full((batch_size,), step + 1, dtype=torch.long, device=device)
+                        # For finished samples, set current = max so they're detected as completed
+                        current_steps[finished_tags] = max_step_per_sample[finished_tags]
+                        progress_tensor = torch.stack((current_steps, max_step_per_sample, completion_steps), dim=1)
+                        monitor_progress(progress_tensor)
 
             # Check if any sample reached its maximum generation length
             max_length_reached = step >= max_step_per_sample
             new_max_length_mask = max_length_reached & ~finished_tags
             if new_max_length_mask.any():
                 finished_tags[new_max_length_mask] = True
-                reach_max_step_sample[new_max_length_mask] = True
+                completion_steps[new_max_length_mask] = step + 1  # Record actual completion step
+                new_max_length_indices = new_max_length_mask.nonzero(as_tuple=False).squeeze(1)
                 if audio_streamer is not None:
-                    new_max_length_indices = new_max_length_mask.nonzero(as_tuple=False).squeeze(1)
                     audio_streamer.end(new_max_length_indices)
 
             # speech_begin
@@ -645,6 +679,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             else:
                 # If no audio was generated for this sample, append None
                 final_audio_outputs.append(None)
+
+        # Compute which samples reached maximum steps based on completion_steps and max_step_per_sample
+        reach_max_step_sample = completion_steps >= max_step_per_sample
 
         return VibeVoiceGenerateOutput(
             sequences=input_ids,
