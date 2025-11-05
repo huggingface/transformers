@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,37 +12,34 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Xcodec model configuration"""
 
 import math
 from typing import Optional, Union
 
 import numpy as np
 
-from transformers import AutoConfig, DacConfig, HubertConfig, WavLMConfig
-
-from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...configuration_utils import PretrainedConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
-class XcodecConfig(PreTrainedConfig):
+class XcodecConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`XcodecModel`]. It is used to instantiate a
-    Xcodec model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the
-    [Manel/X-Codec](https://huggingface.co/Manel/X-Codec) architecture.
+    XcodecModel according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    [bosonai/higgs-audio-v2-tokenizer](https://huggingface.co/bosonai/higgs-audio-v2-tokenizer) architecture.
 
     Args:
         target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2, 4]`):
             The range of different bandwidths (in kbps) the model can encode audio with.
-        sample_rate (`int`, *optional*, defaults to 16000):
+        sample_rate (`int`, *optional*, defaults to 24000):
             The sampling rate at which the audio waveform should be digitalized, in hertz (Hz).
+        semantic_sample_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the semantic model was trained with, in hertz (Hz).
         kernel_size (`int`, *optional*, defaults to 3):
             Kernel size for the initial semantic convolution.
         channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
@@ -55,132 +52,121 @@ class XcodecConfig(PreTrainedConfig):
             Kernel size inside each ResidualUnit in semantic blocks.
         codebook_size (`int`, *optional*, defaults to 1024):
             Number of entries in each residual quantizer's codebook.
-        codebook_dim (`int`, *optional*):
-            Dimensionality of each codebook vector. Defaults to sum of hidden size of acoustic and semantic models.
+        num_quantizers (`int`, *optional*, defaults to 8):
+            Number of sequential quantizers (codebooks) in the RVQ stack.
+        codebook_dim (`int`, *optional*, defaults to 64):
+            Dimensionality of each codebook vector.
         initializer_range (`float`, *optional*, defaults to 0.02):
             Standard deviation of the truncated normal initializer for all weight matrices.
         acoustic_model_config (`Union[Dict, DacConfig]`, *optional*):
             An instance of the configuration for the acoustic (DAC) model.
-        semantic_model_config (`Union[Dict, HubertConfig, WavLMConfig]`, *optional*):
+        semantic_config (`Union[Dict, HubertConfig]`, *optional*):
             An instance of the configuration object for the semantic (HuBERT) model.
+        downsample_mode (`str`, *optional*, defaults to `"step_down"`):
+            The downsample mode for the semantic features.
+        pad (`int`, *optional*, defaults to 160):
+            Padding size for the input to the semantic model.
+        downsample_factor (`int`, *optional*, defaults to 320):
+            The downsample factor used to compute actual downsample factor for the semantic features.
 
     Example:
 
     ```python
     >>> from transformers import XcodecModel, XcodecConfig
 
-    >>> # Initializing configuration
+    >>> # Initializing a " " style configuration
     >>> configuration = XcodecConfig()
 
-    >>> # Initializing a model (with random weights) from the configuration
+    >>> # Initializing a model (with random weights) from the " " style configuration
     >>> model = XcodecModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "xcodec"
-
-    sub_configs = {
-        "acoustic_model_config": DacConfig,
-        "semantic_model_config": AutoConfig,
+    model_type = "higgs_audio_tokenizer"
+    sub_configs = {"semantic_config": AutoConfig}
+    attribute_map = {
+        "sampling_rate": "sample_rate",
     }
-
     def __init__(
-        self,
-        target_bandwidths: Optional[list[float]] = None,
-        sample_rate: int = 16000,
-        kernel_size: int = 3,
-        channel_ratios: list[float] = [1, 1],
-        strides: list[int] = [1, 1],
-        block_dilations: list[int] = [1, 1],
-        unit_kernel_size: int = 3,
-        codebook_size: int = 1024,
-        codebook_dim: Optional[int] = None,
-        initializer_range: float = 0.02,
-        acoustic_model_config: Optional[Union[dict, DacConfig]] = None,
-        semantic_model_config: Optional[Union[dict, HubertConfig]] = None,
+        self, 
+        encoder_hidden_size=64,
+        acoustic_hidden_size=256,
+        downsampling_ratios=[8, 5, 4, 2, 3],
+        decoder_hidden_size=1024,
+        upsampling_ratios=[8, 5, 4, 2, 3],
+        n_codebooks=9,
+        strides=[1, 1],
+        channel_ratios=[1, 1],
+        kernel_size=3,
+        block_dilations=[1, 1],
+        semantic_config=None,
+        unit_kernel_size=3,
+        target_bandwidths=[0.5, 1, 1.5, 2, 4],
+        sample_rate=24000,
+        semantic_sample_rate=16000,
+        codebook_size=1024,
+        num_quantizers=8,
+        codebook_dim=64,
+        initializer_range=0.02,
+        pad=160,
         **kwargs,
     ):
-        if acoustic_model_config is None:
-            self.acoustic_model_config = DacConfig(
-                encoder_hidden_size=64,
-                # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
-                # (not sure if intentional by Xcodec but we keep it)
-                downsampling_ratios=[8, 5, 4, 2],
-                decoder_hidden_size=1024,
-                upsampling_ratios=[8, 5, 4, 2],
-                hidden_size=256,
-            )
-        elif isinstance(acoustic_model_config, dict):
-            self.acoustic_model_config = DacConfig(**acoustic_model_config)
-        elif isinstance(acoustic_model_config, DacConfig):
-            self.acoustic_model_config = acoustic_model_config
-        else:
-            raise ValueError(
-                f"acoustic_model_config must be a dict or DacConfig instance, but got {type(acoustic_model_config)}"
-            )
+        # Handle semantic model config
+        if isinstance(semantic_config, dict):
+            semantic_config["model_type"] = semantic_config.get("model_type", "hubert")
+            semantic_config = CONFIG_MAPPING[semantic_config["model_type"]](**semantic_config)
+        elif semantic_config is None:
+            semantic_config = CONFIG_MAPPING["hubert"]()
 
-        if semantic_model_config is None:
-            self.semantic_model_config = HubertConfig()
-        elif isinstance(semantic_model_config, dict):
-            if "_name_or_path" in semantic_model_config:
-                # If the config is a path, load it using AutoConfig
-                self.semantic_model_config = AutoConfig.from_pretrained(semantic_model_config["_name_or_path"])
-            else:
-                # assume HubertConfig as probably created from scratch
-                logger.warning(
-                    "Could not determine semantic model type from config architecture. Defaulting to `HubertConfig`."
-                )
-                self.semantic_model_config = HubertConfig(**semantic_model_config)
-        elif isinstance(semantic_model_config, WavLMConfig) or isinstance(semantic_model_config, HubertConfig):
-            self.semantic_model_config = semantic_model_config
-        else:
-            raise ValueError(
-                f"semantic_model_config must be a dict, HubertConfig, or WavLMConfig instance, but got {type(semantic_model_config)}"
-            )
+        self.semantic_config = semantic_config
 
-        if target_bandwidths is None:
-            target_bandwidths = [0.5, 1, 1.5, 2, 4]
+        self.acoustic_hidden_size = acoustic_hidden_size
+        self.encoder_hidden_size = encoder_hidden_size
+        self.downsampling_ratios = downsampling_ratios
+        self.n_codebooks = n_codebooks
 
-        self.target_bandwidths = target_bandwidths
-        self.sample_rate = sample_rate
-        self.kernel_size = kernel_size
-        self.channel_ratios = channel_ratios
         self.strides = strides
+        self.channel_ratios = channel_ratios
+        self.kernel_size = kernel_size
         self.block_dilations = block_dilations
         self.unit_kernel_size = unit_kernel_size
+
+        self.decoder_hidden_size = decoder_hidden_size
+        self.target_bandwidths = target_bandwidths
+        self.sample_rate = sample_rate
+        self.semantic_sample_rate = semantic_sample_rate
         self.codebook_size = codebook_size
-        self.initializer_range = initializer_range
-        if codebook_dim is None:
-            codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
+        self.num_quantizers = num_quantizers
         self.codebook_dim = codebook_dim
+        self.initializer_range = initializer_range
+        self.pad = pad
+        self.upsampling_ratios = upsampling_ratios
 
         super().__init__(**kwargs)
 
     @property
     def frame_rate(self) -> int:
-        return math.ceil(self.sample_rate / self.hop_length)
-
-    @property
-    def semantic_hidden_size(self) -> int:
-        return self.semantic_model_config.hidden_size
+        return math.ceil(self.sample_rate / np.prod(self.upsampling_ratios))
 
     @property
     def hop_length(self) -> int:
-        return int(np.prod(self.acoustic_model_config.downsampling_ratios))
+        return int(np.prod(self.downsampling_ratios))
 
     @property
-    def codebook_nbits(self) -> int:
-        return math.ceil(math.log2(self.codebook_size))
+    def semantic_hidden_size(self) -> int:
+        return self.semantic_config.hidden_size
 
     @property
     def hidden_size(self) -> int:
-        return self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
+        return self.acoustic_hidden_size + self.semantic_hidden_size
 
     @property
-    def num_quantizers(self) -> int:
-        return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * self.codebook_nbits))
+    def semantic_downsample_factor(self) -> int:
+        return int(
+            self.hop_length / (self.sample_rate / self.semantic_sample_rate) / self.downsample_factor
+        )
 
 
 __all__ = ["XcodecConfig"]
