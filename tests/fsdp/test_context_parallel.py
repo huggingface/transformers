@@ -40,7 +40,7 @@ if is_torch_available():
     )
 
 
-class TestTrainerContextParallelTorch(TestCasePlus):
+class TestContextParallel(TestCasePlus):
     """Test Trainer with Torch context parallelism enabled via accelerate's ParallelismConfig."""
 
     @require_torch_multi_accelerator
