@@ -3901,7 +3901,7 @@ class Trainer:
 
     def _deepspeed_cp_compute_loss(self, model, inputs, return_outputs, pc):
         """
-        How the loss is computed by Trainer under context parallelism scenario with cp_backend==deepspeed and cp>1. By default, all models return the loss in the first element.
+        How the loss is computed by Trainer under context parallelism scenario with cp_backend==deepspeed and cp_size>1. By default, all models return the loss in the first element.
 
         Args:
             model (`nn.Module`):
