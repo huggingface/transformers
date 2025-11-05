@@ -2630,7 +2630,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if hasattr(output_embeddings, k):
                     output_embeddings.load_state_dict({k: v.data})
 
-        output_embeddings.requires_grad = input_embeddings.requires_grad
         # Passing hooks over to the embeddings if needed
         # (currently limited to tensor parallel hooks and flags only)
         if hasattr(input_embeddings, "_is_hooked") and getattr(input_embeddings, "_hf_tp_plan", None):
