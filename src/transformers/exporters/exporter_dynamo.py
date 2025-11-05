@@ -17,7 +17,7 @@ import copy
 import inspect
 from typing import TYPE_CHECKING
 
-from ..cache_utils import DynamicCache
+from ..cache_utils import DynamicCache, EncoderDecoderCache
 from ..generation.utils import GenerationMixin
 from ..utils import logging
 from ..utils.export_config import DynamoConfig
@@ -75,26 +75,14 @@ class DynamoExporter(HfExporter):
             isinstance(model, GenerationMixin)
             and getattr(model.config, "use_cache", False)
             and "past_key_values" in inspect.signature(model.forward).parameters
-            and "past_key_values" not in sample_inputs
         ):
-            logger.info(
-                f"{self.__class__.__name__} detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
-                "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
-                "You can also provide past_key_values in sample_inputs to avoid this step."
-            )
-
-            dummy_outputs = model(**copy.deepcopy(sample_inputs))
-            if hasattr(dummy_outputs, "past_key_values"):
-                sample_inputs["past_key_values"] = dummy_outputs.past_key_values
-                if isinstance(sample_inputs["past_key_values"], DynamicCache):
-                    if "input_ids" in sample_inputs and "attention_mask" in sample_inputs:
-                        seq_length = sample_inputs["input_ids"].shape[1]
-                        past_length = sample_inputs["past_key_values"].get_seq_length()
-                        sample_inputs["attention_mask"] = torch.ones(
-                            (sample_inputs["attention_mask"].shape[0], past_length + seq_length),
-                            device=sample_inputs["attention_mask"].device,
-                            dtype=sample_inputs["attention_mask"].dtype,
-                        )
+            if "past_key_values" not in sample_inputs:
+                logger.info(
+                    f"{self.__class__.__name__} detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
+                    "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
+                    "You can also provide past_key_values in sample_inputs to avoid this step."
+                )
+                self.prepare_cache_inputs_for_export(model, sample_inputs)
 
         dynamic_shapes = self.export_config.dynamic_shapes
         if self.export_config.dynamic and dynamic_shapes is None:
@@ -113,3 +101,27 @@ class DynamoExporter(HfExporter):
         model.exported_model = exported_program
 
         return exported_program
+
+    @staticmethod
+    def prepare_cache_inputs_for_export(model: "PreTrainedModel", sample_inputs: dict):
+        with torch.no_grad():
+            dummy_outputs = model(**copy.deepcopy(sample_inputs))
+
+        if hasattr(dummy_outputs, "past_key_values"):
+            sample_inputs["past_key_values"] = dummy_outputs.past_key_values
+
+            if isinstance(sample_inputs["past_key_values"], DynamicCache) and model.config.model_type not in {
+                "qwen2_vl",
+                "qwen2_5_vl",
+            }:
+                seq_length = sample_inputs["input_ids"].shape[1]
+                past_length = sample_inputs["past_key_values"].get_seq_length()
+                sample_inputs["attention_mask"] = torch.ones(
+                    (sample_inputs["input_ids"].shape[0], past_length + seq_length),
+                    device=model.device,
+                    dtype=torch.long,
+                )
+            elif isinstance(
+                sample_inputs["past_key_values"], EncoderDecoderCache
+            ) and model.config.model_type.startswith("musicgen"):
+                del sample_inputs["past_key_values"]

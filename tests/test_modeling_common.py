@@ -3473,32 +3473,41 @@ class ModelTesterMixin:
                 return is_tested
             return is_tested
 
-        default_config, default_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs_dict = inputs_dict or default_inputs_dict
-        config = config or default_config
-
         for model_class in self.all_model_classes:
-            if issubclass(model_class, GenerationMixin):
-                continue  # TODO: enable later, skipping generation models for now
-
             if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-                # some model classes define this method in the model_tester instead of _prepare_for_class
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+            else:
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+
+            if issubclass(model_class, GenerationMixin) and getattr(config, "is_encoder_decoder", False):
+                # TODO: enable later, skipping generative encoder-decoder models for now
+                self.skipTest("Skipping Generative Encoder-Decoder models as they need to be exported separately")
 
             with self.subTest(model_class.__name__):
                 model = model_class(config).eval().to(torch_device)
-                sample_inputs = self._prepare_for_class(copy.deepcopy(inputs_dict), model_class)
+
+                if (
+                    isinstance(model, GenerationMixin)
+                    and getattr(model.config, "use_cache", False)
+                    and "past_key_values" in inspect.signature(model.forward).parameters
+                ):
+                    # Only needed to get the cache and run the eager inference with it
+                    DynamoExporter.prepare_cache_inputs_for_export(model, inputs_dict)
 
                 with torch.no_grad():
                     set_seed(1234)
-                    eager_outputs = model(**sample_inputs)
+                    # Running the eager inference before the export to catch model/inputs issues, also sometimes after the export,
+                    # the model used for export will return FakeTensors instead of real ones (torch cuda/inductor issue)
+                    # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
+                    eager_outputs = model(**copy.deepcopy(inputs_dict))
 
-                exporter = DynamoExporter(export_config=DynamoConfig(sample_inputs=sample_inputs))
+                exporter = DynamoExporter(export_config=DynamoConfig(sample_inputs=copy.deepcopy(inputs_dict)))
 
                 try:
                     exported_program = exporter.export(model)
                 except torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode:
-                    continue  # TODO: inspect the modeling (usually this happen in very complicated modeling)
+                    continue  # TODO: inspect the modeling (usually this happen in very complicated ones)
                 except torch._subclasses.fake_tensor.UnsupportedOperatorException:
                     continue  # This is an issue that only happens when exporting on cuda
                 except torch._dynamo.exc.BackendCompilerFailed:
@@ -3513,7 +3522,7 @@ class ModelTesterMixin:
 
                 with torch.no_grad():
                     set_seed(1234)
-                    exported_outputs = exported_program.module().forward(**copy.deepcopy(sample_inputs))
+                    exported_outputs = exported_program.module().forward(**copy.deepcopy(inputs_dict))
 
                 # Check if outputs are close:
                 # is_tested is a boolean flag indicating if we compare any outputs,
