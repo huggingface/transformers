@@ -372,13 +372,8 @@ else:
     _import_structure["data.datasets"] = [
         "GlueDataset",
         "GlueDataTrainingArguments",
-        "LineByLineTextDataset",
-        "LineByLineWithRefDataset",
-        "LineByLineWithSOPTextDataset",
         "SquadDataset",
         "SquadDataTrainingArguments",
-        "TextDataset",
-        "TextDatasetForNextSentencePrediction",
     ]
     _import_structure["generation"].extend(
         [
@@ -524,13 +519,8 @@ if TYPE_CHECKING:
     from .data.data_collator import default_data_collator as default_data_collator
     from .data.datasets import GlueDataset as GlueDataset
     from .data.datasets import GlueDataTrainingArguments as GlueDataTrainingArguments
-    from .data.datasets import LineByLineTextDataset as LineByLineTextDataset
-    from .data.datasets import LineByLineWithRefDataset as LineByLineWithRefDataset
-    from .data.datasets import LineByLineWithSOPTextDataset as LineByLineWithSOPTextDataset
     from .data.datasets import SquadDataset as SquadDataset
     from .data.datasets import SquadDataTrainingArguments as SquadDataTrainingArguments
-    from .data.datasets import TextDataset as TextDataset
-    from .data.datasets import TextDatasetForNextSentencePrediction as TextDatasetForNextSentencePrediction
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
     # Feature Extractor
