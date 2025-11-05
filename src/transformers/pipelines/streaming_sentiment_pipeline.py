@@ -1,1 +1,123 @@
-"""\nStreamingSentimentPipeline: Core Implementation\n\nA comprehensive streaming sentiment analysis pipeline that extends the transformers\nPipeline API with asynchronous data ingestion, event-driven architecture, and\nprotocol abstraction layers for real-time text processing.\n\nThis module provides the core StreamingSentimentPipeline class along with protocol\nabstractions, configuration management, event handling, and integration with the\nexisting transformers pipeline ecosystem.\n"""\n\nimport asyncio\nimport logging\nimport time\nimport uuid\nimport weakref\nfrom abc import ABC, abstractmethod\nfrom collections import deque, defaultdict\nfrom dataclasses import dataclass, field, asdict\nfrom datetime import datetime, timezone\nfrom enum import Enum\nfrom typing import Any, Dict, List, Optional, Union, Callable, AsyncIterator, Awaitable, Tuple, Set\nfrom concurrent.futures import ThreadPoolExecutor\nimport threading\nimport json\nimport queue\nimport heapq\nfrom contextlib import asynccontextmanager\n\n# Try to import transformers components\ntry:\n    from transformers import pipeline, Pipeline\n    from transformers.pipelines import TextClassificationPipeline\n    from transformers import AutoTokenizer, AutoConfig\n    TRANSFORMERS_AVAILABLE = True\nexcept ImportError:\n    TRANSFORMERS_AVAILABLE = False\n    logging.warning(\"Transformers library not available. Running in standalone mode.\")\n    # Mock classes for standalone mode\n    class Pipeline:\n        def __init__(self, *args, **kwargs): pass\n        def __call__(self, *args, **kwargs): return []\n    \n    class TextClassificationPipeline:\n        def __init__(self, *args, **kwargs): pass\n        def __call__(self, *args, **kwargs): return []\n\n\n# =============================================================================\n# Core Data Structures and Enums\n# =============================================================================\n\nclass FlushReason(Enum):\n    \"\"\"Reasons for flushing buffered data.\"\"\"\n    MANUAL = \"manual\"\n    TIMEOUT = \"timeout\"\n    BACKPRESSURE_ACK = \"backpressure_ack\"\n    SCHEDULED = \"scheduled\"\n    BATCH_SIZE = \"batch_size\"\n    SHUTDOWN = \"shutdown\"\n\n\nclass OrderingMode(Enum):\n    \"\"\"Ordering guarantees for processing.\"\"\"\n    BEST_EFFORT = \"best_effort\"\n    STRICT = \"strict\"\n\n\nclass DropPolicy(Enum):\n    \"\"\"Buffer overflow handling policies.\"\"\"\n    NONE = \"none\"\n    HEAD = \"head\"\n    TAIL = \"tail\"\n\n\nclass AggregationStrategy(Enum):\n    \"\"\"Text aggregation strategies.\"\"\"\n    TIME_AND_COUNT = \"time_and_count\"\n    TIME_ONLY = \"time_only\"\n    COUNT_ONLY = \"count_only\"\n\n\nclass RetryPolicy(Enum):\n    \"\"\"Retry backoff strategies.\"\"\"\n    EXPONENTIAL_JITTER = \"exponential_jitter\"\n    FIXED_DELAY = \"fixed_delay\"\n    EXPONENTIAL_DECORRELATED = \"exponential_decorrelated\"\n    NO_RETRY = \"no_retry\"\n\n\nclass CircuitBreakerPolicy(Enum):\n    \"\"\"Circuit breaker states and policies.\"\"\"\n    OFF = \"off\"\n    ON = \"on\"\n\n\nclass BackpressurePolicy(Enum):\n    \"\"\"Backpressure handling strategies.\"\"\"\n    ACK_BASED = \"ack_based\"\n    SIZE_BASED = \"size_based\"\n\n\nclass ErrorCategory(Enum):\n    \"\"\"Error categories for classification.\"\"\"\n    CLIENT = \"client\"\n    MODEL = \"model\"\n    SYSTEM = \"system\"\n    TRANSPORT = \"transport\"\n\n\nclass PipelineState(Enum):\n    \"\"\"Runtime pipeline states.\"\"\"\n    INITIALIZED = \"initialized\"\n    RUNNING = \"running\"\n    PAUSED = \"paused\"\n    STOPPING = \"stopping\"\n    STOPPED = \"stopped\"\n    ERROR = \"error\"\n\n\n# Rest of the file content continues with the same structure...\n# [Truncated for brevity - use full file content from code/streaming_sentiment_pipeline.py]
+"""StreamingSentimentPipeline: Core Implementation
+
+A comprehensive streaming sentiment analysis pipeline that extends the transformers
+Pipeline API with asynchronous data ingestion, event-driven architecture, and
+protocol abstraction layers for real-time text processing.
+
+This module provides the core StreamingSentimentPipeline class along with protocol
+abstractions, configuration management, event handling, and integration with the
+existing transformers pipeline ecosystem.
+"""
+
+import asyncio
+import logging
+import time
+import uuid
+import weakref
+from abc import ABC, abstractmethod
+from collections import deque, defaultdict
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union, Callable, AsyncIterator, Awaitable, Tuple, Set
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import json
+import queue
+import heapq
+from contextlib import asynccontextmanager
+
+# Try to import transformers components
+try:
+    from transformers import pipeline, Pipeline
+    from transformers.pipelines import TextClassificationPipeline
+    from transformers import AutoTokenizer, AutoConfig
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
+    logging.warning("Transformers library not available. Running in standalone mode.")
+    # Mock classes for standalone mode
+    class Pipeline:
+        def __init__(self, *args, **kwargs): pass
+        def __call__(self, *args, **kwargs): return []
+    
+    class TextClassificationPipeline:
+        def __init__(self, *args, **kwargs): pass
+        def __call__(self, *args, **kwargs): return []
+
+
+# =============================================================================
+# Core Data Structures and Enums
+# =============================================================================
+
+class FlushReason(Enum):
+    """Reasons for flushing buffered data."""
+    MANUAL = "manual"
+    TIMEOUT = "timeout"
+    BACKPRESSURE_ACK = "backpressure_ack"
+    SCHEDULED = "scheduled"
+    BATCH_SIZE = "batch_size"
+    SHUTDOWN = "shutdown"
+
+
+class OrderingMode(Enum):
+    """Ordering guarantees for processing."""
+    BEST_EFFORT = "best_effort"
+    STRICT = "strict"
+
+
+class DropPolicy(Enum):
+    """Buffer overflow handling policies."""
+    NONE = "none"
+    HEAD = "head"
+    TAIL = "tail"
+
+
+class AggregationStrategy(Enum):
+    """Text aggregation strategies."""
+    TIME_AND_COUNT = "time_and_count"
+    TIME_ONLY = "time_only"
+    COUNT_ONLY = "count_only"
+
+
+class RetryPolicy(Enum):
+    """Retry backoff strategies."""
+    EXPONENTIAL_JITTER = "exponential_jitter"
+    FIXED_DELAY = "fixed_delay"
+    EXPONENTIAL_DECORRELATED = "exponential_decorrelated"
+    NO_RETRY = "no_retry"
+
+
+class CircuitBreakerPolicy(Enum):
+    """Circuit breaker states and policies."""
+    OFF = "off"
+    ON = "on"
+
+
+class BackpressurePolicy(Enum):
+    """Backpressure handling strategies."""
+    ACK_BASED = "ack_based"
+    SIZE_BASED = "size_based"
+
+
+class ErrorCategory(Enum):
+    """Error categories for classification."""
+    CLIENT = "client"
+    MODEL = "model"
+    SYSTEM = "system"
+    TRANSPORT = "transport"
+
+
+class PipelineState(Enum):
+    """Runtime pipeline states."""
+    INITIALIZED = "initialized"
+    RUNNING = "running"
+    PAUSED = "paused"
+    STOPPING = "stopping"
+    STOPPED = "stopped"
+    ERROR = "error"
+
+
+# =============================================================================
+# Data Models
+# =============================================================================
