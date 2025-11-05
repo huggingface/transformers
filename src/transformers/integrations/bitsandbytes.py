@@ -1,5 +1,6 @@
 import inspect
 from inspect import signature
+from typing import Optional
 
 from ..utils import (
     get_available_devices,
@@ -26,7 +27,16 @@ if is_accelerate_available():
 
 logger = logging.get_logger(__name__)
 
+from ..core_model_loading import ConversionOps
 
+class Bnb4bitQuantize(ConversionOps):
+    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, **kwargs) -> dict[str, torch.Tensor]:
+        target_key, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+        old_value = model.get_parameter_or_buffer(target_key)
+        new_value = bnb.nn.Params4bit(value, **old_value.__dict__).to(value.device)
+        return {target_key : new_value}
+                    
 def _replace_with_bnb_linear(
     model,
     modules_to_not_convert=None,

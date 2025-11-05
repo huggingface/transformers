@@ -4733,8 +4733,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for key in self.state_dict():
             # If it's part of the keys that will be loaded, mark it as already initialized
             if key not in missing_keys:
-                param_or_buffer = self.get_parameter_or_buffer(key)
-                param_or_buffer._is_hf_initialized = True
+                # some quantization methods save in the state_dict tensors that are not stored as buffer or parameters
+                try:
+                    param_or_buffer = self.get_parameter_or_buffer(key)
+                    param_or_buffer._is_hf_initialized = True
+                except AttributeError as e:
+                    if not is_quantized:
+                        raise e
 
         def set_is_initialized_for_modules(module):
             # A module is already initialized if and only if all its children are also already initialized, and all

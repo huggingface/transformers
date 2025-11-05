@@ -157,7 +157,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         ]
 
         missing, unexpected, mismatch, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, quantizer=None
+            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
         )
 
         self.assertEqual(missing, set())

@@ -417,8 +417,12 @@ class HfQuantizer(ABC):
                     parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["module_name"](
                         model.config.get_text_config()
                     )
-
-
+    
+    def get_quantize_ops(self):
+        raise NotImplementedError(
+            f"{self.quantization_config.quant_method} is not available yet and will be supported soon."
+        )
+        
 class SequentialLlama4TextExperts(ModuleList):
     """
     A module that implements a compressed version of a list of expert modules.

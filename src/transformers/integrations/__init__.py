@@ -36,6 +36,7 @@ _import_structure = {
         "get_keys_to_not_convert",
         "replace_with_bnb_linear",
         "validate_bnb_backend_availability",
+        "Bnb4bitQuantize",
     ],
     "deepspeed": [
         "HfDeepSpeedConfig",
@@ -51,7 +52,7 @@ _import_structure = {
     ],
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
-    "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
+    "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear", "Fp8Quantize"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
     "ggml": [
         "GGUF_CONFIG_MAPPING",
@@ -181,6 +182,7 @@ if TYPE_CHECKING:
         get_keys_to_not_convert,
         replace_with_bnb_linear,
         validate_bnb_backend_availability,
+        Bnb4bitQuantize,
     )
     from .deepspeed import (
         HfDeepSpeedConfig,
@@ -196,7 +198,7 @@ if TYPE_CHECKING:
     )
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
-    from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
+    from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear, Fp8Quantize
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
     from .ggml import (
         GGUF_CONFIG_MAPPING,

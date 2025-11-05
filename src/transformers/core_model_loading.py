@@ -357,11 +357,17 @@ def set_param_for_module(
     missing_keys: MutableSet[str],
     misc: MutableMapping[str, Any],
     distributed_operation: Optional[TensorParallelLayer],
+    hf_quantizer,
 ):
     with log_to_misc(layer_name, misc, layer_name):
         module_path, _, param_name = layer_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
-        param_value = param_value[0] if isinstance(param_value, list) else param_value[...]
+        if isinstance(param_value, list):
+            param_value = param_value[0]
+        elif isinstance(param_value, torch.nn.Parameter):
+            pass
+        else:
+            param_value = param_value[...]
         ref = meta_model_state_dict.get(layer_name, empty_param)
         use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
         if not isinstance(param_value, torch.nn.Parameter):
@@ -395,7 +401,7 @@ def convert_and_load_state_dict_in_model(
     state_dict,
     weight_mapping,
     tp_plan,
-    quantizer,
+    hf_quantizer,
     dtype=None,
     device_map=None,
     dtype_plan=None,
@@ -460,14 +466,9 @@ def convert_and_load_state_dict_in_model(
             if empty_param is None:
                 unexpected_keys.add(t)
                 continue
-
-            if quantizer is not None and quantizer.param_needs_quantization(model, t):
-                if quantizer.__class__.__name__ == "FineGrainedFP8HfQuantizer":
-                    from .integrations.finegrained_fp8 import Fp8Quantize
-
-                    converter.quantization_operation = Fp8Quantize()  # TODO support other methods
-                else:
-                    raise ValueError("This quantization method is gonna be supported SOOOON")
+            
+            if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, t):
+                converter.quantization_operation = hf_quantizer.get_quantize_ops()
             else:
                 _dtype = dtype
                 matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
@@ -532,7 +533,7 @@ def convert_and_load_state_dict_in_model(
                                 with log_to_misc(layer_name, misc, op=op):
                                     realized_value.update(
                                         op.convert(
-                                            {k: realized_value.pop(k)}, quant_config=quantizer.quantization_config
+                                            {k: realized_value.pop(k)}, quant_config=hf_quantizer.quantization_config, model=model
                                         )
                                     )
 
@@ -549,6 +550,7 @@ def convert_and_load_state_dict_in_model(
                                 missing_keys,
                                 misc,
                                 converter.distributed_operation,
+                                hf_quantizer
                             )
                 except SkipLayer:
                     continue
