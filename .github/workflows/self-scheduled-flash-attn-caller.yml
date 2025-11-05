@@ -51,7 +51,7 @@ jobs:
     with:
       job: run_models_gpu
       slack_report_channel: "#transformers-ci-flash-attn"
-      docker: huggingface/transformers-all-latest-gpu
+      docker: huggingface/transformers-all-latest-gpu:flash-attn
       ci_event: Daily CI
       runner_type: "a10"
       report_repo_id: hf-internal-testing/transformers_flash_attn_ci

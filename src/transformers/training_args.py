@@ -885,6 +885,12 @@ class TrainingArguments:
             )
         },
     )
+    logging_dir: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Deprecated and will be removed in v5.2. Set env var `TENSORBOARD_LOGGING_DIR` instead. TensorBoard log directory."
+        },
+    )
     logging_strategy: Union[IntervalStrategy, str] = field(
         default="steps",
         metadata={"help": "The logging strategy to use."},
@@ -1694,6 +1700,11 @@ class TrainingArguments:
 
         if isinstance(self.include_num_input_tokens_seen, bool):
             self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
+
+        if self.logging_dir is not None:
+            logger.warning(
+                "`logging_dir` is deprecated and will be removed in v5.2. Please set `TENSORBOARD_LOGGING_DIR` instead."
+            )
 
     def __str__(self):
         self_as_dict = asdict(self)
