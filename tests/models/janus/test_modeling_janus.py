@@ -396,6 +396,10 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    @unittest.skip("Janus VQ module has no gradient checkpointing layers")
+    def test_gradient_checkpointing_enable_disable(self):
+        pass
+
 
 class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):

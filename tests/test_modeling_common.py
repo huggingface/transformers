@@ -830,14 +830,9 @@ class ModelTesterMixin:
             self.assertFalse(model.is_gradient_checkpointing)
 
             # Gradient checkpointing is implemented via GradientCheckpointingLayer, if none is present this is likely
-            # an implementation issue. Note we exclude janus and clvp for now since they are still not using
+            # an implementation issue. Note we exclude clvp for now since they are still not using
             # GradientCheckpointingLayer.
-            if config.model_type not in [
-                "janus_vqgan",
-                "clvp",
-                "clvp_encoder",
-                "clvp_decoder",
-            ]:
+            if config.model_type not in ["clvp", "clvp_decoder"]:
                 self.assertTrue([m for m in model.modules() if isinstance(m, GradientCheckpointingLayer)])
 
             # check enable works
@@ -1202,28 +1197,20 @@ class ModelTesterMixin:
                 # now enable gradient checkpointing and compare the gradients
                 model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
-                # CLVP is not implementing GradientCheckpointingLayers and the change is non-trivial, therefore
-                # we're ignoring this for now and don't check if checkpointed forward is called in CLVP.
-                if config.model_type in ["clvp"]:
+                checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
+
+                optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+                with unittest.mock.patch.object(
+                    checkpointing_layer, "forward", wraps=checkpointing_layer.forward
+                ) as forward_mock:
                     torch.manual_seed(0)
                     loss = model(**inputs).loss
                     loss.backward()
                     optimizer.step()
-                else:
-                    checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
 
-                    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-                    with unittest.mock.patch.object(
-                        checkpointing_layer, "forward", wraps=checkpointing_layer.forward
-                    ) as forward_mock:
-                        torch.manual_seed(0)
-                        loss = model(**inputs).loss
-                        loss.backward()
-                        optimizer.step()
-
-                        # test that gradient checkpointing is active as it would call the gradient checkpointing layer's
-                        # forward more than once.
-                        self.assertGreater(forward_mock.call_count, 1)
+                    # test that gradient checkpointing is active as it would call the gradient checkpointing layer's
+                    # forward more than once.
+                    self.assertGreater(forward_mock.call_count, 1)
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
