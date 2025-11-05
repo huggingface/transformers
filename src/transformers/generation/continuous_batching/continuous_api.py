@@ -21,7 +21,7 @@ from functools import partial
 from itertools import count
 from math import ceil
 from time import perf_counter
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torch import nn
@@ -446,10 +446,7 @@ class ContinuousBatchProcessor:
         cumulative_seqlens_q = [0]
         logits_indices = []
 
-        if isinstance(self.cumulative_seqlens_k, dict):
-            cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k}
-        else:
-            cumulative_seqlens_k = [0]
+        cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k}
 
         read_index = [[] for _ in range(self.cache.num_groups)]
         write_index = [[] for _ in range(self.cache.num_groups)]
@@ -498,10 +495,7 @@ class ContinuousBatchProcessor:
         self.metrics.record_kv_cache_memory_metrics(self.cache)
 
         if logger.isEnabledFor(logging.DEBUG):
-            if isinstance(self.cumulative_seqlens_k, dict):
-                ck = max(cumulative_seqlens_k[layer_type][-1] for layer_type in self.cumulative_seqlens_k)
-            else:
-                ck = cumulative_seqlens_k[-1]
+            ck = max(cumulative_seqlens_k[layer_type][-1] for layer_type in self.cumulative_seqlens_k)
             logger.debug(
                 f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
                 f"Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. "
@@ -517,7 +511,7 @@ class ContinuousBatchProcessor:
         read_index: list[list[int]],
         write_index: list[list[int]],
         cumulative_seqlens_q: list[int],
-        cumulative_seqlens_k: Union[list[int], dict[str, list[int]]],
+        cumulative_seqlens_k: dict[str, list[int]],
         logits_indices: list[int],
     ) -> None:
         """Builds the actual tensors for the current batch, by modifying the already allocated tensors in place."""
@@ -799,7 +793,6 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return
 
-        self._result_queue = queue.Queue()
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
 
@@ -937,20 +930,6 @@ class ContinuousBatchingManager:
                 request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
 
     @traced
-    def warmup(self, batch_processor: ContinuousBatchProcessor) -> None:
-        stream = torch.cuda.Stream(device=self.model.device)
-        stream.wait_stream(torch.cuda.current_stream())
-        with torch.cuda.stream(stream):
-            # Warmup the model with a dummy forward pass
-            self._generation_step(batch_processor)
-        torch.cuda.current_stream().wait_stream(stream)
-
-        self.graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(self.graph, stream=stream):
-            self._generation_step(batch_processor)
-
-    @traced
-    # @torch.compile
     def _generation_step(self) -> None:
         """Perform a single generation step. This is cuda graphed"""
         self.batch_processor._generation_step(self.model, self.logit_processor, self.do_sample)
