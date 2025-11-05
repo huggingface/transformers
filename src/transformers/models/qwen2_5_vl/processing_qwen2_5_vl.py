@@ -145,6 +145,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
             else:
                 video_metadata = videos_inputs["video_metadata"]
 
+            fps = [metadata.fps if metadata.fps is not None else 24 for metadata in video_metadata]
             if output_kwargs["videos_kwargs"].get("do_sample_frames") is not None:
                 if output_kwargs["videos_kwargs"].get("fps") is not None:
                     fps = output_kwargs["videos_kwargs"]["fps"]
@@ -152,8 +153,6 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
                     fps = [
                         output_kwargs["videos_kwargs"]["num_frames"] / metadata.duration for metadata in video_metadata
                     ]
-            else:
-                fps = [metadata.fps if metadata.fps is not None else 24 for metadata in video_metadata]
 
             if isinstance(fps, (int, float)):
                 second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
