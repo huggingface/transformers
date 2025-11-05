@@ -29,6 +29,7 @@ from ...generation import (
     LogitsProcessor,
     LogitsProcessorList,
 )
+from ...generation.stopping_criteria import EosTokenCriteria, MaxLengthCriteria, StoppingCriteriaList
 from ...utils import logging
 
 
@@ -209,6 +210,30 @@ class AudioBatchIterator:
 
 
 class VibeVoiceGenerationMixin(GenerationMixin):
+    
+    def _get_stopping_criteria(
+        self,
+        *args,
+        **kwargs,
+    ) -> StoppingCriteriaList:
+        criteria = super()._get_stopping_criteria(*args, **kwargs)
+
+        kept_criteria = StoppingCriteriaList()
+        for criterion in criteria:
+            if not isinstance(criterion, MaxLengthCriteria):
+                # Use debug level for EosTokenCriteria since VibeVoice always has eos_token_id configured
+                # and handles EOS detection internally
+                if isinstance(criterion, EosTokenCriteria):
+                    logger.debug(
+                        f"VibeVoice handles EOS tokens internally, ignoring {criterion.__class__.__name__} stopping criteria."
+                    )
+                else:
+                    logger.warning(
+                        f"VibeVoice does not support {criterion.__class__.__name__} stopping criteria, it will be ignored."
+                    )
+            else:
+                kept_criteria.append(criterion)
+        return kept_criteria
 
     def _prepare_generation_config(
         self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs
@@ -250,7 +275,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         self,
         input_ids: torch.LongTensor,
         logits_processor: LogitsProcessorList,
-        stopping_criteria,
+        stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional[Union[AudioStreamer]] = None,
@@ -258,7 +283,14 @@ class VibeVoiceGenerationMixin(GenerationMixin):
     ):
         """
         VibeVoice-specific sampling method that implements diffusion-based speech synthesis.
-        This method overrides the base _sample method to add VibeVoice-specific functionality.
+        This method overrides the base _sample method to add VibeVoice-specific functionality:
+        - Handling VibeVoice-specific parameters
+        - Applying diffusion process with classifier-free guidance (namely with negative generation pass)
+        - Decoding generated tokens into audio chunks
+
+        VibeVoice supports two stopping criteria:
+        1. EOS Token Detection: Generation stops when the model generates the EOS token.
+        2. Maximum Generation Steps: Generation stops when the maximum number of generation steps is reached.
         """
 
         # Initialize cache position and other model_kwargs properly
@@ -348,15 +380,19 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         max_step_per_sample = torch.min(generation_config.max_length - initial_length_per_sample, torch.full_like(initial_length_per_sample, max_steps))
         completion_steps = torch.zeros(batch_size, dtype=torch.long, device=device)  # Track when each sample completed
 
-        # VibeVoice generation loop
-        for step in range(max_steps):
+        # Generation loop
+        this_peer_finished = False
+        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=device)
+        step = 0
+        while self._has_unfinished_sequences(
+            this_peer_finished,
+            synced_gpus,
+            device=input_ids.device,
+        ):
             # Check if audio_streamer has been ended (stopped externally)
             if streamer is not None and hasattr(streamer, 'finished_flags'):
                 if any(streamer.finished_flags):
                     break
-
-            if finished_tags.all():
-                break
 
             # Report progress if monitor_progress callback is provided
             if monitor_progress is not None:
@@ -382,16 +418,16 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # Set logits_to_keep for positive pass
             model_inputs['logits_to_keep'] = 1
-
-            # Forward pass through the model
             outputs = self(
                 **model_inputs, return_dict=True
             )
+
+            # From base class
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=False,
             )
-
-            # Get logits and apply logits processor
+            if synced_gpus and this_peer_finished:
+                continue
             next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
             next_token_scores = logits_processor(input_ids, next_token_logits)
 
@@ -575,6 +611,12 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # Set inputs_embeds for next iteration
             inputs_embeds = next_inputs_embeds
+            
+            # Update unfinished sequences and apply stopping criteria
+            unfinished_sequences = unfinished_sequences & ~finished_tags.long()
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, None)
+            this_peer_finished = unfinished_sequences.max() == 0
+            step += 1
 
         if streamer is not None:
             streamer.end()
