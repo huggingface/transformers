@@ -152,7 +152,8 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         processed_images_grouped = {}
         for shape in grouped_images:
             stacked_images = grouped_images[shape]
-            stacked_trimaps = grouped_trimaps[shape]
+            trimaps_shape = torch.Size([1, *shape[1:]]) # Trimaps have singel channel
+            stacked_trimaps = grouped_trimaps[trimaps_shape]
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
