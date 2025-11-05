@@ -1934,10 +1934,11 @@ class ModelTesterMixin:
                     # Checking the state dicts are correct
                     reloaded_state = model_reloaded.state_dict()
                     for k, v in model_tied.state_dict().items():
-                        self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
-                        torch.testing.assert_close(
-                            v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
-                        )
+                        with self.subTest(f"{model_class.__name__}.{k}"):
+                            self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
+                            torch.testing.assert_close(
+                                v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
+                            )
                     # Checking there was no complain of missing weights
                     self.assertEqual(infos["missing_keys"], set())
 

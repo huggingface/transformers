@@ -638,7 +638,7 @@ def convert_and_load_state_dict_in_model(
     if progress_bar is not None:
         progress_bar.close()
     model.inverse_converters = inverse_converters
-    thread_pool.shutdown(wait=True)
+    thread_pool.shutdown(wait=False)
     return missing_keys, unexpected_keys, mismatch_keys, misc
 
 

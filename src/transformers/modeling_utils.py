@@ -2617,10 +2617,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if isinstance(input_embeddings, nn.Module):
             for k, v in input_embeddings.named_parameters():
                 if hasattr(output_embeddings, k):
-                    setattr(output_embeddings, k, v)
+                    setattr(output_embeddings, k, v) # TODO check tying
         else:
-            output_embeddings.data = input_embeddings.data
-            output_embeddings = input_embeddings
+            output_embeddings =  input_embeddings
+            output_embeddings.data =  input_embeddings.data
+            assert output_embeddings.data.data_ptr() == input_embeddings.data.data_ptr(), "Tying weights failed."
+
 
         # Passing hooks over to the embeddings if needed
         # (currently limited to tensor parallel hooks and flags only)
@@ -3499,7 +3501,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
 
             # Recursively descend to find tied weight keys
-            _tied_weights_keys = _get_tied_weight_keys(self)
+            _tied_weights_keys = set(_get_tied_weight_keys(self))
             error_names = []
             to_delete_names = set()
             for names in shared_ptrs.values():
@@ -4440,7 +4442,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
             end = time.perf_counter()
 
-        for k in all_pointer:  # finally close all opened file pointeres
+        for k in all_pointer:  # finally close all opened file pointers TODO async
             k.__exit__(None, None, None)
 
         new_state_dict = model.state_dict()
@@ -4452,6 +4454,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
         loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
 
+        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
+            missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model
+        )
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
         # Remove tied weights keys and etc
@@ -4460,9 +4465,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(miss_and_mismatched, is_quantized)
-        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
-            missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model
-        )
+
 
         # Post-processing for tensor parallelism
         if device_mesh is not None:
