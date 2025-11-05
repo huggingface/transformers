@@ -426,7 +426,7 @@ class PreTrainedConfig(PushToHubMixin):
         if set(self.rope_parameters.keys()).issubset(ALLOWED_LAYER_TYPES):
             def __getitem__(self, key):
                 if key in self.keys():
-                    return super().__getitem__(key)
+                    return dict.__getitem__(self, key)
                 # Try getting it from the nested key
                 values = set()
                 for subdict in self.values():
@@ -439,7 +439,7 @@ class PreTrainedConfig(PushToHubMixin):
 
             def __contains__(self, key):
                 if key in self.keys():
-                    return super().__contains__(key)
+                    return dict.__contains__(self, key)
                 # Try checking in the nested keys
                 values = set()
                 for subdict in self.values():
@@ -452,7 +452,7 @@ class PreTrainedConfig(PushToHubMixin):
 
             def __setitem__(self, key, value):
                 if key in self.keys():
-                    return super().__setitem__(key, value)
+                    return dict.__setitem__(self, key, value)
                 # If key is not present, we need to update all subdicts
                 for subdict in self.values():
                     if isinstance(subdict, dict):
