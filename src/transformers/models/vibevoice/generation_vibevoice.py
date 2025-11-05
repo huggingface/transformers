@@ -317,7 +317,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         """
 
         if noise_scheduler is None:
-            raise ValueError("`noise_scheduler` must be provided for VibeVoice generation.")
+            raise ValueError("`noise_scheduler` from `diffusers` must be provided for VibeVoice generation.")
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         if kwargs.get('max_new_tokens') is None:
@@ -462,20 +462,23 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 monitor_progress(progress_tensor)
 
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            
+            # Handle prefill vs normal generation inputs
             if is_prefill:
-                # we process the speech inputs only during the first generation step
-                prefill_inputs = {
+                # First step: process speech inputs for conditioning
+                model_inputs.update({
                     "input_features": input_features.to(device=device),
                     "input_features_mask": input_features_mask.to(device),
-                }
+                })
                 is_prefill = False
             else:
-                _ = model_inputs.pop('inputs_embeds', None)
-                prefill_inputs = {'inputs_embeds': inputs_embeds}
+                # Subsequent steps: use embeddings from previous step
+                model_inputs.pop('inputs_embeds', None)  # Remove any existing inputs_embeds
+                model_inputs['inputs_embeds'] = inputs_embeds
 
             # Forward pass through the model
             outputs = self(
-                **model_inputs, **prefill_inputs, logits_to_keep=1, return_dict=True, output_attentions=False, output_hidden_states=False,
+                **model_inputs, logits_to_keep=1, return_dict=True
             )
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=False,
@@ -562,7 +565,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     negative_model_inputs['input_ids'] = None
 
                 negative_outputs = self(
-                    **negative_model_inputs, logits_to_keep=0, return_dict=True, output_attentions=False, output_hidden_states=False,
+                    **negative_model_inputs, logits_to_keep=0, return_dict=True
                 )
                 negative_model_kwargs = self._update_model_kwargs_for_generation(
                     negative_outputs, negative_model_kwargs, is_encoder_decoder=False,
