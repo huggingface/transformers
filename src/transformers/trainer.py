@@ -2163,12 +2163,9 @@ class Trainer:
         """Get the context parallel size"""
         if getattr(self.accelerator, "parallelism_config", None) is None:
             return 1
-        pc = self.accelerator.parallelism_config
-        if pc.cp_backend == "deepspeed":
+        else:
+            pc = self.accelerator.parallelism_config
             return pc.cp_size
-        # XXX: not sure if backend=="torch" needs to return cp_size here as well it wasn't originally (a bug?)
-
-        return 1
 
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
