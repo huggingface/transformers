@@ -5189,6 +5189,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         trainer_baseline.train()
 
+        print("~~~~ Checking saved checkpoints after full training")
+        for item in os.listdir(str(exp_dir_baseline)):
+            print(item)
+
         # 1.2 Get the data order from the last saved checkpoint for the full run
         last_checkpoint_path = get_last_checkpoint(exp_dir_baseline)
         last_ckpt_num = int(os.path.basename(last_checkpoint_path).split("-")[1])  # Must be 15
@@ -5230,6 +5234,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
 
         trainer_resume.train(resume_from_checkpoint=checkpoint_path)
+
+        print("~~~~ Checking saved checkpoints after resuming from ckpt 7")
+        for item in os.listdir(str(exp_dir_resume)):
+            print(item)
 
         # 2.2 Get the data order from the last saved checkpoint for the resumed run
         resumed_state_dict = safetensors.torch.load_file(
