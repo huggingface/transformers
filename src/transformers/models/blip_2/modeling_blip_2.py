@@ -1077,7 +1077,6 @@ class Blip2Model(Blip2PreTrainedModel):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-
     @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(

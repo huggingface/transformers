@@ -1022,8 +1022,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     def get_output_embeddings(self):
         return self.lm_head.out_proj
 
-
-
     def get_encoder(self):
         return self.model.encoder
 

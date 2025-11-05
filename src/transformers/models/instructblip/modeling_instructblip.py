@@ -1155,7 +1155,6 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-
     # Copied from transformers.models.instructblip.modeling_instructblip.InstructBlipModel._preprocess_accelerate
     def _preprocess_accelerate(self):
         r"""

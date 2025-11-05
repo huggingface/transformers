@@ -1562,7 +1562,7 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
             audio = nn.utils.rnn.pad_sequence(audio, batch_first=True, padding_value=0)
             return audio, output_lengths
 
-        return audioxw
+        return audio
 
 
 __all__ = [

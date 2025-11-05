@@ -914,8 +914,6 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-
-
     def get_encoder(self):
         return self.encoder
 

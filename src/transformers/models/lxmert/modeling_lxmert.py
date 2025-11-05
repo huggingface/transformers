@@ -908,7 +908,6 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             }
         self.visual_losses = visual_losses
 
-
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
     ) -> nn.Embedding:

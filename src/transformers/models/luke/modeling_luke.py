@@ -1037,8 +1037,6 @@ class LukeLMHead(nn.Module):
         return x
 
 
-
-
 @auto_docstring(
     custom_intro="""
     The LUKE model with a language modeling head and entity prediction head on top for masked language modeling and

@@ -1062,7 +1062,6 @@ class XmodLMHead(nn.Module):
         return x
 
 
-
 @auto_docstring(
     custom_intro="""
     X-MOD Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled

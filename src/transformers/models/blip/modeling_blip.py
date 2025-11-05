@@ -968,6 +968,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "text_decoder.cls.predictions.decoder.weight": "text_decoder.bert.embeddings.word_embeddings.weight",
     }
+
     def __init__(self, config: BlipConfig):
         super().__init__(config)
 

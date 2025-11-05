@@ -635,6 +635,7 @@ class BertGenerationOnlyLMHead(nn.Module):
         logits = self.decoder(hidden_states)
         return logits
 
+
 @auto_docstring(
     custom_intro="""
     BertGeneration Model with a `language modeling` head on top for CLM fine-tuning.
