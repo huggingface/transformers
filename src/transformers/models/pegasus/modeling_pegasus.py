@@ -1248,7 +1248,7 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
 
 class PegasusForCausalLM(PegasusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.weight": "model.shared.weight",
+        "lm_head.weight": "model.decoder.embed_tokens.weight",
     }
 
     def __init__(self, config):

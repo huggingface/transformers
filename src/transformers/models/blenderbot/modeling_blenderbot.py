@@ -1190,7 +1190,7 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot, facebook/bart-base->facebook/blenderbot-400M-distill
 class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.weight": "model.shared.weight",
+        "lm_head.weight": "model.decoder.embed_tokens.weight",
     }
 
     def __init__(self, config):

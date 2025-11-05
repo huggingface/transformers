@@ -927,11 +927,6 @@ class MBartModel(MBartPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.get_input_embeddings())
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.get_input_embeddings())
-
     @auto_docstring
     def forward(
         self,
@@ -1479,7 +1474,7 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->MBart, facebook/bart-base->facebook/mbart-large-cc25
 class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.weight": "model.shared.weight",
+        "lm_head.weight": "model.decoder.embed_tokens.weight",
     }
 
     def __init__(self, config):
