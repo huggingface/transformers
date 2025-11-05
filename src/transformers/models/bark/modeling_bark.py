@@ -16,7 +16,7 @@
 
 import math
 import warnings
-from typing import Optional, Union, cast
+from typing import Optional, Union
 
 import numpy as np
 import torch

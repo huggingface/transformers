@@ -1608,6 +1608,7 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
         "encoder.embed_tokens.weight": "shared.weight",
         "decoder.embed_tokens.weight": "shared.weight",
     }
+
     def __init__(self, config):
         super().__init__(config)
         self.model_dim = config.d_model
