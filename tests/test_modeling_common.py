@@ -24,6 +24,7 @@ import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from copy import deepcopy
+
 import numpy as np
 import pytest
 from packaging import version
@@ -763,8 +764,8 @@ class ModelTesterMixin:
             for k in keys:
                 p1, p2 = new_state_dict[k], state_dict[k]
                 torch.testing.assert_close(p1, p2)
-            new_params =  dict(new_model.named_parameters())
-            for k,v in list(model.named_parameters()):
+            new_params = dict(new_model.named_parameters())
+            for k, v in list(model.named_parameters()):
                 with self.subTest(k):
                     torch.testing.assert_close(v, new_params[k], msg=f"failed on {k}")
 

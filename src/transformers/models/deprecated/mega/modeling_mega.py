@@ -1638,9 +1638,7 @@ class MegaModel(MegaPreTrainedModel):
     """MEGA Model with a `language modeling` head on top for CLM fine-tuning.""", MEGA_START_DOCSTRING
 )
 class MegaForCausalLM(MegaPreTrainedModel):
-    _tied_weights_keys = {
-        "lm_head.weight":"mega.embedding_layer.word_embeddings.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "mega.embedding_layer.word_embeddings.weight"}
 
     def __init__(self, config: MegaConfig):
         super().__init__(config)

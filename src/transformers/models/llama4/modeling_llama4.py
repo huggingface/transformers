@@ -604,9 +604,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
 class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "language_model"
-    _tied_weights_keys = {
-        "lm_head.weight": "model.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     config: Llama4TextConfig
 

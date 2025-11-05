@@ -1105,9 +1105,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
 
 class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {
-        "lm_head.weight": "model.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config, vision_model=None):
         super().__init__(config)
@@ -1124,7 +1122,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def tie_weights(self, missing_keys = None):
+    def tie_weights(self, missing_keys=None):
         """
         Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of
         IdeficsDecoupledLinear and IdeficsDecoupledEmbedding.

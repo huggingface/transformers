@@ -848,7 +848,7 @@ class MarianDecoder(MarianPreTrainedModel):
 class MarianModel(MarianPreTrainedModel):
     _tied_weights_keys = {
         "decoder.embed_tokens.weight": "shared.weight",
-        "encoder.embed_tokens.weight": "shared.weight"
+        "encoder.embed_tokens.weight": "shared.weight",
     }
 
     def __init__(self, config: MarianConfig):
@@ -1049,9 +1049,7 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
         "decoder.embed_positions.weight",
     ]
     _keys_to_ignore_on_save = ["model.encoder.embed_positions.weight", "model.decoder.embed_positions.weight"]
-    _tied_weights_keys = {
-        "lm_head.weight": "model.decoder.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config: MarianConfig):
         super().__init__(config)

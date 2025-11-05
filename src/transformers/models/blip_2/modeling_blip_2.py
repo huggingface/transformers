@@ -1039,6 +1039,7 @@ class Blip2Model(Blip2PreTrainedModel):
         "language_model.encoder.embed_tokens.weight": "language_model.shared.weight",
         "language_model.lm_head.weight": "language_model.shared.weight",
     }
+
     def __init__(self, config: Blip2Config):
         super().__init__(config)
 

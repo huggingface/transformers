@@ -250,21 +250,6 @@ class SplitModulelist(ConversionOps):
         return result
 
 
-class Cast(ConversionOps):
-    """
-    Casts the tensor to a given dtype
-    """
-
-    def __init__(self, dtype):
-        self.dtype = dtype
-
-    def convert(self, value, *args, **kwargs):
-        out = [
-            [x.to(self.dtype) for x in inner] if isinstance(inner, list) else inner.to(self.dtype) for inner in value
-        ]
-        return out
-
-
 class PermuteForRope(ConversionOps):
     """
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format.
@@ -347,27 +332,27 @@ GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 PER_FILE_LIMIT = 4  # concurrent reads per file
 
 
-def _materialize_copy(x):
+def _materialize_copy(tensor, dtype):
     # PyTorch: this runs in C and releases the GIL; good for threads.
-    return x[...]
+    return tensor[...].to(dtype)
 
 
-def spawn_materialize(thread_pool, _file_semaphore, file_id, t) -> Future:
+def spawn_materialize(thread_pool, _file_semaphore, file_id, tensor, dtype) -> Future:
     sem = _file_semaphore[file_id]
 
     def _job():
         with sem:
-            return _materialize_copy(t)
+            return _materialize_copy(tensor, dtype)
 
     return thread_pool.submit(_job)
 
 
-def spawn_tp_materialize(thread_pool, _file_semaphore, file_id, t, sharding_method, tensor_idx) -> Future:
+def spawn_tp_materialize(thread_pool, _file_semaphore, file_id, tensor, dtype, sharding_method, tensor_idx) -> Future:
     sem = _file_semaphore[file_id]
 
     def _job():
         with sem:
-            return sharding_method.shard_tensor(t, tensor_idx=tensor_idx)[0]
+            return sharding_method.shard_tensor(tensor, param_casting_dtype=dtype, tensor_idx=tensor_idx)[0]
 
     return thread_pool.submit(_job)
 
@@ -479,7 +464,6 @@ def convert_and_load_state_dict_in_model(
     Convert a state dict according to a weight mapping (one WeightConverter per glob pattern),
     collecting tensors per *layer instance* (the concrete indices captured from '*').
     """
-    from .modeling_utils import str_to_torch_dtype
 
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}  # {glob_pattern: plan_obj_or_key}
@@ -547,11 +531,6 @@ def convert_and_load_state_dict_in_model(
                     _dtype = dtype_plan[matched_dtype_pattern]
                 else:
                     _dtype = dtype
-                tensor_dtype = (
-                    tensor.dtype if isinstance(tensor, torch.Tensor) else str_to_torch_dtype[tensor.get_dtype()]
-                )
-                if _dtype != tensor_dtype and _dtype is not None:
-                    converter.operations.append(Cast(_dtype))  # can this be slow as well?
 
         first_target_key = target_key.split("|")[0]
         future = None
@@ -570,12 +549,13 @@ def convert_and_load_state_dict_in_model(
                     _file_semaphore,
                     file_id,
                     tensor,
+                    _dtype,
                     converter.distributed_operation,
                     shard_index,
                 )
 
         if future is None:  # If not TP, async materialize the tensors. TODO handle disk offload?
-            future = spawn_materialize(thread_pool, _file_semaphore, file_id, tensor)
+            future = spawn_materialize(thread_pool, _file_semaphore, file_id, tensor, _dtype)
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(future)
 
     # 2. Actually convert the ckpt
@@ -638,7 +618,7 @@ def convert_and_load_state_dict_in_model(
     if progress_bar is not None:
         progress_bar.close()
     model.inverse_converters = inverse_converters
-    thread_pool.shutdown(wait=False)
+    thread_pool.shutdown(wait=True)
     return missing_keys, unexpected_keys, mismatch_keys, misc
 
 

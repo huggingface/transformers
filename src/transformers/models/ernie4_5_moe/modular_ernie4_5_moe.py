@@ -235,6 +235,7 @@ class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
         "attentions": Ernie4_5_MoeAttention,
     }
     _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
+
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Ernie4_5_MoeStatics):

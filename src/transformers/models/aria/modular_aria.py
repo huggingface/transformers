@@ -1220,9 +1220,7 @@ class AriaTextModel(LlamaModel):
 
 
 class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
-    _tied_weights_keys = {
-        "lm_head.weight": "model.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
@@ -1361,9 +1359,8 @@ class AriaModel(LlavaModel):
     """
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
-    _tied_weights_keys = {
-        "lm_head.weight": "model.language_model.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

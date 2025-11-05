@@ -728,9 +728,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 # TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
 @auto_docstring
 class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {
-        "lm_head.weight": "model.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)

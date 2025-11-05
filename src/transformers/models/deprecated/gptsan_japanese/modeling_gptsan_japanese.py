@@ -853,9 +853,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
 
 
 class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
-    _tied_weights_keys = {
-        "lm_head.weight": "model.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)

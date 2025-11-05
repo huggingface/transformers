@@ -900,7 +900,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
 class PegasusModel(PegasusPreTrainedModel):
     _tied_weights_keys = {
         "decoder.embed_tokens.weight": "shared.weight",
-        "encoder.embed_tokens.weight": "shared.weight"
+        "encoder.embed_tokens.weight": "shared.weight",
     }
 
     def __init__(self, config: PegasusConfig):

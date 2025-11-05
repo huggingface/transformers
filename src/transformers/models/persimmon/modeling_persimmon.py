@@ -685,9 +685,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
 
 
 class PersimmonForCausalLM(PersimmonPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {
-        "lm_head.weight": "model.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with LLAMA->PERSIMMON,Llama->Persimmon
     def __init__(self, config):

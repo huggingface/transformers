@@ -919,7 +919,6 @@ class UMT5Model(UMT5PreTrainedModel):
         "decoder.embed_tokens.weight": "shared.weight",
     }
 
-
     def __init__(self, config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -1622,7 +1621,6 @@ class UMT5ForTokenClassification(UMT5PreTrainedModel):
 
 @auto_docstring
 class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.model_dim = config.d_model

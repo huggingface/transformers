@@ -868,7 +868,7 @@ class ZambaModel(ZambaPreTrainedModel):
                     "shared_transf.input_layernorm.weight",
                     "shared_transf.pre_ff_layernorm.weight",
                 ]
-                self._tied_weights_keys.update({ prefix_name + key: f"layers.0.{key}" for key in tied_keys})
+                self._tied_weights_keys.update({prefix_name + key: f"layers.0.{key}" for key in tied_keys})
                 layers.append(ZambaHybridLayer(block, next(linear_layers), next(mamba_layers)))
             else:
                 layers.append(next(mamba_layers))
@@ -1034,6 +1034,7 @@ class ZambaModel(ZambaPreTrainedModel):
 # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->Zamba, JAMBA->ZAMBA
 class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+
     def __init__(self, config: ZambaConfig):
         super().__init__(config)
         self.model = ZambaModel(config)

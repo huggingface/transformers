@@ -308,7 +308,6 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         super().__init__(config)
         del self._tied_weights_keys
 
-
     @can_return_tuple
     @auto_docstring
     def forward(

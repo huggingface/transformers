@@ -738,10 +738,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
     """
 )
 class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {
-        "lm_head.decoder.weight": "roberta.embedding.weight",
-        "lm_head.decoder.bias": "lm_head.bias"
-    }
+    _tied_weights_keys = {"lm_head.decoder.weight": "roberta.embedding.weight", "lm_head.decoder.bias": "lm_head.bias"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -847,10 +844,7 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
-    _tied_weights_keys = {
-        "lm_head.decoder.weight": "roberta.embedding.weight",
-        "lm_head.decoder.bias": "lm_head.bias"
-    }
+    _tied_weights_keys = {"lm_head.decoder.weight": "roberta.embedding.weight", "lm_head.decoder.bias": "lm_head.bias"}
 
     def __init__(self, config):
         super().__init__(config)

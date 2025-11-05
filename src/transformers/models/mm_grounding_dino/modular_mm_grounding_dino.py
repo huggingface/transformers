@@ -398,10 +398,10 @@ class MMGroundingDinoMLPPredictionHead(GroundingDinoMLPPredictionHead):
 
 class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroundingDinoPreTrainedModel):
     _tied_weights_keys = {
-        "bbox_embed\.[1-9]\d*": [
-            "model\.decoder\.bbox_embed\.[0-9]\d*",
-            "class_embed\.[1-9]\d*",
-            "model\.decoder\.class_embed\.[0-9]\d*"
+        r"bbox_embed\.[1-9]\d*": [
+            r"model\.decoder\.bbox_embed\.[0-9]\d*",
+            r"class_embed\.[1-9]\d*",
+            r"model\.decoder\.class_embed\.[0-9]\d*",
         ]
     }
 

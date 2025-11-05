@@ -1466,7 +1466,6 @@ class MT5EncoderModel(MT5PreTrainedModel):
 class MT5ForSequenceClassification(MT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
 
-
     # Copied from transformers.models.t5.modeling_t5.T5ForSequenceClassification.__init__ with T5->MT5
     def __init__(self, config: MT5Config):
         super().__init__(config)
@@ -1609,8 +1608,6 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
 
 @auto_docstring
 class MT5ForTokenClassification(MT5PreTrainedModel):
-
-
     # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.__init__ with T5->MT5
     def __init__(self, config: MT5Config):
         super().__init__(config)

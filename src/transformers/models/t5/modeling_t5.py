@@ -1559,7 +1559,6 @@ class T5ForSequenceClassification(T5PreTrainedModel):
 
 @auto_docstring
 class T5ForTokenClassification(T5PreTrainedModel):
-
     def __init__(self, config: T5Config):
         super().__init__(config)
         self.num_labels = config.num_labels

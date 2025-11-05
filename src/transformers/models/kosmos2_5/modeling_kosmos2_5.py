@@ -1503,9 +1503,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
 class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5TextConfig
     input_modalities = "text"
-    _tied_weights_keys = {
-        "lm_head.weight": "model.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: Kosmos2_5TextConfig):
         super().__init__(config)

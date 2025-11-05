@@ -922,7 +922,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
 class M2M100Model(M2M100PreTrainedModel):
     _tied_weights_keys = {
         "decoder.embed_tokens.weight": "shared.weight",
-        "encoder.embed_tokens.weight": "shared.weight"
+        "encoder.embed_tokens.weight": "shared.weight",
     }
 
     def __init__(self, config: M2M100Config):
@@ -1048,9 +1048,7 @@ class M2M100Model(M2M100PreTrainedModel):
 )
 class M2M100ForConditionalGeneration(M2M100PreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
-    _tied_weights_keys = {
-        "lm_head.weight": "model.shared.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.shared.weight"}
 
     def __init__(self, config: M2M100Config):
         super().__init__(config)

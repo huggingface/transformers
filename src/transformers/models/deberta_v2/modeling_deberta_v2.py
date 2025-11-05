@@ -905,7 +905,7 @@ class DebertaV2OnlyMLMHead(nn.Module):
 class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",
-        "cls.predictions.decoder.weight": "deberta.embeddings.word_embeddings.weight"
+        "cls.predictions.decoder.weight": "deberta.embeddings.word_embeddings.weight",
     }
     _keys_to_ignore_on_load_unexpected = [r"mask_predictions.*"]
 
