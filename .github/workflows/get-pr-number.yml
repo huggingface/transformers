@@ -15,13 +15,19 @@ jobs:
     steps:
       - name: Get PR number
         shell: bash
+        env:
+          issue_number: ${{ github.event.issue.number }}
+          issue_pull_request: ${{ github.event.issue.pull_request }}
+          pr_number: ${{ github.event.pull_request.number }}
+          pull_request: ${{ github.event.pull_request }}
+          event_number: ${{ github.event.number }}
         run: |
-          if [[ "${{ github.event.issue.number }}" != "" && "${{ github.event.issue.pull_request }}" != "" ]]; then
-            echo "PR_NUMBER=${{ github.event.issue.number }}" >> $GITHUB_ENV
-          elif [[ "${{ github.event.pull_request.number }}" != "" ]]; then
-            echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          elif [[ "${{ github.event.pull_request }}" != "" ]]; then
-            echo "PR_NUMBER=${{ github.event.number }}" >> $GITHUB_ENV
+          if [[ "$issue_number" != "" && "$issue_pull_request" != "" ]]; then
+            echo "PR_NUMBER=$issue_number" >> $GITHUB_ENV
+          elif [[ "$pr_number" != "" ]]; then
+            echo "PR_NUMBER=$pr_number" >> $GITHUB_ENV
+          elif [[ "$pull_request" != "" ]]; then
+            echo "PR_NUMBER=$event_number" >> $GITHUB_ENV
           else
             echo "PR_NUMBER=" >> $GITHUB_ENV
           fi
@@ -29,8 +35,8 @@ jobs:
       - name: Check PR number
         shell: bash
         run: |
-          echo "${{ env.PR_NUMBER }}"
+          echo "$PR_NUMBER"
 
       - name: Set PR number
         id: set_pr_number
-        run: echo "PR_NUMBER=${{ env.PR_NUMBER }}" >> "$GITHUB_OUTPUT"
+        run: echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_OUTPUT"
