@@ -12,17 +12,21 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-10-27.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2025-10-31.*
 
 # LightOnOCR
 
-LightOnOCR is a multimodal model designed for optical character recognition (OCR) tasks. It combines a vision encoder for processing document images with a text decoder for generating text sequences.
 
-The model architecture consists of:
-- **Vision Encoder**: Processes document images into visual embeddings
-- **Text Decoder**: Generates text sequences from the visual embeddings
+**LightOnOCR** is a compact, end-to-end vision–language model for Optical Character Recognition (OCR) and document understanding. It achieves state-of-the-art accuracy in its weight class while being several times faster and cheaper than larger general-purpose VLMs.
 
-You can use LightOnOCR for various document understanding tasks including text extraction, document question answering, and structured information extraction.
+📝 **[Read the full blog post](https://huggingface.co/blog/lightonai/lightonocr/)** | 📓 **[Finetuning notebook](https://colab.research.google.com/drive/1WjbsFJZ4vOAAlKtcCauFLn_evo5UBRNa?usp=sharing)**
+
+**Model Overview**
+
+LightOnOCR combines a Vision Transformer encoder(Pixtral-based) with a lightweight text decoder(Qwen3-based) distilled from high-quality open VLMs. It is optimized for document parsing tasks, producing accurate, layout-aware text extraction from high-resolution pages.
+
+
+
 
 ## LightOnOCRConfig
 
