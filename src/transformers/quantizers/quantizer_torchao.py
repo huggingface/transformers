@@ -254,13 +254,14 @@ class TorchAoHfQuantizer(HfQuantizer):
 
             # Handle FqnToConfig, introduced in torchao 0.15.0+
             if self.quantization_config._get_ao_version() >= version.parse("0.15.0"):
-                from torchao.quantization import FqnToConfig, fqn_matches_fqn_config
+                from torchao.quantization import FqnToConfig
+                from torchao.quantization.quant_api import _fqn_matches_fqn_config
 
                 if isinstance(self.quantization_config.quant_type, FqnToConfig):
                     module_fqn, param_name_fqn = param_name.rsplit(".", 1)
                     if (
-                        fqn_matches_fqn_config(module_fqn, self.quantization_config.quant_type)
-                        or fqn_matches_fqn_config(param_name, self.quantization_config.quant_type)
+                        _fqn_matches_fqn_config(module_fqn, self.quantization_config.quant_type)
+                        or _fqn_matches_fqn_config(param_name, self.quantization_config.quant_type)
                         or (
                             "_default" in self.quantization_config.quant_type.fqn_to_config
                             and isinstance(module, tuple(_QUANTIZABLE))
