@@ -938,7 +938,9 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
                 if output_kwargs["videos_kwargs"].get("fps") is not None:
                     fps = output_kwargs["videos_kwargs"]["fps"]
                 elif output_kwargs["videos_kwargs"].get("num_frames") is not None:
-                    fps = output_kwargs["videos_kwargs"]["num_frames"] / video_metadata.total_num_frames
+                    fps = [
+                        output_kwargs["videos_kwargs"]["num_frames"] / metadata.duration for metadata in video_metadata
+                    ]
             else:
                 fps = [metadata.fps if metadata.fps is not None else 24 for metadata in video_metadata]
 
