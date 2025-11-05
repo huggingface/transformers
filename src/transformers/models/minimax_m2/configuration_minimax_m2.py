@@ -98,8 +98,8 @@ class MiniMaxM2Config(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        rotary_dim (`int`, *optional*, defaults to `None`):
-            The dimension of the rotary embeddings. If not specified, will default to `head_dim`.
+        use_qk_norm (`Optional`, *optional*, defaults to `True`):
+            Whether to use layer normalization on the query and key states.
 
     ```python
     >>> from transformers import MiniMaxM2Model, MiniMaxM2Config
@@ -161,7 +161,6 @@ class MiniMaxM2Config(PreTrainedConfig):
         router_aux_loss_coef: Optional[float] = 0.001,
         router_jitter_noise: Optional[float] = 0.0,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        rotary_dim: Optional[int] = None,
         use_qk_norm: Optional[bool] = True,
         **kwargs,
     ):
@@ -199,12 +198,12 @@ class MiniMaxM2Config(PreTrainedConfig):
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
-        self.rotary_dim = rotary_dim if rotary_dim is not None else head_dim
+        rotary_dim = kwargs.pop("rotary_dim", head_dim)
         self.use_qk_norm = use_qk_norm
         self.partial_rotary_factor = kwargs.pop("partial_rotary_factor", 1.0)
 
         if self.head_dim is not None:
-            self.partial_rotary_factor = self.rotary_dim / self.head_dim
+            self.partial_rotary_factor = rotary_dim / self.head_dim
 
         super().__init__(
             pad_token_id=pad_token_id,
