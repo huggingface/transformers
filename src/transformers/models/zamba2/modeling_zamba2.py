@@ -1418,6 +1418,9 @@ class Zamba2Model(Zamba2PreTrainedModel):
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             if attention_mask.dim() == 2:
+                torch._check(
+                    causal_mask.shape[-1] >= attention_mask.shape[-1], "Causal mask length less than attention mask."
+                )
                 mask_length = attention_mask.shape[-1]
                 padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
                 causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
