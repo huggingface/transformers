@@ -102,8 +102,10 @@ jobs:
         working-directory: /transformers/tests
         run: |
           if [ "${{ inputs.job }}" = "run_models_gpu" ]; then
-            echo "folder_slices=$(python3 ../utils/split_model_tests.py --subdirs '${{ inputs.subdirs }}' --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
-            echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
+            python3 ../utils/split_model_tests.py --subdirs '${{ inputs.subdirs }}' --num_splits ${{ env.NUM_SLICES }} > folder_slices.txt
+            echo "folder_slices=$(cat folder_slices.txt)" >> $GITHUB_OUTPUT
+            python3 -c "import ast; folder_slices = ast.literal_eval(open('folder_slices.txt').read()); open('slice_ids.txt', 'w').write(str(list(range(len(folder_slices)))))"
+            echo "slice_ids=$(cat slice_ids.txt)" >> $GITHUB_OUTPUT
           elif [ "${{ inputs.job }}" = "run_trainer_and_fsdp_gpu" ]; then
             echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
             echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
@@ -336,7 +338,7 @@ jobs:
         working-directory: ${{ inputs.working-directory-prefix }}/
         run: |
           python3 -m pip uninstall -y deepspeed
-          DS_DISABLE_NINJA=1 DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          DS_DISABLE_NINJA=1 DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --no-build-isolation --config-settings="--build-option=build_ext" --config-settings="--build-option=-j8" --no-cache -v --disable-pip-version-check
 
       # To avoid unknown test failures
       - name: Pre build DeepSpeed *again* (for nightly & Past CI)
@@ -346,7 +348,7 @@ jobs:
           python3 -m pip uninstall -y deepspeed
           rm -rf DeepSpeed
           git clone https://github.com/deepspeedai/DeepSpeed && cd DeepSpeed && rm -rf build
-          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install . --no-build-isolation --config-settings="--build-option=build_ext" --config-settings="--build-option=-j8" --no-cache -v --disable-pip-version-check
 
       - name: NVIDIA-SMI
         run: |
@@ -475,6 +477,70 @@ jobs:
           name: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports
 
+  run_kernels_gpu:
+    if: ${{ inputs.job == 'run_kernels_gpu' }}
+    name: Kernel tests
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [aws-g5-4xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
+    container:
+      image: ${{ inputs.docker }}
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
+
+      - name: Reinstall transformers in edit mode
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[testing]
+  
+      - name: Install kernels
+        working-directory: /transformers
+        run: python3 -m pip install -U kernels
+  
+      - name: NVIDIA-SMI
+        run: nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
+            machine_type=single-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+    
+      - name: Run kernel tests on GPU
+        working-directory: /transformers
+        run: |
+          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_kernels_gpu_test_reports tests/kernels/test_kernels.py
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ env.machine_type }}_run_kernels_gpu_test_reports/failures_short.txt
+
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_kernels_gpu_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.machine_type }}_run_kernels_gpu_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_run_kernels_gpu_test_reports
+
   run_extract_warnings:
     # Let's only do this for the job `run_models_gpu` to simplify the (already complex) logic.
     if: ${{ always() && inputs.job == 'run_models_gpu' }}
@@ -527,6 +593,7 @@ jobs:
       run_examples_gpu,
       run_torch_cuda_extensions_gpu,
       run_quantization_torch_gpu,
+      run_kernels_gpu,
       run_extract_warnings
     ]
     if: always() && !cancelled()
