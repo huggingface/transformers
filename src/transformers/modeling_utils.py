@@ -2625,7 +2625,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if isinstance(input_embeddings, nn.Module):
             for k, v in input_embeddings.named_parameters():
                 if hasattr(output_embeddings, k):
-                    setattr(output_embeddings, k, v)  # TODO check tying
+                    output_embeddings.load_state_dict({k: v.data})
         else:
             output_embeddings = input_embeddings
             output_embeddings.data = input_embeddings.data
@@ -4461,6 +4461,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
         loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
 
+        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
+            missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model
+        )
+
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
         # Remove tied weights keys and etc
@@ -4470,9 +4474,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(miss_and_mismatched, is_quantized)
 
-        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
-            missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model
-        )
+
 
         # Post-processing for tensor parallelism
         if device_mesh is not None:
