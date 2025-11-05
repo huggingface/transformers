@@ -1097,7 +1097,7 @@ class WhisperModel(WhisperPreTrainedModel):
 )
 class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedModel):
     base_model_prefix = "model"
-    _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens"}
+    _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
