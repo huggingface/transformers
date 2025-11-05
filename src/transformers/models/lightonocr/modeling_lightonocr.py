@@ -1181,12 +1181,7 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
             **kwargs,
         )
 
-        return BaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        return outputs
 
 
 class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMixin):
@@ -1212,7 +1207,6 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
     def get_decoder(self):
         return self.model.language_model
 
-    @can_return_tuple
     @check_model_inputs()
     @auto_docstring
     def forward(
