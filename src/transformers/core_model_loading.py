@@ -530,6 +530,8 @@ def convert_and_load_state_dict_in_model(
                 matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[matched_dtype_pattern]
+                elif empty_param.dtype != _dtype:
+                    _dtype = empty_param.dtype
 
 
         first_target_key = target_key.split("|")[0]

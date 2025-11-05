@@ -2627,7 +2627,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Tie weights, and add hooks and flags if using TP."""
         if isinstance(input_embeddings, nn.Module):
             for k, v in input_embeddings.named_parameters():
-                setattr(output_embeddings, k, v.data)
+                setattr(output_embeddings, k, v)
 
         # Passing hooks over to the embeddings if needed
         # (currently limited to tensor parallel hooks and flags only)
