@@ -1,4 +1,4 @@
-name: PR slow CI
+name: PR slow CI - Suggestion
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
@@ -59,27 +59,35 @@ jobs:
           fetch-depth: "0"
 
       - name: Write pr_files file
+        env:
+          PR_FILES: ${{ needs.get-pr-info.outputs.PR_FILES }}
         run: |
-          cat > pr_files.txt << 'EOF'
-          ${{ needs.get-pr-info.outputs.PR_FILES }}
+          cat > pr_files.txt << EOF
+          $PR_FILES
           EOF
 
       - name: Write tests_dir file
+        env:
+          tests_dir: ${{ steps.repo_content.outputs.tests_dir }}
         run: |
-          cat > tests_dir.txt << 'EOF'
-          ${{ steps.repo_content.outputs.tests_dir }}
+          cat > tests_dir.txt << EOF
+          $tests_dir
           EOF
 
       - name: Write tests_models_dir file
+        env:
+          tests_models_dir: ${{ steps.repo_content.outputs.tests_models_dir }}
         run: |
-          cat > tests_models_dir.txt << 'EOF'
-          ${{ steps.repo_content.outputs.tests_models_dir }}
+          cat > tests_models_dir.txt << EOF
+          $tests_models_dir
           EOF
 
       - name: Write tests_quantization_dir file
+        env:
+          tests_quantization_dir: ${{ steps.repo_content.outputs.tests_quantization_dir }}
         run: |
-          cat > tests_quantization_dir.txt << 'EOF'
-          ${{ steps.repo_content.outputs.tests_quantization_dir }}
+          cat > tests_quantization_dir.txt << EOF
+          $tests_quantization_dir
           EOF
 
       - name: Run script to get jobs to run

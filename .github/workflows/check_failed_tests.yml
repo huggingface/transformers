@@ -64,13 +64,15 @@ jobs:
       - name: Check file
         id: check_file
         working-directory: /transformers
+        env:
+          job: ${{ inputs.job }}
         run: |
-          if [ -f ci_results_${{ inputs.job }}/new_failures.json ]; then
-            echo "`ci_results_${{ inputs.job }}/new_failures.json` exists, continue ..."
+          if [ -f "ci_results_${job}/new_failures.json" ]; then
+            echo "\`ci_results_${job}/new_failures.json\` exists, continue ..."
             echo "process=true" >> $GITHUB_ENV
             echo "process=true" >> $GITHUB_OUTPUT
           else
-            echo "`ci_results_${{ inputs.job }}/new_failures.json` doesn't exist, abort."
+            echo "\`ci_results_${job}/new_failures.json\` doesn't exist, abort."
             echo "process=false" >> $GITHUB_ENV
             echo "process=false" >> $GITHUB_OUTPUT
           fi
@@ -94,15 +96,18 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
+        env:
+          commit_sha: ${{ inputs.commit_sha || github.sha }}
         run: |
-          git fetch origin ${{ inputs.commit_sha || github.sha }}
-          git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
+          git fetch origin "$commit_sha" && git checkout "$commit_sha"
 
       - name: Get `START_SHA`
         working-directory: /transformers/utils
         if: ${{ env.process == 'true' }}
+        env:
+          commit_sha: ${{ inputs.commit_sha || github.sha }}
         run: |
-          echo "START_SHA=${{ inputs.commit_sha || github.sha }}" >> $GITHUB_ENV
+          echo "START_SHA=$commit_sha" >> $GITHUB_ENV
 
       # This is used if the CI is triggered from a pull request `self-comment-ci.yml` (after security check is verified)
       - name: Extract the base commit on `main` (of the merge commit created by Github) if it is a PR
@@ -130,16 +135,20 @@ jobs:
       - name: Get `END_SHA` from previous CI runs of the same workflow
         working-directory: /transformers/utils
         if: ${{ env.process == 'true' && inputs.pr_number == '' }}
+        env:
+          ACCESS_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
         run: |
-          echo "END_SHA=$(TOKEN=${{ secrets.ACCESS_REPO_INFO_TOKEN }} python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"], workflow_run_id=os.environ["PREV_WORKFLOW_RUN_ID"]); print(commit)')" >> $GITHUB_ENV
+          echo "END_SHA=$(TOKEN="$ACCESS_TOKEN" python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"], workflow_run_id=os.environ["PREV_WORKFLOW_RUN_ID"]); print(commit)')" >> $GITHUB_ENV
 
       # However, for workflow runs triggered by `issue_comment` (for pull requests), we want to check against the
       # parent commit (on `main`) of the `merge_commit` (dynamically created by GitHub). In this case, the goal is to
       # see if a reported failing test is actually ONLY failing on the `merge_commit`.
       - name: Set `END_SHA`
         if: ${{ env.process == 'true' && inputs.pr_number != '' }}
+        env:
+          merge_commit_base_sha: ${{ steps.pr_info.outputs.merge_commit_base_sha }}
         run: |
-          echo "END_SHA=${{ steps.pr_info.outputs.merge_commit_base_sha }}" >> $GITHUB_ENV
+          echo "END_SHA=$merge_commit_base_sha" >> $GITHUB_ENV
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -169,14 +178,20 @@ jobs:
       - name: Check failed tests
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
-        run: python3 utils/check_bad_commit.py --start_commit ${{ env.START_SHA }} --end_commit ${{ env.END_SHA }} --file ci_results_${{ inputs.job }}/new_failures.json --output_file new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
+        env:
+          job: ${{ inputs.job }}
+          run_idx: ${{ matrix.run_idx }}
+        run: python3 utils/check_bad_commit.py --start_commit "$START_SHA" --end_commit "$END_SHA" --file "ci_results_${job}/new_failures.json" --output_file "new_failures_with_bad_commit_${job}_${run_idx}.json"
 
       - name: Show results
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
+        env:
+          job: ${{ inputs.job }}
+          run_idx: ${{ matrix.run_idx }}
         run: |
-          ls -l new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
-          cat new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
+          ls -l "new_failures_with_bad_commit_${job}_${run_idx}.json"
+          cat "new_failures_with_bad_commit_${job}_${run_idx}.json"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -209,23 +224,28 @@ jobs:
 
       - name: Check files
         working-directory: /transformers
+        env:
+          job: ${{ inputs.job }}
         run: |
           ls -la /transformers
-          ls -la /transformers/new_failures_with_bad_commit_${{ inputs.job }}
+          ls -la "/transformers/new_failures_with_bad_commit_${job}"
 
       # Currently, we only run with a single runner by using `run_idx: [1]`. We might try to run with multiple runners
       # to further reduce the false positive caused by flaky tests, which requires further processing to merge reports.
       - name: Merge files
         shell: bash
         working-directory: /transformers
+        env:
+          job: ${{ inputs.job }}
         run: |
-          cp /transformers/new_failures_with_bad_commit_${{ inputs.job }}/new_failures_with_bad_commit_${{ inputs.job }}_1.json new_failures_with_bad_commit.json
+          cp "/transformers/new_failures_with_bad_commit_${job}/new_failures_with_bad_commit_${job}_1.json" new_failures_with_bad_commit.json
 
       - name: Update clone
         working-directory: /transformers
+        env:
+          commit_sha: ${{ inputs.commit_sha || github.sha }}
         run: |
-          git fetch origin ${{ inputs.commit_sha || github.sha }}
-          git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
+          git fetch origin "$commit_sha" && git checkout "$commit_sha"
 
       - name: Process report
         shell: bash
@@ -267,9 +287,12 @@ jobs:
 
       - name: Prepare Slack report title
         working-directory: /transformers
+        env:
+          ci_event: ${{ inputs.ci_event }}
+          job: ${{ inputs.job }}
         run: |
           pip install slack_sdk
-          echo "title=$(python3 -c 'import sys; sys.path.append("utils"); from utils.notification_service import job_to_test_map; ci_event = "${{ inputs.ci_event }}"; job = "${{ inputs.job }}"; test_name = job_to_test_map[job]; title = f"New failed tests of {ci_event}" + ":" + f" {test_name}"; print(title)')" >> $GITHUB_ENV
+          echo "title=$(python3 -c 'import sys; import os; sys.path.append("utils"); from utils.notification_service import job_to_test_map; ci_event = os.environ["ci_event"]; job = os.environ["job"]; test_name = job_to_test_map[job]; title = f"New failed tests of {ci_event}" + ":" + f" {test_name}"; print(title)')" >> $GITHUB_ENV
 
       - name: Send processed report
         if: ${{ !endsWith(env.REPORT_TEXT, '{}') }}
