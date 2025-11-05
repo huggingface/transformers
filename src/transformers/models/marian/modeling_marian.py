@@ -1049,7 +1049,9 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
         "decoder.embed_positions.weight",
     ]
     _keys_to_ignore_on_save = ["model.encoder.embed_positions.weight", "model.decoder.embed_positions.weight"]
-    _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight"
+    }
 
     def __init__(self, config: MarianConfig):
         super().__init__(config)
@@ -1143,30 +1145,6 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings: nn.Embedding):
         self.lm_head = new_embeddings
 
-    def tie_weights(self, missing_keys=None) -> None:
-        """
-        Tie the weights between the input embeddings and the output embeddings.
-        """
-        output_embeddings = self.get_output_embeddings()
-        if output_embeddings is not None and getattr(self.config, "tie_word_embeddings", True):
-            # if embeddings are shared this will return shared embeddings otherwise decoder embed_tokens
-            word_embeddings = self.get_decoder().get_input_embeddings()
-            self._tie_embedding_weights(output_embeddings, word_embeddings)
-
-        if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
-            if hasattr(self, self.base_model_prefix):
-                self = getattr(self, self.base_model_prefix)
-            tied_weights = self._tie_encoder_decoder_weights(
-                self.encoder, self.decoder, self.base_model_prefix, "encoder"
-            )
-            # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
-            # attributed not an instance member, therefore modifying it will modify the entire class
-            # Leading to issues on subsequent calls by different tests or subsequent calls.
-            self._dynamic_tied_weights_keys = tied_weights
-
-        for module in self.modules():
-            if hasattr(module, "_tie_weights"):
-                module._tie_weights()
 
     @auto_docstring
     def forward(
@@ -1297,7 +1275,7 @@ class MarianDecoderWrapper(MarianPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Marian, facebook/bart-base->Helsinki-NLP/opus-mt-fr-en
 class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.weight": "model.shared.weight",
+        "lm_head.weight": "model.decoder.embed_tokens.weight",
     }
 
     def __init__(self, config):
