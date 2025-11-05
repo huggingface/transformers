@@ -172,6 +172,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor", max_patches=1024, patch_size={"height": 8, "width": 8})
+        print("image_processor", image_processor)
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
