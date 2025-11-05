@@ -282,7 +282,7 @@ class DeepseekOcrIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
-        model = AutoModel.from_pretrained(self.model_id, torch_dtype=torch.bfloat16)
+        model = DeepseekOcrForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16)
 
         conversation = [
             {
