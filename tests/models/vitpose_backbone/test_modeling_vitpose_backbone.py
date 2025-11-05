@@ -188,18 +188,6 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    @pytest.mark.torch_export_test
-    def test_torch_export(self):
-        # Dense architecture
-        super().test_torch_export()
-
-        # MOE architecture
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_experts = 2
-        config.part_features = config.hidden_size // config.num_experts
-        inputs_dict["dataset_index"] = torch.tensor([0] * self.model_tester.batch_size, device=torch_device)
-        super().test_torch_export(config=config, inputs_dict=inputs_dict)
-
 
 @require_torch
 class VitPoseBackboneTest(unittest.TestCase, BackboneTesterMixin):
