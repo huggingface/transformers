@@ -487,7 +487,7 @@ def convert_and_load_state_dict_in_model(
             converter = source_to_target[matched_pattern]  # TODO make sure its the ref
             sub_with_extractor = partial(re.sub, _glob_to_regex_src(matched_pattern), string=original_key)
             entry_key = "|".join(converter.target_keys)
-            target_key = list(map(sub_with_extractor, [k.replace("*", "\\1") for k in converter.target_keys]))
+            target_key = "|".join(map(sub_with_extractor, [k.replace("*", "\\1") for k in converter.target_keys]))
             entry: ConversionEntry = by_conversion_pattern.setdefault(entry_key, ConversionEntry(converter))
             converter_key = sub_with_extractor(matched_pattern)
         else:
@@ -496,7 +496,8 @@ def convert_and_load_state_dict_in_model(
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
         new_target_key = []
-        for t in target_key:
+        _dtype = dtype
+        for t in target_key.split("|"):
             # let's correct the prefix if needed
             if loading_base_model_from_task_state_dict:
                 t = t.replace(f"{prefix}.", "")
