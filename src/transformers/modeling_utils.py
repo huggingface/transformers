@@ -4340,9 +4340,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             k.__exit__(None, None, None)
 
         #!!!!!!!!!!!!!!!!!!!!!!! POST PROCESS!!!!!!!!!!!!!!!!!!
-        if model.config.tie_word_embeddings or model.config.tie_encoder_decoder:
-            tied = re.compile("|".join(_get_tied_weight_keys(model)))
-            missing_keys = missing_keys - {k for k in missing_keys if tied.search(k)} # TODO this is really not ideal :)
+        # @Cyrilvallez commenting this saved pretty much all tests
+        # if model.config.tie_word_embeddings or model.config.tie_encoder_decoder:
+        #     tied = re.compile("|".join(_get_tied_weight_keys(model)))
+        #     missing_keys = missing_keys - {k for k in missing_keys if tied.search(k)} # TODO this is really not ideal :)
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
@@ -4355,10 +4356,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
             missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model
         )
-
-        # @Cyrilvallez this fixes test_load_save_without_tied_weights... because we save in a dumb way
-        # tied = re.compile("|".join(_get_tied_weight_keys(model)))
-        # missing_keys = missing_keys - {k for k in missing_keys if tied.search(k)} # TODO this is really not ideal :)
         model.tie_weights()
 
         # Post-processing for tensor parallelism
