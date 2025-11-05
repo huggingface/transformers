@@ -1940,8 +1940,7 @@ class ModelTesterMixin:
                             torch.testing.assert_close(
                                 v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
                             )
-                    # Checking there was no complain of missing weights
-                    self.assertEqual(infos["missing_keys"], set())
+
 
                     # Checking the tensor sharing are correct
                     ptrs = defaultdict(list)
@@ -1957,6 +1956,9 @@ class ModelTesterMixin:
                             1,
                             f"The shared pointers are incorrect, found different pointers for keys {shared_names}",
                         )
+
+                    # Checking there was no complain of missing weights
+                    self.assertEqual(infos["missing_keys"], set())
 
     def test_load_save_without_tied_weights(self):
         for model_class in self.all_model_classes:

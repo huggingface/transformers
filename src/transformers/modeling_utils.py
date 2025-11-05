@@ -2572,8 +2572,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
             if (
                 missing_keys != set()
-                and not re.search(rf"^{target_name}", "\n".join(missing_keys))  # regex for modules
-                and not top_level.config.get_text_config().tie_encoder_decoder
+                and not re.search(rf"{target_name}", "\n".join(missing_keys))  # regex for modules
             ):
                 continue  # `can_use_safetensors` goes against this one
             try:
