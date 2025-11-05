@@ -955,10 +955,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
 
         self.post_init()
 
-    def _tie_weights(self):
-        self.prompt_encoder.shared_embedding.positional_embedding.data = (
-            self.shared_image_embedding.positional_embedding.data
-        )
+
 
     def get_image_wide_positional_embeddings(self) -> torch.Tensor:
         size = self.prompt_encoder.image_embedding_size

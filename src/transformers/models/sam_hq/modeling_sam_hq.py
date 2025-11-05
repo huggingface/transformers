@@ -1254,10 +1254,7 @@ class SamHQModel(SamHQPreTrainedModel):
 
         self.post_init()
 
-    def _tie_weights(self):
-        self.prompt_encoder.shared_embedding.positional_embedding.data = (
-            self.shared_image_embedding.positional_embedding.data
-        )
+
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
