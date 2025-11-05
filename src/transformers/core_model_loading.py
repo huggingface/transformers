@@ -450,7 +450,8 @@ def convert_and_load_state_dict_in_model(
     device_map=None,
     dtype_plan=None,
     device_mesh=None,
-    profile: bool = False,
+    loading_task_model_from_base_state_dict: bool = False,
+    loading_base_model_from_task_state_dict: bool = False,
 ):
     """
     Convert a state dict according to a weight mapping (one WeightConverter per glob pattern),
@@ -478,7 +479,6 @@ def convert_and_load_state_dict_in_model(
     dtype_policy_alt, dtype_policy_by_group_name = build_glob_alt(list(dtype_plan.keys()))
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
-    _dtype = dtype
     # 1. Create the conversion entries
     by_conversion_pattern: dict[str, ConversionEntry] = {}
     for original_key, tensor in state_dict:
@@ -487,7 +487,7 @@ def convert_and_load_state_dict_in_model(
             converter = source_to_target[matched_pattern]  # TODO make sure its the ref
             sub_with_extractor = partial(re.sub, _glob_to_regex_src(matched_pattern), string=original_key)
             entry_key = "|".join(converter.target_keys)
-            target_key = "|".join(map(sub_with_extractor, [k.replace("*", "\\1") for k in converter.target_keys]))
+            target_key = list(map(sub_with_extractor, [k.replace("*", "\\1") for k in converter.target_keys]))
             entry: ConversionEntry = by_conversion_pattern.setdefault(entry_key, ConversionEntry(converter))
             converter_key = sub_with_extractor(matched_pattern)
         else:
@@ -496,16 +496,16 @@ def convert_and_load_state_dict_in_model(
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
         new_target_key = []
-        for t in target_key.split("|"):  # let's correct the keys
-            if t.startswith(prefix) and meta_model_state_dict.get(t.replace(f"{prefix}.", "")) is not None:
+        for t in target_key:
+            # let's correct the prefix if needed
+            if loading_base_model_from_task_state_dict:
                 t = t.replace(f"{prefix}.", "")
-            elif meta_model_state_dict.get(f"{prefix}.{t}") is not None:
+            elif loading_task_model_from_base_state_dict:
                 t = f"{prefix}.{t}"
             new_target_key.append(t)
-        target_key = "|".join(new_target_key)
 
-        for t in target_key.split("|"):
             empty_param = meta_model_state_dict.get(t)
+            # If it does not exist, it's unexpected
             if empty_param is None:
                 unexpected_keys.add(t)
                 continue
@@ -518,13 +518,15 @@ def convert_and_load_state_dict_in_model(
                 else:
                     raise ValueError("This quantization method is gonna be supported SOOOON")
             else:
+                _dtype = dtype
                 matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[matched_dtype_pattern]
                 elif empty_param.dtype != _dtype:
                     _dtype = empty_param.dtype
 
-        first_target_key = target_key.split("|")[0]
+        first_target_key = new_target_key[0]
+        target_key = "|".join(new_target_key)
         future = None
         if device_mesh:
             if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name):
