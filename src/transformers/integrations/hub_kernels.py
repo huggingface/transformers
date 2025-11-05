@@ -19,6 +19,7 @@ from typing import Optional, Union
 
 from ..modeling_flash_attention_utils import lazy_import_flash_attention
 from ..utils import logging
+from ..utils.import_utils import is_kernels_available
 from .flash_attention import flash_attention_forward
 
 
@@ -62,6 +63,12 @@ try:
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
                     layer_name="LigerRMSNorm",
+                )
+            },
+            "xpu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/rmsnorm",
+                    layer_name="RMSNorm",
                 )
             },
         },
@@ -139,7 +146,18 @@ try:
         },
     }
 
-    register_kernel_mapping(_KERNEL_MAPPING)
+    def has_key(d, key):
+        return key in d or any(isinstance(v, dict) and has_key(v, key) for v in d.values())
+
+    def register_kernel_mapping_transformers(mapping=None):
+        if mapping is None:
+            mapping = _KERNEL_MAPPING
+        if has_key(mapping, "xpu") and not is_kernels_available(MIN_VERSION="0.10.2"):
+            raise ImportError(
+                "kernels uses an incompatible version. Please install the latest version with `pip install -U kernels`."
+            )
+        register_kernel_mapping(mapping)
+
 
 except ImportError:
     _kernels_available = False
@@ -283,6 +301,7 @@ __all__ = [
     "LayerRepository",
     "use_kernel_forward_from_hub",
     "register_kernel_mapping",
+    "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
     "lazy_load_kernel",
 ]
