@@ -1941,6 +1941,7 @@ class ModelTesterMixin:
                                 v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
                             )
 
+
                     # Checking the tensor sharing are correct
                     ptrs = defaultdict(list)
                     for k, v in model_tied.state_dict().items():

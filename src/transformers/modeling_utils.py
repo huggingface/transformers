@@ -2484,35 +2484,44 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Let the magic happen with this simple call
         self.smart_apply(self._initialize_weights)
 
-    def tie_weights(self, missing_keys: Optional[set[str]] = None):
-        """
-        Recursively (for all submodels) tie all the weights of the model.
-        """
-        # Note that `self` is included in `self.modules` so we also apply to current PreTrainedModel with this call
-        for module in self.modules():
-            # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
-            if isinstance(module, PreTrainedModel):
-                module.tie_weight_source_and_target()
-            # Additionally, if it has a custom `_tie_weights`, honor it
-            if hasattr(module, "_tie_weights"):
-                module._tie_weights()
-
-    def tie_weight_source_and_target(self):
+    def tie_weight_source_and_target(
+        self,
+        top_level: "PreTrainedModel",
+        missing_keys: Optional[set[str]] = None,
+        module_prefix: str = "",
+        _tied_weights_keys=None,
+    ):
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
         and the encoder and decoder. This relies on the `_tied_weights_keys` dict.
         """
+        missing_keys = missing_keys or set()
         mapping = getattr(self, "_tied_weights_keys", None)
         if not isinstance(mapping, dict):
             return
-        if not self.config.tie_word_embeddings and not self.config.tie_encoder_decoder:
-            return
-
         for target_name, source_name in mapping.items():
+            source_name = f"{module_prefix}.{source_name}" if module_prefix else source_name
             try:
-                source_param_or_module = self.get_parameter_or_buffer(source_name)
-            except Exception:
-                source_param_or_module = self.get_submodule(source_name)
+                if source_name.endswith(".bias") or source_name.endswith(".weight"):
+                    source_param_or_module = top_level.get_parameter_or_buffer(source_name)
+                else:
+                    source_param_or_module = top_level.get_submodule(source_name)
+            except AttributeError:
+                continue
+
+            target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
+            if (
+                missing_keys != set()
+                and not re.search(rf"{target_name}", "\n".join(missing_keys))  # regex for modules
+            ):
+                continue  # `can_use_safetensors` goes against this one
+            try:
+                if source_name.endswith(".bias") or source_name.endswith(".weight"):
+                    target_tensor = top_level.get_parameter_or_buffer(target_name)
+                else:
+                    target_tensor = top_level.get_submodule(target_name)
+            except AttributeError:
+                continue
 
             if "d+" in target_name:
                 reg = re.compile(target_name)
@@ -2529,6 +2538,35 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     setattr(submodule, weight, source_param_or_module)
                 else:
                     setattr(self, target_name, source_param_or_module)
+
+            if missing_keys != set() and not re.search(
+                rf"{source_name}", "\n".join(missing_keys)
+            ):  # test_model_weights_reload_no_missing_tied_weights
+                if isinstance(target_tensor, nn.Module):
+                    for k, _ in target_tensor.named_parameters():
+                        missing_keys.discard(f"{target_name}.{k}")
+                else:
+                    missing_keys.discard(target_name)
+
+    def tie_weights(self, missing_keys: Optional[set[str]] = None):
+        """
+        Recursively (for all submodels) tie all the weights of the model.
+        """
+        # Note that `self` is included in `self.modules` so we also apply to current PreTrainedModel with this call
+        if missing_keys is None:
+            # called from `post_init`
+            # if self.config.get_text_config().tie_word_embeddings or self.config.get_text_config().tie_encoder_decoder: # is this even true? no cuz resize?
+            self.tie_weight_source_and_target(self, missing_keys, "", self._tied_weights_keys)
+        else:
+            for module_prefix, module in self.named_modules():
+                # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
+                if isinstance(module, PreTrainedModel) and (
+                    missing_keys != set() or self.config.tie_word_embeddings or self.config.tie_encoder_decoder
+                ):
+                    module.tie_weight_source_and_target(self, missing_keys, module_prefix, self._tied_weights_keys)
+                # Additionally, if it has a custom `_tie_weights`, honor it
+                if hasattr(module, "_tie_weights"):
+                    module._tie_weights()
 
     def _get_no_split_modules(self, device_map: str):
         """
@@ -4340,10 +4378,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             k.__exit__(None, None, None)
 
         #!!!!!!!!!!!!!!!!!!!!!!! POST PROCESS!!!!!!!!!!!!!!!!!!
-        # @Cyrilvallez commenting this saved pretty much all tests
-        # if model.config.tie_word_embeddings or model.config.tie_encoder_decoder:
-        #     tied = re.compile("|".join(_get_tied_weight_keys(model)))
-        #     missing_keys = missing_keys - {k for k in missing_keys if tied.search(k)} # TODO this is really not ideal :)
+        model.tie_weights(missing_keys)
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
@@ -4356,7 +4391,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
             missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model
         )
-        model.tie_weights()
 
         # Post-processing for tensor parallelism
         if device_mesh is not None:

@@ -849,11 +849,6 @@ class FSMTModel(PretrainedFSMTModel):
     def get_encoder(self):
         return self.encoder
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.get_input_embeddings())
-            self._tie_embedding_weights(self.decoder.output_projection, self.get_input_embeddings())
-
     @auto_docstring
     def forward(
         self,
