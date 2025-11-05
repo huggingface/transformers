@@ -738,7 +738,7 @@ class CamembertModel(CamembertPreTrainedModel):
 @auto_docstring
 class CamembertForMaskedLM(CamembertPreTrainedModel):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "roberta.embedding.weight",
+        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 

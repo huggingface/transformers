@@ -14,7 +14,7 @@
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "roberta.embedding.weight",
+        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight",
         "lm_head.decoder.bias": "lm_head.bias"
     }
 

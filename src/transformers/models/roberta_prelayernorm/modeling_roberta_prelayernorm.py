@@ -748,7 +748,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.40,ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm, RobertaPreLayerNormTokenizer->RobertaTokenizer
 class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "roberta_prelayernorm.embedding.weight",
+        "lm_head.decoder.weight": "roberta_prelayernorm.embeddings.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
@@ -865,7 +865,7 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel, Generat
 )
 class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "roberta_prelayernorm.embedding.weight",
+        "lm_head.decoder.weight": "roberta_prelayernorm.embeddings.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 

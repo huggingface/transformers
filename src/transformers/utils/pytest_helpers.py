@@ -87,16 +87,16 @@ def main():
         if not counter:
             print("None")
             return
-        for key, cnt in sorted(counter.items(), key=lambda x: (-x[1], x[0])):
+        for key, cnt in sorted(counter.items(), key=lambda x: (x[1], x[0])):
             if label:
                 print(f"{cnt:4d}  {label}{key}")
             else:
                 print(f"{cnt:4d}  {key}")
 
-    _print_counter("Failures per test file", summary["failures_per_file"])
     _print_counter("Failures per test class", summary["failures_per_class"], label="class ")
-    _print_counter("Failures per test name (base)", summary["failures_per_testname"])
     _print_counter("Failures per test_modeling_xxx", summary["failures_per_modeling_key"], label="model ")
+    _print_counter("Failures per test file", summary["failures_per_file"])
+    _print_counter("Failures per test name (base)", summary["failures_per_testname"])
 
 if __name__ == "__main__":
     main()
