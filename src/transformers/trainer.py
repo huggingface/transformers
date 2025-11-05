@@ -3844,30 +3844,7 @@ class Trainer:
         """
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.cp_backend == "deepspeed":
-            unwrapped_model = self.accelerator.unwrap_model(model)
-
-            outputs = model(**inputs)
-            shift_labels = inputs["shift_labels"]
-            loss = unwrapped_model.loss_function(
-                logits=outputs.logits,
-                labels=None,
-                shift_labels=shift_labels,
-                vocab_size=unwrapped_model.config.vocab_size,
-            )
-
-            if pc.cp_size > 1:
-                sp_group = self.accelerator.torch_device_mesh["cp"].get_group()
-                sp_world_size = pc.cp_size
-                # differentiable weighted per-shard-loss aggregation across ranks
-                losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
-                # special dealing with SFT that has prompt tokens that aren't used in loss computation
-                good_tokens = (shift_labels != -100).view(-1).sum()
-                good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
-                total_loss = sum(losses_per_rank[rank] * good_tokens_per_rank[rank] for rank in range(sp_world_size))
-                total_good_tokens = sum(good_tokens_per_rank)
-                loss = total_loss / max(total_good_tokens, 1)
-
-            return (loss, outputs) if return_outputs else loss
+            return self._deepspeed_cp_compute_loss(model, inputs, return_outputs, pc)
 
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
@@ -3919,6 +3896,49 @@ class Trainer:
             and num_items_in_batch is not None
         ):
             loss *= self.accelerator.num_processes if self.args.n_gpu <= 1 else self.args.n_gpu
+
+        return (loss, outputs) if return_outputs else loss
+
+    def _deepspeed_cp_compute_loss(self, model, inputs, return_outputs, pc):
+        """
+        How the loss is computed by Trainer under context parallelism scenario with cp_backend==deepspeed and cp>1. By default, all models return the loss in the first element.
+
+        Args:
+            model (`nn.Module`):
+                The model to compute the loss for.
+            inputs (`dict[str, Union[torch.Tensor, Any]]`):
+                The input data for the model.
+            return_outputs (`bool`, *optional*, defaults to `False`):
+                Whether to return the model outputs along with the loss.
+            pc (`accelerate.parallelism_config.ParallelismConfig`):
+                self.accelerator.parallelism_config object (not None)
+
+        Returns:
+            The loss of the model along with its output if return_outputs was set to True
+        """
+
+        unwrapped_model = self.accelerator.unwrap_model(model)
+
+        outputs = model(**inputs)
+        shift_labels = inputs["shift_labels"]
+        loss = unwrapped_model.loss_function(
+            logits=outputs.logits,
+            labels=None,
+            shift_labels=shift_labels,
+            vocab_size=unwrapped_model.config.vocab_size,
+        )
+
+        if pc.cp_size > 1:
+            sp_group = self.accelerator.torch_device_mesh["cp"].get_group()
+            sp_world_size = pc.cp_size
+            # differentiable weighted per-shard-loss aggregation across ranks
+            losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
+            # special dealing with SFT that has prompt tokens that aren't used in loss computation
+            good_tokens = (shift_labels != -100).view(-1).sum()
+            good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
+            total_loss = sum(losses_per_rank[rank] * good_tokens_per_rank[rank] for rank in range(sp_world_size))
+            total_good_tokens = sum(good_tokens_per_rank)
+            loss = total_loss / max(total_good_tokens, 1)
 
         return (loss, outputs) if return_outputs else loss
 
