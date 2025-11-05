@@ -324,8 +324,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         n_diffusion_steps = getattr(self, '_vibevoice_n_diffusion_steps', 10)
         noise_scheduler = getattr(self, '_vibevoice_noise_scheduler', None)
         monitor_progress = getattr(self, '_vibevoice_monitor_progress', None)
-        if noise_scheduler is None:
-            raise ValueError("`noise_scheduler` from `diffusers` must be provided for VibeVoice generation.")
 
         # State tracking
         acoustic_cache = None
