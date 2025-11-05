@@ -217,9 +217,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         audio_streamer: Optional[Union[AudioStreamer]] = None,
         input_features: Optional[torch.FloatTensor] = None,
         input_features_mask: Optional[torch.BoolTensor] = None,
-        cfg_scale: float = 1.0,
+        cfg_scale: float = 1.3,
         ddpm_inference_steps: int = 10,
         noise_scheduler=None,
+        max_length_times: int = 2,
         **kwargs,
     ) -> Union[torch.LongTensor, VibeVoiceGenerateOutput]:
         """
@@ -242,8 +243,16 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 Input speech tensors for voice cloning or conditioning.
             input_features_mask (`torch.BoolTensor`, *optional*):
                 Masks for speech tensors to ignore padded parts.
-            cfg_scale (`float`, *optional*, defaults to 1.0):
+            cfg_scale (`float`, *optional*, defaults to 1.3):
                 Classifier-free guidance scale for speech generation quality control.
+            ddpm_inference_steps (`int`, *optional*, defaults to 10):
+                Number of diffusion denoising steps for speech generation.
+            noise_scheduler (`SchedulerMixin`, *required*):
+                The noise scheduler to use for diffusion sampling.
+            max_length_times (`int`, *optional*, defaults to 2):
+                Maximum generation length multiplier relative to input length. The actual maximum 
+                generation steps will be min(generation_config.max_length, max_length_times * input_length).
+                This prevents runaway generation while allowing speech-heavy outputs to be longer than text-only outputs.
             **kwargs:
                 Additional model-specific kwargs that will be forwarded to the model.
 
@@ -258,8 +267,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             raise ValueError("`noise_scheduler` must be provided for VibeVoice generation.")
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
-        max_length_times = kwargs.pop("max_length_times", 2)
-
         if kwargs.get('max_new_tokens') is None:
             kwargs['max_new_tokens'] = self.config.text_config.max_position_embeddings - kwargs['input_ids'].shape[-1]
 
@@ -274,7 +281,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             True,
             **kwargs
         )
-        
+
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(inputs, self.config.bos_token_id, model_kwargs)
         batch_size = inputs_tensor.shape[0]
         device = self.device
@@ -315,27 +322,24 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
         # === Negative generation config setup (for classifier-free guidance) ===
         negative_kwargs = {
-            'input_ids': torch.full((kwargs['input_ids'].shape[0], 1), self.config.speech_start_id, dtype=torch.long, device=kwargs['input_ids'].device),
-            'attention_mask':  torch.ones((kwargs['input_ids'].shape[0], 1), dtype=torch.long, device=kwargs['input_ids'].device),
+            'input_ids': torch.full((kwargs['input_ids'].shape[0], 1), self.config.speech_start_id, dtype=torch.long, device=device),
+            'attention_mask': torch.ones((kwargs['input_ids'].shape[0], 1), dtype=torch.long, device=device),
             'max_new_tokens': kwargs.get('max_new_tokens', 100)
         }
-        
+
         negative_generation_config = GenerationConfig()
         negative_generation_config, negative_model_kwargs = self._prepare_generation_config(
-            negative_generation_config,
-            True,
-            **negative_kwargs
+            negative_generation_config, True, **negative_kwargs
         )
-        
+
         _, negative_model_input_name, negative_model_kwargs = self._prepare_model_inputs(
             None, negative_generation_config.bos_token_id, negative_model_kwargs
         )
-        negative_batch_size = negative_kwargs['input_ids'].shape[0]
 
         self._prepare_special_tokens(negative_generation_config, True, device=device)
         negative_generation_config.use_cache = self.config.use_cache
         negative_model_kwargs["use_cache"] = self.config.use_cache
-        negative_input_ids = negative_kwargs['input_ids'].to(self.device)
+        negative_input_ids = negative_kwargs['input_ids'].to(device)
 
         negative_input_ids_length = negative_input_ids.shape[1]
         negative_has_default_max_length = negative_kwargs.get("max_length") is None and negative_generation_config.max_length is not None
@@ -350,6 +354,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         )
 
         negative_max_cache_length = negative_generation_config.max_length - 1
+        negative_batch_size = negative_kwargs['input_ids'].shape[0]
         self._prepare_cache_for_generation(negative_generation_config, negative_model_kwargs, None, negative_batch_size, negative_max_cache_length)
         negative_model_kwargs['cache_position'] = torch.arange(negative_input_ids_length, device=device, dtype=torch.long)
         for k, v in negative_model_kwargs.items():
@@ -358,9 +363,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
         acoustic_cache = None
         semantic_cache = None
-
-        batch_size = input_ids.shape[0]
-        device = input_ids.device
         finished_tags = torch.zeros(batch_size, dtype=torch.bool, device=device)
         correct_cnt = torch.zeros(batch_size, dtype=torch.long, device=device)
         is_prefill = True
@@ -387,8 +389,18 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         token_constraint_processor = VibeVoiceTokenConstraintProcessor(valid_tokens, device=device)
         logits_processor.append(token_constraint_processor)
 
-        max_steps = min(generation_config.max_length - initial_length, int(max_length_times * initial_length))
-        max_step_per_sample = torch.min(generation_config.max_length - initial_length_per_sample, (max_length_times * initial_length_per_sample).long())
+        # Calculate maximum generation steps, TODO (ebezzam) simplify explanation?
+        # Use the minimum of configured max_length and relative max length (max_length_times * input_length)
+        # This prevents runaway generation while allowing longer outputs for speech-heavy content
+        max_steps = min(generation_config.max_length - initial_length, max_length_times * initial_length)
+
+        # Calculate per-sample maximum steps based on actual input length (respecting attention masks)
+        # This accounts for varying input lengths within a batch
+        relative_max_per_sample = (max_length_times * initial_length_per_sample).long()
+        max_step_per_sample = torch.min(
+            generation_config.max_length - initial_length_per_sample,
+            relative_max_per_sample
+        )
         reach_max_step_sample = torch.zeros(batch_size, dtype=torch.bool, device=device)
 
         # Create progress iterator
@@ -444,7 +456,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # Get logits and apply logits processor
             next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
-            # next_token_logits = outputs.logits[:, -1, :].to(copy=True, device=input_ids.device)
             next_token_scores = logits_processor(input_ids, next_token_logits)
 
             # token selection
@@ -459,31 +470,33 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
 
             # reached end of generation
-            if (next_tokens == self.config.eos_token_id).any():
-                eos_indices = (next_tokens == self.config.eos_token_id).nonzero(as_tuple=False).squeeze(1)
-                # Only print for samples that are newly finished (not already marked as finished)
-                new_eos_indices = eos_indices[~finished_tags[eos_indices]]
-                if new_eos_indices.numel() > 0:
+            eos_mask = (next_tokens == self.config.eos_token_id)
+            if eos_mask.any():
+                new_eos_indices = eos_mask & ~finished_tags
+                if new_eos_indices.any():
                     finished_tags[new_eos_indices] = True
+                    new_eos_idx_list = new_eos_indices.nonzero(as_tuple=False).squeeze(1)
                     # TODO (ebezzam) for debugging, remove for final
-                    print(f"Samples {new_eos_indices.tolist()} reached EOS token at step {step + 1}.", flush=True)
+                    print(f"Samples {new_eos_idx_list.tolist()} reached EOS token at step {step + 1}.", flush=True)
                     if audio_streamer is not None:
-                        audio_streamer.end(new_eos_indices)
+                        audio_streamer.end(new_eos_idx_list)
 
             # Check if any sample reached its maximum generation length
             max_length_reached = step >= max_step_per_sample
-            new_max_length_indices = torch.nonzero(max_length_reached & ~finished_tags, as_tuple=False).squeeze(1)
-            if new_max_length_indices.numel() > 0:
-                finished_tags[new_max_length_indices] = True
-                reach_max_step_sample[new_max_length_indices] = True
+            new_max_length_mask = max_length_reached & ~finished_tags
+            if new_max_length_mask.any():
+                finished_tags[new_max_length_mask] = True
+                reach_max_step_sample[new_max_length_mask] = True
                 if audio_streamer is not None:
+                    new_max_length_indices = new_max_length_mask.nonzero(as_tuple=False).squeeze(1)
                     audio_streamer.end(new_max_length_indices)
 
             # speech_begin
-            diffusion_start_indices = torch.arange(batch_size, device=device)[~finished_tags & (next_tokens == self.config.speech_start_id)]
-            if diffusion_start_indices.numel() > 0 and kwargs.get('refresh_negative', True):
+            diffusion_start_mask = ~finished_tags & (next_tokens == self.config.speech_start_id)
+            if diffusion_start_mask.any() and kwargs.get('refresh_negative', True):
+                diffusion_start_indices = diffusion_start_mask.nonzero(as_tuple=False).squeeze(1)
                 # update attention mask
-                for i, sample_idx in enumerate(diffusion_start_indices.tolist()):
+                for sample_idx in diffusion_start_indices.tolist():
                     negative_model_kwargs['attention_mask'][sample_idx, :] = 0
                     negative_model_kwargs['attention_mask'][sample_idx, -1] = 1
                 # update past key values
@@ -505,9 +518,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # forward diffusion
             # Diffusion indices are those that are not finished and not special tokens
-            diffusion_indices = torch.arange(batch_size, device=device)[~finished_tags & (next_tokens == self.config.speech_diffusion_id)]
-
-            if diffusion_indices.numel() > 0:
+            diffusion_mask = ~finished_tags & (next_tokens == self.config.speech_diffusion_id)
+            if diffusion_mask.any():
+                diffusion_indices = diffusion_mask.nonzero(as_tuple=False).squeeze(1)
                 negative_model_inputs = self.prepare_inputs_for_generation(negative_input_ids, **negative_model_kwargs)
                 # Forward negative pass through the model
                 if negative_model_inputs['inputs_embeds'] is None and inputs_embeds is not None:
@@ -528,12 +541,12 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 # So we need to correct the kv cache of non-diffusion samples
                 non_diffusion_mask = ~finished_tags & (next_tokens != self.config.speech_diffusion_id)
                 if non_diffusion_mask.any():
-                    non_diffusion_indices = torch.arange(batch_size, device=device)[non_diffusion_mask]
+                    non_diffusion_indices = non_diffusion_mask.nonzero(as_tuple=False).squeeze(1)
                     start_indices = correct_cnt[non_diffusion_indices]
 
                     # 1. Update attention_mask - need to handle each sample separately
                     seq_len = negative_model_kwargs['attention_mask'].shape[1]
-                    for i, (sample_idx, start_idx) in enumerate(zip(non_diffusion_indices.tolist(), start_indices.tolist())):
+                    for sample_idx, start_idx in zip(non_diffusion_indices.tolist(), start_indices.tolist()):
                         # Shift the attention mask for this sample
                         if start_idx + 1 < seq_len - 1:
                             negative_model_kwargs['attention_mask'][sample_idx, start_idx+1:] = \
@@ -628,8 +641,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         for sample_chunks in audio_chunks:
             if sample_chunks:
                 # Concatenate all chunks along the time dimension (assumed to be the last dimension)
-                concatenated_audio = torch.cat(sample_chunks, dim=-1)
-                final_audio_outputs.append(concatenated_audio)
+                final_audio_outputs.append(torch.cat(sample_chunks, dim=-1))
             else:
                 # If no audio was generated for this sample, append None
                 final_audio_outputs.append(None)
