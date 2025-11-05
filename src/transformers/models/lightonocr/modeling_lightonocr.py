@@ -64,7 +64,7 @@ class LightOnOCRPatchMerger(nn.Module):
 
         self.merging_layer = nn.Linear(self.hidden_size * self.spatial_merge_size**2, self.hidden_size, bias=False)
 
-    def forward(self, image_features: torch.Tensor, image_sizes: list[tuple[int, int]]) -> torch.Tensor:
+    def forward(self, image_features: torch.Tensor, image_sizes: Union[torch.Tensor, list]) -> torch.Tensor:
         image_sizes_in_patches = [
             (image_size[0] // self.patch_size, image_size[1] // self.patch_size) for image_size in image_sizes
         ]
@@ -111,7 +111,7 @@ class LightOnOCRVisionProjector(nn.Module):
         )
         self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=False)
 
-    def forward(self, image_features: torch.Tensor, image_sizes):
+    def forward(self, image_features: torch.Tensor, image_sizes: Union[torch.Tensor, list]):
         image_features = self.norm(image_features)
         image_features = self.patch_merger(image_features, image_sizes)
         hidden_states = self.linear_1(image_features)
@@ -1099,12 +1099,9 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
         Returns:
             List of image feature tensors, one per image
         """
-        # Convert image_sizes tensor to list of tuples for compatibility with vision encoder
-        image_sizes_list = [(int(h), int(w)) for h, w in image_sizes]
+        visual_features = self.vision_encoder(pixel_values, image_sizes=image_sizes).last_hidden_state
 
-        visual_features = self.vision_encoder(pixel_values, image_sizes=image_sizes_list).last_hidden_state
-
-        image_features = self.vision_projection(visual_features.squeeze(0), image_sizes_list)
+        image_features = self.vision_projection(visual_features.squeeze(0), image_sizes)
 
         # Split features per image based on the effective patch size
         downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
