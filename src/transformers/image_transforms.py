@@ -820,6 +820,7 @@ def split_to_tiles(images: "torch.Tensor", num_tiles_height: int, num_tiles_widt
     )
     return image
 
+
 def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = False):
     """Helper function to flatten a single level of nested image and batch structures and group by shape."""
     grouped_images = defaultdict(list)
