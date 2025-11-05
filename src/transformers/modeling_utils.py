@@ -4428,9 +4428,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
                     )
                     all_pointer.add(file_pointer)
-                    merged_state_dict[k] = (v, file_pointer.get_slice(k))  # don't materialize yet
+                    merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
             elif state_dict is not None:
-                merged_state_dict = {k: ("", v) for k, v in state_dict.items()}
+                merged_state_dict = state_dict
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
             start = time.perf_counter()
@@ -4471,8 +4471,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
             missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model
         )
-
-
 
         # Post-processing for tensor parallelism
         if device_mesh is not None:

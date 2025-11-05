@@ -19,7 +19,6 @@ from __future__ import annotations
 import itertools
 import os
 import re
-import threading
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import MutableMapping, MutableSet, Sequence
@@ -329,7 +328,6 @@ class ConversionEntry:
 
 
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
-PER_FILE_LIMIT = 4  # concurrent reads per file
 
 
 def _materialize_copy(tensor, dtype):
@@ -337,22 +335,16 @@ def _materialize_copy(tensor, dtype):
     return tensor[...].to(dtype)
 
 
-def spawn_materialize(thread_pool, _file_semaphore, file_id, tensor, dtype) -> Future:
-    sem = _file_semaphore[file_id]
-
+def spawn_materialize(thread_pool, tensor, dtype) -> Future:
     def _job():
-        with sem:
-            return _materialize_copy(tensor, dtype)
+        return _materialize_copy(tensor, dtype)
 
     return thread_pool.submit(_job)
 
 
-def spawn_tp_materialize(thread_pool, _file_semaphore, file_id, tensor, dtype, sharding_method, tensor_idx) -> Future:
-    sem = _file_semaphore[file_id]
-
+def spawn_tp_materialize(thread_pool, tensor, dtype, sharding_method, tensor_idx) -> Future:
     def _job():
-        with sem:
-            return sharding_method.shard_tensor(tensor, param_casting_dtype=dtype, tensor_idx=tensor_idx)[0]
+        return sharding_method.shard_tensor(tensor, param_casting_dtype=dtype, tensor_idx=tensor_idx)[0]
 
     return thread_pool.submit(_job)
 
@@ -476,9 +468,8 @@ def convert_and_load_state_dict_in_model(
     misc = {}
     mismatch_keys = set()
     unexpected_keys = set()
-    # Global thread_poolutor + per-file semaphores: allow lock only upon 4 file access? Should be tensor get_shape dependant?
+    # Global thread_pool
     thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
-    _file_semaphore = defaultdict(lambda: threading.Semaphore(PER_FILE_LIMIT))
 
     _patterns = list(itertools.chain.from_iterable([k.source_keys for k in weight_mapping]))
     source_to_target = {sk: k for k in weight_mapping for sk in k.source_keys}
@@ -490,7 +481,7 @@ def convert_and_load_state_dict_in_model(
     _dtype = dtype
     # 1. Create the conversion entries
     by_conversion_pattern: dict[str, ConversionEntry] = {}
-    for original_key, (file_id, tensor) in state_dict:
+    for original_key, tensor in state_dict:
         matched_pattern = match_glob(original_key, weight_pattern_alt, weight_pattern_by_group_name)
         if matched_pattern is not None:
             converter = source_to_target[matched_pattern]  # TODO make sure its the ref
@@ -533,7 +524,6 @@ def convert_and_load_state_dict_in_model(
                 elif empty_param.dtype != _dtype:
                     _dtype = empty_param.dtype
 
-
         first_target_key = target_key.split("|")[0]
         future = None
         if device_mesh:
@@ -548,8 +538,6 @@ def convert_and_load_state_dict_in_model(
                 shard_index = len(entry.collected_tensors[target_key].get(converter_key, []))
                 future = spawn_tp_materialize(
                     thread_pool,
-                    _file_semaphore,
-                    file_id,
                     tensor,
                     _dtype,
                     converter.distributed_operation,
@@ -557,7 +545,7 @@ def convert_and_load_state_dict_in_model(
                 )
 
         if future is None:  # If not TP, async materialize the tensors. TODO handle disk offload?
-            future = spawn_materialize(thread_pool, _file_semaphore, file_id, tensor, _dtype)
+            future = spawn_materialize(thread_pool, tensor, _dtype)
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(future)
 
     # 2. Actually convert the ckpt
