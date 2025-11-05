@@ -925,15 +925,6 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             image_grid_thw = image_inputs["image_grid_thw"]
 
         if videos is not None:
-            if "do_sample_frames" not in output_kwargs["videos_kwargs"] and (
-                output_kwargs["videos_kwargs"].get("fps") is not None
-            ):
-                output_kwargs["videos_kwargs"]["do_sample_frames"] = True
-                logger.info(
-                    "User specified 'fps' without 'do_sample_frames'; "
-                    "'do_sample_frames' has been automatically enabled."
-                )
-
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 
@@ -943,9 +934,14 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             else:
                 video_metadata = videos_inputs["video_metadata"]
 
-            fps = output_kwargs["videos_kwargs"].get(
-                "fps", [metadata.fps if metadata.fps is not None else 24 for metadata in video_metadata]
-            )
+            if (
+                output_kwargs["videos_kwargs"].get("do_sample_frames") is not None
+                and output_kwargs["videos_kwargs"].get("fps") is not None
+            ):
+                fps = output_kwargs["videos_kwargs"]["fps"]
+            else:
+                fps = [metadata.fps if metadata.fps is not None else 24 for metadata in video_metadata]
+
             if isinstance(fps, (int, float)):
                 second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
             elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
