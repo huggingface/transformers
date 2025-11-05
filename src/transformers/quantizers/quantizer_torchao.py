@@ -256,8 +256,6 @@ class TorchAoHfQuantizer(HfQuantizer):
             if self.quantization_config._get_ao_version() >= version.parse("0.15.0"):
                 from torchao.quantization import FqnToConfig, fqn_matches_fqn_config
 
-                from torchao.quantization.quant_api import _module_param_matches_fqn_config
-
                 if isinstance(self.quantization_config.quant_type, FqnToConfig):
                     module_fqn, param_name_fqn = param_name.rsplit(".", 1)
                     if (
@@ -373,8 +371,13 @@ class TorchAoHfQuantizer(HfQuantizer):
                             c = config.module_fqn_to_config.get("_default", None)
 
                     if c is not None:
-                        custom_fqn_config = FqnToConfig({param_val: c})
-                        quantize_(module, custom_fqn_config, filter_fn=None)
+                        if param_val == "weight":
+                            # we can apply the module config directly
+                            quantize_(module, c, lambda x, fqn: True)
+                        else:
+                            # need to apply to custom param name
+                            custom_param_fqn_config = FqnToConfig({param_val: c})
+                            quantize_(module, custom_param_fqn_config, filter_fn=None)
                     return
 
             # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
