@@ -44,7 +44,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralPreTrainedModel,
     MixtralRMSNorm,
     MixtralSparseMoeBlock,
-    MixtralTopKRouter
+    MixtralTopKRouter,
 )
 
 
@@ -467,6 +467,7 @@ class MiniMaxAttention(MixtralAttention):
 
 class MiniMaxTopKRouter(MixtralTopKRouter):
     pass
+
 
 class MiniMaxSparseMoeBlock(MixtralSparseMoeBlock):
     pass

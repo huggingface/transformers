@@ -1926,6 +1926,7 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
     This is a wrapper class, so that [`ProphetNetForCausalLM`] can correctly be loaded from pretrained prophetnet
     classes.
     """
+
     _tied_weights_keys = {
         "decoder.word_embeddings.weight": "word_embeddings.weight",
     }
@@ -1938,7 +1939,6 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)

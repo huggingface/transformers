@@ -97,41 +97,8 @@ def match_glob(key: str, alt: re.Pattern, name_map: dict[str, str]) -> Optional[
 class ConversionOps:
     """Base class for weight conversion operations."""
 
-    # Reusable staging/scratch buffer to avoid reallocations.
-    _buffer: Optional[torch.Tensor] = None
     # The inverse operation class, will be used when saving the checkpoint
     reverse_op: type[ConversionOps]
-
-    def _ensure_buffer(
-        self,
-        required_shape: torch.Size,
-        *,
-        dtype: torch.dtype,
-        device: torch.device,
-        growth_factor: float = 1.5,
-    ) -> torch.Tensor:
-        """Ensure a pre-allocated buffer large enough for ``required_shape`` exists."""
-
-        required_elems = 1
-        for dim in required_shape:
-            required_elems *= int(dim)
-
-        need_new = (
-            self._buffer is None
-            or self._buffer.dtype != dtype
-            or self._buffer.device != device
-            or self._buffer.numel() < required_elems
-        )
-
-        if need_new:
-            capacity = max(required_elems, int(required_elems * growth_factor))
-            self._buffer = torch.empty(capacity, dtype=dtype, device=device)
-
-        return self._buffer[:required_elems].view(required_shape)
-
-    def clear_cache(self) -> None:
-        """Free any cached buffers."""
-        self._buffer = None
 
     @abstractmethod
     def convert(
@@ -180,19 +147,7 @@ class Concatenate(ConversionOps):
         if not tensors:
             raise ValueError("Fuse requires at least one tensor to concatenate.")
 
-        out_shape = list(tensors[0].shape)
-        out_shape[self.dim] = sum([t.size(self.dim) for t in tensors])
-
-        with torch.no_grad():  # we use staging buffers
-            out = self._ensure_buffer(torch.Size(out_shape), dtype=tensors[0].dtype, device=tensors[0].device)
-            torch.cat(tuple(tensors), dim=self.dim, out=out)
-            # offset = 0
-            # for tensor in tensors:
-            #     index = [slice(None)] * tensor.ndim
-            #     index[self.dim] = slice(offset, offset + tensor.shape[self.dim])
-            #     out[tuple(index)].copy_(tensor, non_blocking=tensor.is_cuda)
-            #     offset += tensor.shape[self.dim]
-        return out.clone()  # need to say I can overwrite this storage now
+        return torch.cat(tuple(tensors), dim=self.dim)
 
 
 class MergeModulelist(Concatenate):
@@ -206,21 +161,14 @@ class MergeModulelist(Concatenate):
         super().__init__(dim=dim)
         self.reverse_op = SplitModulelist
 
+    @torch.no_grad
     def convert(self, value: Sequence[torch.Tensor], *args, **kwargs) -> list[torch.Tensor]:
         merged = []
-        with torch.no_grad():  # we use staging buffers
-            for group in value:
-                if not isinstance(group, Sequence) or len(group) == 0:
-                    raise ValueError("MergeModulelist requires non-empty sub-sequences.")
-                group = [k for k in group if k.ndim]
-                out_shape = list(group[0].shape)
-                out_shape.insert(self.dim, len(group))
-                out = self._ensure_buffer(torch.Size(out_shape), dtype=group[0].dtype, device=group[0].device)
-                torch.stack(tuple(group), dim=self.dim, out=out)
-                # for off, tensor in enumerate(group):
-                #     out[off].copy_(tensor, non_blocking=tensor.is_cuda)
-                # torch.as_tensor(numpy.stack(batch))
-                merged.append(out.clone())  # TODO have a single staging tensor here as well!
+        for group in value:
+            if not isinstance(group, Sequence) or len(group) == 0:
+                raise ValueError("MergeModulelist requires non-empty sub-sequences.")
+            group = [k for k in group if k.ndim]
+            merged.append(torch.stack(group, dim=self.dim))
         return merged
 
 
@@ -234,6 +182,7 @@ class SplitModulelist(ConversionOps):
         self.dim = dim
         self.reverse_op = MergeModulelist
 
+    @torch.no_grad
     def convert(self, value: Sequence[torch.Tensor], *, context: dict[str, Any]) -> list[list[torch.Tensor]]:
         if not isinstance(value, Sequence):
             raise TypeError("SplitModulelist expects a sequence of tensors.")
@@ -265,6 +214,7 @@ class PermuteForRope(ConversionOps):
         tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
         return tensor
 
+    @torch.no_grad
     def convert(
         self, value: Union[dict[str, torch.Tensor], Sequence[torch.Tensor], torch.Tensor], config
     ) -> Union[dict[str, torch.Tensor], list[torch.Tensor], torch.Tensor]:
@@ -603,8 +553,6 @@ def convert_and_load_state_dict_in_model(
                 except SkipLayer:
                     continue
             del group
-            for op in operations:
-                op.clear_cache()
 
             # Update progress bar
             pbar.update()
