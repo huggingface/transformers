@@ -1822,9 +1822,11 @@ class DetaForObjectDetection(DetaPreTrainedModel):
             nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
             # hack implementation for iterative bounding box refinement
             self.model.decoder.bbox_embed = self.bbox_embed
-            self._tied_weights_keys.update({
-                "model.decoder.bbox_embed ":"bbox_embed",
-            })
+            self._tied_weights_keys.update(
+                {
+                    "model.decoder.bbox_embed ": "bbox_embed",
+                }
+            )
         else:
             nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
             self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
@@ -1833,9 +1835,11 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         if config.two_stage:
             # hack implementation for two-stage
             self.model.decoder.class_embed = self.class_embed
-            self._tied_weights_keys.update({
-                "model.decoder.class_embed ":"class_embed",
-            })
+            self._tied_weights_keys.update(
+                {
+                    "model.decoder.class_embed ": "class_embed",
+                }
+            )
             for box_embed in self.bbox_embed:
                 nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
 

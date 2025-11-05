@@ -686,7 +686,7 @@ class TapasModel(TapasPreTrainedModel):
 class TapasForMaskedLM(TapasPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",
-        "cls.predictions.decoder.weight": "tapas.embeddings.word_embeddings.weight"
+        "cls.predictions.decoder.weight": "tapas.embeddings.word_embeddings.weight",
     }
     config: TapasConfig
     base_model_prefix = "tapas"

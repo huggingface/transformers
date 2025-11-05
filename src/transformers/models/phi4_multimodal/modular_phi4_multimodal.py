@@ -1563,9 +1563,7 @@ class Phi4MultimodalModel(Phi3Model):
 
 
 class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
-    _tied_weights_keys = {
-        "lm_head.weight": "model.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)

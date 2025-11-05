@@ -1728,9 +1728,11 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
             # hack implementation for iterative bounding box refinement
             self.model.decoder.bbox_embed = self.bbox_embed
-            self._tied_weights_keys.update({
-                "model.decoder.bbox_embed ":"bbox_embed",
-            })
+            self._tied_weights_keys.update(
+                {
+                    "model.decoder.bbox_embed ": "bbox_embed",
+                }
+            )
         else:
             self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
             self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
@@ -1738,9 +1740,7 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         if config.two_stage:
             # hack implementation for two-stage
             self.model.decoder.class_embed = self.class_embed
-            self._tied_weights_keys.update({
-                "model.decoder.class_embed" : "class_embed"
-            })
+            self._tied_weights_keys.update({"model.decoder.class_embed": "class_embed"})
 
         # Initialize weights and apply final processing
         self.post_init()

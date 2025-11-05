@@ -830,7 +830,7 @@ class DebertaOnlyMLMHead(nn.Module):
 class DebertaForMaskedLM(DebertaPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",
-        "cls.predictions.decoder.weight": "deberta.embeddings.word_embeddings.weight"
+        "cls.predictions.decoder.weight": "deberta.embeddings.word_embeddings.weight",
     }
 
     def __init__(self, config):

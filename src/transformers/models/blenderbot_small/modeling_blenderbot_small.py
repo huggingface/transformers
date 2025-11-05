@@ -843,7 +843,6 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
         "decoder.embed_tokens.weight": "shared.weight",
     }
 
-
     def __init__(self, config: BlenderbotSmallConfig):
         super().__init__(config)
 

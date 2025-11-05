@@ -982,9 +982,7 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
 
 @auto_docstring
 class FunnelForMaskedLM(FunnelPreTrainedModel):
-    _tied_weights_keys = {
-        "lm_head.weight": "funnel.embeddings.word_embeddings.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "funnel.embeddings.word_embeddings.weight"}
 
     def __init__(self, config: FunnelConfig) -> None:
         super().__init__(config)

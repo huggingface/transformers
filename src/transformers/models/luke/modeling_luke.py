@@ -1052,12 +1052,7 @@ class LukeLMHead(nn.Module):
     """
 )
 class LukeForMaskedLM(LukePreTrainedModel):
-    _tied_weights_keys = {
-        "lm_head.decoder.weight": [
-            "lm_head.decoder.bias",
-            "entity_predictions.decoder.weight"
-        ]
-    }
+    _tied_weights_keys = {"lm_head.decoder.weight": ["lm_head.decoder.bias", "entity_predictions.decoder.weight"]}
 
     def __init__(self, config):
         super().__init__(config)

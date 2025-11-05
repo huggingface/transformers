@@ -719,7 +719,7 @@ class YosoModel(YosoPreTrainedModel):
 class YosoForMaskedLM(YosoPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",
-        "cls.predictions.decoder.weight": "yoso.embeddings.word_embeddings.weight"
+        "cls.predictions.decoder.weight": "yoso.embeddings.word_embeddings.weight",
     }
 
     def __init__(self, config):

@@ -964,7 +964,6 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
 class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
     config: BlipConfig
 
-
     def __init__(self, config: BlipConfig):
         super().__init__(config)
 

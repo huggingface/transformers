@@ -901,7 +901,7 @@ class BartDecoder(BartPreTrainedModel):
 class BartModel(BartPreTrainedModel):
     _tied_weights_keys = {
         "decoder.embed_tokens.weight": "shared.weight",
-        "encoder.embed_tokens.weight": "shared.weight"
+        "encoder.embed_tokens.weight": "shared.weight",
     }
 
     def __init__(self, config: BartConfig):
@@ -1245,7 +1245,6 @@ class BartForConditionalGeneration(BartPreTrainedModel, GenerationMixin):
     """
 )
 class BartForSequenceClassification(BartPreTrainedModel):
-
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = BartModel(config)
@@ -1378,7 +1377,6 @@ class BartForSequenceClassification(BartPreTrainedModel):
 
 @auto_docstring
 class BartForQuestionAnswering(BartPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 

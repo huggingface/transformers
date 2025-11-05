@@ -1210,7 +1210,6 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
     """
 )
 class MvpForSequenceClassification(MvpPreTrainedModel):
-
     def __init__(self, config: MvpConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = MvpModel(config)
@@ -1370,7 +1369,6 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
 
 @auto_docstring
 class MvpForQuestionAnswering(MvpPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1540,9 +1538,7 @@ class MvpDecoderWrapper(MvpPreTrainedModel):
 
 
 class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {
-        "lm_head.weight": "model.decoder.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config):
         config.is_decoder = True

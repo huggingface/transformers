@@ -339,7 +339,7 @@ class ErnieForPreTrainingOutput(BertForPreTrainingOutput):
 class ErnieForPreTraining(BertForPreTraining):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",
-        "cls.predictions.decoder.weight": "ernie.embeddings.word_embeddings.weight"
+        "cls.predictions.decoder.weight": "ernie.embeddings.word_embeddings.weight",
     }
 
     @can_return_tuple
@@ -491,7 +491,7 @@ class ErnieForCausalLM(BertLMHeadModel):
 class ErnieForMaskedLM(BertForMaskedLM):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",
-        "cls.predictions.decoder.weight": "ernie.embeddings.word_embeddings.weight"
+        "cls.predictions.decoder.weight": "ernie.embeddings.word_embeddings.weight",
     }
 
     @can_return_tuple

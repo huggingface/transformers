@@ -515,7 +515,7 @@ class GatherParallel(TensorParallelLayer):
         tensor_idx=None,
     ):
         shard = [Replicate()]
-        parameter = param[...]
+        parameter = param[...].to(param_casting_dtype)
         self.shard = shard
         return parameter, shard
 
@@ -558,7 +558,7 @@ class IsolatedParallel(TensorParallelLayer):
         tensor_idx=None,
     ):
         mesh = device_mesh or self.device_mesh
-        parameter = param[...]
+        parameter = param[...].to(param_casting_dtype)
         if mesh is not None:
             parameter = parameter / mesh.size()
         self.shard = None
@@ -618,7 +618,7 @@ class ReplicateParallel(TensorParallelLayer):
         device_mesh=None,
         tensor_idx=None,
     ):
-        parameter = param[...]
+        parameter = param[...].to(param_casting_dtype)
         shard = [Replicate()]
         self.shard = shard
         return parameter, shard
@@ -670,7 +670,16 @@ class ColwiseParallel(TensorParallelLayer):
             input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
         return input_tensor
 
-    def shard_tensor(self, param, param_type=None, tensor_idx=None):
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
         device_mesh = self.device_mesh
         empty_param = self.empty_param
         rank = self.rank
@@ -680,6 +689,7 @@ class ColwiseParallel(TensorParallelLayer):
         else:
             shard = [Shard(-2)]
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2, tensor_idx)
+        parameter = parameter.to(param_casting_dtype)
         self.shard = shard
         return parameter, shard
 
@@ -688,7 +698,6 @@ class ColwiseParallel(TensorParallelLayer):
         # means Colwise as Linear is input * weight^T + bias, where
         # weight would become Shard(1)
         parameter, shard = self.shard_tensor(param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh)
-        parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
@@ -720,7 +729,7 @@ class PackedColwiseParallel(ColwiseParallel):
         device_mesh = device_mesh or self.device_mesh
         empty_param = self.empty_param
         rank = rank if rank is not None else self.rank
-        return get_packed_weights(param, empty_param, device_mesh, rank, -2), [Shard(-2)]
+        return get_packed_weights(param, empty_param, device_mesh, rank, -2).to(param_casting_dtype), [Shard(-2)]
 
     def create_nn_parameter(
         self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh
@@ -788,10 +797,11 @@ class RowwiseParallel(TensorParallelLayer):
         rank = rank if rank is not None else self.rank
         if param_type == "bias":
             shard = [Replicate()]
-            parameter = param[:]
+            parameter = param[...]
         else:
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1, tensor_idx=tensor_idx)
             shard = [Shard(-1)]
+        parameter = parameter.to(param_casting_dtype)
         self.shard = shard
         return parameter, shard
 
@@ -959,7 +969,7 @@ class SequenceParallel(TensorParallelLayer):
         device_mesh=None,
         tensor_idx=None,
     ):
-        parameter = param[...]
+        parameter = param[...].to(param_casting_dtype)
         shard = [Replicate()]
         self.shard = shard
         return parameter, shard
@@ -1022,7 +1032,7 @@ class GroupedGemmParallel(TensorParallelLayer):
                 f"Global number of experts must be divisible by number of devices: {global_num_experts} % {device_mesh.size()} != 0"
             )
         local_num_experts = global_num_experts // device_mesh.size()
-        parameter = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts]
+        parameter = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts].to(param_casting_dtype)
         self.shard = None
         return parameter, None
 
@@ -1122,7 +1132,7 @@ class RouterParallel(TensorParallelLayer):
         device_mesh=None,
         tensor_idx=None,
     ):
-        parameter = param[...]
+        parameter = param[...].to(param_casting_dtype)
         self.shard = None
         return parameter, None
 

@@ -28,7 +28,6 @@ import warnings
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
@@ -723,7 +722,6 @@ def _load_state_dict_into_meta_model(
         file_pointer.__exit__(None, None, None)
 
     return disk_offload_index
-
 
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
@@ -1725,7 +1723,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
 
-
         self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
@@ -2554,7 +2551,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.smart_apply(self._initialize_weights)
 
     def tie_weight_source_and_target(
-        self, top_level:"PreTrainedModel", missing_keys: Optional[set[str]] = None, module_prefix: str = "", _tied_weights_keys = None
+        self,
+        top_level: "PreTrainedModel",
+        missing_keys: Optional[set[str]] = None,
+        module_prefix: str = "",
+        _tied_weights_keys=None,
     ):
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
@@ -2575,8 +2576,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 continue
 
             target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
-            if missing_keys != set() and not re.search( "|".join(map(re.escape, missing_keys)), target_name) and not top_level.config.get_text_config().tie_encoder_decoder:
-                continue # `can_use_safetensors` goes against this one
+            if (
+                missing_keys != set()
+                and not re.search("|".join(map(re.escape, missing_keys)), target_name)
+                and not top_level.config.get_text_config().tie_encoder_decoder
+            ):
+                continue  # `can_use_safetensors` goes against this one
             try:
                 if source_name.endswith(".bias") or source_name.endswith(".weight"):
                     target_tensor = top_level.get_parameter_or_buffer(target_name)
@@ -2586,9 +2591,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 continue
             top_level._tie_embedding_weights(target_tensor, source_tensor)
 
-            if missing_keys and source_name not in missing_keys: # and not top_level.config.get_text_config().tie_encoder_decoder:
+            if (
+                missing_keys and source_name not in missing_keys
+            ):  # and not top_level.config.get_text_config().tie_encoder_decoder:
                 if isinstance(target_tensor, nn.Module):
-                    for k,_ in target_tensor.named_parameters():
+                    for k, _ in target_tensor.named_parameters():
                         missing_keys.discard(f"{target_name}.{k}")
                 else:
                     missing_keys.discard(target_name)
@@ -2605,24 +2612,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             for module_prefix, module in self.named_modules():
                 # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
-                if isinstance(module, PreTrainedModel) and (missing_keys != set() or self.config.tie_word_embeddings or self.config.tie_encoder_decoder):
+                if isinstance(module, PreTrainedModel) and (
+                    missing_keys != set() or self.config.tie_word_embeddings or self.config.tie_encoder_decoder
+                ):
                     module.tie_weight_source_and_target(self, missing_keys, module_prefix, self._tied_weights_keys)
                 # Additionally, if it has a custom `_tie_weights`, honor it
                 if hasattr(module, "_tie_weights"):
                     module._tie_weights()
-
 
     def _tie_embedding_weights(self, output_embeddings, input_embeddings):
         """Tie weights, and add hooks and flags if using TP."""
         if isinstance(input_embeddings, nn.Module):
             for k, v in input_embeddings.named_parameters():
                 if hasattr(output_embeddings, k):
-                    setattr(output_embeddings, k, v) # TODO check tying
+                    setattr(output_embeddings, k, v)  # TODO check tying
         else:
-            output_embeddings =  input_embeddings
-            output_embeddings.data =  input_embeddings.data
+            output_embeddings = input_embeddings
+            output_embeddings.data = input_embeddings.data
             assert output_embeddings.data.data_ptr() == input_embeddings.data.data_ptr(), "Tying weights failed."
-
 
         # Passing hooks over to the embeddings if needed
         # (currently limited to tensor parallel hooks and flags only)
@@ -4259,7 +4266,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             hf_quantizer.preprocess_model(
                 model=model,
                 device_map=device_map,
-                keep_in_fp32_modules=model._keep_in_fp32_modules, # TODO prob no longer needed?
+                keep_in_fp32_modules=model._keep_in_fp32_modules,  # TODO prob no longer needed?
                 config=config,
                 checkpoint_files=checkpoint_files,
                 use_kernels=use_kernels,
@@ -4418,7 +4425,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         if isinstance(device, torch.device):
                             device = device.index  # safetensors only
                     if device == "disk":
-                        device = "cpu" # we read to cpu to then write to disk
+                        device = "cpu"  # we read to cpu to then write to disk
                     file_pointer = safe_open(
                         os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
                     )
@@ -4466,7 +4473,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(miss_and_mismatched, is_quantized)
 
-
         # Post-processing for tensor parallelism
         if device_mesh is not None:
             # When using TP, the device map is a single device for all parameters
@@ -4499,7 +4505,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         device_mesh.get_local_rank(),
                         device_mesh,
                     )
-
 
         logger.warning(f"Loading the checkpoint files into the model took {end - start}")
         log_state_dict_report(

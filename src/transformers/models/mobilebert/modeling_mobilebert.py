@@ -672,7 +672,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
 class MobileBertForPreTraining(MobileBertPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",
-        "cls.predictions.decoder.weight": "mobilebert.embeddings.word_embeddings.weight"
+        "cls.predictions.decoder.weight": "mobilebert.embeddings.word_embeddings.weight",
     }
 
     def __init__(self, config):
@@ -771,7 +771,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
 class MobileBertForMaskedLM(MobileBertPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",
-        "cls.predictions.decoder.weight": "mobilebert.embeddings.word_embeddings.weight"
+        "cls.predictions.decoder.weight": "mobilebert.embeddings.word_embeddings.weight",
     }
 
     def __init__(self, config):

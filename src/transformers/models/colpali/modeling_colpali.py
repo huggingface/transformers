@@ -109,6 +109,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
     _tied_weights_keys = {
         "vlm.language_model.lm_head.weight": "vlm.model.language_model.shared.weight",
     }
+
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)
         self.config = config

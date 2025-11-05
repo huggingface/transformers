@@ -1901,7 +1901,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
 class BigBirdForPreTraining(BigBirdPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",
-        "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight"
+        "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
     }
 
     def __init__(self, config):
@@ -2004,7 +2004,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
 class BigBirdForMaskedLM(BigBirdPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",
-        "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight"
+        "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
     }
 
     def __init__(self, config):
@@ -2149,7 +2149,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
 class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",
-        "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight"
+        "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
     }
 
     def __init__(self, config):

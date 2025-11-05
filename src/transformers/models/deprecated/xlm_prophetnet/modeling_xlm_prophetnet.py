@@ -1611,9 +1611,7 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
     XLM_PROPHETNET_START_DOCSTRING,
 )
 class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
-    _tied_weights_keys = {
-        "encoder.word_embeddings.weight": "encoder.word_embeddings.decoder.word_embeddings.weight"
-    }
+    _tied_weights_keys = {"encoder.word_embeddings.weight": "encoder.word_embeddings.decoder.word_embeddings.weight"}
 
     def __init__(self, config: XLMProphetNetConfig):
         super().__init__(config)
@@ -1739,10 +1737,7 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
 )
 class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
     _tied_weights_keys = {
-        "prophetnet.word_embeddings.weight": [
-            "prophetnet.decoder.word_embeddings.weight",
-            "lm_head.weight"
-        ]
+        "prophetnet.word_embeddings.weight": ["prophetnet.decoder.word_embeddings.weight", "lm_head.weight"]
     }
 
     def __init__(self, config: XLMProphetNetConfig):
@@ -1942,10 +1937,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
 )
 class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
     _tied_weights_keys = {
-        "prophetnet.decoder.word_embeddings.weight": [
-            "prophetnet.decoder.word_embeddings.weight",
-            "lm_head.weight"
-        ]
+        "prophetnet.decoder.word_embeddings.weight": ["prophetnet.decoder.word_embeddings.weight", "lm_head.weight"]
     }
 
     def __init__(self, config: XLMProphetNetConfig):

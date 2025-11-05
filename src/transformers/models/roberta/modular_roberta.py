@@ -194,10 +194,7 @@ class RobertaModel(BertModel):
     """
 )
 class RobertaForCausalLM(RobertaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {
-        "lm_head.decoder.weight": "roberta.embedding.weight",
-        "lm_head.decoder.bias": "lm_head.bias"
-    }
+    _tied_weights_keys = {"lm_head.decoder.weight": "roberta.embedding.weight", "lm_head.decoder.bias": "lm_head.bias"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -305,10 +302,7 @@ class RobertaForCausalLM(RobertaPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class RobertaForMaskedLM(RobertaPreTrainedModel):
-    _tied_weights_keys = {
-        "lm_head.decoder.weight": "roberta.embedding.weight",
-        "lm_head.decoder.bias": "lm_head.bias"
-    }
+    _tied_weights_keys = {"lm_head.decoder.weight": "roberta.embedding.weight", "lm_head.decoder.bias": "lm_head.bias"}
 
     def __init__(self, config):
         super().__init__(config)

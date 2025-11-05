@@ -1006,7 +1006,6 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 class ElectraForMaskedLM(ElectraPreTrainedModel):
     _tied_weights_keys = {"generator_lm_head.weight": "electra.embeddings.word_embeddings.weight"}
 
-
     def __init__(self, config):
         super().__init__(config)
 

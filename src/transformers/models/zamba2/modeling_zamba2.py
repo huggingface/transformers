@@ -1452,6 +1452,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
 # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->Zamba2, JAMBA->ZAMBA2
 class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+
     def __init__(self, config: Zamba2Config):
         super().__init__(config)
         self.model = Zamba2Model(config)

@@ -416,9 +416,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     """
 )
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {
-        "lm_head.weight": "transformer.tokens_embed.weight"
-    }
+    _tied_weights_keys = {"lm_head.weight": "transformer.tokens_embed.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -503,9 +501,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
     """
 )
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
-    _tied_weights_keys = {
-        "transformer.tokens_embed.weight": "lm_head.weight"
-    }
+    _tied_weights_keys = {"transformer.tokens_embed.weight": "lm_head.weight"}
 
     def __init__(self, config):
         super().__init__(config)

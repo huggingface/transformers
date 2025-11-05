@@ -1768,7 +1768,6 @@ class LEDModel(LEDPreTrainedModel):
         "decoder.embed_tokens.weight": "shared.weight",
     }
 
-
     def __init__(self, config: LEDConfig):
         super().__init__(config)
 
@@ -2112,9 +2111,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
     """
 )
 class LEDForSequenceClassification(LEDPreTrainedModel):
-    _tied_weights_keys = {
-        "decoder.embed_tokens.weight": "led.encoder.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"decoder.embed_tokens.weight": "led.encoder.embed_tokens.weight"}
 
     def __init__(self, config: LEDConfig, **kwargs):
         warnings.warn(
@@ -2260,9 +2257,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
 
 @auto_docstring
 class LEDForQuestionAnswering(LEDPreTrainedModel):
-    _tied_weights_keys = {
-        "decoder.embed_tokens.weight": "led.encoder.embed_tokens.weight"
-    }
+    _tied_weights_keys = {"decoder.embed_tokens.weight": "led.encoder.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)

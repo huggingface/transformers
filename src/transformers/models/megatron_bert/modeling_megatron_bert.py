@@ -710,7 +710,7 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
 class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
-        "cls.predictions.decoder.bias": "cls.predictions.bias"
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
     def __init__(self, config, add_binary_head=True):
@@ -818,7 +818,7 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
 class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
-        "cls.predictions.decoder.bias": "cls.predictions.bias"
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
     def __init__(self, config):
@@ -927,7 +927,7 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
 class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
-        "cls.predictions.decoder.bias": "cls.predictions.bias"
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
     def __init__(self, config):

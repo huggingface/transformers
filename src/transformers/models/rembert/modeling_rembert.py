@@ -638,7 +638,6 @@ class RemBertModel(RemBertPreTrainedModel):
 
 @auto_docstring
 class RemBertForMaskedLM(RemBertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -744,7 +743,6 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
     """
 )
 class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
-
     def __init__(self, config):
         super().__init__(config)
 

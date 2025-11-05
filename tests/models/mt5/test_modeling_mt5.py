@@ -456,7 +456,6 @@ class MT5ModelTester:
                 decoder_attention_mask=decoder_attention_mask,
             )
 
-
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             # check that outputs are equal

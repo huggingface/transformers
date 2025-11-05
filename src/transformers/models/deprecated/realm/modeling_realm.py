@@ -963,7 +963,7 @@ class RealmBertModel(RealmPreTrainedModel):
 class RealmEmbedder(RealmPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.weight": "realm.embeddings.word_embeddings.weight",
-        "cls.predictions.decoder.bias": "cls.predictions.bias"
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
     def __init__(self, config):
@@ -1191,7 +1191,7 @@ class RealmScorer(RealmPreTrainedModel):
 class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.weight": "realm.embeddings.word_embeddings.weight",
-        "cls.predictions.decoder.bias": "cls.predictions.bias"
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
     def __init__(self, config):
