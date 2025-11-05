@@ -2537,12 +2537,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     else:
                         module.smart_apply(fn)
                 fn(self)
-                if not isinstance(self, nn.Parameter):
-                    for name, param in self.named_parameters(recurse=False):
-                        if param is None:
-                            continue
-                        fn(param)
-
                 return self
 
             torch.nn.Module.smart_apply = smart_apply

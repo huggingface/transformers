@@ -396,7 +396,6 @@ class XLMRobertaLMHead(nn.Module):
         return x
 
 
-
 @auto_docstring
 class XLMRobertaPreTrainedModel(PreTrainedModel):
     config_class = XLMRobertaConfig

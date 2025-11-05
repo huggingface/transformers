@@ -726,7 +726,6 @@ class Data2VecTextLMHead(nn.Module):
         return x
 
 
-
 class Data2VecTextClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 

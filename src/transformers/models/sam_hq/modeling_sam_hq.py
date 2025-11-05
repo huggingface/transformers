@@ -1254,8 +1254,6 @@ class SamHQModel(SamHQPreTrainedModel):
 
         self.post_init()
 
-
-
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
 

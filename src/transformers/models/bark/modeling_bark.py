@@ -1562,15 +1562,7 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
             audio = nn.utils.rnn.pad_sequence(audio, batch_first=True, padding_value=0)
             return audio, output_lengths
 
-        return audio
-
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings list and the output embeddings list.
-        """
-        for module in self.modules():
-            if hasattr(module, "_tie_weights"):
-                module._tie_weights()
+        return audioxw
 
 
 __all__ = [
