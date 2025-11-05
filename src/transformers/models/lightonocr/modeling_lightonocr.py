@@ -1065,7 +1065,7 @@ class LightOnOCRTextModel(LightOnOCRTextPreTrainedModel):
 
 
 class LightOnOCRModel(LightOnOCRPreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

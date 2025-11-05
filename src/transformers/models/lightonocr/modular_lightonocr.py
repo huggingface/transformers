@@ -267,13 +267,6 @@ class LightOnOCRProcessor(ProcessorMixin):
             mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
-        # Convert image_sizes to tensor if return_tensors is specified
-        if image_inputs.get("image_sizes") is not None and return_tensors == "pt":
-            if not isinstance(image_inputs["image_sizes"], torch.Tensor):
-                image_inputs["image_sizes"] = torch.tensor(image_inputs["image_sizes"])
-            else:
-                image_inputs["image_sizes"] = image_inputs["image_sizes"].clone()
-
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
@@ -583,7 +576,7 @@ class LightOnOCRTextModel(Qwen3Model):
 
 
 class LightOnOCRModel(LightOnOCRPreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
