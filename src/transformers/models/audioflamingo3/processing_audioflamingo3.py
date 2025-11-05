@@ -188,30 +188,16 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 n_win = per_sample_windows[idx]
                 total_tokens = sum(frames_per_window[w_ptr : w_ptr + n_win])
                 w_ptr += n_win
-                n_placeholders = sample.count(sound_token)
 
-                if n_placeholders == 1:
-                    # Single placeholder: expand it with the total number of tokens needed
-                    sample = sample.replace(sound_token, sound_token * total_tokens, 1)
-                elif n_placeholders == 0:
-                    # No placeholders: insert tokens based on text format
-                    prefix = sound_token * total_tokens
+                # expand the text to repeat the audio token for the corresponding number of frames
+                replace_str = []
+                while sound_token in sample:
+                    expanded_sound_token = sound_token * total_tokens
+                    replace_str.append(expanded_sound_token)
+                    sample = sample.replace(sound_token, "<placeholder>", 1)
 
-                    # Check if it's a chat template format
-                    user_start = "<|im_start|>user\n"
-                    if user_start in sample:
-                        # Chat template: insert after user start
-                        sample = sample.replace(user_start, user_start + prefix, 1)
-                    else:
-                        logger.warning("Consider applying the chat template to ensure proper output.")
-                        # Plain text: prepend to the beginning
-                        sample = prefix + sample
-                else:
-                    # Multiple placeholders not supported for simplicity
-                    raise ValueError(
-                        f"Sample {idx}: found {n_placeholders} '{sound_token}' placeholders. "
-                        f"Expected exactly 1 or 0 placeholders."
-                    )
+                while "<placeholder>" in sample:
+                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
 
                 expanded_texts.append(sample)
 

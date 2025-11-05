@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Audio Flamingo 3 (AF3) is a fully open large audio–language model designed for robust understanding and reasoning over speech, environmental sounds, and music. AF3 pairs a Whisper-style audio encoder with a causal language model and performs replace-in-place audio–text fusion: the processor aligns post-pool audio frames to a dedicated placeholder token (written as `<sound>` in code) and the model replaces those token slots with projected audio embeddings during the forward pass.
+Audio Flamingo 3 (AF3) is a fully open large audio–language model designed for robust understanding and reasoning over speech, environmental sounds, and music. AF3 pairs a Whisper-style audio encoder with a causal language model and performs replace-in-place audio–text fusion: the processor aligns post-pool audio frames to a dedicated placeholder token and the model replaces those token slots with projected audio embeddings during the forward pass.
 
 The model checkpoint is available at: [nvidia/audio-flamingo-3-hf](https://huggingface.co/nvidia/audio-flamingo-3-hf)
 
@@ -34,7 +34,7 @@ Highlights:
 
 - Unified audio encoder across speech, sound, and music.
 - **Long-audio support via windowing and post-pool alignment (up to 10 minutes maximum).** The model processes audio in 30-second windows with a hard limit of 20 windows (10 minutes total). Audio longer than 10 minutes will be truncated.
-- Deterministic fusion that preserves sequence length by replacing `<sound>` tokens with audio embeddings.
+- Deterministic fusion that preserves sequence length by replacing audio placeholder tokens with audio embeddings.
 
 This model was contributed by [Lasha Koroshinadze](https://huggingface.co/lashahub) and [Eric Bezzam](https://huggingface.co/bezzam).
 
@@ -278,19 +278,14 @@ print(transcription[0])
   A small MLP that maps encoder features to the language model’s hidden size.
 
 * **AudioFlamingo3ForConditionalGeneration**
-  A causal language model that accepts text embeddings where each `<sound>` token slot is replaced, in place, by an audio frame embedding. No sequence-length change is introduced by fusion.
+  A causal language model that accepts text embeddings where each audio placeholder token slot is replaced, in place, by an audio frame embedding. No sequence-length change is introduced by fusion.
 
 ### Processor-level alignment
 
 1. Each raw waveform is split into fixed-length windows based on the feature extractor’s `chunk_length` (seconds) and `sampling_rate` (Hz).
 2. For each window, the processor computes the number of post-pool frames `post_pool_len` that the encoder will output (matching the conv/pool schedule).
 3. The processor expands the audio placeholder token by the total number of post-pool frames across all windows.
-
-   * If the prompt contains no `<sound>`, all expanded tokens are inserted at the start of the user message in the chat template (or prepended to plain text if no template is used).
-   * If the prompt contains `<sound>`, exactly one placeholder is supported and it is expanded in place. Multiple placeholders are not supported.
 4. The model later replaces those token positions with the corresponding projected audio embeddings.
-
-This design guarantees a 1:1 match between placeholder positions in the text and encoder frame outputs, enabling safe batching without ragged audio–text concatenation.
 
 ## Usage patterns
 
@@ -309,43 +304,18 @@ keeping the audio placeholder handling.
 `audio` accepts in-memory arrays, local file paths, or URLs. Any processor kwargs (`text_kwargs`, `audio_kwargs`, etc.)
 are forwarded, so you can tweak padding or tensor formats just like when calling `processor(...)`.
 
-### Single-turn prompts (recommended)
-
-You can omit `<sound>` entirely and let the processor insert the expanded tokens:
-
-```python
-prompt = "Describe the melody in detail."
-inputs = processor(text=prompt, audio=audio_array)
-```
-
-### Explicit placeholder control (advanced)
-
-If you include `<sound>` in your prompt, provide exactly one placeholder; it will be expanded to match the total number of post‑pool frames across all windows:
-
-```python
-# For a clip that may span multiple windows:
-prompt = "<sound>\nDescribe the audio in detail."
-inputs = processor(text=prompt, audio=audio_array)
-```
-
-Notes:
-
-* The processor computes window counts automatically and expands a single `<sound>` to the correct total number of frame tokens.
-* Multiple `<sound>` placeholders are not supported and will raise an error.
-
 ## Long audio and windowing
 
 **Important: Maximum audio length is 10 minutes.** Audio longer than this will be truncated.
 
-* The feature extractor's `chunk_length` and `sampling_rate` determine window size.
-  The default setup processes 30-second windows at 16 kHz mono.
+* The default setup processes 30-second windows at 16 kHz mono.
 * **The processor enforces a hard limit of 20 windows per sample, resulting in a maximum of 10 minutes of audio (20 windows × 30 seconds).**
 * For each window:
 
   * `mel_len` is the padded mel length.
   * A conv stack reduces time as `conv_output_len = (mel_len - 1) // 2 + 1`.
   * Post-pool frames per window: `post_pool_len = (conv_output_len - 2) // 2 + 1`.
-  * A single `<sound>` placeholder is expanded to the sum of `post_pool_len` across all windows.
+  * An audio placeholder token is expanded to the sum of `post_pool_len` across all windows.
 
 ## Padding, attention, and caching
 
@@ -353,19 +323,11 @@ Notes:
   For generation with mixed prompt lengths in a batch, left padding is usually preferable.
   For training, right padding is common; AF3’s fusion mechanism itself is padding-agnostic because it replaces in place.
 * **Attention masks**
-  The processor returns `attention_mask` (text) and `feature_attention_mask` (audio). The model builds an internal 4-D mask on the encoder’s pre-pool axis with negative infinity at pad positions.
+  The processor returns `attention_mask` (text) and `input_features_mask` (audio). The model builds an internal 4-D mask on the encoder’s pre-pool axis with negative infinity at pad positions.
 * **Caching**
-  During generation, `input_features` and `feature_attention_mask` are only passed on the first step. Subsequent steps use cached keys/values from the language model.
+  During generation, `input_features` and `input_features_mask` are only passed on the first step. Subsequent steps use cached keys/values from the language model.
 
 ## Troubleshooting
-
-* Error: “Audio tokens and features mismatch”
-  Cause: The number of `<sound>` tokens in `input_ids` does not match the total number of post-pool frames.
-  Fix: Let the processor handle expansion. If you include `<sound>` explicitly, use exactly one placeholder.
-
-* Error: “Sample X: found N '<sound>' placeholders. Expected exactly 1 or 0 placeholders.”
-  Cause: Multiple placeholders are not supported.
-  Fix: Remove extra placeholders or omit them entirely and let the processor insert them.
 
 * Empty or truncated outputs when batching
   Use left padding for batched generation and decode only the new tokens after the prompt length, as shown in the quickstart.
