@@ -4,10 +4,8 @@ name: CodeQL Security Analysis
 on:
   push:
     branches: ["main"]
-  
   pull_request:
-    branches: ["**"]
-  
+    branches: ["main"]
   workflow_dispatch:
 
 jobs:
@@ -20,5 +18,5 @@ jobs:
       actions: read
       contents: read
     with:
-      languages: '["actions", "python"]'
+      languages: '["actions"]'
       queries: 'security-extended,security-and-quality'
