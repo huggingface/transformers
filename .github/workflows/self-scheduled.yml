@@ -503,7 +503,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
 
   run_kernels_gpu:
     if: ${{ inputs.job == 'run_kernels_gpu' }}
