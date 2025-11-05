@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import math
-from typing import Optional, Union
 
 import numpy as np
 
@@ -90,7 +89,7 @@ class XcodecConfig(PretrainedConfig):
         "sampling_rate": "sample_rate",
     }
     def __init__(
-        self, 
+        self,
         encoder_hidden_size=64,
         acoustic_hidden_size=256,
         downsampling_ratios=[8, 5, 4, 2, 3],

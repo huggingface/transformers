@@ -14,18 +14,16 @@
 # limitations under the License.
 
 import math
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio
 
-from .configuration_xcodec import XcodecConfig
-from ...utils import auto_docstring, can_return_tuple
 from ..auto.modeling_auto import AutoModel
 from ..dac.modeling_dac import DacDecoder, DacDecoderBlock, DacEncoder, DacModel
 from ..encodec.modeling_encodec import EncodecResidualVectorQuantizer
+from .configuration_xcodec import XcodecConfig
 
 
 class XcodecAcousticEncoder(DacEncoder):...
