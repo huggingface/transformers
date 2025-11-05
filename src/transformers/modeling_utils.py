@@ -4355,6 +4355,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model
         )
 
+        # @Cyrilvallez this fixes test_load_save_without_tied_weights... because we save in a dumb way
+        tied = re.compile("|".join(_get_tied_weight_keys(model)))
+        missing_keys = missing_keys - {k for k in missing_keys if tied.search(k)} # TODO this is really not ideal :)
         model.tie_weights()
 
         # Post-processing for tensor parallelism
