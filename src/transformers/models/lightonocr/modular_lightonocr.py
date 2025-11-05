@@ -676,10 +676,10 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            pixel_values = pixel_values.to(inputs_embeds.device, inputs_embeds.dtype)
             # Note: image_sizes is automatically expanded by the generation framework during beam search
             image_features_list = self.get_image_features(pixel_values, image_sizes)
             image_features = torch.cat(image_features_list, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
         outputs = self.language_model(
