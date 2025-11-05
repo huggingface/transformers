@@ -41,6 +41,8 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,
         },
         "audio_kwargs": {
+            "sampling_rate": 16000,
+            "chunk_length": 30.0,
             "sound_token": "<sound>",
             "return_attention_mask": True,
             "padding": "max_length",
@@ -138,41 +140,30 @@ class AudioFlamingo3Processor(ProcessorMixin):
             sound_token: str = audio_kwargs.pop("sound_token")
 
             # Determine number of chunks per sample, and flatten
-            if not hasattr(self.feature_extractor, "chunk_length") or not hasattr(
-                self.feature_extractor, "sampling_rate"
-            ):
-                raise AttributeError("Feature extractor must expose `chunk_length` (sec) and `sampling_rate` (Hz).")
-
-            max_seconds = float(getattr(self.feature_extractor, "chunk_length"))
-            sampling_rate = int(getattr(self.feature_extractor, "sampling_rate"))
-            window_size = int(max_seconds * sampling_rate)
-            max_windows = int(MAX_AUDIO_LEN // max_seconds)
+            window_size = int(audio_kwargs["sampling_rate"] * audio_kwargs["chunk_length"])
+            max_windows = int(MAX_AUDIO_LEN // audio_kwargs["chunk_length"])
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []
 
             for wav in audios:
-                total = int(wav.shape[0])
-                n_win = max(1, (total + window_size - 1) // window_size)
+                n_samples = int(wav.shape[0])
+                n_win = max(1, (n_samples + window_size - 1) // window_size)
                 if n_win > max_windows:
                     logger.warning(
-                        f"Audio duration ({total / sampling_rate:.1f}s) exceeds {MAX_AUDIO_LEN}s; truncating to first {MAX_AUDIO_LEN}s."
+                        f"Audio duration ({n_samples / audio_kwargs['sampling_rate']:.1f}s) exceeds {MAX_AUDIO_LEN}s; truncating to first {MAX_AUDIO_LEN}s."
                     )
                     n_win = max_windows
                 per_sample_windows.append(n_win)
 
-                T_cap = min(total, n_win * window_size)
+                time_cap = min(n_samples, n_win * window_size)
                 for i in range(n_win):
                     start = i * window_size
-                    end = min((i + 1) * window_size, T_cap)
+                    end = min((i + 1) * window_size, time_cap)
                     flat_chunks.append(wav[start:end])
 
             # Feature extraction
-            audio_inputs = self.feature_extractor(
-                flat_chunks,
-                sampling_rate=sampling_rate,
-                **audio_kwargs,
-            )
+            audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
             padding_mask = audio_inputs.pop("attention_mask")
 
             # Compute sequence lengths for attention mask and token counting
