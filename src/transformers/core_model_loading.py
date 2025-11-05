@@ -555,7 +555,7 @@ def convert_and_load_state_dict_in_model(
     inverse_converters = {}
     keys = list(by_conversion_pattern.keys())
 
-    with logging.tqdm(total=len(keys), desc="Loading weights", leave=False) as pbar:
+    with logging.tqdm(total=len(keys), desc="Loading weights") as pbar:
         for key in keys[::-1]:  # revert to process simple keys first
             group = by_conversion_pattern.pop(key)
             converter = group.weight_converter
@@ -606,9 +606,9 @@ def convert_and_load_state_dict_in_model(
             for op in operations:
                 op.clear_cache()
 
-        # Update progress bar
-        pbar.update()
-        pbar.refresh()
+            # Update progress bar
+            pbar.update()
+            pbar.refresh()
 
     model.inverse_converters = inverse_converters
     thread_pool.shutdown(wait=True)
