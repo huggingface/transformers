@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was released on 2025-07-10 and added to Hugging Face Transformers on 2025-11-04.*
+*This model was released on 2025-07-10 and added to Hugging Face Transformers on 2025-11-05.*
 
 # Audio Flamingo 3
 
@@ -261,10 +261,12 @@ model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_
 inputs = processor.apply_transcription_request(audio="https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav").to(model.device)
 
 generated = model.generate(**inputs)
-transcription = processor.batch_decode(generated[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+transcription = processor.batch_decode(generated[:, inputs.input_ids.shape[1]:], skip_special_tokens=True, strip_prefix=True)
 
 print(transcription[0])
 ```
+
+The model is trained to emit transcriptions prefixed with assistant framing such as `The spoken content of the audio is "<text>".`. Use `strip_prefix=True` (as shown above) to remove the fixed assistant sentence and surrounding quotes so that only the transcription remains.
 
 ## How the model works
 

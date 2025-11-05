@@ -552,7 +552,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         >>>                 {"type": "text", "text": "Transcribe the input speech."},
         >>>                 {
         >>>                     "type": "audio",
-        >>>                     "path": "https://audioflamingo3.github.io/static/long_speech/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
+        >>>                     "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
         >>>                 },
         >>>             ],
         >>>         }
@@ -565,7 +565,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         >>>                     "type": "text",
         >>>                     "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
         >>>                 },
-        >>>                 {"type": "audio", "path": "https://audioflamingo3.github.io/static/chat/FPSbCAANfbJLVSwD.mp3"},
+        >>>                 {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/FPSbCAANfbJLVSwD.mp3"},
         >>>             ],
         >>>         }
         >>>     ],

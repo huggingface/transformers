@@ -293,5 +293,44 @@ class AudioFlamingo3Processor(ProcessorMixin):
             **kwargs,
         )
 
+    def batch_decode(self, *args, strip_prefix=False, **kwargs):
+        """
+        Forward arguments to [`~PreTrainedTokenizer.batch_decode`] and optionally remove the assistant framing the model
+        was trained to produce. AF3 transcription checkpoints respond with sentences such as
+        `"The spoken content of the audio is \"...\"."`. Setting `strip_prefix=True` trims that fixed prefix and the
+        surrounding quotes so you receive only the transcription text.
+        """
+        if not hasattr(self, "tokenizer"):
+            raise ValueError(f"Cannot batch decode text: {self.__class__.__name__} has no tokenizer.")
+        decoded = self.tokenizer.batch_decode(*args, **kwargs)
+
+        if not strip_prefix:
+            return decoded
+
+        return [self._strip_assistant_prefix_and_quotes(text) for text in decoded]
+
+    def _strip_assistant_prefix_and_quotes(self, text: str) -> str:
+        """
+        Remove the assistant prefix and surrounding quotes from a decoded transcription string.
+        """
+
+        stripped = text.strip()
+
+        for prefix in (
+            "The spoken content of the audio is",
+            "The transcription of the audio is",
+        ):
+            if stripped.startswith(prefix):
+                stripped = stripped[len(prefix) :].strip()
+                break
+
+        if stripped.endswith("."):
+            stripped = stripped[:-1].strip()
+
+        if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}:
+            stripped = stripped[1:-1].strip()
+
+        return stripped
+
 
 __all__ = ["AudioFlamingo3Processor"]
