@@ -487,6 +487,7 @@ def convert_and_load_state_dict_in_model(
     dtype_policy_alt, dtype_policy_by_group_name = build_glob_alt(list(dtype_plan.keys()))
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
+    _dtype = dtype
     # 1. Create the conversion entries
     by_conversion_pattern: dict[str, ConversionEntry] = {}
     for original_key, (file_id, tensor) in state_dict:
@@ -529,8 +530,7 @@ def convert_and_load_state_dict_in_model(
                 matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[matched_dtype_pattern]
-                else:
-                    _dtype = dtype
+
 
         first_target_key = target_key.split("|")[0]
         future = None
