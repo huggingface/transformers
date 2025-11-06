@@ -190,6 +190,25 @@ class Sam3Processor(ProcessorMixin):
                 text = "geometric"
             elif input_boxes:
                 text = "visual"
+        elif isinstance(text, (list, tuple)):
+            # check that the number of text prompts is the same as the number of input boxes
+            if input_boxes:
+                if len(text) != len(input_boxes):
+                    raise ValueError(
+                        "The number of text prompts must be the same as the number of input boxes. Got {len(text)} text prompts and {len(input_boxes)} input boxes."
+                    )
+            if input_points:
+                if len(text) != len(input_points):
+                    raise ValueError(
+                        "The number of text prompts must be the same as the number of input points. Got {len(text)} text prompts and {len(input_points)} input points."
+                    )
+            for i, text_prompt in enumerate(text):
+                if text_prompt is None:
+                    if input_points and input_points[i] is not None:
+                        text_prompt = "geometric"
+                    elif input_boxes and input_boxes[i] is not None:
+                        text_prompt = "visual"
+                text[i] = text_prompt
 
         encoding_image_processor.update(
             self.tokenizer(text, return_tensors=return_tensors, padding="max_length", max_length=32)

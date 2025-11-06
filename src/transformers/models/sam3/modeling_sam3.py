@@ -266,8 +266,8 @@ def get_valid_ratio(mask):
     _, H, W = mask.shape
     valid_H = torch.sum(~mask[:, :, 0], 1)
     valid_W = torch.sum(~mask[:, 0, :], 1)
-    valid_ratio_h = valid_H.float() / H
-    valid_ratio_w = valid_W.float() / W
+    valid_ratio_h = valid_H.to(mask.dtype) / H
+    valid_ratio_w = valid_W.to(mask.dtype) / W
     valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
     return valid_ratio
 
@@ -897,7 +897,7 @@ class Sam3SinePositionEmbedding(nn.Module):
         x_embed = x * self.scale
         y_embed = y * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).to(x.dtype)
         dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
 
         pos_x = x_embed[:, None] / dim_t
@@ -917,8 +917,7 @@ class Sam3SinePositionEmbedding(nn.Module):
             Position embeddings [batch_size, num_queries, num_pos_feats*4]
         """
         assert boxes.size(-1) == 4, f"Expected 4D box coordinates (x, y, w, h), got shape {boxes.shape}"
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=boxes.device)
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=boxes.device).to(boxes.dtype)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
 
         x_embed = boxes[:, :, 0] * self.scale
@@ -1384,7 +1383,6 @@ class Sam3GeometryEncoder(nn.Module):
         """Encode box prompts using direct projection, ROI pooling, and position encoding (batch-first)."""
         batch_size, num_boxes = boxes.shape[:2]
         height, width = vision_features.shape[-2:]
-
         # Direct projection from coordinates
         boxes_embed = self.boxes_direct_project(boxes)  # [batch_size, num_boxes, hidden_size]
 
@@ -1394,8 +1392,13 @@ class Sam3GeometryEncoder(nn.Module):
         scale = torch.tensor([width, height, width, height], dtype=boxes_xyxy.dtype, device=boxes_xyxy.device)
         scale = scale.view(1, 1, 4)
         boxes_xyxy = boxes_xyxy * scale
-        # ROI align expects list of boxes per batch element
-        sampled_features = torchvision.ops.roi_align(vision_features, boxes_xyxy.float().unbind(0), self.roi_size)
+        # ROI align expects list of boxes per batch element,
+        # convert from bfloat16 to float16 as roi_align only supports float16 and float32
+        dtype = torch.float16 if vision_features.dtype == torch.bfloat16 else vision_features.dtype
+        sampled_features = torchvision.ops.roi_align(
+            vision_features.to(dtype), boxes_xyxy.to(dtype).unbind(0), self.roi_size
+        ).to(vision_features.dtype)
+
         pooled_projection = self.boxes_pool_project(sampled_features)
         pooled_projection = pooled_projection.view(batch_size, num_boxes, self.hidden_size)
         boxes_embed = boxes_embed + pooled_projection
@@ -1740,7 +1743,11 @@ class Sam3DetrEncoder(nn.Module):
         else:
             # No masks, so all positions are valid
             num_levels = len(vision_features)
-            valid_ratios = torch.ones((features_flattened.shape[0], num_levels, 2), device=features_flattened.device)
+            valid_ratios = torch.ones(
+                (features_flattened.shape[0], num_levels, 2),
+                dtype=features_flattened.dtype,
+                device=features_flattened.device,
+            )
 
         return (
             features_flattened,
@@ -2068,11 +2075,11 @@ class Sam3DetrDecoder(nn.Module):
 
     @compile_compatible_method_lru_cache(maxsize=1)
     def _get_coords(
-        self, height: torch.Tensor, width: torch.Tensor, device: torch.device
+        self, height: torch.Tensor, width: torch.Tensor, dtype: torch.dtype, device: torch.device
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Generate normalized coordinate grids."""
-        coords_h = torch.arange(0, height, device=device, dtype=torch.float32) / height
-        coords_w = torch.arange(0, width, device=device, dtype=torch.float32) / width
+        coords_h = torch.arange(0, height, device=device, dtype=dtype) / height
+        coords_w = torch.arange(0, width, device=device, dtype=dtype) / width
         return coords_h, coords_w
 
     def _get_rpb_matrix(
@@ -2094,7 +2101,9 @@ class Sam3DetrDecoder(nn.Module):
         batch_size, num_queries, _ = boxes_xyxy.shape
 
         # Generate coordinate grids
-        coords_h, coords_w = self._get_coords(height, width, reference_boxes.device)
+        coords_h, coords_w = self._get_coords(
+            height, width, dtype=reference_boxes.dtype, device=reference_boxes.device
+        )
 
         # Compute deltas between coordinates and box boundaries
         deltas_y = coords_h.view(1, -1, 1) - boxes_xyxy.reshape(-1, 1, 4)[:, :, 1:4:2]
@@ -2157,9 +2166,7 @@ class Sam3DetrDecoder(nn.Module):
         else:
             hidden_states = self.query_embed.weight.unsqueeze(0).expand(batch_size, -1, -1)
             reference_boxes = self.reference_points.weight.unsqueeze(0).expand(batch_size, -1, -1)
-
         reference_boxes = reference_boxes.sigmoid()
-
         # Initialize presence token [batch_size, 1, hidden_size]
         presence_token = None
         if not is_instance_prompt:
@@ -2178,7 +2185,6 @@ class Sam3DetrDecoder(nn.Module):
             reference_points_input = reference_boxes.unsqueeze(2) * torch.cat(
                 [valid_ratios, valid_ratios], -1
             ).unsqueeze(1)
-            # [batch_size, num_queries, num_levels, 4]
 
             # Generate sine embeddings for conditional queries
             query_sine_embed = self.position_encoding.encode_boxes(reference_points_input[:, :, 0, :])
@@ -2290,7 +2296,7 @@ class Sam3DotProductScoring(nn.Module):
 
         # Create validity mask (True for valid tokens, False for padding)
         is_valid = ~text_mask  # [batch_size, seq_len]
-        is_valid = is_valid.float().unsqueeze(-1)  # [batch_size, seq_len, 1]
+        is_valid = is_valid.to(text_features.dtype).unsqueeze(-1)  # [batch_size, seq_len, 1]
 
         # Count valid tokens per batch
         num_valid = is_valid.sum(dim=1).clamp(min=1.0)  # [batch_size, 1]
@@ -2688,8 +2694,9 @@ class Sam3Model(Sam3PreTrainedModel):
                     if input_points_labels is not None
                     else torch.zeros(batch_size, input_points.shape[1], dtype=torch.bool, device=device)
                 )
+                point_labels = torch.where(point_labels == -10, 0, point_labels)
             else:
-                point_embeddings = torch.zeros(batch_size, 0, 2, device=device)
+                point_embeddings = torch.zeros(batch_size, 0, 2, dtype=text_features.dtype, device=device)
                 point_labels = torch.zeros(batch_size, 0, dtype=torch.long, device=device)
                 point_mask = torch.zeros(batch_size, 0, dtype=torch.bool, device=device)
 
@@ -2700,9 +2707,14 @@ class Sam3Model(Sam3PreTrainedModel):
                     if input_boxes_labels is not None
                     else torch.ones_like(box_embeddings[..., 0], dtype=torch.long)
                 )
-                box_mask = torch.zeros(batch_size, input_boxes.shape[1], dtype=torch.bool, device=device)
+                box_mask = (
+                    (input_boxes_labels == -10)
+                    if input_boxes_labels is not None
+                    else torch.zeros(batch_size, input_boxes.shape[1], dtype=torch.bool, device=device)
+                )
+                box_labels = torch.where(box_labels == -10, 0, box_labels)
             else:
-                box_embeddings = torch.zeros(batch_size, 0, 4, device=device)
+                box_embeddings = torch.zeros(batch_size, 0, 4, dtype=text_features.dtype, device=device)
                 box_labels = torch.zeros(batch_size, 0, dtype=torch.long, device=device)
                 box_mask = torch.zeros(batch_size, 0, dtype=torch.bool, device=device)
 
@@ -2736,7 +2748,16 @@ class Sam3Model(Sam3PreTrainedModel):
             )
 
         if geometry_prompt_features is not None:
+            # Repeat text_features for all geometry prompts
+            if text_features.shape[0] == 1 and geometry_prompt_features.shape[0] > 1:
+                text_features = text_features.repeat(geometry_prompt_features.shape[0], 1, 1)
             combined_prompt_features = torch.cat([text_features, geometry_prompt_features], dim=1)
+            if (
+                text_padding_mask is not None
+                and text_padding_mask.shape[0] == 1
+                and geometry_prompt_padding_mask.shape[0] > 1
+            ):
+                text_padding_mask = text_padding_mask.repeat(geometry_prompt_padding_mask.shape[0], 1)
 
             if text_padding_mask is not None and geometry_prompt_padding_mask is not None:
                 combined_prompt_padding_mask = torch.cat([text_padding_mask, geometry_prompt_padding_mask], dim=1)

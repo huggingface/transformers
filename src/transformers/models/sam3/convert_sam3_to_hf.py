@@ -427,7 +427,7 @@ def convert_sam3_checkpoint(
     image_processor = Sam2ImageProcessorFast(
         image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5], size={"height": 1008, "width": 1008}
     )
-    tokenizer = CLIPTokenizerFast.from_pretrained("tokenizer_fast", max_length=32, model_max_length=32)
+    tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32", max_length=32, model_max_length=32)
     processor = Sam3Processor(image_processor=image_processor, tokenizer=tokenizer)
     processor.save_pretrained(output_path)
 
