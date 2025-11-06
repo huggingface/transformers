@@ -81,6 +81,7 @@ VideoInput = Union[
 class VideoMetadata(Mapping):
     total_num_frames: int
     fps: Optional[float] = None
+    sampled_fps: Optional[float] = None
     width: Optional[int] = None
     height: Optional[int] = None
     duration: Optional[float] = None
@@ -362,11 +363,19 @@ def read_video_opencv(
 
     video = cv2.VideoCapture(video_path)
     total_num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-    video_fps = video.get(cv2.CAP_PROP_FPS)
+    video_fps = video.get(cv2.CAP_PROP_FPS)    
+    num_frames, fps = sample_indices_fn.keywords.get("num_frames"), sample_indices_fn.keywords.get("fps")
+    if fps:
+        sampled_fps = fps
+    elif num_frames and video_fps:
+        sampled_fps = num_frames / total_num_frames * video_fps
+    else:
+        sampled_fps = video_fps if video_fps else 24
     duration = total_num_frames / video_fps if video_fps else 0
     metadata = VideoMetadata(
         total_num_frames=int(total_num_frames),
         fps=float(video_fps),
+        sampled_fps=float(sampled_fps),
         duration=float(duration),
         video_backend="opencv",
         height=int(video.get(cv2.CAP_PROP_FRAME_HEIGHT)),
@@ -425,10 +434,18 @@ def read_video_decord(
     vr = VideoReader(uri=video_path, ctx=cpu(0))  # decord has problems with gpu
     video_fps = vr.get_avg_fps()
     total_num_frames = len(vr)
+    num_frames, fps = sample_indices_fn.keywords.get("num_frames"), sample_indices_fn.keywords.get("fps")
+    if fps:
+        sampled_fps = fps
+    elif num_frames and video_fps:
+        sampled_fps = num_frames / total_num_frames * video_fps
+    else:
+        sampled_fps = video_fps if video_fps else 24
     duration = total_num_frames / video_fps if video_fps else 0
     metadata = VideoMetadata(
         total_num_frames=int(total_num_frames),
         fps=float(video_fps),
+        sampled_fps=float(sampled_fps),
         duration=float(duration),
         video_backend="decord",
     )
@@ -477,10 +494,18 @@ def read_video_pyav(
     container = av.open(video_path)
     total_num_frames = container.streams.video[0].frames
     video_fps = container.streams.video[0].average_rate  # should we better use `av_guess_frame_rate`?
+    num_frames, fps = sample_indices_fn.keywords.get("num_frames"), sample_indices_fn.keywords.get("fps")
+    if fps:
+        sampled_fps = fps
+    elif num_frames and video_fps:
+        sampled_fps = num_frames / total_num_frames * video_fps
+    else:
+        sampled_fps = video_fps if video_fps else 24
     duration = total_num_frames / video_fps if video_fps else 0
     metadata = VideoMetadata(
         total_num_frames=int(total_num_frames),
         fps=float(video_fps),
+        sampled_fps=float(sampled_fps),
         duration=float(duration),
         video_backend="pyav",
         height=container.streams.video[0].height,
@@ -539,10 +564,18 @@ def read_video_torchvision(
     )
     video_fps = info["video_fps"]
     total_num_frames = video.size(0)
+    num_frames, fps = sample_indices_fn.keywords.get("num_frames"), sample_indices_fn.keywords.get("fps")
+    if fps:
+        sampled_fps = fps
+    elif num_frames and video_fps:
+        sampled_fps = num_frames / total_num_frames * video_fps
+    else:
+        sampled_fps = video_fps if video_fps else 24
     duration = total_num_frames / video_fps if video_fps else 0
     metadata = VideoMetadata(
         total_num_frames=int(total_num_frames),
         fps=float(video_fps),
+        sampled_fps=float(sampled_fps),
         duration=float(duration),
         video_backend="torchvision",
     )
@@ -596,9 +629,19 @@ def read_video_torchcodec(
         num_ffmpeg_threads=0,
         device=kwargs.get("device", "cpu"),
     )
+    total_num_frames = decoder.metadata.num_frames
+    video_fps = decoder.metadata.average_fps
+    num_frames, fps = sample_indices_fn.keywords.get("num_frames"), sample_indices_fn.keywords.get("fps")
+    if fps:
+        sampled_fps = fps
+    elif num_frames and video_fps:
+        sampled_fps = num_frames / total_num_frames * video_fps
+    else:
+        sampled_fps = video_fps if video_fps else 24
     metadata = VideoMetadata(
-        total_num_frames=decoder.metadata.num_frames,
-        fps=decoder.metadata.average_fps,
+        total_num_frames=total_num_frames,
+        fps=video_fps,
+        sampled_fps=float(sampled_fps)
         duration=decoder.metadata.duration_seconds,
         video_backend="torchcodec",
         height=decoder.metadata.height,
