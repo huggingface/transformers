@@ -15,13 +15,13 @@
 
 import os
 import warnings
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import redirect_stdout
 from dataclasses import dataclass, fields
 from functools import partial
 from io import BytesIO
 from types import FunctionType
-from typing import Callable, NewType, Optional, Union
+from typing import NewType, Optional, Union
 from urllib.parse import urlparse
 
 import httpx
