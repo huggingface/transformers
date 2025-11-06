@@ -88,6 +88,15 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
 
+    def test_processor_from_local_subfolder_from_repo(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
+            processor.save_pretrained(f"{tmpdirname}/processor_subfolder")
+
+            processor = Wav2Vec2Processor.from_pretrained(tmpdirname, subfolder="processor_subfolder")
+
+        self.assertIsInstance(processor, Wav2Vec2Processor)
+
     def test_processor_from_local_directory_from_extractor_config(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             # copy relevant files
