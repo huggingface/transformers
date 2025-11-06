@@ -26,6 +26,7 @@ from .base import HfExporter
 from .utils import (
     get_auto_dynamic_shapes,
     patch_masks_for_export,
+    patch_moe_experts_for_export,
     register_dynamic_cache_for_export,
     register_encoder_decoder_cache_for_export,
 )
@@ -61,7 +62,7 @@ class DynamoExporter(HfExporter):
                 f"{self.__class__.__name__} can't automatically generate export inptus. Please provide sample_inputs in the exporter_config as a dictionary. "
                 "You can do so by using the tokenizer/processor to prepare a batch of inputs as you would do for a normal forward pass. "
                 f"{self.__class__.__name__} can automatically generate past_key_values and its dynamic shapes if the model is "
-                "auto-regressive and model.config.use_cache is set to True."
+                "an auto-regressive (CausalLM) and its model.config.use_cache is set to True."
             )
 
         sample_inputs = copy.deepcopy(self.export_config.sample_inputs)
@@ -86,7 +87,7 @@ class DynamoExporter(HfExporter):
             # assigns AUTO to all axes to let torch.onnx decide
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
-        with patch_masks_for_export():
+        with patch_masks_for_export() and patch_moe_experts_for_export(model):
             exported_program: ExportedProgram = torch.export.export(
                 model,
                 args=(),

@@ -14,6 +14,7 @@
 # limitations under the License.
 from collections.abc import Callable
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
 from ..cache_utils import Cache, DynamicCache, DynamicLayer, DynamicSlidingWindowLayer, EncoderDecoderCache
 from ..masking_utils import (
@@ -31,6 +32,9 @@ from ..utils.import_utils import is_torch_available
 
 if is_torch_available():
     import torch
+
+if TYPE_CHECKING:
+    from ..modeling_utils import PreTrainedModel
 
 
 def _get_dynamic_cache_dict(cache: DynamicCache):
@@ -228,12 +232,10 @@ def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str
 
 
 def batched_experts_forward_with_split_expert_weights(
-    self,
-    hidden_states: torch.Tensor,
-    top_k_index: torch.Tensor,
-    top_k_weights: torch.Tensor,
-    final_hidden_states: torch.Tensor,
+    self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
 ) -> torch.Tensor:
+    final_hidden_states = torch.zeros_like(hidden_states)
+
     # Vectorized single-pass expert dispatch (no data-dependent loop)
     num_tokens, hidden_dim = hidden_states.shape
     top_k = top_k_index.size(1)
@@ -295,8 +297,11 @@ def batched_experts_forward_with_grouped_expert_weights(
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
-    next_states: torch.Tensor,
 ) -> torch.Tensor:
+    batch_size = hidden_states.size(0)
+    hidden_states = hidden_states.reshape(-1, self.ffn_hidden_size)
+    next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
+
     # Vectorized single-pass expert dispatch (compute only hit experts)
     T = hidden_states.shape[0]
     top_k = top_k_index.shape[1]
@@ -331,7 +336,7 @@ def batched_experts_forward_with_grouped_expert_weights(
 
     y = (y * pair_weights).to(dtype)  # (P, I)
     next_states.index_add_(0, token_idx, y)  # scatter-add back to tokens
-
+    next_states = next_states.view(batch_size, -1, self.ffn_hidden_size)
     return next_states
 
 
@@ -353,3 +358,45 @@ def batched_experts_gemm(
     output = torch.bmm(input.unsqueeze(1), expert_weights).squeeze(1)
 
     return output
+
+
+MOE_EXPERTS_MODULES_TO_EXPORTABLE_FORWARD = {
+    "AriaGroupedExpertsGemm": batched_experts_gemm,
+    "DbrxExperts": batched_experts_forward_with_grouped_expert_weights,
+    "DeepseekV2Experts": batched_experts_forward_with_split_expert_weights,
+    "DeepseekV3NaiveMoe": batched_experts_forward_with_split_expert_weights,
+    "Dots1NaiveMoe": batched_experts_forward_with_split_expert_weights,
+    "Ernie4_5_MoeExperts": batched_experts_forward_with_split_expert_weights,
+    "FlexOlmoExperts": batched_experts_forward_with_split_expert_weights,
+    "Glm4MoeNaiveMoe": batched_experts_forward_with_split_expert_weights,
+    "Glm4vMoeTextNaiveMoe": batched_experts_forward_with_split_expert_weights,
+    "HunYuanMoEV1Experts": batched_experts_forward_with_split_expert_weights,
+    "JambaExperts": batched_experts_forward_with_split_expert_weights,
+    "Lfm2MoeExperts": batched_experts_forward_with_split_expert_weights,
+    "LongcatFlashExperts": batched_experts_forward_with_split_expert_weights,
+    "MiniMaxExperts": batched_experts_forward_with_split_expert_weights,
+    "MixtralExperts": batched_experts_forward_with_split_expert_weights,
+    "OlmoeExperts": batched_experts_forward_with_split_expert_weights,
+    "PhimoeExperts": batched_experts_forward_with_split_expert_weights,
+    "Qwen2MoeExperts": batched_experts_forward_with_split_expert_weights,
+    "Qwen3MoeExperts": batched_experts_forward_with_split_expert_weights,
+    "Qwen3NextExperts": batched_experts_forward_with_split_expert_weights,
+    "Qwen3OmniMoeThinkerTextExperts": batched_experts_forward_with_split_expert_weights,
+}
+
+
+@contextmanager
+def patch_moe_experts_for_export(model: "PreTrainedModel"):
+    for module in model.modules():
+        module_class_name = module.__class__.__name__
+        if module_class_name in MOE_EXPERTS_MODULES_TO_EXPORTABLE_FORWARD:
+            original_forward = module.forward
+            module.forward = MOE_EXPERTS_MODULES_TO_EXPORTABLE_FORWARD[module_class_name].__get__(module)
+
+    try:
+        yield
+    finally:
+        for module in model.modules():
+            module_class_name = module.__class__.__name__
+            if module_class_name in MOE_EXPERTS_MODULES_TO_EXPORTABLE_FORWARD:
+                module.forward = original_forward
