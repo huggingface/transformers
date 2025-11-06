@@ -2510,8 +2510,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # if there are missing keys but the source is also missing, we are out, _init_weights will init later and tie later.
             # maybe we still need ot remove tied from missing just because you tie
-            source_is_not_missing = missing_keys and re.search(rf"^{re.escape(source_name)}", "\n".join(missing_keys), flags=re.MULTILINE)
-            if not(source_is_not_missing) or missing_keys is None:
+            source_is_there = missing_keys and not re.search(rf"^{re.escape(source_name)}", "\n".join(missing_keys), flags=re.MULTILINE)
+            if source_is_there or missing_keys is None:
                 try:
                     if source_name.endswith(".bias") or source_name.endswith(".weight"):
                         source_param_or_module = top_level.get_parameter_or_buffer(source_name)
@@ -2543,7 +2543,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         missing_keys.discard(target_name)
 
             # source and target are missing, but we don't need to warn about target missing as we are prob gonna tie
-            elif missing_keys and (self.config.get_text_config().tie_word_embeddings or self.config.get_text_config().tie_encoder_decoder):
+            elif source_is_there and missing_keys and (self.config.get_text_config().tie_word_embeddings or self.config.get_text_config().tie_encoder_decoder):
                 if "d+" in target_name:
                     for target_n, _ in self.named_parameters():
                         missing_keys.discard(target_n)
