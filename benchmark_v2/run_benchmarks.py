@@ -108,6 +108,14 @@ if __name__ == "__main__":
         args.model_id, configs, args.num_tokens_to_profile, pretty_print_summary=True
     )
 
+    # Check if we have any successful benchmark results
+    if len(results) == 0:
+        logger.error("No benchmarks completed successfully. All benchmark configurations failed.")
+        sys.exit(1)
+
     dataset_id = args.push_result_to_dataset
     if dataset_id is not None and len(results) > 0:
         runner.push_results_to_hub(dataset_id, results, timestamp)
+
+    logger.info("Benchmark run completed successfully")
+    sys.exit(0)
