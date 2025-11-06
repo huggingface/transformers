@@ -380,7 +380,6 @@ class TorchAoTest(unittest.TestCase):
         ]
         self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
 
-
     @require_torchao_version_greater_or_equal("0.15.0")
     def test_fqn_to_config_regex_precedence(self):
         linear1_config = Int8WeightOnlyConfig()
@@ -524,8 +523,11 @@ class TorchAoTest(unittest.TestCase):
         )
 
         self.assertTrue(isinstance(quantized_model.model.layers[1].feed_forward.experts.gate_up_proj, Float8Tensor))
-        self.assertTrue(not isinstance(quantized_model.model.layers[44].feed_forward.experts.gate_up_proj, Float8Tensor))
+        self.assertTrue(
+            not isinstance(quantized_model.model.layers[44].feed_forward.experts.gate_up_proj, Float8Tensor)
+        )
         self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
+
 
 @require_torch_accelerator
 class TorchAoAcceleratorTest(TorchAoTest):
@@ -725,6 +727,7 @@ class TorchAoSerializationTest(unittest.TestCase):
 class TorchAoSafeSerializationTest(TorchAoSerializationTest):
     # placeholder
     quant_scheme = Float8WeightOnlyConfig()
+
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
