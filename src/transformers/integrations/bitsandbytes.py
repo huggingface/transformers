@@ -1,7 +1,9 @@
 import inspect
+from collections import defaultdict
 from inspect import signature
 from typing import Optional
 
+from ..quantizers.quantizers_utils import get_module_from_name
 from ..utils import (
     get_available_devices,
     is_accelerate_available,
@@ -29,14 +31,43 @@ logger = logging.get_logger(__name__)
 
 from ..core_model_loading import ConversionOps
 
+
 class Bnb4bitQuantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
     def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, **kwargs) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
-        old_value = model.get_parameter_or_buffer(target_key)
-        new_value = bnb.nn.Params4bit(value, **old_value.__dict__).to(value.device)
-        return {target_key : new_value}
-                    
+        if not self.hf_quantizer.pre_quantized:
+            old_value = model.get_parameter_or_buffer(target_key)
+            new_value = bnb.nn.Params4bit(value, **old_value.__dict__).to(value.device)
+            return {target_key : new_value}
+        else:
+            full_name = target_key
+            # update param name to get the weights instead of the quantized stats
+            target_key = self.hf_quantizer.get_param_name(target_key)
+            module, _ = get_module_from_name(model, target_key)
+
+            module_name = target_key.rsplit(".", 1)[0]
+            # Save the states for later quantization when they are all gathered
+            if not hasattr(self.hf_quantizer, "param_quant_stats"):
+                self.hf_quantizer.param_quant_stats = defaultdict(dict)
+            self.hf_quantizer.param_quant_stats[module_name].update({full_name: value})
+            # We are ready for quantization in this case (note, the +1 is for the weight itself)
+            if len(self.hf_quantizer.param_quant_stats[module_name]) == len(self.hf_quantizer.bnb_keys) + 1:
+                weight = self.hf_quantizer.param_quant_stats[module_name].pop(f"{module_name}.weight")
+                new_value = bnb.nn.Params4bit.from_prequantized(
+                    data=weight,
+                    quantized_stats=self.hf_quantizer.param_quant_stats[module_name],
+                    requires_grad=False,
+                    device=value.device,
+                    module=module
+                )
+                del self.hf_quantizer.param_quant_stats[module_name]
+                return {target_key : new_value}
+            return {}
+
 def _replace_with_bnb_linear(
     model,
     modules_to_not_convert=None,

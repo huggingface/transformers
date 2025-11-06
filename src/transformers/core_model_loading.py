@@ -29,13 +29,34 @@ from functools import partial
 from typing import Any, Optional, Union
 
 import torch
-from torch.distributed.tensor import DTensor
 
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer
-from .utils import logging
+from .utils import logging, is_torch_greater_or_equal
+from .quantizers import HfQuantizer
+from .utils.quantization_config import QuantizationMethod
+
+_torch_distributed_available = torch.distributed.is_available()
+_is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
+if _is_dtensor_available:
+    from torch.distributed.tensor import DTensor
 
 
 logger = logging.get_logger(__name__)
+
+str_to_torch_dtype = {
+    "BOOL": torch.bool,
+    "U8": torch.uint8,
+    "I8": torch.int8,
+    "I16": torch.int16,
+    "F16": torch.float16,
+    "BF16": torch.bfloat16,
+    "I32": torch.int32,
+    "F32": torch.float32,
+    "F64": torch.float64,
+    "I64": torch.int64,
+    "F8_E4M3": torch.float8_e4m3fn,
+    "F8_E5M2": torch.float8_e5m2,
+}
 
 
 def _glob_to_regex_src(glob: str, *, digits_only: bool = True) -> str:
@@ -280,19 +301,22 @@ class ConversionEntry:
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
 
-def _materialize_copy(tensor, dtype):
+def _materialize_copy(tensor, dtype=None):
     # PyTorch: this runs in C and releases the GIL; good for threads.
-    return tensor[...].to(dtype)
+    tensor = tensor[...]
+    if dtype is not None:
+        tensor = tensor.to(dtype)
+    return tensor
 
 
-def spawn_materialize(thread_pool, tensor, dtype) -> Future:
+def spawn_materialize(thread_pool, tensor, dtype=None) -> Future:
     def _job():
         return _materialize_copy(tensor, dtype)
 
     return thread_pool.submit(_job)
 
 
-def spawn_tp_materialize(thread_pool, tensor, dtype, sharding_method, tensor_idx) -> Future:
+def spawn_tp_materialize(thread_pool, tensor, sharding_method, tensor_idx, dtype=None) -> Future:
     def _job():
         return sharding_method.shard_tensor(tensor, param_casting_dtype=dtype, tensor_idx=tensor_idx)[0]
 
@@ -384,7 +408,8 @@ def set_param_for_module(
                 pass  # TODO for "local" stuff, it will trigger missmatched no?
             param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
-        if ref is not None and ref.shape != param_value.shape:
+        # skip mismatch for hf_quantizer for now
+        if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
         missing_keys.discard(layer_name)
         setattr(module_obj, param_name, param_value)
@@ -464,11 +489,19 @@ def convert_and_load_state_dict_in_model(
             empty_param = meta_model_state_dict.get(t)
             # If it does not exist, it's unexpected
             if empty_param is None:
-                unexpected_keys.add(t)
-                continue
-            
+                if hf_quantizer is not None and hf_quantizer.is_valid_unexpected_keys(t):
+                    pass
+                else:
+                    unexpected_keys.add(t)
+                    continue
+    
             if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, t):
                 converter.quantization_operation = hf_quantizer.get_quantize_ops()
+                # TODO: to clean later. We need to use the empty_param from the checkpoint to decide if we upcast the param to a specific dtype
+                k_dtype = tensor.get_dtype()
+                dtype = str_to_torch_dtype[k_dtype]
+                empty_param_checkpoint = torch.empty(size=tensor.get_shape(), dtype=dtype, device="meta")
+                _, _dtype = _infer_parameter_dtype(model, t, empty_param_checkpoint, hf_quantizer)
             else:
                 _dtype = dtype
                 matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
@@ -532,9 +565,7 @@ def convert_and_load_state_dict_in_model(
                             if op := converter.quantization_operation:
                                 with log_to_misc(layer_name, misc, op=op):
                                     realized_value.update(
-                                        op.convert(
-                                            {k: realized_value.pop(k)}, quant_config=hf_quantizer.quantization_config, model=model
-                                        )
+                                        op.convert({k: realized_value.pop(k)}, model=model)
                                     )
 
                         for k, output_value in realized_value.items():
@@ -561,7 +592,7 @@ def convert_and_load_state_dict_in_model(
             pbar.refresh()
 
     model.inverse_converters = inverse_converters
-    thread_pool.shutdown(wait=True)
+    thread_pool.shutdown(wait=False)
     return missing_keys, unexpected_keys, mismatch_keys, misc
 
 
@@ -582,3 +613,34 @@ def revert_weight_conversion(model, state_dict):
         original_state_dict[key] = value
     state_dict = original_state_dict
     return state_dict
+
+def _infer_parameter_dtype(
+    model: torch.nn.Module,
+    param_name: str,
+    empty_param: torch.Tensor,
+    hf_quantizer: Optional[HfQuantizer] = None,
+) -> Union[bool, Optional[torch.dtype]]:
+    try:
+        old_param = model.get_parameter_or_buffer(param_name)
+    except Exception as e:
+        if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
+            QuantizationMethod.HQQ,
+            QuantizationMethod.QUARK,
+            QuantizationMethod.MXFP4,
+            QuantizationMethod.BITS_AND_BYTES,
+        }:
+            return True, None
+        else:
+            raise e
+    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
+    # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
+    # in int/uint/bool and not cast them.
+    casting_dtype = None
+    is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
+    if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+        # dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
+        if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, param_name):
+            casting_dtype = model.config._pre_quantization_dtype
+        else:
+            casting_dtype = old_param.dtype
+    return old_param is not None and old_param.is_contiguous(), casting_dtype

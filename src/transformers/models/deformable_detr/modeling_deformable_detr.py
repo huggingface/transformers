@@ -1703,13 +1703,17 @@ class DeformableDetrMLPPredictionHead(nn.Module):
 )
 class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
+    _tied_weights_keys = {
+        r"bbox_embed.(\d+).layers.1.weight":"bbox_embed.0.layers.1.weight",
+        r"bbox_embed.(\d+).layers.0.weight":"bbox_embed.0.layers.0.weight",
+        r"class_embed.1.weight":"class_embed.0.weight",
+        r"class_embed.1.bias":"class_embed.0.bias",
+    }
 
     def __init__(self, config: DeformableDetrConfig):
         super().__init__(config)
-        self._tied_weights_keys = {}
         # Deformable DETR encoder-decoder model
         self.model = DeformableDetrModel(config)
         # Detection heads on top
@@ -1720,7 +1724,7 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             output_dim=4,
             num_layers=3,
         )
-
+        _tied_weights_keys = {}
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = (config.decoder_layers + 1) if config.two_stage else config.decoder_layers
         if config.with_box_refine:
@@ -1728,20 +1732,17 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
             # hack implementation for iterative bounding box refinement
             self.model.decoder.bbox_embed = self.bbox_embed
-            self._tied_weights_keys.update(
-                {
-                    "model.decoder.bbox_embed ": "bbox_embed",
-                }
-            )
+            _tied_weights_keys.update({
+                "model.decoder.bbox_embed":"bbox_embed"
+            })
         else:
             self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
             self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
-            self.model.decoder.bbox_embed = None
         if config.two_stage:
             # hack implementation for two-stage
             self.model.decoder.class_embed = self.class_embed
-            self._tied_weights_keys.update({"model.decoder.class_embed": "class_embed"})
-
+            _tied_weights_keys.update({"model.decoder.class_embed":"class_embed"})
+        # self._tied_weights_keys = _tied_weights_keys
         # Initialize weights and apply final processing
         self.post_init()
 

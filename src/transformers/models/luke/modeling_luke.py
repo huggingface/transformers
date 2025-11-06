@@ -1036,14 +1036,6 @@ class LukeLMHead(nn.Module):
 
         return x
 
-    def _tie_weights(self):
-        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        # For accelerate compatibility and to not break backward compatibility
-        if self.decoder.bias.device.type == "meta":
-            self.decoder.bias = self.bias
-        else:
-            self.bias = self.decoder.bias
-
 
 @auto_docstring(
     custom_intro="""

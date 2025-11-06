@@ -1996,7 +1996,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     """
 )
 class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"text_decoder_postnet.lm_head.weight": "speecht5.prenet.embed_tokens.weight"}
+    _tied_weights_keys = {"text_decoder_postnet.lm_head.weight": "speecht5.decoder.prenet.embed_tokens.weight"}
 
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)

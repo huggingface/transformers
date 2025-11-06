@@ -60,7 +60,7 @@ class XLMRobertaModel(RobertaModel):
     """
 )
 class XLMRobertaForCausalLM(RobertaForCausalLM):
-    _tied_weights_keys = {"lm_head.decoder.weight": "roberta.embedding.weight", "lm_head.decoder.bias": "lm_head.bias"}
+    _tied_weights_keys = {"lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight", "lm_head.decoder.bias": "lm_head.bias"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -153,7 +153,7 @@ class XLMRobertaForCausalLM(RobertaForCausalLM):
 
 @auto_docstring
 class XLMRobertaForMaskedLM(RobertaForMaskedLM):
-    _tied_weights_keys = {"lm_head.decoder.weight": "roberta.embedding.weight", "lm_head.decoder.bias": "lm_head.bias"}
+    _tied_weights_keys = {"lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight", "lm_head.decoder.bias": "lm_head.bias"}
 
     def __init__(self, config):
         super().__init__(config)

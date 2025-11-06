@@ -2111,7 +2111,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
     """
 )
 class LEDForSequenceClassification(LEDPreTrainedModel):
-    _tied_weights_keys = {"decoder.embed_tokens.weight": "led.encoder.embed_tokens.weight"}
 
     def __init__(self, config: LEDConfig, **kwargs):
         warnings.warn(

@@ -575,22 +575,22 @@ class Fp8Quantize(ConversionOps):
 
     reverse_op: type[ConversionOps]
 
-    def __init__(self, block_size: Optional[tuple[int, int]] = None):
-        self.block_size = block_size
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
         self.reverse_op = Fp8Dequantize
 
-    def convert(self, input_dict: torch.Tensor, quant_config: Optional[dict[str, Any]]= None, **kwargs) -> dict[str, torch.Tensor]:
+    def convert(self, input_dict: torch.Tensor, **kwargs) -> dict[str, torch.Tensor]:
         # Unpack single key/value (value may be wrapped in a list)
         target_keys, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
 
         # Resolve block size (support dict-like or attr-like quant_config)
         block_size = None
-        if quant_config is not None:
-            if isinstance(quant_config, dict):
-                block_size = quant_config.get("weight_block_size")
+        if self.hf_quantizer.quantization_config is not None:
+            if isinstance(self.hf_quantizer.quantization_config, dict):
+                block_size = self.hf_quantizer.quantization_config.get("weight_block_size")
             else:
-                block_size = getattr(quant_config, "weight_block_size", None)
+                block_size = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
         if block_size is None:
             block_size = (value.shape[-2], value.shape[-1])
 

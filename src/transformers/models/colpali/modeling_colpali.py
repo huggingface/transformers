@@ -106,9 +106,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         "vlm.multi_modal_projector": "vlm.model.multi_modal_projector",
         "vlm.language_model.lm_head": "vlm.lm_head",
     }
-    _tied_weights_keys = {
-        "vlm.language_model.lm_head.weight": "vlm.model.language_model.shared.weight",
-    }
 
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)

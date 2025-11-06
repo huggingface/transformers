@@ -1346,7 +1346,6 @@ class T5EncoderModel(T5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
-
     def get_encoder(self):
         return self.encoder
 

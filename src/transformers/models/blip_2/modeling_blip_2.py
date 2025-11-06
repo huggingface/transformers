@@ -1034,11 +1034,6 @@ class Blip2Model(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn = False  # because self.qformer does not support FA2
-    _tied_weights_keys = {
-        "language_model.decoder.embed_tokens.weight": "language_model.shared.weight",
-        "language_model.encoder.embed_tokens.weight": "language_model.shared.weight",
-        "language_model.lm_head.weight": "language_model.shared.weight",
-    }
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1076,11 +1071,6 @@ class Blip2Model(Blip2PreTrainedModel):
 
     def get_decoder(self):
         return self.language_model.get_decoder()
-
-    # def _tie_weights(self):
-    #     if not self.config.use_decoder_only_language_model:
-    #         self.language_model.encoder.embed_tokens = self.language_model.shared
-    #         self.language_model.decoder.embed_tokens = self.language_model.shared
 
     @filter_out_non_signature_kwargs()
     @auto_docstring
@@ -1636,10 +1626,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
 
     def _preprocess_accelerate(self):
         r"""

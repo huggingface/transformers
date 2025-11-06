@@ -46,7 +46,12 @@ from torch.utils.checkpoint import checkpoint
 
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_checkpoint_conversion_mapping
-from .core_model_loading import WeightConverter, convert_and_load_state_dict_in_model, revert_weight_conversion
+from .core_model_loading import (
+    WeightConverter,
+    _infer_parameter_dtype,
+    convert_and_load_state_dict_in_model,
+    revert_weight_conversion,
+)
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -467,39 +472,12 @@ def _end_ptr(tensor: torch.Tensor) -> int:
     return stop
 
 
-def _as_list(value) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, dict):
-        result: list[str] = []
-        for subvalue in value.values():
-            result.extend(_as_list(subvalue))
-        return result
-    if isinstance(value, Iterable):
-        return list(value)
-    return [value]
-
-
-def _extract_tied_value_names(tied_weight_keys) -> list[str]:
-    if tied_weight_keys is None:
-        return []
-    if isinstance(tied_weight_keys, dict):
-        names: list[str] = []
-        for tied in tied_weight_keys.values():
-            names.extend(_as_list(tied))
-        return names
-    return _as_list(tied_weight_keys)
-
-
 def _get_tied_weight_keys(module: nn.Module, prefix=""):
     tied_weight_keys = []
     if getattr(module, "_tied_weights_keys", None) is not None:
-        value_names = _extract_tied_value_names(list(module._tied_weights_keys.keys()))
+        value_names = list(module._tied_weights_keys.keys())
         names = [f"{prefix}.{k}" if prefix else k for k in value_names]
         tied_weight_keys.extend(names)
-        tied_weight_keys.extend(value_names)
     if getattr(module, "_dynamic_tied_weights_keys", None) is not None:
         names = [f"{prefix}.{k}" if prefix else k for k in module._dynamic_tied_weights_keys]
         tied_weight_keys.extend(names)
@@ -557,39 +535,6 @@ def _find_identical(tensors: list[set[str]], state_dict: dict[str, torch.Tensor]
         else:
             shared_tensors.append(shared)
     return shared_tensors, identical
-
-
-def _infer_parameter_dtype(
-    model: "PreTrainedModel",
-    param_name: str,
-    empty_param: torch.Tensor,
-    hf_quantizer: Optional[HfQuantizer] = None,
-) -> Union[bool, Optional[torch.dtype]]:
-    try:
-        old_param = model.get_parameter_or_buffer(param_name)
-    except Exception as e:
-        if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
-            QuantizationMethod.HQQ,
-            QuantizationMethod.QUARK,
-            QuantizationMethod.MXFP4,
-            QuantizationMethod.BITS_AND_BYTES,
-        }:
-            return True, None
-        else:
-            raise e
-    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
-    # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
-    # in int/uint/bool and not cast them.
-    casting_dtype = None
-    is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
-    if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
-        # dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
-        if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, param_name):
-            casting_dtype = model.config._pre_quantization_dtype
-        else:
-            casting_dtype = old_param.dtype
-    return old_param is not None and old_param.is_contiguous(), casting_dtype
-
 
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
     """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
@@ -730,39 +675,6 @@ def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
         weights_name = f"{path}.{variant}.{name}"
     return weights_name
 
-
-def update_key_name(keys):
-    """
-    Updates a dictionary of keys to pack layers together as layer.{0, 1, 4} instead of layers.0, layers.1, layers.4.
-    """
-    key_dict = defaultdict(list)
-    for key in keys:
-        all_digits = re.findall(r".(\d+).", key)
-        for i, k in enumerate(all_digits):
-            if len(key_dict[re.sub(r".(\d+).", ".*.", key)]) <= i:
-                key_dict[re.sub(r".(\d+).", ".*.", key)].append(set())
-            key_dict[re.sub(r".(\d+).", ".*.", key)][i].add(int(k))
-
-    final_keys = set()
-    for key in keys:
-        text = re.sub(r".(\d+).", ".*.", key)
-        pattern = key_dict[text]
-        final_text = ""
-        for i, part in enumerate(text.split("*")):
-            if len(pattern) <= i:
-                final_text += part
-            else:
-                data = [str(i) for i in sorted(pattern[i])]
-                if len(data) > 10:
-                    result = f"{data[0]}...{data[-1]}"
-                else:
-                    result = ", ".join(data)  # If there are only 1 or 2 elements, show them all
-                if len(data) > 1:
-                    final_text += part + "{" + result + "}"
-                else:
-                    final_text += part + data[0]
-        final_keys.add(final_text)
-    return sorted(final_keys)
 
 
 def _get_resolved_checkpoint_files(
@@ -2474,7 +2386,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         try:
-            if isinstance(
+            if isinstance(module, PreTrainedModel):
+                return
+            elif isinstance(
                 module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)
             ):
                 module.weight.data.normal_(mean=0.0, std=std)
@@ -2549,13 +2463,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         top_level: "PreTrainedModel",
         missing_keys: Optional[set[str]] = None,
         module_prefix: str = "",
-        _tied_weights_keys=None,
     ):
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
         and the encoder and decoder. This relies on the `_tied_weights_keys` dict.
         """
-        missing_keys = missing_keys or set()
         mapping = getattr(self, "_tied_weights_keys", None)
         if not isinstance(mapping, dict):
             return
@@ -2563,41 +2475,42 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             source_name = f"{module_prefix}.{source_name}" if module_prefix else source_name
             try:
                 if source_name.endswith(".bias") or source_name.endswith(".weight"):
-                    source_tensor = top_level.get_parameter_or_buffer(source_name)
+                    source_param_or_module = top_level.get_parameter_or_buffer(source_name)
                 else:
-                    source_tensor = top_level.get_submodule(source_name)
+                    source_param_or_module = top_level.get_submodule(source_name)
             except AttributeError:
                 continue
 
             target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
+            # during post_init, don't tie if config does not tie
             if (
-                missing_keys != set()
-                and not re.search(rf"^{target_name}", "\n".join(missing_keys)) # regex for modules
-                and not top_level.config.get_text_config().tie_encoder_decoder
-            ):
+                not self.config.get_text_config().tie_word_embeddings and
+                (missing_keys != set() and missing_keys is not None
+                and re.search(rf"\n{source_name}", "\n".join(missing_keys)))  # if source is missing, all missing (can_uss_safetensors ensures this)
+            ): # test_can_init_all_missing_weights need this to not skip
                 continue  # `can_use_safetensors` goes against this one
-            try:
-                if source_name.endswith(".bias") or source_name.endswith(".weight"):
-                    target_tensor = top_level.get_parameter_or_buffer(target_name)
-                else:
-                    target_tensor = top_level.get_submodule(target_name)
-            except AttributeError:
-                continue
 
-            module, param_type = get_module_from_name(top_level, target_name)
-            if isinstance(source_tensor, nn.Module):
-                target_tensor.load_state_dict(source_tensor.state_dict())  # TODO can we do better?
-            else:
-                setattr(module, param_type, source_tensor)
-            top_level._tie_embedding_weights(target_tensor, source_tensor)
-
-            if (
-                missing_keys and not re.search(fr"^{source_name}", "\n".join(missing_keys))
-            ):  # and not top_level.config.get_text_config().tie_encoder_decoder:
-                if isinstance(target_tensor, nn.Module):
-                    for k, _ in target_tensor.named_parameters():
-                        missing_keys.discard(f"{target_name}.{k}")
+            if "d+" in target_name:
+                reg = re.compile(target_name)
+                # if target_name is a re:
+                for target_n, _ in self.named_parameters():
+                    # we don't want to TIE if the weight was found in the ckpt (not missing)
+                    if reg.search(target_n) and missing_keys is not None and re.search(rf"\n{source_name}", "\n".join(missing_keys)):
+                        submodule, target_entity = target_n.rsplit(".", 1)
+                        submodule = self.get_submodule(submodule)
+                        setattr(submodule, target_entity, source_param_or_module)
+                        if missing_keys and not re.search(rf"{source_name}", "\n".join(missing_keys)):
+                            missing_keys.discard(target_n) # probably not full match here?
+            # missing_keys None -> post init -> need to tie
+            elif missing_keys is None or re.search(rf"^{re.escape(target_name)}", "\n".join(missing_keys), flags=re.M):
+                if "." in target_name:
+                    submodule, weight = target_name.rsplit(".", 1)
+                    submodule = top_level.get_submodule(submodule)
+                    setattr(submodule, weight, source_param_or_module)
                 else:
+                    setattr(top_level, target_name, source_param_or_module)
+
+                if missing_keys and not re.search(rf"{source_name}", "\n".join(missing_keys)):
                     missing_keys.discard(target_name)
 
     def tie_weights(self, missing_keys: Optional[set[str]] = None):
@@ -2608,41 +2521,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if missing_keys is None:
             # called from `post_init`
             # if self.config.get_text_config().tie_word_embeddings or self.config.get_text_config().tie_encoder_decoder: # is this even true? no cuz resize?
-            self.tie_weight_source_and_target(self, missing_keys, "", self._tied_weights_keys)
+            self.tie_weight_source_and_target(self, missing_keys, "")
         else:
             for module_prefix, module in self.named_modules():
                 # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
                 if isinstance(module, PreTrainedModel) and (
                     missing_keys != set() or self.config.tie_word_embeddings or self.config.tie_encoder_decoder
                 ):
-                    module.tie_weight_source_and_target(self, missing_keys, module_prefix, self._tied_weights_keys)
+                    module.tie_weight_source_and_target(self, missing_keys, module_prefix)
                 # Additionally, if it has a custom `_tie_weights`, honor it
                 if hasattr(module, "_tie_weights"):
                     module._tie_weights()
-
-    def _tie_embedding_weights(self, output_embeddings, input_embeddings):
-        """Tie weights, and add hooks and flags if using TP."""
-
-        # Passing hooks over to the embeddings if needed
-        # (currently limited to tensor parallel hooks and flags only)
-        if hasattr(input_embeddings, "_is_hooked") and getattr(input_embeddings, "_hf_tp_plan", None):
-            output_embeddings._is_hooked = input_embeddings._is_hooked
-            output_embeddings._hf_tp_plan = input_embeddings._hf_tp_plan
-            output_embeddings._forward_hooks = input_embeddings._forward_hooks
-            output_embeddings._forward_pre_hooks = input_embeddings._forward_pre_hooks
-            output_embeddings.__repr__ = (
-                lambda: f"{output_embeddings.__repr__()}\nTP Plan: {output_embeddings._hf_tp_plan}"
-            )
-
-        if getattr(output_embeddings, "bias", None) is not None:
-            output_embeddings.bias.data = nn.functional.pad(
-                output_embeddings.bias.data,
-                (0, output_embeddings.weight.shape[0] - output_embeddings.bias.shape[0]),
-                "constant",
-                0,
-            )
-        if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
-            output_embeddings.out_features = input_embeddings.num_embeddings
 
     def _get_no_split_modules(self, device_map: str):
         """
@@ -3251,7 +3140,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         variant: Optional[str] = None,
         token: Optional[Union[str, bool]] = None,
         save_peft_format: bool = True,
-        save_original_format: bool = False,
+        save_original_format: bool = False, # TODO next PR will make it go to True
         **kwargs,
     ):
         """
