@@ -225,3 +225,131 @@ def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str
             )
 
     return dynamic_shapes
+
+
+def batched_experts_forward_with_split_expert_weights(
+    self,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    final_hidden_states: torch.Tensor,
+) -> torch.Tensor:
+    # Vectorized single-pass expert dispatch (no data-dependent loop)
+    num_tokens, hidden_dim = hidden_states.shape
+    top_k = top_k_index.size(1)
+    device = hidden_states.device
+    dtype = hidden_states.dtype
+
+    # Flatten token-expert pairs
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, top_k).reshape(-1)  # (P,)
+    expert_ids = top_k_index.reshape(-1)  # (P,)
+    pair_weights = top_k_weights.reshape(-1, 1).to(dtype)  # (P, 1)
+
+    # Gather inputs for all (token, expert) pairs
+    x = hidden_states.index_select(0, token_idx)  # (P, H)
+
+    # Stack per-expert weights once, then gather per pair
+    # Linear weight shapes: gate/up: (I, H), down: (H, I)
+    if hasattr(self[0], "w1"):
+        Wg = torch.stack([m.w1.weight for m in self], dim=0)  # (E, I, H)
+        Wup = torch.stack([m.w3.weight for m in self], dim=0)  # (E, I, H)
+        Wd = torch.stack([m.w2.weight for m in self], dim=0)  # (E, H, I)
+    elif hasattr(self[0], "gate_proj"):
+        Wg = torch.stack(
+            [m.gate_proj.weight for m in self if not isinstance(m, torch.nn.Identity)], dim=0
+        )  # (E, I, H)
+        Wup = torch.stack([m.up_proj.weight for m in self if not isinstance(m, torch.nn.Identity)], dim=0)  # (E, I, H)
+        Wd = torch.stack(
+            [m.down_proj.weight for m in self if not isinstance(m, torch.nn.Identity)], dim=0
+        )  # (E, H, I)
+    else:
+        raise RuntimeError("Unexpected expert MLP structure")
+
+    # Select weights for each pair and reshape for bmm
+    Wg_sel = Wg.index_select(0, expert_ids).transpose(1, 2)  # (P, H, I)
+    Wup_sel = Wup.index_select(0, expert_ids).transpose(1, 2)  # (P, H, I)
+    Wd_sel = Wd.index_select(0, expert_ids).transpose(1, 2)  # (P, I, H)
+
+    x_ = x.unsqueeze(1)  # (P, 1, H)
+
+    # gate/up projections
+    s_gate = torch.bmm(x_, Wg_sel).squeeze(1)  # (P, I)
+    s_up = torch.bmm(x_, Wup_sel).squeeze(1)  # (P, I)
+
+    # activation and elementwise product
+    act = self[0].act_fn(s_gate)  # (P, I)  # same act for all experts
+    inter = act * s_up  # (P, I)
+
+    # down projection
+    y = torch.bmm(inter.unsqueeze(1), Wd_sel).squeeze(1)  # (P, H)
+
+    # apply routing weights and scatter-add back to tokens
+    y = (y * pair_weights).to(dtype)
+    final_hidden_states.index_add_(0, token_idx, y)
+
+    return final_hidden_states
+
+
+def batched_experts_forward_with_grouped_expert_weights(
+    self,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    next_states: torch.Tensor,
+) -> torch.Tensor:
+    # Vectorized single-pass expert dispatch (compute only hit experts)
+    T = hidden_states.shape[0]
+    top_k = top_k_index.shape[1]
+    device = hidden_states.device
+    dtype = hidden_states.dtype
+
+    # Flatten token-expert pairs
+    token_idx = torch.arange(T, device=device).unsqueeze(1).expand(-1, top_k).reshape(-1)  # (P,)
+    expert_ids = top_k_index.reshape(-1)  # (P,)
+    pair_weights = top_k_weights.reshape(-1, 1).to(dtype)  # (P, 1)
+
+    # Gather input states for all pairs
+    x = hidden_states.index_select(0, token_idx)  # (P, I)
+
+    # Prepare per-expert weights and select for each pair
+    I = self.ffn_hidden_size
+    H = self.hidden_size
+    W1 = self.mlp.w1.view(self.num_experts, I, H)  # (E, I, H)
+    V1 = self.mlp.v1.view(self.num_experts, I, H)  # (E, I, H)
+    W2 = self.mlp.w2.view(self.num_experts, I, H)  # (E, I, H)
+
+    W1_sel = W1.index_select(0, expert_ids)  # (P, I, H)
+    V1_sel = V1.index_select(0, expert_ids)  # (P, I, H)
+    W2_sel = W2.index_select(0, expert_ids)  # (P, I, H)
+
+    x_ = x.unsqueeze(1)  # (P, 1, I)
+    s1 = torch.bmm(x_, W1_sel).squeeze(1)  # (P, H)
+    s2 = torch.bmm(x_, V1_sel).squeeze(1)  # (P, H)
+
+    inter = self.mlp.activation_fn(s1) * s2  # (P, H)
+    y = torch.bmm(inter.unsqueeze(1), W2_sel.transpose(1, 2)).squeeze(1)  # (P, I)
+
+    y = (y * pair_weights).to(dtype)  # (P, I)
+    next_states.index_add_(0, token_idx, y)  # scatter-add back to tokens
+
+    return next_states
+
+
+def batched_experts_gemm(
+    self,
+    input: torch.Tensor,
+    tokens_per_expert: torch.Tensor,
+) -> torch.Tensor:
+    # Create expert assignment indices [num_tokens]
+    expert_indices = torch.repeat_interleave(
+        torch.arange(self.groups, device=input.device, dtype=torch.long), tokens_per_expert.to(torch.long)
+    )
+    torch._check(expert_indices.shape[0] == input.shape[0])
+
+    # Gather expert weights for each token: [num_tokens, in_features, out_features]
+    expert_weights = self.weight.index_select(0, expert_indices)
+
+    # Batched matrix multiplication: [num_tokens, 1, in_features] @ [num_tokens, in_features, out_features]
+    output = torch.bmm(input.unsqueeze(1), expert_weights).squeeze(1)
+
+    return output

@@ -302,11 +302,20 @@ class AriaGroupedExpertsGemm(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (num_tokens, out_features).
         """
-        return sequential_experts_gemm(
-            input,
-            self.weight,
-            tokens_per_expert.cpu(),
-        )
+        if torch.compiler.is_exporting():
+            from ...exporters.utils import batched_experts_gemm
+
+            return batched_experts_gemm(
+                self,
+                input,
+                tokens_per_expert,
+            )
+        else:
+            return sequential_experts_gemm(
+                input,
+                self.weight,
+                tokens_per_expert.cpu(),
+            )
 
 
 class AriaExperts(nn.Module):

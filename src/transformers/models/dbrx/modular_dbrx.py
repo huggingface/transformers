@@ -175,24 +175,36 @@ class DbrxExperts(nn.Module):
     ) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.ffn_hidden_size)
-
         next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        split_expert_shape = (-1, self.ffn_hidden_size, self.hidden_size)
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
+        if torch.compiler.is_exporting():
+            from ...exporters.utils import batched_experts_forward_with_grouped_expert_weights
+
+            next_states = batched_experts_forward_with_grouped_expert_weights(
+                self,
+                hidden_states,
+                top_k_index,
+                top_k_weights,
+                next_states,
+            )
+        else:
             with torch.no_grad():
-                idx, token_idx = torch.where(expert_mask[expert_idx])
-            v1 = self.mlp.v1.view(split_expert_shape)[expert_idx]
-            w1 = self.mlp.w1.view(split_expert_shape)[expert_idx]
-            w2 = self.mlp.w2.view(split_expert_shape)[expert_idx]
-            states = self.mlp(hidden_states[token_idx], w1, v1, w2)
-            states = states.view(-1, self.ffn_hidden_size) * top_k_weights[token_idx, idx, None]
-            next_states.index_add_(0, token_idx, states)
+                expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+                expert_mask = expert_mask.permute(2, 1, 0)
+                expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+            split_expert_shape = (-1, self.ffn_hidden_size, self.hidden_size)
+
+            for expert_idx in expert_hit:
+                expert_idx = expert_idx[0]
+                with torch.no_grad():
+                    idx, token_idx = torch.where(expert_mask[expert_idx])
+                v1 = self.mlp.v1.view(split_expert_shape)[expert_idx]
+                w1 = self.mlp.w1.view(split_expert_shape)[expert_idx]
+                w2 = self.mlp.w2.view(split_expert_shape)[expert_idx]
+                states = self.mlp(hidden_states[token_idx], w1, v1, w2)
+                states = states.view(-1, self.ffn_hidden_size) * top_k_weights[token_idx, idx, None]
+                next_states.index_add_(0, token_idx, states)
 
         next_states = next_states.view(batch_size, -1, self.ffn_hidden_size)
         return next_states
