@@ -2424,7 +2424,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
                 message += ', `"attn_implementation=flash_attention_3"`, `"attn_implementation=flash_attention_2"`, `"attn_implementation=paged|flash_attention_2"`'
             if self._supports_sdpa:
-                message += ', `"attn_implementation=sdpa"`, `"attn_implementation=paged|spda"`'
+                message += ', `"attn_implementation=sdpa"`, `"attn_implementation=paged|sdpa"`'
             if self._supports_flex_attn:
                 message += ', `"attn_implementation=flex_attention"`'
             raise ValueError(message + ".")
