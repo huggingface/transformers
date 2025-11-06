@@ -45,6 +45,7 @@ AUTODOC_FILES = [
 
 PLACEHOLDER_TO_AUTO_MODULE = {
     "image_processor_class": ("image_processing_auto", "IMAGE_PROCESSOR_MAPPING_NAMES"),
+    "tokenizer_class": ("tokenization_auto", "TOKENIZER_MAPPING_NAMES"),
     "video_processor_class": ("video_processing_auto", "VIDEO_PROCESSOR_MAPPING_NAMES"),
     "feature_extractor_class": ("feature_extraction_auto", "FEATURE_EXTRACTOR_MAPPING_NAMES"),
     "processor_class": ("processing_auto", "PROCESSOR_MAPPING_NAMES"),
@@ -53,10 +54,12 @@ PLACEHOLDER_TO_AUTO_MODULE = {
 
 UNROLL_KWARGS_METHODS = {
     "preprocess",
+    "__call__",
 }
 
 UNROLL_KWARGS_CLASSES = {
     "ImageProcessorFast",
+    "ProcessorMixin",
 }
 
 HARDCODED_CONFIG_FOR_MODELS = {
@@ -246,6 +249,68 @@ class ImageProcessorArgs:
     Added for backward compatibility but this should be set as a processor attribute in future models.
     """,
         "shape": None,
+    }
+
+
+class ProcessorArgs:
+    # __init__ arguments
+    image_processor = {
+        "description": """
+    The image processor is a required input.
+    """,
+        "type": "{image_processor_class}",
+    }
+
+    tokenizer = {
+        "description": """
+    The tokenizer is a required input.
+    """,
+        "type": "{tokenizer_class}",
+    }
+
+    video_processor = {
+        "description": """
+    The video processor is a required input.
+    """,
+        "type": "{video_processor_class}",
+    }
+
+    audio_processor = {
+        "description": """
+    The audio processor is a required input.
+    """,
+        "type": "{audio_processor_class}",
+    }
+
+    feature_extractor = {
+        "description": """
+    The feature extractor is a required input.
+    """,
+        "type": "{feature_extractor_class}",
+    }
+
+    chat_template = {
+        "description": """
+    A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
+    """,
+        "type": "str",
+    }
+
+    # __call__ arguments
+    text = {
+        "description": """
+    The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+    (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+    `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+    """,
+    }
+
+    audio = {
+        "description": """
+    The audio or batch of audios to be prepared. Each audio can be a NumPy array or PyTorch tensor.
+    In case of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
+    and T is the sample length of the audio.
+    """,
     }
 
 
@@ -1130,6 +1195,63 @@ def get_model_name(obj):
     return "model"
 
 
+def generate_processor_intro(cls) -> str:
+    """
+    Generate the intro docstring for a processor class based on its attributes.
+
+    Args:
+        cls: Processor class to generate intro for
+
+    Returns:
+        str: Generated intro text
+    """
+    class_name = cls.__name__
+
+    # Get attributes and their corresponding class names
+    attributes = cls.get_attributes()
+    if not attributes:
+        return ""
+
+    # Build list of component names and their classes
+    components = []
+    component_classes = []
+
+    for attr in attributes:
+        # Get the class name for this attribute
+        class_attr = f"{attr}_class"
+        # Format attribute name for display
+        attr_display = attr.replace("_", " ")
+        components.append(attr_display)
+        component_classes.append(f"[`{{{class_attr}}}`]")
+    if not components:
+        return ""
+
+    # Generate the intro text
+    if len(components) == 1:
+        components_text = f"a {components[0]}"
+        classes_text = component_classes[0]
+        classes_text_short = component_classes[0].replace("[`", "[`~")
+    elif len(components) == 2:
+        components_text = f"a {components[0]} and a {components[1]}"
+        classes_text = f"{component_classes[0]} and {component_classes[1]}"
+        classes_text_short = (
+            f"{component_classes[0].replace('[`', '[`~')} and {component_classes[1].replace('[`', '[`~')}"
+        )
+    else:
+        components_text = ", ".join(f"a {c}" for c in components[:-1]) + f", and a {components[-1]}"
+        classes_text = ", ".join(component_classes[:-1]) + f", and {component_classes[-1]}"
+        classes_short = [c.replace("[`", "[`~") for c in component_classes]
+        classes_text_short = ", ".join(classes_short[:-1]) + f", and {classes_short[-1]}"
+
+    intro = f"""Constructs a {class_name} which wraps {components_text} into a single processor.
+
+[`{class_name}`] offers all the functionalities of {classes_text}. See the
+{classes_text_short} for more information.
+"""
+
+    return intro
+
+
 def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
     """
     Get the dictionary of placeholders for the given model name.
@@ -1151,7 +1273,9 @@ def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
                 place_holder_value = None
             if place_holder_value is not None:
                 if isinstance(place_holder_value, (list, tuple)):
-                    place_holder_value = place_holder_value[0]
+                    place_holder_value = (
+                        place_holder_value[-1] if place_holder_value[-1] is not None else place_holder_value[0]
+                    )
                 placeholders_dict[placeholder] = place_holder_value if place_holder_value is not None else placeholder
             else:
                 placeholders_dict[placeholder] = placeholder
@@ -1342,13 +1466,14 @@ def _get_parameter_info(param_name, documented_params, source_args_dict, param_t
         ):
             param_type = documented_params[param_name]["type"]
         optional = documented_params[param_name]["optional"]
-        shape = documented_params[param_name]["shape"]
+        shape = documented_params[param_name].get("shape", None)
         shape_string = shape if shape else ""
         additional_info = documented_params[param_name]["additional_info"] or ""
         description = f"{documented_params[param_name]['description']}\n"
     elif param_name in source_args_dict:
         # Parameter is documented in ModelArgs or ImageProcessorArgs
-        shape = source_args_dict[param_name]["shape"]
+        param_type = source_args_dict[param_name].get("type", param_type)
+        shape = source_args_dict[param_name].get("shape", None)
         shape_string = " " + shape if shape else ""
         description = source_args_dict[param_name]["description"]
         additional_info = source_args_dict[param_name].get("additional_info", None)
@@ -1376,9 +1501,23 @@ def _process_regular_parameters(
         undocumented_parameters (`list`): List to append undocumented parameters to
     """
     docstring = ""
-    source_args_dict = (
-        get_args_doc_from_source([ModelArgs, ImageProcessorArgs]) if source_args_dict is None else source_args_dict
-    )
+    # Check if this is a processor (check both parent_class and class_name for "Processor")
+    is_processor = False
+    if parent_class is not None:
+        is_processor = "ProcessorMixin" in parent_class.__name__ or any(
+            "ProcessorMixin" in base.__name__ for base in parent_class.__mro__
+        )
+    elif class_name and "Processor" in class_name:
+        # When decorating methods directly, check if class name suggests it's a processor
+        is_processor = True
+
+    # Use appropriate args source based on whether it's a processor or not
+    if source_args_dict is None:
+        if is_processor:
+            source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs])
+        else:
+            source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs])
+
     missing_args = {}
 
     for param_name, param in sig.parameters.items():
@@ -1467,7 +1606,22 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
         undocumented_parameters (`list`): List to append undocumented parameters to
     """
     docstring = ""
-    source_args_dict = get_args_doc_from_source(ImageProcessorArgs)
+
+    # Check if this is a processor (has ProcessorMixin in parent class hierarchy or class name contains "Processor")
+    is_processor = False
+    if parent_class is not None:
+        is_processor = "ProcessorMixin" in parent_class.__name__ or any(
+            "ProcessorMixin" in base.__name__ for base in parent_class.__mro__
+        )
+    # Also check by function's qualified name when decorating methods directly
+    elif "Processor" in func.__qualname__:
+        is_processor = True
+
+    # Use appropriate args source based on whether it's a processor or not
+    if is_processor:
+        source_args_dict = get_args_doc_from_source([ImageProcessorArgs, ProcessorArgs])
+    else:
+        source_args_dict = get_args_doc_from_source(ImageProcessorArgs)
 
     # Check if we need to add typed kwargs description to the docstring
     unroll_kwargs = func.__name__ in UNROLL_KWARGS_METHODS
@@ -1476,7 +1630,6 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
         unroll_kwargs = any(
             unroll_kwargs_class in parent_class.__name__ for unroll_kwargs_class in UNROLL_KWARGS_CLASSES
         )
-
     if unroll_kwargs:
         # get all unpackable "kwargs" parameters
         kwargs_parameters = [
@@ -1496,6 +1649,117 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
 
             # Process each kwarg parameter
             for param_name, param_type_annotation in kwarg_param.annotation.__args__[0].__annotations__.items():
+                # Handle nested kwargs structures for processors
+                if is_processor and param_name.endswith("_kwargs"):
+                    # Check if this is a basic kwargs type that should be skipped
+                    # Basic kwargs types are generic containers that shouldn't be documented as individual params
+                    basic_kwargs_types = ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs"]
+
+                    # Get the actual type (unwrap Optional if needed)
+                    actual_type = param_type_annotation
+                    type_name = getattr(param_type_annotation, "__name__", None)
+                    if type_name is None and hasattr(param_type_annotation, "__origin__"):
+                        # Handle Optional[Type] or Union cases
+                        args = getattr(param_type_annotation, "__args__", ())
+                        for arg in args:
+                            if arg is not type(None):
+                                actual_type = arg
+                                type_name = getattr(arg, "__name__", None)
+                                break
+
+                    # Skip only if it's one of the basic kwargs types
+                    if type_name in basic_kwargs_types:
+                        continue
+
+                    # Otherwise, unroll the custom typed kwargs
+                    # Get the nested TypedDict's annotations
+                    if hasattr(actual_type, "__annotations__"):
+                        nested_kwargs_doc = getattr(actual_type, "__doc__", None)
+                        documented_nested_kwargs = {}
+                        if nested_kwargs_doc:
+                            documented_nested_kwargs = parse_docstring(nested_kwargs_doc)[0]
+
+                        # Only process fields that are documented in the custom kwargs class's own docstring
+                        # This prevents showing too many inherited parameters
+                        if not documented_nested_kwargs:
+                            # No documentation in the custom kwargs class, skip unrolling
+                            continue
+
+                        # Process each field in the custom typed kwargs
+                        for nested_param_name, nested_param_type in actual_type.__annotations__.items():
+                            # Only document parameters that are explicitly documented in the TypedDict's docstring
+                            if nested_param_name not in documented_nested_kwargs:
+                                continue
+                            nested_param_type_str = str(nested_param_type)
+                            nested_optional = False
+
+                            # Process parameter type
+                            if "typing" in nested_param_type_str:
+                                nested_param_type_str = "".join(nested_param_type_str.split("typing.")).replace(
+                                    "transformers.", "~"
+                                )
+                            else:
+                                nested_param_type_str = f"{nested_param_type_str.replace('transformers.', '~').replace('builtins', '')}.{nested_param_name}"
+                            if "ForwardRef" in nested_param_type_str:
+                                nested_param_type_str = re.sub(
+                                    r"ForwardRef\('([\w.]+)'\)", r"\1", nested_param_type_str
+                                )
+                            if "Optional" in nested_param_type_str:
+                                nested_param_type_str = re.sub(r"Optional\[(.*?)\]", r"\1", nested_param_type_str)
+                                nested_optional = True
+
+                            # Check for default value
+                            nested_param_default = ""
+                            if parent_class is not None:
+                                nested_param_default = str(getattr(parent_class, nested_param_name, ""))
+                                nested_param_default = (
+                                    f", defaults to `{nested_param_default}`" if nested_param_default != "" else ""
+                                )
+
+                            # Only use the TypedDict's own docstring, not source_args_dict
+                            # This prevents pulling in too many inherited parameters
+                            (
+                                nested_param_type_str,
+                                nested_optional_string,
+                                nested_shape_string,
+                                nested_additional_info,
+                                nested_description,
+                                nested_is_documented,
+                            ) = _get_parameter_info(
+                                nested_param_name,
+                                documented_nested_kwargs,
+                                {},  # Empty dict - only use TypedDict's own docstring
+                                nested_param_type_str,
+                                nested_optional,
+                            )
+
+                            # nested_is_documented should always be True here since we filter for it above
+                            # Check if type is missing
+                            if nested_param_type_str == "":
+                                print(
+                                    f"🚨 {nested_param_name} for {type_name} in file {func.__code__.co_filename} has no type"
+                                )
+                            nested_param_type_str = (
+                                nested_param_type_str if "`" in nested_param_type_str else f"`{nested_param_type_str}`"
+                            )
+                            # Format the parameter docstring
+                            if nested_additional_info:
+                                docstring += set_min_indent(
+                                    f"{nested_param_name} ({nested_param_type_str}{nested_additional_info}):{nested_description}",
+                                    indent_level + 8,
+                                )
+                            else:
+                                docstring += set_min_indent(
+                                    f"{nested_param_name} ({nested_param_type_str}{nested_shape_string}{nested_optional_string}{nested_param_default}):{nested_description}",
+                                    indent_level + 8,
+                                )
+
+                        # Skip processing the _kwargs parameter itself since we've processed its contents
+                        continue
+                    else:
+                        # If we can't get annotations, skip this parameter
+                        continue
+
                 param_type = str(param_type_annotation)
                 optional = False
 
@@ -1781,11 +2045,21 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
     from transformers.models import auto as auto_module
 
     is_dataclass = False
+    is_processor = False
     docstring_init = ""
     docstring_args = ""
     if "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
         docstring_init = auto_method_docstring(
             cls.__init__, parent_class=cls, custom_args=custom_args, checkpoint=checkpoint
+        ).__doc__.replace("Args:", "Parameters:")
+    elif "ProcessorMixin" in (x.__name__ for x in cls.__mro__):
+        is_processor = True
+        docstring_init = auto_method_docstring(
+            cls.__init__,
+            parent_class=cls,
+            custom_args=custom_args,
+            checkpoint=checkpoint,
+            source_args_dict=get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs]),
         ).__doc__.replace("Args:", "Parameters:")
     elif "ModelOutput" in (x.__name__ for x in cls.__mro__):
         # We have a data class
@@ -1810,17 +2084,23 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         model_name_lowercase = model_name_lowercase.replace("_", "-")
 
     name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
-    if name == [] and custom_intro is None and not is_dataclass:
+    if name == [] and custom_intro is None and not is_dataclass and not is_processor:
         raise ValueError(
             f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
             "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the auto doc."
         )
-    if name != [] or custom_intro is not None or is_dataclass:
+    if name != [] or custom_intro is not None or is_dataclass or is_processor:
         name = name[0] if name else None
         if custom_intro is not None:
             pre_block = equalize_indent(custom_intro, indent_level)
             if not pre_block.endswith("\n"):
                 pre_block += "\n"
+        elif is_processor:
+            # Generate processor intro dynamically
+            pre_block = generate_processor_intro(cls)
+            if pre_block:
+                pre_block = equalize_indent(pre_block, indent_level)
+                pre_block = format_args_docstring(pre_block, model_name_lowercase)
         elif model_name_title is None or name is None:
             pre_block = ""
         else:

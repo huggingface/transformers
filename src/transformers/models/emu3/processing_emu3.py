@@ -22,11 +22,11 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_vision_available
+from ...utils import auto_docstring, is_vision_available
 
 
 if is_vision_available():
-    from .image_processing_emu3 import smart_resize
+    from .image_processing_emu3 import Emu3ImageProcessorKwargs, smart_resize
 
 
 class Emu3TextKwargs(TextKwargs, total=False):
@@ -35,6 +35,7 @@ class Emu3TextKwargs(TextKwargs, total=False):
 
 class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Emu3TextKwargs
+    images_kwargs: Emu3ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "return_for_image_generation": False,
@@ -47,23 +48,8 @@ class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Emu3Processor(ProcessorMixin):
-    r"""
-    Constructs a Emu3 processor which wraps a Emu3 image processor and a GPT2 tokenizer into a single
-    processor.
-
-    [`Emu3Processor`] offers all the functionalities of [`Emu3ImageProcessor`] and [`GPT2TokenizerFast`].
-    See the [`~Emu3Processor.__call__`] and [`~Emu3Processor.decode`] for more information.
-
-    Args:
-        image_processor ([`Emu3ImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`Emu3TokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
     def __init__(
         self,
         image_processor,
@@ -81,6 +67,7 @@ class Emu3Processor(ProcessorMixin):
         self.downsample_ratio = 8
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
@@ -88,26 +75,6 @@ class Emu3Processor(ProcessorMixin):
         **kwargs: Unpack[Emu3ProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to Emu3TokenizerFast's [`~Emu3TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

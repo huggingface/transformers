@@ -485,6 +485,23 @@ MATH_OPERATORS = {
 }
 
 
+def has_auto_docstring_decorator(obj) -> bool:
+    try:
+        # Get the source lines for the object
+        source_lines = inspect.getsourcelines(obj)[0]
+
+        # Check the lines before the definition for @auto_docstring decorator
+        for line in source_lines[:10]:  # Check first 10 lines (decorators come before def/class)
+            line = line.strip()
+            if line.startswith("@auto_docstring"):
+                return True
+    except (TypeError, OSError):
+        # Some objects don't have source code available
+        pass
+
+    return False
+
+
 def find_indent(line: str) -> int:
     """
     Returns the number of spaces that start a line indent.
@@ -1421,6 +1438,10 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
 
         obj = getattr(transformers, name)
         if not callable(obj) or not isinstance(obj, type) or getattr(obj, "__doc__", None) is None:
+            continue
+
+        # Skip objects decorated with @auto_docstring - they have auto-generated documentation
+        if has_auto_docstring_decorator(obj):
             continue
 
         # If we are checking against the diff, we skip objects that are not part of the diff.

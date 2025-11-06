@@ -16,25 +16,32 @@
 Image/Text processor class for CLIP
 """
 
-from ...processing_utils import ProcessorMixin
+from typing import Optional, Union
+
+from ...audio_utils import AudioInput
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring
+from ...video_utils import VideoInput
 
 
+@auto_docstring
 class CLIPProcessor(ProcessorMixin):
-    r"""
-    Constructs a CLIP processor which wraps a CLIP image processor and a CLIP tokenizer into a single processor.
-
-    [`CLIPProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`CLIPTokenizerFast`]. See the
-    [`~CLIPProcessor.__call__`] and [`~CLIPProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`CLIPImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`AutoTokenizer`], *optional*):
-            The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
+
+    @auto_docstring
+    def __call__(
+        self,
+        images: Optional[ImageInput] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        videos: Optional[VideoInput] = None,
+        audio: Optional[AudioInput] = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature:
+        return super().__call__(images, text, videos, audio, **kwargs)
 
 
 __all__ = ["CLIPProcessor"]
