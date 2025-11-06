@@ -32,13 +32,11 @@ from ..glm4_moe.modeling_glm4_moe import (
     eager_attention_forward,
 )
 from ..mixtral.modeling_mixtral import (
-    MixtralDecoderLayer,
     MixtralExperts,
     MixtralForCausalLM,
     MixtralForQuestionAnswering,
     MixtralForSequenceClassification,
     MixtralForTokenClassification,
-    MixtralMLP,
     MixtralModel,
     MixtralPreTrainedModel,
     MixtralRMSNorm,
@@ -235,10 +233,6 @@ class MiniMaxM2Config(PreTrainedConfig):
         )
 
 
-class MiniMaxM2MLP(MixtralMLP):
-    pass
-
-
 class MiniMaxM2Experts(MixtralExperts):
     pass
 
@@ -343,10 +337,6 @@ class MiniMaxM2Attention(Glm4MoeAttention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-
-class MiniMaxM2DecoderLayer(MixtralDecoderLayer):
-    pass
 
 
 class MiniMaxM2PreTrainedModel(MixtralPreTrainedModel):
