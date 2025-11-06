@@ -251,7 +251,9 @@ def _ignore_causal_mask_sdpa(
     if (
         not is_tracing(padding_mask)
         # only cases when lower and upper diags are the same, see https://github.com/pytorch/pytorch/issues/108108
-        and (query_length == 1 or (kv_length == query_length or _is_torch_xpu_available))
+        and (
+            query_length == 1 or (kv_length == query_length or (_is_torch_xpu_available and padding_mask is not None))
+        )
         # in this case we need to add special patterns to the mask so cannot be skipped otherwise
         and (local_attention_size is None or kv_length < local_attention_size)
         # In this case, we need to add padding to the mask, so cannot be skipped otherwise
@@ -260,7 +262,7 @@ def _ignore_causal_mask_sdpa(
             or (
                 padding_mask.all()
                 if not _is_torch_xpu_available or query_length == 1
-                else padding_mask[:, :query_length].all()
+                else (padding_mask[:, :query_length].all() and not padding_mask[:, query_length:].any())
             )
         )
     ):
