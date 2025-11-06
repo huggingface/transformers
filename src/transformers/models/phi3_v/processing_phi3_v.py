@@ -148,7 +148,7 @@ class Phi3VProcessor(ProcessorMixin):
 
             tokenized_prompts.append(tokenized_outputs)
 
-        if padding!="max_length":
+        if padding != "max_length":
             max_length = min(max_length, max([len(tokenized_input) for tokenized_input in tokenized_prompts]))
 
         pad_token_id = self.tokenizer.pad_token_id
