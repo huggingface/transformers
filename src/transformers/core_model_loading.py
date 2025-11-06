@@ -623,14 +623,12 @@ def _infer_parameter_dtype(
     try:
         old_param = model.get_parameter_or_buffer(param_name)
     except Exception as e:
-        print("we are in the expection")
         if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
             QuantizationMethod.MXFP4,
             QuantizationMethod.BITS_AND_BYTES,
         }:
-            print("we should be here no ?")
             return True, None
         else:
             raise e
