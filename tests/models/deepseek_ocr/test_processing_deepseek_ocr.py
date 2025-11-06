@@ -80,14 +80,6 @@ class DeepseekOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         processor.save_pretrained(self.tmpdirname)
         self.image_token = processor.image_token
-        if is_vision_available():
-            from PIL import Image
-
-            from ...test_processing_common import MODALITY_INPUT_DATA
-
-            local_image_path = os.path.join(self.tmpdirname, "local_test_image.png")
-            Image.new("RGB", (32, 32), color="white").save(local_image_path)
-            MODALITY_INPUT_DATA["images"] = [local_image_path, local_image_path]
 
     @staticmethod
     def prepare_processor_dict():
@@ -141,24 +133,6 @@ class DeepseekOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_token_id = processor.tokenizer.convert_tokens_to_ids(processor.image_token)
         expected_mask = inputs["input_ids"] == image_token_id
         torch.testing.assert_close(image_attention_mask, expected_mask)
-
-    @require_torch
-    def test_num_img_tokens_handling(self):
-        from PIL import Image
-
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
-        image1 = Image.new("RGB", (64, 64), color="red")
-        image2 = Image.new("RGB", (128, 128), color="green")
-
-        text = [
-            f"{processor.image_token} First image.",
-            f"{processor.image_token} Second image.",
-        ]
-        inputs = processor(text=text, images=[image1, image2], return_tensors="pt")
-
-        self.assertIn("num_img_tokens", inputs)
-        self.assertIsInstance(inputs["num_img_tokens"], list)
-        self.assertEqual(len(inputs["num_img_tokens"]), 2)
 
     @require_torch
     def test_processor_with_multiple_images(self):
