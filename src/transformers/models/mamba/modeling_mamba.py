@@ -721,7 +721,7 @@ class MambaModel(MambaPreTrainedModel):
     """
 )
 class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"backbone.embeddings.weight": "lm_head.weight"}
+    _tied_weights_keys = { "lm_head.weight":"backbone.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

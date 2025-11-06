@@ -330,7 +330,6 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-
 class ClvpModelForConditionalGenerationTester:
     def __init__(self, parent, is_training=False):
         self.parent = parent

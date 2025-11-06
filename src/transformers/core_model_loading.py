@@ -445,16 +445,14 @@ def convert_and_load_state_dict_in_model(
             converter_key = entry_key = target_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
-        new_target_key = []
         _dtype = dtype
+        new_target_key = [] # test_load_with_mismatched_shapes for AutoModel.from_pretrained(AutoForCausal, vocab=10)
         for t in target_key.split("|"):
-            # let's correct the prefix if needed
-            if loading_base_model_from_task_state_dict:
+            if t.startswith(prefix) and meta_model_state_dict.get(t.replace(f"{prefix}.", "")) is not None:
                 t = t.replace(f"{prefix}.", "")
-            elif loading_task_model_from_base_state_dict:
+            elif meta_model_state_dict.get(f"{prefix}.{t}") is not None:
                 t = f"{prefix}.{t}"
             new_target_key.append(t)
-
             empty_param = meta_model_state_dict.get(t)
             # If it does not exist, it's unexpected
             if empty_param is None:
@@ -478,6 +476,7 @@ def convert_and_load_state_dict_in_model(
 
         first_target_key = new_target_key[0]
         target_key = "|".join(new_target_key)
+
         future = None
         if device_mesh:
             if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name):

@@ -2499,46 +2499,55 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         mapping = getattr(self, "_tied_weights_keys", None)
         if not isinstance(mapping, dict):
             return
+        if (
+            not self.config.get_text_config().tie_word_embeddings and
+            not self.config.get_text_config().tie_encoder_decoder
+        ):
+            return
+
         for target_name, source_name in mapping.items():
             source_name = f"{module_prefix}.{source_name}" if module_prefix else source_name
-            try:
-                if source_name.endswith(".bias") or source_name.endswith(".weight"):
-                    source_param_or_module = top_level.get_parameter_or_buffer(source_name)
+
+            # if there are missing keys but the source is also missing, we are out, _init_weights will init later and tie later.
+            # maybe we still need ot remove tied from missing just because you tie
+            source_is_not_missing = missing_keys and re.search(rf"^{re.escape(source_name)}", "\n".join(missing_keys), flags=re.MULTILINE)
+            if not(source_is_not_missing) or missing_keys is None:
+                try:
+                    if source_name.endswith(".bias") or source_name.endswith(".weight"):
+                        source_param_or_module = top_level.get_parameter_or_buffer(source_name)
+                    else:
+                        source_param_or_module = top_level.get_submodule(source_name)
+                except AttributeError:
+                    continue
+
+                target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
+
+                if "d+" in target_name:
+                    reg = re.compile(target_name)
+                    for target_n, _ in self.named_parameters():
+                        if reg.search(target_n):
+                            submodule, target_entity = target_n.rsplit(".", 1)
+                            submodule = self.get_submodule(submodule)
+                            setattr(submodule, target_entity, source_param_or_module)
+                            if missing_keys:
+                                missing_keys.discard(target_n) # probably not full match here?
                 else:
-                    source_param_or_module = top_level.get_submodule(source_name)
-            except AttributeError:
-                continue
+                    if "." in target_name:
+                        submodule, weight = target_name.rsplit(".", 1)
+                        submodule = top_level.get_submodule(submodule)
+                        setattr(submodule, weight, source_param_or_module)
+                    else:
+                        setattr(top_level, target_name, source_param_or_module)
 
-            target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
-            # during post_init, don't tie if config does not tie
-            if (
-                not self.config.get_text_config().tie_word_embeddings and
-                (missing_keys != set() and missing_keys is not None
-                and re.search(rf"\n{source_name}", "\n".join(missing_keys)))  # if source is missing, all missing (can_uss_safetensors ensures this)
-            ): # test_can_init_all_missing_weights need this to not skip
-                continue  # `can_use_safetensors` goes against this one
+                    if missing_keys:
+                        missing_keys.discard(target_name)
 
-            if "d+" in target_name:
-                reg = re.compile(target_name)
-                # if target_name is a re:
-                for target_n, _ in self.named_parameters():
-                    # we don't want to TIE if the weight was found in the ckpt (not missing)
-                    if reg.search(target_n) and missing_keys is not None and re.search(rf"\n{source_name}", "\n".join(missing_keys)):
-                        submodule, target_entity = target_n.rsplit(".", 1)
-                        submodule = self.get_submodule(submodule)
-                        setattr(submodule, target_entity, source_param_or_module)
-                        if missing_keys and not re.search(rf"{source_name}", "\n".join(missing_keys)):
-                            missing_keys.discard(target_n) # probably not full match here?
-            # missing_keys None -> post init -> need to tie
-            elif missing_keys is None or re.search(rf"^{re.escape(target_name)}", "\n".join(missing_keys), flags=re.M):
-                if "." in target_name:
-                    submodule, weight = target_name.rsplit(".", 1)
-                    submodule = top_level.get_submodule(submodule)
-                    setattr(submodule, weight, source_param_or_module)
+            # source and target are missing, but we don't need to warn about target missing as we are prob gonna tie
+            elif missing_keys and (self.config.get_text_config().tie_word_embeddings or self.config.get_text_config().tie_encoder_decoder):
+                if "d+" in target_name:
+                    for target_n, _ in self.named_parameters():
+                        missing_keys.discard(target_n)
                 else:
-                    setattr(top_level, target_name, source_param_or_module)
-
-                if missing_keys and not re.search(rf"{source_name}", "\n".join(missing_keys)):
                     missing_keys.discard(target_name)
 
     def tie_weights(self, missing_keys: Optional[set[str]] = None):
@@ -4313,13 +4322,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         error_msgs = []
         misc = {}
 
-        # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
-        prefix = model.base_model_prefix
-        has_prefix_module = any(s.startswith(prefix) for s in model.state_dict().keys()) if len(prefix) > 0 else False
-        expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
-        loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
-        loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
-
         if is_deepspeed_zero3_enabled() and not is_quantized:
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
         else:
@@ -4362,8 +4364,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 device_map,
                 model.dtype_plan,
                 device_mesh,
-                loading_task_model_from_base_state_dict,
-                loading_base_model_from_task_state_dict,
             )
             end = time.perf_counter()
 
@@ -4382,7 +4382,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(miss_and_mismatched, is_quantized)
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
-            missing_keys, unexpected_keys, loading_task_model_from_base_state_dict, model
+            missing_keys, unexpected_keys, False, model
         )
 
         # Post-processing for tensor parallelism
