@@ -93,7 +93,7 @@ def feature_extractor_class_from_name(class_name: str):
         if getattr(extractor, "__name__", None) == class_name:
             return extractor
 
-    # We did not fine the class, but maybe it's because a dep is missing. In that case, the class will be in the main
+    # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # init and we return the proper dummy to get an appropriate error message.
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
@@ -113,7 +113,7 @@ def get_feature_extractor_config(
     **kwargs,
 ):
     """
-    Loads the tokenizer configuration from a pretrained model tokenizer configuration.
+    Loads the feature extractor configuration from a pretrained model feature extractor configuration.
 
     Args:
         pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -122,7 +122,7 @@ def get_feature_extractor_config(
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
               huggingface.co.
             - a path to a *directory* containing a configuration file saved using the
-              [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
+              [`~FeatureExtractionMixin.save_pretrained`] method, e.g., `./my_model_directory/`.
 
         cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
@@ -141,7 +141,7 @@ def get_feature_extractor_config(
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
         local_files_only (`bool`, *optional*, defaults to `False`):
-            If `True`, will only try to load the tokenizer configuration from local files.
+            If `True`, will only try to load the feature extractor configuration from local files.
 
     <Tip>
 
@@ -150,22 +150,22 @@ def get_feature_extractor_config(
     </Tip>
 
     Returns:
-        `Dict`: The configuration of the tokenizer.
+        `Dict`: The configuration of the feature extractor.
 
     Examples:
 
     ```python
     # Download configuration from huggingface.co and cache.
-    tokenizer_config = get_tokenizer_config("google-bert/bert-base-uncased")
-    # This model does not have a tokenizer config so the result will be an empty dict.
-    tokenizer_config = get_tokenizer_config("FacebookAI/xlm-roberta-base")
+    feature_extractor_config = get_feature_extractor_config("facebook/wav2vec2-base-960h")
+    # This model does not have a feature extractor config so the result will be an empty dict.
+    feature_extractor_config = get_feature_extractor_config("FacebookAI/xlm-roberta-base")
 
-    # Save a pretrained tokenizer locally and you can reload its config
-    from transformers import AutoTokenizer
+    # Save a pretrained feature extractor locally and you can reload its config
+    from transformers import AutoFeatureExtractor
 
-    tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
-    tokenizer.save_pretrained("tokenizer-test")
-    tokenizer_config = get_tokenizer_config("tokenizer-test")
+    feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
+    feature_extractor.save_pretrained("feature-extractor-test")
+    feature_extractor_config = get_feature_extractor_config("feature-extractor-test")
     ```"""
     resolved_config_file = cached_file(
         pretrained_model_name_or_path,
