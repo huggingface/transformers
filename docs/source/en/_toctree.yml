@@ -1010,6 +1010,8 @@
         title: Aria
       - local: model_doc/aya_vision
         title: AyaVision
+      - local: model_doc/bagel
+        title: Bagel
       - local: model_doc/blip
         title: BLIP
       - local: model_doc/blip-2
