@@ -160,7 +160,7 @@ qmodel = AutoModelForCausalLM.from_pretrained(hf_hub_model)
 
 ✅ Your model is now loaded and ready for inference!
 
-> Note: If the model has been quantized in 4 bit and 'gemlite' library is installed, SINQ utilize gemlite kernel to run the inference.
+> Note: If the model has been quantized in 4 bit and `gemlite` library is installed, gemlite faster kernel is used to run the inference.
 
 ---
 
