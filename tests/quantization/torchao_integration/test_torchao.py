@@ -504,6 +504,28 @@ class TorchAoTest(unittest.TestCase):
         ]
         self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
 
+    @require_torchao_version_greater_or_equal("0.15.0")
+    def test_fqn_to_config_non_weight_param(self):
+        linear1_config = Int8WeightOnlyConfig()
+        linear2_config = Float8WeightOnlyConfig()
+        config = FqnToConfig(
+            {
+                r"re:.*gate_up_proj": linear2_config,
+                "model.layers.44.feed_forward.experts.gate_up_proj": None,
+                "_default": linear1_config,
+            }
+        )
+        quant_config = TorchAoConfig(quant_type=config)
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-4-Scout-17B-16E-Instruct",
+            device_map="auto",
+            dtype=torch.bfloat16,
+            quantization_config=quant_config,
+        )
+
+        self.assertTrue(isinstance(quantized_model.model.layers[1].feed_forward.experts.gate_up_proj, Float8Tensor))
+        self.assertTrue(not isinstance(quantized_model.model.layers[44].feed_forward.experts.gate_up_proj, Float8Tensor))
+        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
 
 @require_torch_accelerator
 class TorchAoAcceleratorTest(TorchAoTest):
