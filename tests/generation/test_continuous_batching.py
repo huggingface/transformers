@@ -20,7 +20,7 @@ from parameterized import parameterized
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, LogitsProcessorList
 from transformers.generation.continuous_batching.cache import group_layers_by_attn_type
 from transformers.generation.continuous_batching.continuous_api import build_attention_mask
-from transformers.testing_utils import Expectations, require_kernels, require_torch_gpu, slow
+from transformers.testing_utils import Expectations, require_kernels, require_read_token, require_torch_gpu, slow
 
 
 ALLOW_EXPECTED_OUTPUTS = True  # this is a debug flag when you want to measure deviation between CB and non-CB gen
