@@ -14,7 +14,6 @@
 # limitations under the License.
 """video processor class for GLM-4.6V."""
 
-import math
 from typing import Optional, Union
 
 import numpy as np
@@ -36,7 +35,7 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_glm4v import smart_resize
 
 
-class Glm4vVideoProcessorInitKwargs(VideosKwargs, total=False):
+class Glm46vVideoProcessorInitKwargs(VideosKwargs, total=False):
     max_image_size: dict[str, int]
     patch_size: int
     temporal_patch_size: int
@@ -127,7 +126,6 @@ class Glm46vVideoProcessor(BaseVideoProcessor):
         extract_t = int(effective_duration * target_fps * self.temporal_patch_size)
         extract_t = min(extract_t, MAX_FRAME_COUNT_DYNAMIC)
 
-        max_effective_frame = max_frame_idx
         duration_per_frame = 1 / metadata.fps
         timestamps = [i * duration_per_frame for i in range(total_frames)]
         max_second = int(duration)

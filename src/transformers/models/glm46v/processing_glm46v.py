@@ -191,6 +191,7 @@ class Glm46vProcessor(ProcessorMixin):
                         video_structure += frame_structure
 
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
+                    print(text[i])
                     num_image_tokens = (
                         video_grid_thw[video_index].prod() // merge_length // video_grid_thw[video_index][0]
                     )

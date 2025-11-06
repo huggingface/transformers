@@ -1687,6 +1687,7 @@ class Glm4vProcessor(Qwen2VLProcessor):
     def replace_frame_token_id(self, timestamp_sec):
         return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"
 
+
 __all__ = [
     "Glm4vConfig",
     "Glm4vTextConfig",

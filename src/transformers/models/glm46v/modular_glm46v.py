@@ -127,9 +127,9 @@ class Glm46VForConditionalGeneration(Glm4vForConditionalGeneration):
 
 
 class Glm46vProcessor(Glm4vProcessor):
-
     def replace_frame_token_id(self, timestamp_sec):
         return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{round(timestamp_sec)} seconds"
+
 
 __all__ = [
     "Glm46VConfig",
