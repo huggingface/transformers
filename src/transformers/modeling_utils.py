@@ -2516,7 +2516,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if (
                 not self.config.get_text_config().tie_word_embeddings or
                 (missing_keys != set()
-                and not re.search(rf"\n{source_name}", "\n".join(missing_keys)))  # regex for modules
+                and re.search(rf"\n{source_name}", "\n".join(missing_keys)))  # if source is missing, all missing
             ): # test_can_init_all_missing_weights need this to not skip
                 continue  # `can_use_safetensors` goes against this one
 
