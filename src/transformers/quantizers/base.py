@@ -417,12 +417,19 @@ class HfQuantizer(ABC):
                     parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["module_name"](
                         model.config.get_text_config()
                     )
-    
+
     def get_quantize_ops(self):
         raise NotImplementedError(
             f"{self.quantization_config.quant_method} is not available yet and will be supported soon."
         )
-        
+
+    def is_valid_unexpected_keys(self, k):
+        """ 
+        Check if the keys is valid or not even if it is not in the state_dict of the meta model.
+        This is because the state dict of the model might change after quantization like for 4bit bnb
+        """
+        return False
+
 class SequentialLlama4TextExperts(ModuleList):
     """
     A module that implements a compressed version of a list of expert modules.

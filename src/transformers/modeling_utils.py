@@ -46,7 +46,12 @@ from torch.utils.checkpoint import checkpoint
 
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_checkpoint_conversion_mapping
-from .core_model_loading import WeightConverter, convert_and_load_state_dict_in_model, revert_weight_conversion
+from .core_model_loading import (
+    WeightConverter,
+    _infer_parameter_dtype,
+    convert_and_load_state_dict_in_model,
+    revert_weight_conversion,
+)
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -557,39 +562,6 @@ def _find_identical(tensors: list[set[str]], state_dict: dict[str, torch.Tensor]
         else:
             shared_tensors.append(shared)
     return shared_tensors, identical
-
-
-def _infer_parameter_dtype(
-    model: "PreTrainedModel",
-    param_name: str,
-    empty_param: torch.Tensor,
-    hf_quantizer: Optional[HfQuantizer] = None,
-) -> Union[bool, Optional[torch.dtype]]:
-    try:
-        old_param = model.get_parameter_or_buffer(param_name)
-    except Exception as e:
-        if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
-            QuantizationMethod.HQQ,
-            QuantizationMethod.QUARK,
-            QuantizationMethod.MXFP4,
-            QuantizationMethod.BITS_AND_BYTES,
-        }:
-            return True, None
-        else:
-            raise e
-    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
-    # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
-    # in int/uint/bool and not cast them.
-    casting_dtype = None
-    is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
-    if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
-        # dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
-        if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, param_name):
-            casting_dtype = model.config._pre_quantization_dtype
-        else:
-            casting_dtype = old_param.dtype
-    return old_param is not None and old_param.is_contiguous(), casting_dtype
-
 
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
     """Cast a single parameter `param_name` into the `model`, with value `tensor`."""

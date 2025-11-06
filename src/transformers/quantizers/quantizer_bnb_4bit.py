@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from functools import cached_property
 from typing import TYPE_CHECKING, Optional, Union
 
 from .base import HfQuantizer
@@ -118,7 +117,10 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         return CustomDtype.INT4
 
     def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
-        return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.bnb_keys)]
+        return [k for k in unexpected_keys if not self.is_valid_unexpected_keys(k)]
+
+    def is_valid_unexpected_keys(self, k):
+        return any(k.endswith(x) for x in self.bnb_keys)
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         import bitsandbytes as bnb
@@ -172,17 +174,13 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
             # We are ready for quantization in this case (note, the +1 is for the weight itself)
             if len(self.param_quant_stats[module_name]) == len(self.bnb_keys) + 1:
-                param_kwargs = {}
-                if self.is_bnb_supports_quant_storage_module:
-                    param_kwargs["module"] = module
-
                 weight = self.param_quant_stats[module_name].pop(f"{module_name}.weight")
                 new_value = bnb.nn.Params4bit.from_prequantized(
                     data=weight,
                     quantized_stats=self.param_quant_stats[module_name],
                     requires_grad=False,
                     device=target_device,
-                    **param_kwargs,
+                    module=module
                 )
                 # Set it
                 module._parameters[tensor_name] = new_value
@@ -285,15 +283,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     def is_serializable(self, safe_serialization=None):
         return True
 
-    @cached_property
-    def is_bnb_supports_quant_storage_module(self) -> bool:
-        """
-        determines if the current version of bitsandbytes supports
-        the `module` parameter in `Params4bit.from_prequantized`
-        :return:
-        """
-        return True
-
     @property
     def is_trainable(self) -> bool:
         return True
@@ -305,7 +294,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             model, self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         return model
-    
+
     def get_quantize_ops(self):
         from ..integrations.bitsandbytes import Bnb4bitQuantize
-        return Bnb4bitQuantize()
+        return Bnb4bitQuantize(self)
