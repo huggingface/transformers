@@ -64,9 +64,6 @@ class DynamoExporter(HfExporter):
                 "auto-regressive and model.config.use_cache is set to True."
             )
 
-        if isinstance(model, GenerationMixin) and getattr(model.config, "is_encoder_decoder", False):
-            raise NotImplementedError(f"{self.__class__.__name__} does not yet support encoder-decoder models yet.")
-
         sample_inputs = copy.deepcopy(self.export_config.sample_inputs)
 
         register_dynamic_cache_for_export()
@@ -108,20 +105,19 @@ class DynamoExporter(HfExporter):
             dummy_outputs = model(**copy.deepcopy(sample_inputs))
 
         if hasattr(dummy_outputs, "past_key_values"):
-            sample_inputs["past_key_values"] = dummy_outputs.past_key_values
-
-            if isinstance(sample_inputs["past_key_values"], DynamicCache) and model.config.model_type not in {
-                "qwen2_vl",
-                "qwen2_5_vl",
-            }:
-                seq_length = sample_inputs["input_ids"].shape[1]
-                past_length = sample_inputs["past_key_values"].get_seq_length()
-                sample_inputs["attention_mask"] = torch.ones(
-                    (sample_inputs["input_ids"].shape[0], past_length + seq_length),
-                    device=model.device,
-                    dtype=torch.long,
+            if isinstance(dummy_outputs.past_key_values, DynamicCache):
+                sample_inputs["past_key_values"] = dummy_outputs.past_key_values
+                if model.config.model_type not in {"qwen2_vl", "qwen2_5_vl"}:
+                    seq_length = sample_inputs["input_ids"].shape[1]
+                    past_length = sample_inputs["past_key_values"].get_seq_length()
+                    sample_inputs["attention_mask"] = torch.ones(
+                        (sample_inputs["input_ids"].shape[0], past_length + seq_length),
+                        device=model.device,
+                        dtype=torch.long,
+                    )
+            elif isinstance(dummy_outputs.past_key_values, EncoderDecoderCache):
+                logger.warning(
+                    "The model seems to be returning an EncoderDecoderCache as past_key_values. "
+                    "DynamoExporter does not yet support cache in inputs for encoder-decoder models. "
+                    "Please provide past_key_values in sample_inputs manually if needed."
                 )
-            elif isinstance(
-                sample_inputs["past_key_values"], EncoderDecoderCache
-            ) and model.config.model_type.startswith("musicgen"):
-                del sample_inputs["past_key_values"]

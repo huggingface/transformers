@@ -3480,10 +3480,6 @@ class ModelTesterMixin:
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
 
-            if issubclass(model_class, GenerationMixin) and getattr(config, "is_encoder_decoder", False):
-                # TODO: enable later, skipping generative encoder-decoder models for now
-                self.skipTest("Skipping Generative Encoder-Decoder models as they need to be exported separately")
-
             with self.subTest(model_class.__name__):
                 model = model_class(config).eval().to(torch_device)
 
