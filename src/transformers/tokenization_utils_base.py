@@ -1872,26 +1872,29 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     f" from is '{cls.__name__}'."
                 )
 
+        # Preserve extra_special_tokens from tokenizer_config.json before updating with kwargs
+        # extra_special_tokens should be a list (user-defined extra tokens)
+        extra_special_tokens_from_config = init_kwargs.get("extra_special_tokens")
+        if isinstance(extra_special_tokens_from_config, (list, tuple)):
+            extra_special_tokens_from_config = list(extra_special_tokens_from_config)
+        else:
+            extra_special_tokens_from_config = None
+        
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
 
         # V5: Backward compatibility - convert old "additional_special_tokens" to "extra_special_tokens"
         if "additional_special_tokens" in init_kwargs and "extra_special_tokens" not in init_kwargs:
             init_kwargs["extra_special_tokens"] = init_kwargs.pop("additional_special_tokens")
+        # Restore extra_special_tokens from config if kwargs overwrote it or it's missing
+        elif extra_special_tokens_from_config is not None:
+            if "extra_special_tokens" not in init_kwargs or not isinstance(init_kwargs.get("extra_special_tokens"), (list, tuple)):
+                init_kwargs["extra_special_tokens"] = extra_special_tokens_from_config
 
-        # V5: Get model-specific special tokens from config (saved as individual keys in special_tokens_map)
-        # These need to be groupes as extra_special_tokens dict so __init__ can save them to attributes
-        if "extra_special_tokens" not in init_kwargs or not isinstance(init_kwargs.get("extra_special_tokens"), dict):
-            default_attrs = set(cls.SPECIAL_TOKENS_ATTRIBUTES)
-            model_specific_tokens = {
-                key: init_kwargs.pop(key)
-                for key in list(init_kwargs.keys())
-                if key not in default_attrs
-                and key.endswith("_token")
-                and isinstance(init_kwargs[key], (str, AddedToken))
-            }
-            if model_specific_tokens:
-                init_kwargs["extra_special_tokens"] = model_specific_tokens
+        # V5: Model-specific tokens (e.g., prefix_token, middle_token) are already individual keys in init_kwargs
+        # They will be handled by __init__ as individual attributes, so we don't need to group them into extra_special_tokens
+        if isinstance(init_kwargs.get("extra_special_tokens"), dict):
+            pass
 
         # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
@@ -1925,6 +1928,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if special_tokens_map_file is not None:
                 with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                     special_tokens_map = json.load(special_tokens_map_handle)
+                    # Preserve extra_special_tokens from tokenizer_config.json before processing special_tokens_map
+                    extra_special_tokens_before_map = init_kwargs.get("extra_special_tokens")
+                    if isinstance(extra_special_tokens_before_map, (list, tuple)):
+                        extra_special_tokens_before_map = list(extra_special_tokens_before_map)
+                    else:
+                        extra_special_tokens_before_map = None
+                    
                     for key, value in special_tokens_map.items():
                         if key in kwargs and kwargs[key]:
                             # This value has already been redefined by the kwargs
@@ -1935,22 +1945,29 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                             value["special"] = True
                             value = AddedToken(**value)
                         elif key == "extra_special_tokens":
-                            # Handle extra_special_tokens (list or dict format)
+                            # Handle extra_special_tokens from special_tokens_map.json
                             if isinstance(value, dict):
-                                # Keep as dict so __init__ can promote them to named tokens
+                                # Dict format for model-specific tokens - keep as is
                                 init_kwargs[key] = value
                                 continue
-                            # Otherwise treat as list of extra tokens
-                            extra_special_tokens = init_kwargs.pop("extra_special_tokens", []) or []
-                            if isinstance(value, list):
+                            elif isinstance(value, list):
+                                # List format - merge with existing if present
+                                existing = init_kwargs.pop("extra_special_tokens", []) or []
+                                if not isinstance(existing, (list, tuple)):
+                                    existing = []
                                 for token in value:
                                     if isinstance(token, dict):
-                                        token["special"] = True
-                                        token = AddedToken(**token)
-                                    if token not in extra_special_tokens:
-                                        extra_special_tokens.append(token)
-                                value = extra_special_tokens
+                                        token = AddedToken(**token, special=True)
+                                    if token not in existing:
+                                        existing.append(token)
+                                init_kwargs[key] = existing
+                                continue
                         init_kwargs[key] = value
+                    
+                    # Restore extra_special_tokens from tokenizer_config.json if not in special_tokens_map.json
+                    if "extra_special_tokens" not in special_tokens_map and extra_special_tokens_before_map is not None:
+                        if "extra_special_tokens" not in init_kwargs or not isinstance(init_kwargs.get("extra_special_tokens"), (list, tuple)):
+                            init_kwargs["extra_special_tokens"] = extra_special_tokens_before_map
 
             # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
             # this is for legacy purpose. We don't add the tokens after init for efficiency.
@@ -2461,6 +2478,46 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         raise NotImplementedError
+
+    @property
+    def max_len_single_sentence(self) -> int:
+        """
+        `int`: The maximum length of a sentence that can be fed to the model.
+        """
+        return self.model_max_length - self.num_special_tokens_to_add(pair=False)
+
+    @max_len_single_sentence.setter
+    def max_len_single_sentence(self, value) -> None:
+        # For backward compatibility, allow to try to setup 'max_len_single_sentence'.
+        if value == self.model_max_length - self.num_special_tokens_to_add(pair=False) and self.verbose:
+            if not self.deprecation_warnings.get("max_len_single_sentence", False):
+                logger.warning(
+                    "Setting 'max_len_single_sentence' is now deprecated. This value is automatically set up."
+                )
+            self.deprecation_warnings["max_len_single_sentence"] = True
+        else:
+            raise ValueError(
+                "Setting 'max_len_single_sentence' is now deprecated. This value is automatically set up."
+            )
+
+    @property
+    def max_len_sentences_pair(self) -> int:
+        """
+        `int`: The maximum combined length of a pair of sentences that can be fed to the model.
+        """
+        return self.model_max_length - self.num_special_tokens_to_add(pair=True)
+
+    @max_len_sentences_pair.setter
+    def max_len_sentences_pair(self, value) -> None:
+        # For backward compatibility, allow to try to setup 'max_len_sentences_pair'.
+        if value == self.model_max_length - self.num_special_tokens_to_add(pair=True) and self.verbose:
+            if not self.deprecation_warnings.get("max_len_sentences_pair", False):
+                logger.warning(
+                    "Setting 'max_len_sentences_pair' is now deprecated. This value is automatically set up."
+                )
+            self.deprecation_warnings["max_len_sentences_pair"] = True
+        else:
+            raise ValueError("Setting 'max_len_sentences_pair' is now deprecated. This value is automatically set up.")
 
     def _get_padding_truncation_strategies(
         self, padding=False, truncation=None, max_length=None, pad_to_multiple_of=None, verbose=True, **kwargs

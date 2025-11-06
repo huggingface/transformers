@@ -164,6 +164,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
+            unk_id=unk_id,
             do_lower_case=do_lower_case,
             split_by_punct=split_by_punct,
             add_prefix_space=add_prefix_space,

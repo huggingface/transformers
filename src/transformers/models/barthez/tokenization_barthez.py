@@ -144,6 +144,7 @@ class BarthezTokenizer(TokenizersBackend):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 

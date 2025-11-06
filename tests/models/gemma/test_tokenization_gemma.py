@@ -23,7 +23,7 @@ from transformers.testing_utils import (
 
 
 @require_tokenizers
-class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):  # TEMP we won't use the mixin in v5
+class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase): 
     from_pretrained_id = "google/gemma-7b"
     tokenizer_class = GemmaTokenizer
     

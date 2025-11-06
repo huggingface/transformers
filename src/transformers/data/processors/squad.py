@@ -161,7 +161,7 @@ def squad_convert_example_to_features(
         if tokenizer_type in MULTI_SEP_TOKENS_TOKENIZERS_SET
         else tokenizer.model_max_length - tokenizer.max_len_single_sentence
     )
-    max_len_sentences_pair = self.model_max_length - self.num_special_tokens_to_add(pair=True)
+    max_len_sentences_pair = tokenizer.model_max_length - tokenizer.num_special_tokens_to_add(pair=True)
     sequence_pair_added_tokens = tokenizer.model_max_length
 
     span_doc_tokens = all_doc_tokens
