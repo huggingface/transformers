@@ -323,8 +323,9 @@ class BenchmarkRunner:
             e2e_latency = wall_time_1 - wall_time_0
             return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
         except Exception as e:
-            manager.stop()
             raise e
+        finally:
+            manager.stop()
 
     def time_generate(
         self,
