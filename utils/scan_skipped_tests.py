@@ -155,7 +155,7 @@ def summarize_all_tests(
             "skipped_proportion": round(skipped_ratio, 4),
             "reasons_skipped": sorted(reasons_for_skipping),
         }
-    print("\n✅ Scan complete.")
+    print("\n[INFO] Scan complete.")
     return results
 
 

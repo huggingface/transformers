@@ -1054,7 +1054,7 @@ def test(
             "The segmentation image is not the same."
         )
 
-        logger.info("✅ Test passed!")
+        logger.info("[PASS] Test passed!")
 
 
 def get_name(checkpoint_file: Path):

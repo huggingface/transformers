@@ -902,7 +902,7 @@ def test(
             "The predicted masks are not the same."
         )
 
-        logger.info("✅ Test passed!")
+        logger.info("[PASS] Test passed!")
 
 
 def get_model_name(checkpoint_file: Path):

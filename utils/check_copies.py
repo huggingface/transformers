@@ -57,7 +57,7 @@ REPO_PATH = "."
 LOCALIZED_READMES = {
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     "README.md": {
-        "start_prompt": "🤗 Transformers currently provides the following architectures",
+        "start_prompt": "[INFO] Transformers currently provides the following architectures",
         "end_prompt": "1. Want to contribute a new model?",
         "format_model_list": (
             "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
@@ -65,7 +65,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_zh-hans.md": {
-        "start_prompt": "🤗 Transformers 目前支持如下的架构",
+        "start_prompt": "[INFO] Transformers 目前支持如下的架构",
         "end_prompt": "1. 想要贡献新的模型？",
         "format_model_list": (
             "**[{title}]({model_link})** (来自 {paper_affiliations}) 伴随论文 {paper_title_link} 由 {paper_authors}"
@@ -73,7 +73,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_zh-hant.md": {
-        "start_prompt": "🤗 Transformers 目前支援以下的架構",
+        "start_prompt": "[INFO] Transformers 目前支援以下的架構",
         "end_prompt": "1. 想要貢獻新的模型？",
         "format_model_list": (
             "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
@@ -81,7 +81,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_ko.md": {
-        "start_prompt": "🤗 Transformers는 다음 모델들을 제공합니다",
+        "start_prompt": "[INFO] Transformers는 다음 모델들을 제공합니다",
         "end_prompt": "1. 새로운 모델을 올리고 싶나요?",
         "format_model_list": (
             "**[{title}]({model_link})** ({paper_affiliations} 에서 제공)은 {paper_authors}.{supplements}의"
@@ -89,7 +89,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_es.md": {
-        "start_prompt": "🤗 Transformers actualmente proporciona las siguientes arquitecturas",
+        "start_prompt": "[INFO] Transformers actualmente proporciona las siguientes arquitecturas",
         "end_prompt": "1. ¿Quieres aportar un nuevo modelo?",
         "format_model_list": (
             "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
@@ -97,7 +97,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_ja.md": {
-        "start_prompt": "🤗Transformersは現在、以下のアーキテクチャを提供しています",
+        "start_prompt": "[INFO] Transformersは現在、以下のアーキテクチャを提供しています",
         "end_prompt": "1. 新しいモデルを投稿したいですか？",
         "format_model_list": (
             "**[{title}]({model_link})** ({paper_affiliations} から) {paper_authors}.{supplements} から公開された研究論文"
@@ -105,7 +105,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_hd.md": {
-        "start_prompt": "🤗 ट्रांसफॉर्मर वर्तमान में निम्नलिखित आर्किटेक्चर का समर्थन करते हैं",
+        "start_prompt": "[INFO] ट्रांसफॉर्मर वर्तमान में निम्नलिखित आर्किटेक्चर का समर्थन करते हैं",
         "end_prompt": "1. एक नए मॉडल में योगदान देना चाहते हैं?",
         "format_model_list": (
             "**[{title}]({model_link})** ({paper_affiliations} से) {paper_authors}.{supplements} द्वारा"
@@ -113,7 +113,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_ru.md": {
-        "start_prompt": "🤗 В настоящее время Transformers предоставляет следующие архитектуры",
+        "start_prompt": "[INFO] В настоящее время Transformers предоставляет следующие архитектуры",
         "end_prompt": "1. Хотите внести новую модель?",
         "format_model_list": (
             "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
@@ -121,7 +121,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_pt-br.md": {
-        "start_prompt": "🤗 Transformers atualmente fornece as seguintes arquiteturas",
+        "start_prompt": "[INFO] Transformers atualmente fornece as seguintes arquiteturas",
         "end_prompt": "1. Quer contribuir com um novo modelo?",
         "format_model_list": (
             "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
@@ -129,7 +129,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_te.md": {
-        "start_prompt": "🤗 ట్రాన్స్‌ఫార్మర్లు ప్రస్తుతం కింది ఆర్కిటెక్చర్‌లను అందజేస్తున్నాయి",
+        "start_prompt": "[INFO] ట్రాన్స్‌ఫార్మర్లు ప్రస్తుతం కింది ఆర్కిటెక్చర్‌లను అందజేస్తున్నాయి",
         "end_prompt": "1. కొత్త మోడల్‌ను అందించాలనుకుంటున్నారా?",
         "format_model_list": (
             "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
@@ -137,7 +137,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_fr.md": {
-        "start_prompt": "🤗 Transformers fournit actuellement les architectures suivantes",
+        "start_prompt": "[INFO] Transformers fournit actuellement les architectures suivantes",
         "end_prompt": "1. Vous souhaitez contribuer avec un nouveau modèle ?",
         "format_model_list": (
             "**[{title}]({model_link})** (de {paper_affiliations}) publié dans l'article {paper_title_link} par"
@@ -145,7 +145,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_de.md": {
-        "start_prompt": "🤗 Transformers bietet derzeit die folgenden Architekturen an",
+        "start_prompt": "[INFO] Transformers bietet derzeit die folgenden Architekturen an",
         "end_prompt": "1. Möchten Sie ein neues Modell beitragen?",
         "format_model_list": (
             "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
@@ -153,7 +153,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_vi.md": {
-        "start_prompt": "🤗 Transformers hiện đang cung cấp các kiến trúc sau đây",
+        "start_prompt": "[INFO] Transformers hiện đang cung cấp các kiến trúc sau đây",
         "end_prompt": "1. Muốn đóng góp một mô hình mới?",
         "format_model_list": (
             "**[{title}]({model_link})** (từ {paper_affiliations}) được phát hành với bài báo {paper_title_link} by"
