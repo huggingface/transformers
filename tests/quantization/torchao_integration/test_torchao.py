@@ -726,7 +726,7 @@ class TorchAoSerializationTest(unittest.TestCase):
 @require_torchao_version_greater_or_equal("0.14.0")
 class TorchAoSafeSerializationTest(TorchAoSerializationTest):
     # placeholder
-    quant_scheme = Float8WeightOnlyConfig()
+    quant_scheme = torchao.quantization.Float8WeightOnlyConfig()
 
     # called only once for all test in this class
     @classmethod
