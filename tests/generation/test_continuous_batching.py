@@ -208,6 +208,7 @@ class ContinuousBatchingTest(unittest.TestCase):
                     )
 
     # Eager tests
+    @require_read_token
     @require_torch_gpu
     @slow
     def test_continuous_batching_parity_llama_eager(self) -> None:
@@ -236,24 +237,27 @@ class ContinuousBatchingTest(unittest.TestCase):
         }).get_expectation()  # fmt: skip
         self._continuous_batching_parity("google/gemma-2-2b-it", "paged|eager", expected_outputs)
 
-    @require_torch_gpu
-    @slow
-    def test_continuous_batching_parity_qwen_eager(self) -> None:
-        expected_outputs = {}
-        self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "paged|eager", expected_outputs)
+    # FIXME: set expected_outputs
+    # @require_torch_gpu
+    # @slow
+    # def test_continuous_batching_parity_qwen_eager(self) -> None:
+    #     expected_outputs = {}
+    #     self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "paged|eager", expected_outputs)
 
-    @require_torch_gpu
-    @slow
-    def test_continuous_batching_parity_gpt_oss_eager(self) -> None:
-        expected_outputs = Expectations({
-            ("cuda", (9, 0)): {
-                "req_1": " 2.5 bolts. The question: \"What is the name of the puzzle that involves a robe taking 2 bolts of blue fiber and half that much white fiber?\" The answer: \"The",
-                "req_2": " 50%.\"\n\nWe need to parse: He buys a house for $80,000. He puts in $50,000 in repairs. This increased the value of the house by 150%."
-            }
-        }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("openai/gpt-oss-20b", "paged|eager", expected_outputs)
+    # FIXME: OOMs
+    # @require_torch_gpu
+    # @slow
+    # def test_continuous_batching_parity_gpt_oss_eager(self) -> None:
+    #     expected_outputs = Expectations({
+    #         ("cuda", (9, 0)): {
+    #             "req_1": " 2.5 bolts. The question: \"What is the name of the puzzle that involves a robe taking 2 bolts of blue fiber and half that much white fiber?\" The answer: \"The",
+    #             "req_2": " 50%.\"\n\nWe need to parse: He buys a house for $80,000. He puts in $50,000 in repairs. This increased the value of the house by 150%."
+    #         }
+    #     }).get_expectation()  # fmt: skip
+    #     self._continuous_batching_parity("openai/gpt-oss-20b", "paged|eager", expected_outputs)
 
     # SDPA tests
+    @require_read_token
     @require_torch_gpu
     @slow
     def test_continuous_batching_parity_llama_sdpa(self) -> None:
@@ -274,11 +278,12 @@ class ContinuousBatchingTest(unittest.TestCase):
         }).get_expectation()  # fmt: skip
         self._continuous_batching_parity("google/gemma-2-2b-it", "paged|sdpa", expected_outputs)
 
-    @require_torch_gpu
-    @slow
-    def test_continuous_batching_parity_qwen_sdpa(self) -> None:
-        expected_outputs = {}
-        self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "paged|sdpa", expected_outputs)
+    # FIXME: set expected_outputs
+    # @require_torch_gpu
+    # @slow
+    # def test_continuous_batching_parity_qwen_sdpa(self) -> None:
+    #     expected_outputs = {}
+    #     self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "paged|sdpa", expected_outputs)
 
     # GPT-OSS is not compatible with SDPA because it has an attention sink. TODO: is this fixable?
 
