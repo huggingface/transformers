@@ -74,7 +74,7 @@ With **SINQ**, they become **spread out and less severe**, preserving model accu
 First, install the package:
 
 ```bash
-pip install hqq
+pip install sinq
 ```
 
 ---
