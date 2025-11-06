@@ -156,7 +156,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from ..integrations import Mxfp4GptOssExperts
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
-
         # if we are dequantizing, the model doesn't have scales, and blocks only params like gate_up_proj and down_proj so we need to handle this case differently
         if self.quantization_config.dequantize and ("blocks" in param_name or "scales" in param_name):
             module, tensor_name = get_module_from_name(model, param_name[: -len("_blocks")])
@@ -416,6 +415,10 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
         metadata = {}
         return state_dict, metadata
+
+    def get_quantize_ops(self):
+        from ..integrations import Mxfp4Quantize
+        return Mxfp4Quantize()
 
     def is_serializable(self, safe_serialization=None):
         return True
