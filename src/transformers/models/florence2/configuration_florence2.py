@@ -140,7 +140,7 @@ class Florence2Config(PreTrainedConfig):
     Florence-2 model according to the specified arguments, defining the model architecture.
 
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Florence-2
-    [microsoft/Florence-2-base](https://huggingface.co/microsoft/Florence-2-base) architecture.
+    [florence-community/Florence-2-base](https://huggingface.co/florence-community/Florence-2-base) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.

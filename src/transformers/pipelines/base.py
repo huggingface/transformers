@@ -22,7 +22,6 @@ import pickle
 import sys
 import traceback
 import types
-import warnings
 from abc import ABC, abstractmethod
 from collections import UserDict
 from contextlib import contextmanager
@@ -79,7 +78,7 @@ def _pad(items, key, padding_value, padding_side):
     if isinstance(items[0][key], torch.Tensor):
         # Others include `attention_mask` etc...
         shape = items[0][key].shape
-        dim = len(shape)
+        dim = items[0][key].ndim
         if dim == 1:
             # We have a list of 1-dim torch tensors, which can be stacked without padding
             return torch.cat([item[key] for item in items], dim=0)
@@ -94,37 +93,18 @@ def _pad(items, key, padding_value, padding_side):
         min_length = min(item[key].shape[1] for item in items)
         dtype = items[0][key].dtype
 
-        tensor = None
-        if dim == 2:
-            if max_length == min_length:
-                # Bypass for `ImageGPT` which doesn't provide a padding value, yet
-                # we can consistently pad since the size should be matching
-                return torch.cat([item[key] for item in items], dim=0)
-            tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
-        elif dim == 3:
-            tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
-        elif dim == 4:
-            tensor = torch.zeros((batch_size, max_length, shape[-2], shape[-1]), dtype=dtype) + padding_value
-
-        if tensor is None:
-            raise ValueError(f"Unable to create tensor for padding from {key} with dimension {dim}")
+        if dim == 2 and max_length == min_length:
+            # Bypass for `ImageGPT` which doesn't provide a padding value, yet
+            # we can consistently pad since the size should be matching
+            return torch.cat([item[key] for item in items], dim=0)
+        else:
+            tensor = torch.full([batch_size, max_length] + list(shape[2:]), fill_value=padding_value, dtype=dtype)
 
         for i, item in enumerate(items):
-            if dim == 2:
-                if padding_side == "left":
-                    tensor[i, -len(item[key][0]) :] = item[key][0].clone()
-                else:
-                    tensor[i, : len(item[key][0])] = item[key][0].clone()
-            elif dim == 3:
-                if padding_side == "left":
-                    tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
-                else:
-                    tensor[i, : len(item[key][0]), :] = item[key][0].clone()
-            elif dim == 4:
-                if padding_side == "left":
-                    tensor[i, -len(item[key][0]) :, :, :] = item[key][0].clone()
-                else:
-                    tensor[i, : len(item[key][0]), :, :] = item[key][0].clone()
+            if padding_side == "left":
+                tensor[i, -len(item[key][0]) :] = item[key][0]
+            else:
+                tensor[i, : len(item[key][0])] = item[key][0]
 
         return tensor
     else:
@@ -985,19 +965,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return

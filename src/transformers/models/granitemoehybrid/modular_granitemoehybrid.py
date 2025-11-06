@@ -28,6 +28,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import check_model_inputs
 from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated, HybridMambaAttentionDynamicCache
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteFlashAttentionKwargs,
     GraniteMoeSharedAttention,
@@ -102,6 +103,10 @@ class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
         super().__init__(config)
 
 
+class GraniteMoeHybridRotaryEmbedding(Gemma2RotaryEmbedding):
+    pass
+
+
 class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -127,6 +132,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -147,6 +153,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -193,6 +200,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -213,6 +221,9 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
         causal_mask = create_causal_mask(
             self.config,
             inputs_embeds,
@@ -224,6 +235,8 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
         # embed positions
         hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
             layer_mask = mamba_mask if decoder_layer.layer_type == "mamba" else causal_mask
@@ -234,6 +247,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)

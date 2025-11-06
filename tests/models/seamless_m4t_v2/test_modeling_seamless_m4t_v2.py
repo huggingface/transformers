@@ -362,11 +362,9 @@ class SeamlessM4Tv2ModelTester:
 @require_torch
 class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
-    fx_compatible = False
     test_missing_keys = False
 
     test_resize_embeddings = False
-    test_torchscript = False
 
     all_model_classes = (
         (
@@ -555,11 +553,9 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
 @require_torch
 class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
-    fx_compatible = False
     test_missing_keys = False
 
     test_resize_embeddings = True
-    test_torchscript = False
 
     all_model_classes = (
         (

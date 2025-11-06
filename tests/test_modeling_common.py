@@ -20,7 +20,6 @@ import os.path
 import random
 import re
 import tempfile
-import unittest
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
@@ -122,12 +121,8 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
-    from transformers.cache_utils import Cache, DynamicCache
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
-
-from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
-
 
 if is_deepspeed_available():
     import deepspeed
@@ -566,8 +561,6 @@ def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
 class ModelTesterMixin:
     model_tester = None
     all_model_classes = ()
-    fx_compatible = False
-    test_torchscript = True
     test_resize_embeddings = True
     test_resize_position_embeddings = False
     test_mismatched_shapes = True
@@ -1351,343 +1344,6 @@ class ModelTesterMixin:
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
-    @unittest.skip("many failing tests after #39120. Will fix when the community ask for it.")
-    @slow
-    def test_torchscript_simple(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self._create_and_check_torchscript(config, inputs_dict)
-
-    @unittest.skip("many failing tests after #39120. Will fix when the community ask for it.")
-    @slow
-    def test_torchscript_output_attentions(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_attentions = True
-        self._create_and_check_torchscript(config, inputs_dict)
-
-    @unittest.skip("many failing tests after #39120. Will fix when the community ask for it.")
-    @slow
-    def test_torchscript_output_hidden_state(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        self._create_and_check_torchscript(config, inputs_dict)
-
-    # This is copied from `torch/testing/_internal/jit_utils.py::clear_class_registry`
-    def clear_torch_jit_class_registry(self):
-        torch._C._jit_clear_class_registry()
-        torch.jit._recursive.concrete_type_store = torch.jit._recursive.ConcreteTypeStore()
-        # torch 1.8 has no `_clear_class_state` in `torch.jit._state`
-        if hasattr(torch.jit._state, "_clear_class_state"):
-            torch.jit._state._clear_class_state()
-
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to `False`")
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        for model_class in self.all_model_classes:
-            for attn_implementation in ["eager", "sdpa"]:
-                if attn_implementation == "sdpa" and not model_class._supports_sdpa or config.output_attentions:
-                    continue
-
-                configs_no_init._attn_implementation = attn_implementation
-                model = model_class(config=configs_no_init)
-                model.to(torch_device)
-                model.eval()
-                inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                main_input_name = model_class.main_input_name
-
-                try:
-                    if model.config.is_encoder_decoder:
-                        model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                        main_input = inputs[main_input_name]
-                        attention_mask = inputs["attention_mask"]
-                        decoder_input_ids = inputs["decoder_input_ids"]
-                        decoder_attention_mask = inputs["decoder_attention_mask"]
-                        outputs = model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
-                        # `torchscript` doesn't work with outputs containing `Cache` object. However, #35235 makes
-                        # several models to use `Cache` by default instead of the legacy cache (tuple), and
-                        # their `torchscript` tests are failing. We won't support them anyway, but we still want to keep
-                        # the tests for encoder models like `BERT`. So we skip the checks if the model's output contains
-                        # a `Cache` object.
-                        if any(isinstance(x, Cache) for x in outputs):
-                            continue
-                        traced_model = torch.jit.trace(
-                            model, (main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
-                        )
-                    elif "bbox" in inputs and "image" in inputs:  # LayoutLMv2 requires additional inputs
-                        input_ids = inputs["input_ids"]
-                        bbox = inputs["bbox"]
-                        image = inputs["image"].tensor
-                        outputs = model(input_ids, bbox, image)
-                        if any(isinstance(x, Cache) for x in outputs):
-                            continue
-                        traced_model = torch.jit.trace(
-                            model, (input_ids, bbox, image), check_trace=False
-                        )  # when traced model is checked, an error is produced due to name mangling
-                    elif "bbox" in inputs:  # Bros requires additional inputs (bbox)
-                        input_ids = inputs["input_ids"]
-                        bbox = inputs["bbox"]
-                        outputs = model(input_ids, bbox)
-                        if any(isinstance(x, Cache) for x in outputs):
-                            continue
-                        traced_model = torch.jit.trace(
-                            model, (input_ids, bbox), check_trace=False
-                        )  # when traced model is checked, an error is produced due to name mangling
-                    elif (
-                        "pixel_values" in inputs and "prompt_pixel_values" in inputs and "prompt_masks" in inputs
-                    ):  # SegGpt requires additional inputs
-                        pixel_values = inputs["pixel_values"]
-                        prompt_pixel_values = inputs["prompt_pixel_values"]
-                        prompt_masks = inputs["prompt_masks"]
-                        outputs = model(pixel_values, prompt_pixel_values, prompt_masks)
-                        if any(isinstance(x, Cache) for x in outputs):
-                            continue
-                        traced_model = torch.jit.trace(
-                            model, (pixel_values, prompt_pixel_values, prompt_masks), check_trace=False
-                        )  # when traced model is checked, an error is produced due to name mangling
-                    elif "Siglip2" in model_class.__name__:
-                        outputs = model(**inputs)
-                        example_inputs = [t for t in inputs.values() if isinstance(t, torch.Tensor)]
-                        traced_model = torch.jit.trace(model, example_inputs, check_trace=False)
-                    else:
-                        main_input = inputs[main_input_name]
-                        outputs = model(main_input)
-                        if any(isinstance(x, Cache) for x in outputs):
-                            continue
-                        traced_model = torch.jit.trace(model, (main_input,))
-                except RuntimeError:
-                    self.fail("Couldn't trace module.")
-
-                with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                    try:
-                        torch.jit.save(traced_model, pt_file_name)
-                    except Exception:
-                        self.fail("Couldn't save module.")
-
-                    try:
-                        loaded_model = torch.jit.load(pt_file_name)
-                    except Exception:
-                        self.fail("Couldn't load module.")
-
-                model.to(torch_device)
-                model.eval()
-
-                loaded_model.to(torch_device)
-                loaded_model.eval()
-
-                model_state_dict = model.state_dict()
-                loaded_model_state_dict = loaded_model.state_dict()
-
-                non_persistent_buffers = {}
-                for key in loaded_model_state_dict:
-                    if key not in model_state_dict:
-                        non_persistent_buffers[key] = loaded_model_state_dict[key]
-
-                loaded_model_state_dict = {
-                    key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
-                }
-
-                self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-                model_buffers = list(model.buffers())
-                for non_persistent_buffer in non_persistent_buffers.values():
-                    found_buffer = False
-                    for i, model_buffer in enumerate(model_buffers):
-                        if torch.equal(non_persistent_buffer, model_buffer):
-                            found_buffer = True
-                            break
-
-                    self.assertTrue(found_buffer)
-                    model_buffers.pop(i)
-
-                models_equal = True
-                for layer_name, p1 in model_state_dict.items():
-                    if layer_name in loaded_model_state_dict:
-                        p2 = loaded_model_state_dict[layer_name]
-                        if p1.data.ne(p2.data).sum() > 0:
-                            models_equal = False
-
-                self.assertTrue(models_equal)
-
-                # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
-                # (Even with this call, there are still memory leak by ~0.04MB)
-                self.clear_torch_jit_class_registry()
-
-    def test_torch_fx(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self._create_and_check_torch_fx_tracing(config, inputs_dict)
-
-    def test_torch_fx_output_loss(self):
-        if self.all_model_classes[0].__name__ == "BloomModel":
-            self.skipTest(reason="Bloom currently has issues, @michaelbenayoun")
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
-
-    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not self.fx_compatible:
-            self.skipTest(f"The model type {config.model_type} is not compatible with torch.fx")
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.return_dict = False
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
-
-            # We may want to test several inputs (various shapes, etc.).
-            inputs_to_test = [inputs]
-
-            if model.config.is_encoder_decoder:
-                model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                labels = inputs.get("labels", None)
-                input_names = [
-                    "attention_mask",
-                    "decoder_attention_mask",
-                    "decoder_input_ids",
-                    "input_features",
-                    "input_ids",
-                    "input_values",
-                ]
-                if labels is not None:
-                    input_names.append("labels")
-            else:
-                input_names = [
-                    "attention_mask",
-                    "bbox",
-                    "input_features",
-                    "input_ids",
-                    "input_values",
-                    "inputs_embeds",
-                    "pixel_values",
-                    "pixel_values_videos",
-                    "token_type_ids",
-                    "visual_feats",
-                    "visual_pos",
-                    "noise",
-                ]
-
-                labels = inputs.get("labels", None)
-                start_positions = inputs.get("start_positions", None)
-                end_positions = inputs.get("end_positions", None)
-                if labels is not None:
-                    input_names.append("labels")
-                if start_positions is not None:
-                    input_names.append("start_positions")
-                if end_positions is not None:
-                    input_names.append("end_positions")
-
-                if model.config.model_type in _FX_SUPPORTED_MODELS_WITH_KV_CACHE:
-                    input_names.append("past_key_values")
-
-                    # Generally model_tester.prepare_config_and_inputs_for_common seem not to generate past key values inputs.
-                    if "past_key_values" not in inputs:
-                        batch_size = inputs[next(iter(inputs))].shape[0]
-                        num_heads = model.config.num_attention_heads
-                        head_dim = model.config.hidden_size // model.config.num_attention_heads
-
-                        cache_shape = (batch_size, num_heads, 0, head_dim)
-                        empty_pkv = DynamicCache(config=model.config)
-
-                        cache_length = 9
-                        cache_shape = (batch_size, num_heads, cache_length, head_dim)
-                        non_empty_pkv = tuple(
-                            (
-                                None,
-                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
-                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
-                            )
-                            for i in range(model.config.num_hidden_layers)
-                        )
-                        non_empty_pkv = DynamicCache(non_empty_pkv)
-
-                        inps = copy.deepcopy(inputs_to_test[0])
-
-                        inputs_to_test[0]["past_key_values"] = empty_pkv
-
-                        inps["past_key_values"] = non_empty_pkv
-                        inputs_to_test.append(inps)
-
-                        past_mask = torch.ones(batch_size, cache_length, device=torch_device, dtype=torch.float)
-                        inputs_to_test[1]["attention_mask"] = torch.cat(
-                            (past_mask, inputs_to_test[1]["attention_mask"]), dim=1
-                        )
-
-                forward_parameters = inspect.signature(model.forward).parameters
-                if "input_ids" in forward_parameters and "inputs_embeds" in forward_parameters:
-                    inps = copy.deepcopy(inputs_to_test[0])
-
-                    embedding_size = (
-                        model.config.embedding_size
-                        if getattr(model.config, "embedding_size", None) is not None
-                        and model.config.model_type != "megatron-bert"
-                        else model.config.hidden_size
-                    )
-
-                    if (
-                        model.config.model_type in MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES
-                        and model.__class__.__name__
-                        == MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES[model.config.model_type]
-                    ):
-                        batch_size, num_choices, sequence_length = inputs["input_ids"].shape
-                        shape = (batch_size, num_choices, sequence_length, embedding_size)
-                    elif inps["input_ids"].ndim == 2:
-                        batch_size, sequence_length = inputs["input_ids"].shape
-                        shape = (batch_size, sequence_length, embedding_size)
-                    else:
-                        self.skipTest("Unknown case")
-
-                    del inps["input_ids"]
-                    inps["inputs_embeds"] = torch.rand(shape, dtype=torch.float, device=torch_device)
-                    inputs_to_test.append(inps)
-
-            for inps in inputs_to_test:
-                filtered_inputs = {k: v for (k, v) in inps.items() if k in input_names}
-                input_names_to_trace = list(filtered_inputs.keys())
-
-                if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
-                    not hasattr(model.config, "problem_type") or model.config.problem_type is None
-                ):
-                    model.config.problem_type = "single_label_classification"
-
-                model.config.use_cache = "past_key_values" in input_names_to_trace
-
-                traced_model = symbolic_trace(model, input_names_to_trace)
-
-                with torch.no_grad():
-                    traced_output = traced_model(**filtered_inputs)
-                    model_output = model(**filtered_inputs)
-
-                def flatten_output(output):
-                    flatten = []
-                    for x in output:
-                        if isinstance(x, (tuple, list)):
-                            flatten += flatten_output(x)
-                        elif not isinstance(x, torch.Tensor):
-                            continue
-                        else:
-                            flatten.append(x)
-                    return flatten
-
-                model_output = flatten_output(model_output)
-                traced_output = flatten_output(traced_output)
-                num_outputs = len(model_output)
-
-                for i in range(num_outputs):
-                    self.assertTrue(
-                        torch.allclose(model_output[i], traced_output[i]),
-                        f"traced {i}th output doesn't match model {i}th output for {model_class}",
-                    )
-
-                # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
-                # (Even with this call, there are still memory leak by ~0.04MB)
-                self.clear_torch_jit_class_registry()
-
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
@@ -2248,38 +1904,6 @@ class ModelTesterMixin:
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
                     self.assertGreater(len(loading_info["missing_keys"]), 0, model.__class__.__name__)
-
-    def test_tie_model_weights(self):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to `False`")
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def check_same_values(layer_1, layer_2):
-            equal = True
-            for p1, p2 in zip(layer_1.weight, layer_2.weight):
-                if p1.data.ne(p2.data).sum() > 0:
-                    equal = False
-            return equal
-
-        for model_class in self.all_model_classes:
-            config.torchscript = True
-            model_not_tied = model_class(copy.deepcopy(config))
-            if model_not_tied.get_output_embeddings() is None:
-                continue
-
-            config_tied = copy.deepcopy(config)
-            config_tied.torchscript = False
-            model_tied = model_class(config_tied)
-            params_tied = list(model_tied.parameters())
-            # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(check_same_values(embeddings, decoding))
-
-            # Check that after resize they remain tied.
-            vocab_size = config.get_text_config().vocab_size
-            model_tied.resize_token_embeddings(vocab_size + 10)
-            params_tied_2 = list(model_tied.parameters())
-            self.assertEqual(len(params_tied_2), len(params_tied))
 
     def test_can_use_safetensors(self):
         for model_class in self.all_model_classes:
@@ -3737,6 +3361,7 @@ class ModelTesterMixin:
             config.use_sliding_window = True
             config_dict = config.to_diff_dict()
             config_dict.pop("layer_types", None)
+            config_dict.pop("rope_parameters", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
@@ -3754,6 +3379,7 @@ class ModelTesterMixin:
             config.use_sliding_window = False
             config_dict = config.to_diff_dict()
             config_dict.pop("layer_types", None)
+            config_dict.pop("rope_parameters", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
@@ -3936,12 +3562,12 @@ class ModelTesterMixin:
             # 3d rope also depends on the head dim
             # (we assume easy shapes here where we get to the requested head dim at least)
             if (
-                getattr(config, "rope_scaling", None) is not None
-                and len(config.rope_scaling.get("mrope_section", [])) > 0
+                getattr(config, "rope_parameters", None) is not None
+                and len(config.rope_parameters.get("mrope_section", [])) > 0
             ):
-                scaling_factor = max(requested_dim // (sum(config.rope_scaling["mrope_section"]) * 2), 1)
-                config.rope_scaling["mrope_section"] = [
-                    section * scaling_factor for section in config.rope_scaling["mrope_section"]
+                scaling_factor = max(requested_dim // (sum(config.rope_parameters["mrope_section"]) * 2), 1)
+                config.rope_parameters["mrope_section"] = [
+                    section * scaling_factor for section in config.rope_parameters["mrope_section"]
                 ]
 
         # Update config values

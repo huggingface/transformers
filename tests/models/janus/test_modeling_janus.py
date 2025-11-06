@@ -199,8 +199,6 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-
     _is_composite = True
 
     def setUp(self):
@@ -360,7 +358,6 @@ class JanusVQModelTester:
 class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (JanusVQVAE,) if is_torch_available() else ()
 
-    fx_compatible = False
     has_attentions = False
     test_resize_embeddings = False
 

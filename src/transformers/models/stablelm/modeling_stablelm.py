@@ -19,7 +19,7 @@
 # limitations under the License.
 """PyTorch StableLM model."""
 
-import math
+from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
@@ -29,7 +29,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import (
     GenericForSequenceClassification,
     GenericForTokenClassification,
@@ -39,9 +38,13 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...modeling_rope_utils import (
+    ROPE_INIT_FUNCTIONS,
+    dynamic_rope_update,
+)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_stablelm import StableLmConfig
 
 
@@ -49,11 +52,6 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
     from ...integrations.flex_attention import make_flex_block_causal_mask
-
-
-if is_flash_attn_available():
-    from ...integrations.flash_attention import get_target_dtype
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -65,20 +63,52 @@ class StableLmRotaryEmbedding(nn.Module):
 
     def __init__(self, config: StableLmConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    # Ignore copy
+    def compute_default_rope_parameters(
+        config: Optional[StableLmConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -177,6 +207,33 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+# Copied from transformers.models.llama.modeling_llama.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class StableLmAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -196,9 +253,10 @@ class StableLmAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.rope_theta = config.rope_theta
+
         self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
         self.is_causal = True
+        self.scaling = self.head_dim**-0.5
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -217,8 +275,7 @@ class StableLmAttention(nn.Module):
                 self.head_dim, self.num_key_value_heads, eps=config.layer_norm_eps
             )
 
-        self.attention_dropout = nn.Dropout(config.attention_dropout)
-        self.rotary_emb = StableLmRotaryEmbedding(config=self.config)
+        self.attention_dropout = config.attention_dropout
 
     def forward(
         self,
@@ -229,231 +286,15 @@ class StableLmAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        if self.qk_layernorm:
-            query_states = self.q_layernorm(query_states)
-            key_states = self.k_layernorm(key_states)
-
-        cos, sin = position_embeddings
-
-        # Partial rotary embedding
-        query_rot, query_pass = (
-            query_states[..., : self.rotary_ndims],
-            query_states[..., self.rotary_ndims :],
-        )
-        key_rot, key_pass = (
-            key_states[..., : self.rotary_ndims],
-            key_states[..., self.rotary_ndims :],
-        )
-        # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
-        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
-
-        # [batch_size, seq_length, num_heads, head_dim]
-        query_states = torch.cat((query_rot, query_pass), dim=-1)
-        key_states = torch.cat((key_rot, key_pass), dim=-1)
-
-        if past_key_values is not None:
-            # Specific to RoPE models with partial rotation
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "partial_rotation_size": self.rotary_ndims,
-                "cache_position": cache_position,
-            }
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        # Repeat k/v heads if n_kv_heads < n_heads
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            attn_weights += causal_mask
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query_states.dtype)
-        attn_weights = self.attention_dropout(attn_weights)
-
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-
-        attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights
-
-
-class StableLmSdpaAttention(StableLmAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "StableLmModel is using StableLmSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                position_embeddings=position_embeddings,
-            )
-
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        if self.qk_layernorm:
-            query_states = self.q_layernorm(query_states)
-            key_states = self.k_layernorm(key_states)
-
-        cos, sin = position_embeddings
-
-        # Partial rotary embedding
-        query_rot, query_pass = (
-            query_states[..., : self.rotary_ndims],
-            query_states[..., self.rotary_ndims :],
-        )
-        key_rot, key_pass = (
-            key_states[..., : self.rotary_ndims],
-            key_states[..., self.rotary_ndims :],
-        )
-        # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
-        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
-
-        # [batch_size, seq_length, num_heads, head_dim]
-        query_states = torch.cat((query_rot, query_pass), dim=-1)
-        key_states = torch.cat((key_rot, key_pass), dim=-1)
-
-        if past_key_values is not None:
-            # Specific to RoPE models with partial rotation
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "partial_rotation_size": self.rotary_ndims,
-                "cache_position": cache_position,
-            }
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        # Repeat k/v heads if n_kv_heads < n_heads
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        causal_mask = attention_mask
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and attention_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-        is_causal = bool(causal_mask is None and q_len > 1)
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=causal_mask,
-            dropout_p=self.attention_dropout.p if self.training else 0.0,
-            is_causal=is_causal,
-        )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
-
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, None
-
-
-class StableLmFlashAttention2(StableLmAttention):
-    """
-    StableLM flash attention module. This module inherits from `StableLmAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        # StableLmFlashAttention2 attention does not support output_attentions
-
-        output_attentions = False
-
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -463,8 +304,6 @@ class StableLmFlashAttention2(StableLmAttention):
             key_states = self.k_layernorm(key_states)
 
         cos, sin = position_embeddings
-
-        # Partial rotary embedding
         query_rot, query_pass = (
             query_states[..., : self.rotary_ndims],
             query_states[..., self.rotary_ndims :],
@@ -473,6 +312,7 @@ class StableLmFlashAttention2(StableLmAttention):
             key_states[..., : self.rotary_ndims],
             key_states[..., self.rotary_ndims :],
         )
+        # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
         query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
 
         # [batch_size, seq_length, num_heads, head_dim]
@@ -480,6 +320,7 @@ class StableLmFlashAttention2(StableLmAttention):
         key_states = torch.cat((key_rot, key_pass), dim=-1)
 
         if past_key_values is not None:
+            # Specific to RoPE models with partial rotation
             cache_kwargs = {
                 "sin": sin,
                 "cos": cos,
@@ -488,43 +329,26 @@ class StableLmFlashAttention2(StableLmAttention):
             }
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        dropout_rate = self.attention_dropout.p if self.training else 0.0
-
-        target_dtype = get_target_dtype(query_states, self)
-
-        attn_output = _flash_attention_forward(
+        attn_output, attn_weights = attention_interface(
+            self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            q_len,
-            position_ids=position_ids,
-            dropout=dropout_rate,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-            is_causal=self.is_causal,
-            target_dtype=target_dtype,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            position_ids=position_ids,  # pass `position_ids` for FA2
+            **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
 
-        if not output_attentions:
-            attn_weights = None
-
         return attn_output, attn_weights
-
-
-ATTENTION_CLASSES = {
-    "eager": StableLmAttention,
-    "sdpa": StableLmSdpaAttention,
-    "flash_attention_2": StableLmFlashAttention2,
-}
 
 
 class StableLmDecoderLayer(GradientCheckpointingLayer):
@@ -532,7 +356,7 @@ class StableLmDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.use_parallel_residual = config.use_parallel_residual
         self.hidden_size = config.hidden_size
-        self.self_attn = ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
+        self.self_attn = StableLmAttention(config, layer_idx=layer_idx)
         self.mlp = StableLmMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = None
@@ -549,7 +373,7 @@ class StableLmDecoderLayer(GradientCheckpointingLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -662,10 +486,11 @@ class StableLmModel(StableLmPreTrainedModel):
             [StableLmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.rotary_emb = StableLmRotaryEmbedding(config=config)
 
         self._attn_implementation = config._attn_implementation
         self.gradient_checkpointing = False
+        self.rotary_emb = StableLmRotaryEmbedding(config=self.config)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -718,9 +543,7 @@ class StableLmModel(StableLmPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None

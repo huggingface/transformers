@@ -17,7 +17,6 @@
 import importlib
 import json
 import os
-import warnings
 from collections import OrderedDict
 from typing import Any, Optional, Union
 
@@ -816,7 +815,7 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
             if getattr(tokenizer, "__name__", None) == class_name:
                 return tokenizer
 
-    # We did not fine the class, but maybe it's because a dep is missing. In that case, the class will be in the main
+    # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # init and we return the proper dummy to get an appropriate error message.
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
@@ -894,16 +893,6 @@ def get_tokenizer_config(
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
-    use_auth_token = kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     commit_hash = kwargs.get("_commit_hash")
     resolved_config_file = cached_file(
         pretrained_model_name_or_path,
@@ -1021,18 +1010,6 @@ class AutoTokenizer:
         >>> # Download vocabulary from huggingface.co and define model-specific arguments
         >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base", add_prefix_space=True)
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 

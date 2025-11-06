@@ -98,12 +98,12 @@ else:
             ("eomt", ("EomtImageProcessor", "EomtImageProcessorFast")),
             ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
             ("focalnet", ("BitImageProcessor", "BitImageProcessorFast")),
-            ("fuyu", ("FuyuImageProcessor", None)),
+            ("fuyu", ("FuyuImageProcessor", "FuyuImageProcessorFast")),
             ("gemma3", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("gemma3n", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("git", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("glm4v", ("Glm4vImageProcessor", "Glm4vImageProcessorFast")),
-            ("glpn", ("GLPNImageProcessor", None)),
+            ("glpn", ("GLPNImageProcessor", "GLPNImageProcessorFast")),
             ("got_ocr2", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
             ("grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),
             ("groupvit", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
@@ -114,7 +114,6 @@ else:
             ("ijepa", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("imagegpt", ("ImageGPTImageProcessor", "ImageGPTImageProcessorFast")),
             ("instructblip", ("BlipImageProcessor", "BlipImageProcessorFast")),
-            ("instructblipvideo", ("InstructBlipVideoImageProcessor", None)),
             ("janus", ("JanusImageProcessor", "JanusImageProcessorFast")),
             ("kosmos-2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("kosmos-2.5", ("Kosmos2_5ImageProcessor", "Kosmos2_5ImageProcessorFast")),
@@ -122,11 +121,11 @@ else:
             ("layoutlmv3", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
             ("levit", ("LevitImageProcessor", "LevitImageProcessorFast")),
             ("lfm2_vl", (None, "Lfm2VlImageProcessorFast")),
-            ("lightglue", ("LightGlueImageProcessor", None)),
+            ("lightglue", ("LightGlueImageProcessor", "LightGlueImageProcessorFast")),
             ("llama4", ("Llama4ImageProcessor", "Llama4ImageProcessorFast")),
             ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
             ("llava_next", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
-            ("llava_next_video", ("LlavaNextVideoImageProcessor", None)),
+            ("llava_next_video", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
             ("llava_onevision", ("LlavaOnevisionImageProcessor", "LlavaOnevisionImageProcessorFast")),
             ("mask2former", ("Mask2FormerImageProcessor", "Mask2FormerImageProcessorFast")),
             ("maskformer", ("MaskFormerImageProcessor", "MaskFormerImageProcessorFast")),
@@ -171,7 +170,7 @@ else:
             ("siglip", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("siglip2", ("Siglip2ImageProcessor", "Siglip2ImageProcessorFast")),
             ("smolvlm", ("SmolVLMImageProcessor", "SmolVLMImageProcessorFast")),
-            ("superglue", ("SuperGlueImageProcessor", None)),
+            ("superglue", ("SuperGlueImageProcessor", "SuperGlueImageProcessorFast")),
             ("superpoint", ("SuperPointImageProcessor", "SuperPointImageProcessorFast")),
             ("swiftformer", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin", ("ViTImageProcessor", "ViTImageProcessorFast")),
@@ -261,7 +260,7 @@ def get_image_processor_config(
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
               huggingface.co.
             - a path to a *directory* containing a configuration file saved using the
-              [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
+              [`~ProcessorMixin.save_pretrained`] method, e.g., `./my_model_directory/`.
 
         cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
@@ -300,22 +299,12 @@ def get_image_processor_config(
     image_processor_config = get_image_processor_config("FacebookAI/xlm-roberta-base")
 
     # Save a pretrained image processor locally and you can reload its config
-    from transformers import AutoTokenizer
+    from transformers import AutoImageProcessor
 
     image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
     image_processor.save_pretrained("image-processor-test")
     image_processor_config = get_image_processor_config("image-processor-test")
     ```"""
-    use_auth_token = kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         IMAGE_PROCESSOR_NAME,
@@ -437,18 +426,6 @@ class AutoImageProcessor:
         >>> # If image processor files are in a directory (e.g. image processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         # TODO: @yoni, change in v4.48 (use_fast set to True by default)
         use_fast = kwargs.pop("use_fast", None)
@@ -651,19 +628,6 @@ class AutoImageProcessor:
             fast_image_processor_class, BaseImageProcessorFast
         ):
             raise ValueError("The `fast_image_processor_class` should inherit from `BaseImageProcessorFast`.")
-
-        if (
-            slow_image_processor_class is not None
-            and fast_image_processor_class is not None
-            and issubclass(fast_image_processor_class, BaseImageProcessorFast)
-            and fast_image_processor_class.slow_image_processor_class != slow_image_processor_class
-        ):
-            raise ValueError(
-                "The fast processor class you are passing has a `slow_image_processor_class` attribute that is not "
-                "consistent with the slow processor class you passed (fast tokenizer has "
-                f"{fast_image_processor_class.slow_image_processor_class} and you passed {slow_image_processor_class}. Fix one of those "
-                "so they match!"
-            )
 
         # Avoid resetting a set slow/fast image processor if we are passing just the other ones.
         if config_class in IMAGE_PROCESSOR_MAPPING._extra_content:

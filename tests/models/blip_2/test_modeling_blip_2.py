@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_gpu,
     require_torch_multi_accelerator,
     require_vision,
     slow,
@@ -156,7 +155,6 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Blip2VisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -461,11 +459,9 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
 class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
     additional_model_inputs = ["input_ids"]
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -793,11 +789,9 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     # TODO: Fix the failed tests
@@ -1073,11 +1067,9 @@ class Blip2TextModelWithProjectionTester:
 @require_torch
 class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2TextModelWithProjection,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Blip2TextModelWithProjectionTester(self)
@@ -1231,10 +1223,8 @@ class Blip2VisionModelWithProjectionTester:
 @require_torch
 class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2VisionModelWithProjection,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Blip2VisionModelWithProjectionTester(self)
@@ -1380,11 +1370,9 @@ class Blip2TextRetrievalModelTester:
 class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForImageTextRetrieval,) if is_torch_available() else ()
     additional_model_inputs = ["input_ids"]
-    fx_compatible = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Blip2TextRetrievalModelTester(self)
@@ -1746,7 +1734,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(predictions[0].tolist(), expected_ids_and_text[0])
         self.assertEqual(generated_text, expected_ids_and_text[1])
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_inference_itm(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)

@@ -88,6 +88,15 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
 
+    def test_processor_from_local_subfolder_from_repo(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
+            processor.save_pretrained(f"{tmpdirname}/processor_subfolder")
+
+            processor = Wav2Vec2Processor.from_pretrained(tmpdirname, subfolder="processor_subfolder")
+
+        self.assertIsInstance(processor, Wav2Vec2Processor)
+
     def test_processor_from_local_directory_from_extractor_config(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             # copy relevant files
@@ -476,20 +485,6 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 tokenizer=tokenizer, image_processor=image_processor, chat_template=chat_template
             )
             self.assertEqual(processor.chat_template, chat_template)
-
-            existing_tokenizer_template = getattr(processor.tokenizer, "chat_template", None)
-            with TemporaryHubRepo(token=self._token) as tmp_repo:
-                processor.save_pretrained(
-                    tmp_dir, repo_id=tmp_repo.repo_id, token=self._token, push_to_hub=True, save_jinja_files=False
-                )
-                reloaded_processor = LlavaProcessor.from_pretrained(tmp_repo.repo_id)
-                self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
-                # When we don't use single-file chat template saving, processor and tokenizer chat templates
-                # should remain separate
-                self.assertEqual(
-                    getattr(reloaded_processor.tokenizer, "chat_template", None), existing_tokenizer_template
-                )
-
             with TemporaryHubRepo(token=self._token) as tmp_repo:
                 processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, token=self._token, push_to_hub=True)
                 reloaded_processor = LlavaProcessor.from_pretrained(tmp_repo.repo_id)
