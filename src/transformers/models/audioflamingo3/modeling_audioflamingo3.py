@@ -369,8 +369,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         )
 
         # Conv front-end
-        # TODO (ebezzam) remove after pushing new weights?
-        inputs_embeds = nn.functional.gelu(self.conv1(input_features.to(self.conv1.weight.dtype)))
+        inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
 

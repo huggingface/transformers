@@ -283,7 +283,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         batch = self.processor.apply_chat_template(
             conversation, tokenize=True, add_generation_prompt=True, return_dict=True
-        ).to(model.device)
+        ).to(model.device, dtype=model.dtype)
         seq = model.generate(**batch)
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
@@ -348,7 +348,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         batch = self.processor.apply_chat_template(
             conversations, tokenize=True, add_generation_prompt=True, return_dict=True
-        ).to(model.device)
+        ).to(model.device, dtype=model.dtype)
         seq = model.generate(**batch)
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
