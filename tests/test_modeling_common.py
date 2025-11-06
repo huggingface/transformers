@@ -3507,18 +3507,26 @@ class ModelTesterMixin:
                 try:
                     exported_program = exporter.export(model)
                 except torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode:
-                    continue  # TODO: inspect the modeling (usually this happen in very complicated ones)
-                except torch._subclasses.fake_tensor.UnsupportedOperatorException:
-                    continue  # This is an issue that only happens when exporting on cuda
-                except torch._dynamo.exc.BackendCompilerFailed:
-                    continue  # Same as above, inductor error
-                except torch.AcceleratorError:
-                    continue  # Same as above, cuda error
+                    # TODO: investigate on a per-importance basis, I already fixed most MoEs and some VLMs
+                    # The error is usually informative and sometimes even suggests the check to be added
+                    self.skipTest(
+                        "Skipping test but these usually mean modeling should be changed or some guards are to to be added."
+                    )
+                except (
+                    torch._subclasses.fake_tensor.UnsupportedOperatorException,
+                    torch._dynamo.exc.BackendCompilerFailed,  # Happens with modernbert (uses torch.compile decorator)
+                ):
+                    self.skipTest(
+                        "Skipping test due to UnsupportedOperatorException/BackendCompilerFailed during export (cuda issue)"
+                    )
                 except Exception as e:
                     if "Expected cond to be True, but got False." in str(e):
-                        continue  # TODO: there's around 15 models failing with this
-                    else:
-                        raise e
+                        # TODO: investigate, there's around 15 models (encoder-decoder parts) failing with this error during export
+                        # The error is not very actionable as it doesn't explain where the problem is exactly
+                        self.skipTest(
+                            "Skipping test due to torch's ambiguous error 'Expected cond to be True, but got False.'"
+                        )
+                    raise e
 
                 with torch.no_grad():
                     set_seed(1234)
