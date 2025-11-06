@@ -23,7 +23,7 @@ on:
 
 # Used for `push` to easily modify the target workflow runs to compare against
 env:
-    prev_workflow_run_id: ""
+    prev_workflow_run_id: "19089641651"
     other_workflow_run_id: ""
 
 
