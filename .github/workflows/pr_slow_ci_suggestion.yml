@@ -29,12 +29,12 @@ jobs:
           fetch-depth: "0"
 
       - name: Write pr_files file
-        env:
-          PR_FILES: ${{ needs.get-pr-info.outputs.PR_FILES }}
-        run: |
-          cat > pr_files.txt << EOF
-          $PR_FILES
-          EOF
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const prFilesJson = `${{ needs.get-pr-info.outputs.PR_FILES }}`;
+            fs.writeFileSync('pr_files.txt', prFilesJson);
 
       - name: Get repository content
         id: repo_content
