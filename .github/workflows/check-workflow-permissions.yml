@@ -2,34 +2,22 @@
 name: Check Permissions Advisor
 
 on:
-  workflow_call:
+  workflow_dispatch:
     inputs:
       workflow_name:
-        description: 'Workflow file to analyze'
-        required: false
+        description: 'Workflow file name'
         type: string
-        default: ''
       run_count:
         description: 'Number of runs to analyze'
-        required: false
-        type: number
-        default: 10
-
-permissions:
-  actions: read
-  contents: read
+        type: string
+        default: "10"
 
 jobs:
   advisor:
-    name: Analyze Permissions
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Run Advisor
-        uses: GitHubSecurityLab/actions-permissions/advisor@v1
-        with:
-          name: ${{ inputs.workflow_name }}
-          count: ${{ inputs.run_count }}
+    uses: huggingface/security-workflows/.github/workflows/permissions-advisor-reusable.yml@main
+    permissions:
+      actions: read
+      contents: read
+    with:
+      workflow_name: ${{ inputs.workflow_name }}
+      run_count: ${{ fromJSON(inputs.run_count) }}
