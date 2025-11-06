@@ -376,9 +376,9 @@ class ContinuousBatchingTest(unittest.TestCase):
 
         messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
 
-        inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
-            model.device
-        )[0]
+        inputs = tokenizer.apply_chat_template(
+            messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
+        ).to(model.device)[0]
 
         request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=True)
 
@@ -408,9 +408,9 @@ class ContinuousBatchingTest(unittest.TestCase):
 
         messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
 
-        inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
-            model.device
-        )[0]
+        inputs = tokenizer.apply_chat_template(
+            messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
+        ).to(model.device)[0]
 
         request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=False)
 
@@ -435,9 +435,9 @@ class ContinuousBatchingTest(unittest.TestCase):
 
         messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
 
-        inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
-            model.device
-        )[0]
+        inputs = tokenizer.apply_chat_template(
+            messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
+        ).to(model.device)[0]
 
         # Non-streaming request
         request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=False)
