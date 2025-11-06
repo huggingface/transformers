@@ -1,0 +1,35 @@
+---
+name: Check Permissions Advisor
+
+on:
+  workflow_call:
+    inputs:
+      workflow_name:
+        description: 'Workflow file to analyze'
+        required: false
+        type: string
+        default: ''
+      run_count:
+        description: 'Number of runs to analyze'
+        required: false
+        type: number
+        default: 10
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  advisor:
+    name: Analyze Permissions
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Run Advisor
+        uses: GitHubSecurityLab/actions-permissions/advisor@v1
+        with:
+          name: ${{ inputs.workflow_name }}
+          count: ${{ inputs.run_count }}
