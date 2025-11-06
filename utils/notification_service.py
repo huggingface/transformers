@@ -1526,7 +1526,7 @@ if __name__ == "__main__":
             )
             other_workflow_run_ids.append(other_workflow_run_id)
     # triggered via `issue_comment` for CI on pull requests (e.g. using the comment `run-slow:`)
-    elif os.environ.get("GITHUB_EVENT_NAME") in ["issue_comment"]:
+    elif os.environ.get("GITHUB_EVENT_NAME") in ["issue_comment", "pull_request"]:
         # TODO (ydshieh): Make this flexible once we implement `run-slow` for AMD CI and others.
         # The id of the workflow `.github/workflows/self-scheduled-caller.yml` (not of a workflow run of it).
         prev_workflow_id = "90575235"

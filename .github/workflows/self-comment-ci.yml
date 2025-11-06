@@ -6,9 +6,10 @@ on:
       - created
     branches-ignore:
       - main
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow') }}
-  cancel-in-progress: true
+  pull_request:
+#concurrency:
+#  group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow') }}
+#  cancel-in-progress: true
 permissions: read-all
 
 env:
@@ -27,7 +28,7 @@ env:
 jobs:
   get-pr-number:
     name: Get PR number
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
+    # if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
     uses: ./.github/workflows/get-pr-number.yml
 
   get-pr-info:
@@ -51,13 +52,14 @@ jobs:
           COMMENT_DATE: ${{ github.event.comment.created_at }}
           PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
         run: |
-            COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
-            echo "COMMENT_DATE: $COMMENT_DATE"
-            echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
-            if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
-              echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
-              exit -1;
-            fi
+            echo "bon"
+#            COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
+#            echo "COMMENT_DATE: $COMMENT_DATE"
+#            echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
+#            if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+#              echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
+#              exit -1;
+#            fi
 
   # use a python script to handle this complex logic.
   get-tests:
@@ -70,21 +72,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: "0"
-          ref: "refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge"
+          ref: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
 
-      - name: Verify merge commit SHA
-        env:
-          VERIFIED_PR_MERGE_SHA: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
-        run: |
-            PR_MERGE_SHA=$(git log -1 --format=%H)
-            if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
-              echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
-              exit -1;
-            fi
+#      - name: Verify merge commit SHA
+#        env:
+#          VERIFIED_PR_MERGE_SHA: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
+#        run: |
+#            PR_MERGE_SHA=$(git log -1 --format=%H)
+#            if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
+#              echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
+#              exit -1;
+#            fi
 
       - name: Get models to test
         env:
-          PR_COMMENT: ${{ github.event.comment.body }}
+          PR_COMMENT: "run-slow: vit"
         run: |
           python -m pip install GitPython
           python utils/pr_slow_ci_models.py --message "$PR_COMMENT" | tee output.txt

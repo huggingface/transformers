@@ -6,7 +6,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - trigger_for_pauline
+      - check_commitxxx
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
