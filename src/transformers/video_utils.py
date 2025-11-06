@@ -15,11 +15,13 @@
 
 import os
 import warnings
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Iterable, Mapping
 from contextlib import redirect_stdout
 from dataclasses import dataclass, fields
+from functools import partial
 from io import BytesIO
-from typing import NewType, Optional, Union
+from types import FunctionType
+from typing import Callable, NewType, Optional, Union
 from urllib.parse import urlparse
 
 import httpx
@@ -298,6 +300,37 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: Optional[int] =
     return indices
 
 
+def get_num_frames_and_fps(sample_indices_fn: Union[partial, FunctionType]) -> tuple[Optional[int], Optional[float]]:
+    """
+    Extract num_frames and fps from a function or functools.partial.
+    
+    Args:
+        sample_indices_fn: function or functools.partial
+    
+    Returns:
+        num_frames (int or None), fps (float or None)
+    """
+    num_frames, fps = None, None
+
+    # Case 1: functools.partial
+    if isinstance(sample_indices_fn, partial):
+        num_frames = sample_indices_fn.keywords.get("num_frames")
+        fps = sample_indices_fn.keywords.get("fps")
+
+    # Case 2: normal function with closure
+    elif isinstance(sample_indices_fn, FunctionType):
+        if sample_indices_fn.__closure__:
+            closure_vars = {
+                var: cell.cell_contents
+                for var, cell in zip(sample_indices_fn.__code__.co_freevars, sample_indices_fn.__closure__)
+            }
+            num_frames = closure_vars.get("num_frames")
+            fps = closure_vars.get("fps")
+    
+    # Otherwise, not supported
+    return num_frames, fps
+
+
 def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None, **kwargs):
     """
     A default sampling function that replicates the logic used in get_uniform_frame_indices,
@@ -364,7 +397,7 @@ def read_video_opencv(
     video = cv2.VideoCapture(video_path)
     total_num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
     video_fps = video.get(cv2.CAP_PROP_FPS)
-    num_frames, fps = sample_indices_fn.keywords.get("num_frames"), sample_indices_fn.keywords.get("fps")
+    num_frames, fps = get_num_frames_and_fps(sample_indices_fn=sample_indices_fn)
     if fps:
         sampled_fps = fps
     elif num_frames and video_fps:
@@ -434,7 +467,7 @@ def read_video_decord(
     vr = VideoReader(uri=video_path, ctx=cpu(0))  # decord has problems with gpu
     video_fps = vr.get_avg_fps()
     total_num_frames = len(vr)
-    num_frames, fps = sample_indices_fn.keywords.get("num_frames"), sample_indices_fn.keywords.get("fps")
+    num_frames, fps = get_num_frames_and_fps(sample_indices_fn=sample_indices_fn)
     if fps:
         sampled_fps = fps
     elif num_frames and video_fps:
@@ -494,7 +527,7 @@ def read_video_pyav(
     container = av.open(video_path)
     total_num_frames = container.streams.video[0].frames
     video_fps = container.streams.video[0].average_rate  # should we better use `av_guess_frame_rate`?
-    num_frames, fps = sample_indices_fn.keywords.get("num_frames"), sample_indices_fn.keywords.get("fps")
+    num_frames, fps = get_num_frames_and_fps(sample_indices_fn=sample_indices_fn)
     if fps:
         sampled_fps = fps
     elif num_frames and video_fps:
@@ -564,7 +597,7 @@ def read_video_torchvision(
     )
     video_fps = info["video_fps"]
     total_num_frames = video.size(0)
-    num_frames, fps = sample_indices_fn.keywords.get("num_frames"), sample_indices_fn.keywords.get("fps")
+    num_frames, fps = get_num_frames_and_fps(sample_indices_fn=sample_indices_fn)
     if fps:
         sampled_fps = fps
     elif num_frames and video_fps:
@@ -631,7 +664,7 @@ def read_video_torchcodec(
     )
     total_num_frames = decoder.metadata.num_frames
     video_fps = decoder.metadata.average_fps
-    num_frames, fps = sample_indices_fn.keywords.get("num_frames"), sample_indices_fn.keywords.get("fps")
+    num_frames, fps = get_num_frames_and_fps(sample_indices_fn=sample_indices_fn)
     if fps:
         sampled_fps = fps
     elif num_frames and video_fps:
