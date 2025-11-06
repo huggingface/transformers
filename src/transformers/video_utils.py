@@ -641,7 +641,7 @@ def read_video_torchcodec(
     metadata = VideoMetadata(
         total_num_frames=total_num_frames,
         fps=video_fps,
-        sampled_fps=float(sampled_fps)
+        sampled_fps=float(sampled_fps),
         duration=decoder.metadata.duration_seconds,
         video_backend="torchcodec",
         height=decoder.metadata.height,
