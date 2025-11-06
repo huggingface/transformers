@@ -725,14 +725,13 @@ class TorchAoSerializationTest(unittest.TestCase):
 @require_torchao
 @require_torchao_version_greater_or_equal("0.14.0")
 class TorchAoSafeSerializationTest(TorchAoSerializationTest):
-    # placeholder
-    quant_scheme = torchao.quantization.Float8WeightOnlyConfig()
-
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
+        # placeholder
+        cls.quant_scheme = torchao.quantization.Float8WeightOnlyConfig()
 
     def tearDown(self):
         gc.collect()
