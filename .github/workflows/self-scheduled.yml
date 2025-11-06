@@ -586,11 +586,10 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [setup, run_models_gpu]
     steps:
+      # Checkout in order to run `utils/extract_warnings.py`. Avoid **explicit** checkout (i.e. don't specify `ref`) for
+      # security reason.
       - name: Checkout transformers
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-          ref: ${{ inputs.commit_sha || github.sha }}
 
       - name: Install transformers
         run: pip install transformers
