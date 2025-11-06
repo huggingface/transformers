@@ -291,37 +291,39 @@ class BenchmarkRunner:
         )
         manager = self.model.init_continuous_batching(config)
         manager.start()
-        first_req_results = []
-        timestamps = []
-        wall_time_0 = time.perf_counter()
-        inputs = self.inputs["input_ids"].tolist()
-        manager.add_requests(inputs, max_new_tokens=max_new_tokens, streaming=True)
-        first_req_id = None
-        num_requests = len(inputs)
-        finished_requests = 0
-        while finished_requests < num_requests:
-            # NOTE: I don't like having the extra if stmt here, but hopefully won't degrade perf too much
-            result = manager.get_result()
-            if result:
-                timestamps.append(time.perf_counter() - wall_time_0)
-                if result.is_finished():
-                    finished_requests += 1
-                if first_req_id is None:
-                    first_req_id = result.request_id
-                if result.request_id == first_req_id:
-                    first_req_results.append(result)
-            else:
-                if not manager.is_running():
-                    raise RuntimeError("Generation thread exited unexpectedly")
-        wall_time_1 = time.perf_counter()
-        manager.stop()
-        gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
-        decoded_output = self.tokenizer.decode(
-            [res.generated_tokens[0] for res in first_req_results], skip_special_tokens=True
-        )
-        shape_and_decoded_output = f"{(1, len(first_req_results))} | {decoded_output}"
-        e2e_latency = wall_time_1 - wall_time_0
-        return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
+        try:
+            first_req_results = []
+            timestamps = []
+            wall_time_0 = time.perf_counter()
+            inputs = self.inputs["input_ids"].tolist()
+            manager.add_requests(inputs, max_new_tokens=max_new_tokens, streaming=True)
+            first_req_id = None
+            num_requests = len(inputs)
+            finished_requests = 0
+            while finished_requests < num_requests:
+                # NOTE: I don't like having the extra if stmt here, but hopefully won't degrade perf too much
+                result = manager.get_result()
+                if result:
+                    timestamps.append(time.perf_counter() - wall_time_0)
+                    if result.is_finished():
+                        finished_requests += 1
+                    if first_req_id is None:
+                        first_req_id = result.request_id
+                    if result.request_id == first_req_id:
+                        first_req_results.append(result)
+                else:
+                    if not manager.is_running():
+                        raise RuntimeError("Generation thread exited unexpectedly")
+            wall_time_1 = time.perf_counter()
+            gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
+            decoded_output = self.tokenizer.decode(
+                [res.generated_tokens[0] for res in first_req_results], skip_special_tokens=True
+            )
+            shape_and_decoded_output = f"{(1, len(first_req_results))} | {decoded_output}"
+            e2e_latency = wall_time_1 - wall_time_0
+            return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
+        finally:
+            manager.stop()
 
     def time_generate(
         self,
