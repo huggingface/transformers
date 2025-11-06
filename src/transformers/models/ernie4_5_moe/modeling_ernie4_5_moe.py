@@ -326,21 +326,14 @@ class Ernie4_5_MoeExperts(nn.ModuleList):
         self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
+        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        if torch.compiler.is_exporting():
-            from ...exporters.utils import batched_experts_forward_with_split_expert_weights
-
-            return batched_experts_forward_with_split_expert_weights(
-                self, hidden_states, selected_experts, routing_weights, final_hidden_states
-            )
-        else:
-            expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-            for expert_idx in expert_hit:
-                idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-                current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-                current_hidden_states = self[expert_idx](current_state) * routing_weights[top_x, idx, None]
-                final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        for expert_idx in expert_hit:
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
+            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
+            current_hidden_states = self[expert_idx](current_state) * routing_weights[top_x, idx, None]
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
 
         return final_hidden_states
 
