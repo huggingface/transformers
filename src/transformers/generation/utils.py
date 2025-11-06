@@ -2905,7 +2905,11 @@ class GenerationMixin(ContinuousMixin):
             streamer.end()
 
         return self._finalize_generate_output(
-            generate_output, input_ids, model_kwargs, GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput
+            generate_output,
+            input_ids,
+            model_kwargs,
+            decoder_only_cls=GenerateDecoderOnlyOutput,
+            encoder_decoder_cls=GenerateEncoderDecoderOutput,
         )
 
     @staticmethod
@@ -3409,17 +3413,15 @@ class GenerationMixin(ContinuousMixin):
         # previous decoding iteration)
         max_generated_length = ((beam_indices + 1).bool()).sum(dim=1).max()
         output_length = decoder_prompt_len + max_generated_length
-        sequences = sequences[:, :output_length]
-        beam_indices = beam_indices[:, :max_generated_length]
 
         return self._finalize_generate_output(
             generate_output,
-            sequences,
+            sequences[:, :output_length],
             model_kwargs,
             decoder_only_cls=GenerateBeamDecoderOnlyOutput,
             encoder_decoder_cls=GenerateBeamEncoderDecoderOutput,
             sequences_scores=(beam_scores if generation_config.output_scores else None),
-            beam_indices=beam_indices,
+            beam_indices=beam_indices[:, :max_generated_length],
         )
 
     def _assisted_decoding(
