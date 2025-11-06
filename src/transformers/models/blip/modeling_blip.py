@@ -797,9 +797,6 @@ class BlipModel(BlipPreTrainedModel):
 )
 class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
     config: BlipConfig
-    _tied_weights_keys = {
-        "text_decoder.cls.predictions.decoder.weight": "text_decoder.bert.embeddings.word_embeddings.weight",
-    }
     main_input_name = "pixel_values"
 
     def __init__(self, config: BlipConfig):
@@ -965,9 +962,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
 )
 class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
     config: BlipConfig
-    _tied_weights_keys = {
-        "text_decoder.cls.predictions.decoder.weight": "text_decoder.bert.embeddings.word_embeddings.weight",
-    }
+
 
     def __init__(self, config: BlipConfig):
         super().__init__(config)
@@ -975,7 +970,6 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
         self.vision_model = BlipVisionModel(config.vision_config)
 
         self.text_encoder = BlipTextModel(config.text_config, add_pooling_layer=False)
-
         self.text_decoder = BlipTextLMHeadModel(config.text_config)
 
         self.decoder_pad_token_id = config.text_config.pad_token_id

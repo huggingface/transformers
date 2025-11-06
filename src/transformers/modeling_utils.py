@@ -2491,13 +2491,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         top_level: "PreTrainedModel",
         missing_keys: Optional[set[str]] = None,
         module_prefix: str = "",
-        _tied_weights_keys=None,
     ):
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
         and the encoder and decoder. This relies on the `_tied_weights_keys` dict.
         """
-        missing_keys = missing_keys or set()
         mapping = getattr(self, "_tied_weights_keys", None)
         if not isinstance(mapping, dict):
             return
@@ -2514,9 +2512,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
             # during post_init, don't tie if config does not tie
             if (
-                not self.config.get_text_config().tie_word_embeddings or
-                (missing_keys != set()
-                and re.search(rf"\n{source_name}", "\n".join(missing_keys)))  # if source is missing, all missing
+                not self.config.get_text_config().tie_word_embeddings and
+                (missing_keys != set() and missing_keys is not None
+                and re.search(rf"\n{source_name}", "\n".join(missing_keys)))  # if source is missing, all missing (can_uss_safetensors ensures this)
             ): # test_can_init_all_missing_weights need this to not skip
                 continue  # `can_use_safetensors` goes against this one
 
@@ -2524,19 +2522,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 reg = re.compile(target_name)
                 # if target_name is a re:
                 for target_n, _ in self.named_parameters():
-                    if reg.search(target_n):
+                    # we don't want to TIE if the weight was found in the ckpt (not missing)
+                    if reg.search(target_n) and missing_keys is not None and re.search(rf"\n{source_name}", "\n".join(missing_keys)):
                         submodule, target_entity = target_n.rsplit(".", 1)
                         submodule = self.get_submodule(submodule)
                         setattr(submodule, target_entity, source_param_or_module)
                         if missing_keys and not re.search(rf"{source_name}", "\n".join(missing_keys)):
-                            missing_keys.discard(target_n)
-            else:
+                            missing_keys.discard(target_n) # probably not full match here?
+            # missing_keys None -> post init -> need to tie
+            elif missing_keys is None or re.search(rf"^{re.escape(target_name)}", "\n".join(missing_keys), flags=re.M):
                 if "." in target_name:
                     submodule, weight = target_name.rsplit(".", 1)
-                    submodule = self.get_submodule(submodule)
+                    submodule = top_level.get_submodule(submodule)
                     setattr(submodule, weight, source_param_or_module)
                 else:
-                    setattr(self, target_name, source_param_or_module)
+                    setattr(top_level, target_name, source_param_or_module)
+
                 if missing_keys and not re.search(rf"{source_name}", "\n".join(missing_keys)):
                     missing_keys.discard(target_name)
 
@@ -2548,16 +2549,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if missing_keys is None:
             # called from `post_init`
             # if self.config.get_text_config().tie_word_embeddings or self.config.get_text_config().tie_encoder_decoder: # is this even true? no cuz resize?
-            self.tie_weight_source_and_target(self, missing_keys, "", self._tied_weights_keys)
+            self.tie_weight_source_and_target(self, missing_keys, "")
         else:
             for module_prefix, module in self.named_modules():
                 # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
                 if isinstance(module, PreTrainedModel) and (
                     missing_keys != set() or self.config.tie_word_embeddings or self.config.tie_encoder_decoder
                 ):
-                    # Use the module's own tied-weights mapping, not the top-level one
-                    module_mapping = getattr(module, "_tied_weights_keys", None)
-                    module.tie_weight_source_and_target(self, missing_keys, module_prefix, module_mapping)
+                    module.tie_weight_source_and_target(self, missing_keys, module_prefix)
                 # Additionally, if it has a custom `_tie_weights`, honor it
                 if hasattr(module, "_tie_weights"):
                     module._tie_weights()

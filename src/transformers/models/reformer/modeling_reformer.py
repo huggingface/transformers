@@ -2142,7 +2142,6 @@ class ReformerModel(ReformerPreTrainedModel):
 )
 class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "reformer.embedding.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
@@ -2281,7 +2280,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
 @auto_docstring
 class ReformerForMaskedLM(ReformerPreTrainedModel):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "reformer.embedding.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
