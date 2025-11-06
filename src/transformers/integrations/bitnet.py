@@ -1,13 +1,13 @@
-from ..utils import is_accelerate_available, is_torch_available, logging
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from ..utils import is_accelerate_available, logging
 
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
 
-if is_torch_available():
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
 
 logger = logging.get_logger(__name__)
 

@@ -16,16 +16,13 @@
 from math import sqrt
 from typing import Optional
 
+import torch
+from torch import nn
+
 from ..utils import (
     is_flute_available,
     is_hadamard_available,
-    is_torch_available,
 )
-
-
-if is_torch_available():
-    import torch
-    from torch import nn
 
 
 if is_flute_available():
@@ -47,7 +44,7 @@ def pad_to_block(tensor, dims, had_block_size, value=0):
     return nn.functional.pad(tensor, pad_dims, "constant", value)
 
 
-def get_higgs_grid(p: int, n: int) -> "torch.Tensor":
+def get_higgs_grid(p: int, n: int) -> torch.Tensor:
     if (p, n) == (2, 256):
         return torch.tensor(
             [

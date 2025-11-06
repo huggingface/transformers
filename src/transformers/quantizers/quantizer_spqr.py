@@ -19,13 +19,14 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..integrations import replace_with_spqr_linear
 from ..utils import is_accelerate_available, is_spqr_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 
 
 if is_torch_available():
     import torch
+
+    from ..integrations import replace_with_spqr_linear
 
 logger = logging.get_logger(__name__)
 

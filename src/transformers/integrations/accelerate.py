@@ -33,10 +33,7 @@ from ..utils.quantization_config import QuantizationMethod
 from .deepspeed import is_deepspeed_zero3_enabled
 from .fsdp import is_fsdp_enabled
 
-
-if is_torch_available():
-    import torch
-    import torch.nn as nn
+from ..utils import logging
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map
@@ -85,7 +82,7 @@ def init_empty_weights(include_buffers: bool = False):
 
 
 @contextmanager
-def init_on_device(device: "torch.device", include_buffers: bool = False):
+def init_on_device(device: torch.device, include_buffers: bool = False):
     """
     A context manager under which models are initialized with all parameters on the specified device.
 
@@ -158,7 +155,7 @@ def init_on_device(device: "torch.device", include_buffers: bool = False):
             setattr(torch, torch_function_name, old_torch_function)
 
 
-def find_tied_parameters(model: "nn.Module", **kwargs):
+def find_tied_parameters(model: nn.Module, **kwargs):
     """
     Find the tied parameters in a given model.
 
