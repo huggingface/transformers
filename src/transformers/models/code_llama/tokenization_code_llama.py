@@ -166,12 +166,13 @@ class CodeLlamaTokenizer(TokenizersBackend):
             replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
         )
 
-        sequence = []
-        
-        if self.add_prefix_space:
-            sequence += [decoders.Strip(content=" ", left=1)]
-
-        self._tokenizer.decoder = decoders.Sequence(sequence)
+        # Use sequence of decoders: ByteFallback for byte sequences, then Metaspace to replace ▁ with spaces
+        prepend_scheme = _get_prepend_scheme(self.add_prefix_space, self)
+        decoder_sequence = [
+            decoders.ByteFallback(),  # Handle byte-level tokens from byte_fallback
+            decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme),
+        ]
+        self._tokenizer.decoder = decoders.Sequence(decoder_sequence)
         tokenizer_object = self._tokenizer
 
         super().__init__(

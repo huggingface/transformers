@@ -1045,26 +1045,30 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         text = self.convert_tokens_to_string(filtered_tokens)
 
-        # Simple cleanup of common tokenization artifacts
+        # Apply tokenizer-specific cleanup if available and requested
         clean_up_tokenization_spaces = (
             clean_up_tokenization_spaces
             if clean_up_tokenization_spaces is not None
             else self.clean_up_tokenization_spaces
         )
         if clean_up_tokenization_spaces:
-            # Inline simple cleanup (removed clean_up_tokenization method)
-            text = (
-                text.replace(" .", ".")
-                .replace(" ?", "?")
-                .replace(" !", "!")
-                .replace(" ,", ",")
-                .replace(" ' ", "'")
-                .replace(" n't", "n't")
-                .replace(" 'm", "'m")
-                .replace(" 's", "'s")
-                .replace(" 've", "'ve")
-                .replace(" 're", "'re")
-            )
+            # Call custom cleanup method if it exists (e.g., for CLVP's [SPACE] token replacement)
+            if hasattr(self, "clean_up_tokenization") and callable(self.clean_up_tokenization):
+                text = self.clean_up_tokenization(text)
+            else:
+                # Otherwise apply standard cleanup
+                text = (
+                    text.replace(" .", ".")
+                    .replace(" ?", "?")
+                    .replace(" !", "!")
+                    .replace(" ,", ",")
+                    .replace(" ' ", "'")
+                    .replace(" n't", "n't")
+                    .replace(" 'm", "'m")
+                    .replace(" 's", "'s")
+                    .replace(" 've", "'ve")
+                    .replace(" 're", "'re")
+                )
 
         return text
 

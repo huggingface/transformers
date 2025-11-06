@@ -321,10 +321,16 @@ class WhisperTokenizer(TokenizersBackend):
                 outputs.append([])
             else:
                 outputs[-1].append(token)
-        outputs = [
-            s if isinstance(s, str) else (super().decode(s, skip_special_tokens=skip_special_tokens) if s else "") for s in outputs
-        ]
-        return "".join(outputs)
+        # Decode token sequences outside list comprehension to avoid super() resolution issues
+        decoded_outputs = []
+        for s in outputs:
+            if isinstance(s, str):
+                decoded_outputs.append(s)
+            elif s:
+                decoded_outputs.append(super().decode(s, skip_special_tokens=skip_special_tokens))
+            else:
+                decoded_outputs.append("")
+        return "".join(decoded_outputs)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._compute_offsets
     def _compute_offsets(self, token_ids, time_precision=0.02, segment_size=1500):

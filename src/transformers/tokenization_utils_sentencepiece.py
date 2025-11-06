@@ -306,47 +306,19 @@ class SentencePieceBackend(PreTrainedTokenizer):
         spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
-        if isinstance(token_ids, int):
-            token_ids = [token_ids]
-
-        sub_texts = []
-        current_sub_text = []
+        """
+        Decode token ids to string.
         
-        for token_id in token_ids:
-            if skip_special_tokens and token_id in self.all_special_ids:
-                continue
-                
-            # Check if this is a special token (added or base vocab)
-            is_added_token = token_id in self._added_tokens_decoder
-            is_base_special = not skip_special_tokens and token_id in self.all_special_ids
-            
-            if is_added_token or is_base_special:
-                # Decode and flush any accumulated regular tokens
-                if current_sub_text:
-                    decoded = self.sp_model.decode(current_sub_text)
-                    # Preserve leading space from SPIECE_UNDERLINE, except for the first segment
-                    if sub_texts and self.sp_model.IdToPiece(current_sub_text[0]) == SPIECE_UNDERLINE:
-                        decoded = " " + decoded
-                    sub_texts.append(decoded)
-                    current_sub_text = []
-                
-                # Add the special token as-is
-                if is_added_token:
-                    sub_texts.append(self._added_tokens_decoder[token_id].content)
-                else:
-                    sub_texts.append(self.convert_ids_to_tokens(token_id))
-            else:
-                current_sub_text.append(token_id)
-        
-        # Decode any remaining regular tokens
-        if current_sub_text:
-            decoded = self.sp_model.decode(current_sub_text)
-            # Preserve leading space from SPIECE_UNDERLINE, except for the first segment
-            if sub_texts and self.sp_model.IdToPiece(current_sub_text[0]) == SPIECE_UNDERLINE:
-                decoded = " " + decoded
-            sub_texts.append(decoded)
-
-        return " ".join(sub_texts) if spaces_between_special_tokens else "".join(sub_texts)
+        Uses the generic decode path from PreTrainedTokenizer which works for all vocabularies,
+        including custom vocabularies that override _convert_id_to_token.
+        """
+        # Use parent class's generic decode method - it's simpler and works for all cases
+        return super()._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
 
 
 class SentencePieceExtractor:
