@@ -2109,6 +2109,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         synced_gpus: Optional[bool] = None,
         streamer: Optional["BaseStreamer"] = None,
+        use_model_defaults: Optional[bool] = None,
         **kwargs,
     ):
         """
@@ -2153,6 +2154,11 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
+            use_model_defaults (`bool`, *optional*):
+                When it is `True`, unset parameters in `generation_config` will be set to the model-specific default
+                generation configuration (`model.generation_config`), as opposed to the global defaults
+                (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
+                `True`.
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2175,13 +2181,19 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         # 1. Handle `generation_config` and kwargs that might update it, and validate the resulting objects
-        if generation_config is None:
-            generation_config = self.generation_config
+        generation_mode_kwargs = self._extract_generation_mode_kwargs(None, kwargs, False, None, None)
+        generation_config, model_kwargs = self._prepare_generation_config(
+            generation_config, use_model_defaults, **kwargs
+        )
+        generation_mode = generation_config.get_generation_mode()
+        if generation_mode not in [GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH]:
+            raise ValueError(
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
+                "Ensure that beam search is de-activated by setting `num_beams=1`."
+            )
 
-        generation_config = copy.deepcopy(generation_config)
-        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
-        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
+        self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
 
         if model_kwargs.get("encoder_outputs") is not None and type(model_kwargs["encoder_outputs"]) is tuple:
             # wrap the unconditional outputs as a BaseModelOutput for compatibility with the rest of generate
@@ -2281,31 +2293,26 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
 
-        if generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            # expand input_ids with `num_return_sequences` additional sequences per batch
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids=input_ids,
-                expand_size=generation_config.num_return_sequences,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-                **model_kwargs,
-            )
+        # expand input_ids with `num_return_sequences` additional sequences per batch
+        input_ids, model_kwargs = self._expand_inputs_for_generation(
+            input_ids=input_ids,
+            expand_size=generation_config.num_return_sequences,
+            is_encoder_decoder=self.config.is_encoder_decoder,
+            **model_kwargs,
+        )
 
-            # 11. run sample
-            outputs = self._sample(
-                input_ids,
-                logits_processor=logits_processor,
-                stopping_criteria=stopping_criteria,
-                generation_config=generation_config,
-                synced_gpus=synced_gpus,
-                streamer=streamer,
-                **model_kwargs,
-            )
+        # 10b. prepare prefill outputs
+        generation_mode_kwargs["prefill_outputs"] = self._prefill(input_ids, generation_config, model_kwargs)
 
-        else:
-            raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling. "
-                "Ensure that beam search is de-activated by setting `num_beams=1`."
-            )
+        # 11. run sample
+        outputs = self._sample(
+            input_ids,
+            logits_processor=logits_processor,
+            stopping_criteria=stopping_criteria,
+            generation_config=generation_config,
+            **generation_mode_kwargs,
+            **model_kwargs,
+        )
 
         if generation_config.return_dict_in_generate:
             output_ids = outputs.sequences
