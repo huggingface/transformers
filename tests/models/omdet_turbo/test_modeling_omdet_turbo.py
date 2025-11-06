@@ -195,7 +195,6 @@ class OmDetTurboModelTester:
 class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OmDetTurboForObjectDetection,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_torch_exportable = False  # cryptic assetion (assert len(kp) > 0) fails in torch, no explanation
 
     pipeline_model_mapping = (
         {"zero-shot-object-detection": OmDetTurboForObjectDetection} if is_torch_available() else {}

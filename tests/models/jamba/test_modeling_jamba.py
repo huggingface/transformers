@@ -340,7 +340,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
-    test_torch_exportable = False  # Jamba uses a custom Cache class (can be added at some point)
+    test_torch_exportable = False  # Uses a custom Cache class (can be added at some point)
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         self.assertIsInstance(past_key_values, HybridMambaAttentionDynamicCache)

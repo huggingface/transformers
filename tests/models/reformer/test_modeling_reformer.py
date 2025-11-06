@@ -603,7 +603,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         else ()
     )
 
-    test_torch_exportable = False  # Uses custom cache
+    test_torch_exportable = False  # Uses a custom Cache class (can be added at some point)
     test_sequence_classification_problem_types = True
 
     def setUp(self):
@@ -744,7 +744,7 @@ class ReformerLSHAttnModelTest(
         if is_torch_available()
         else {}
     )
-    test_torch_exportable = False  # Uses custom cache
+    test_torch_exportable = False  # Uses a custom Cache class (can be added at some point)
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
