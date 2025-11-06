@@ -363,7 +363,7 @@ def read_video_opencv(
 
     video = cv2.VideoCapture(video_path)
     total_num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-    video_fps = video.get(cv2.CAP_PROP_FPS)    
+    video_fps = video.get(cv2.CAP_PROP_FPS)
     num_frames, fps = sample_indices_fn.keywords.get("num_frames"), sample_indices_fn.keywords.get("fps")
     if fps:
         sampled_fps = fps
