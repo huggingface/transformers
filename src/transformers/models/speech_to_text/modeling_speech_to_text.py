@@ -544,6 +544,8 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
+    _no_split_modules = ["Speech2TextEncoderLayer"]
+
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
 
