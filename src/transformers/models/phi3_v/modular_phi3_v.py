@@ -25,10 +25,10 @@ from ...configuration_utils import PretrainedConfig
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..deepseek_vl.modeling_deepseek_vl import DeepseekVLForConditionalGeneration
 from ..janus.modeling_janus import (
     JanusBaseModelOutputWithPast,
     JanusCausalLMOutputWithPast,
-    JanusForConditionalGeneration,
     JanusPreTrainedModel,
 )
 from ..llama4.modeling_llama4 import Llama4VisionMLP
@@ -160,7 +160,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
 
     def reshape_hd_patches_2x2merge(self, image_features, h_crop, w_crop):
         """Reshape high-dimensional patches by merging 2x2 patches."""
-        N, L, C = image_features.shape # Shape: (num_images*num_crops, 24*24, 1024)
+        N, L, C = image_features.shape  # Shape: (num_images*num_crops, 24*24, 1024)
         H = int(L**0.5)
 
         num_images = N // (h_crop * w_crop)
@@ -308,9 +308,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
         )
 
 
-class Phi3VForConditionalGeneration(JanusForConditionalGeneration):
-    @can_return_tuple
-    @auto_docstring
+class Phi3VForConditionalGeneration(DeepseekVLForConditionalGeneration):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -392,28 +390,6 @@ class Phi3VForConditionalGeneration(JanusForConditionalGeneration):
 
         model_inputs["image_sizes"] = image_sizes
         return model_inputs
-
-    @torch.no_grad()
-    def generate(
-        self,
-        inputs: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ):
-        # 1. Handle generation config and model kwargs
-        generation_config = kwargs.pop("generation_config", self.generation_config)
-        return super().generate(
-            inputs=inputs,
-            attention_mask=attention_mask,
-            generation_config=generation_config,
-            **kwargs,
-        )
-
-    def decode_image_tokens(self):
-        raise AttributeError("Not needed for Phi3 Vision Model.")
-
-    def prepare_embeddings_for_image_generation(self):
-        raise AttributeError("Not needed for Phi3 Vision Model.")
 
 
 __all__ = ["Phi3VConfig", "Phi3VModel", "Phi3VPreTrainedModel", "Phi3VForConditionalGeneration"]

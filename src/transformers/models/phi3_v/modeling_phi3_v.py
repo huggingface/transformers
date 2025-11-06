@@ -31,12 +31,9 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_phi3_v import Phi3VConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -53,10 +50,7 @@ class Phi3VBaseModelOutputWithPast(ModelOutput):
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-        `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-        encoder_sequence_length, embed_size_per_head)`.
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
         `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
@@ -69,7 +63,7 @@ class Phi3VBaseModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
@@ -88,8 +82,7 @@ class Phi3VCausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -102,7 +95,7 @@ class Phi3VCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
@@ -112,6 +105,7 @@ class Phi3VCausalLMOutputWithPast(ModelOutput):
 class Phi3VPreTrainedModel(PreTrainedModel):
     config: Phi3VConfig
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer", "Phi3VVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
@@ -138,39 +132,6 @@ class Phi3VImageProjection(nn.Module):
         return hidden_states
 
 
-def reshape_hd_patches_2x2merge(image_features, h_crop, w_crop):
-    """
-    Reshape high-dimensional patches by merging 2x2 patches.
-
-    Args:
-        image_features (torch.Tensor): Input tensor of shape (num_images*num_crops, 24*24, 1024).
-        h_crop (int): Number of vertical crops.
-        w_crop (int): Number of horizontal crops.
-
-    Returns:
-        torch.Tensor: Reshaped tensor of shape (num_images, h_crop*12, w_crop*12, 4096).
-    """
-    N, L, C = image_features.shape
-    H = int(L**0.5)
-
-    num_images = N // (h_crop * w_crop)
-
-    # Reshape and merge patches
-    image_features_hd = image_features.reshape(N, H, H, C)  # (N, 24, 24, 1024)
-    image_features_hd = image_features_hd.reshape(N, H // 2, 2, H // 2, 2, C)  # (N, 12, 2, 12, 2, 1024)
-    image_features_hd = image_features_hd.permute(0, 1, 3, 2, 4, 5)  # (N, 12, 12, 2, 2, 1024)
-    image_features_hd = image_features_hd.reshape(N, -1, 4 * C)  # (N, 144, 4096)
-    image_features_hd = image_features_hd.reshape(
-        num_images, h_crop, w_crop, H // 2, H // 2, -1
-    )  # (num_images, h_crop, w_crop, 12, 12, 4096)
-    image_features_hd = image_features_hd.permute(0, 1, 3, 2, 4, 5)  # (num_images, h_crop, 12, w_crop, 12, 4096)
-    image_features_hd = image_features_hd.reshape(
-        num_images, h_crop * H // 2, w_crop * H // 2, 4 * C
-    )  # (num_images, h_crop*12, w_crop*12, 4096)
-
-    return image_features_hd
-
-
 class Phi3VModel(Phi3VPreTrainedModel):
     def __init__(self, config: Phi3VConfig):
         super().__init__(config)
@@ -192,21 +153,40 @@ class Phi3VModel(Phi3VPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    def reshape_hd_patches_2x2merge(self, image_features, h_crop, w_crop):
+        """Reshape high-dimensional patches by merging 2x2 patches."""
+        N, L, C = image_features.shape  # Shape: (num_images*num_crops, 24*24, 1024)
+        H = int(L**0.5)
+
+        num_images = N // (h_crop * w_crop)
+
+        # Reshape and merge patches
+        image_features_hd = image_features.reshape(N, H, H, C)  # (N, 24, 24, 1024)
+        image_features_hd = image_features_hd.reshape(N, H // 2, 2, H // 2, 2, C)  # (N, 12, 2, 12, 2, 1024)
+        image_features_hd = image_features_hd.permute(0, 1, 3, 2, 4, 5)  # (N, 12, 12, 2, 2, 1024)
+        image_features_hd = image_features_hd.reshape(N, -1, 4 * C)  # (N, 144, 4096)
+        image_features_hd = image_features_hd.reshape(
+            num_images, h_crop, w_crop, H // 2, H // 2, -1
+        )  # (num_images, h_crop, w_crop, 12, 12, 4096)
+        image_features_hd = image_features_hd.permute(0, 1, 3, 2, 4, 5)  # (num_images, h_crop, 12, w_crop, 12, 4096)
+        image_features_hd = image_features_hd.reshape(
+            num_images, h_crop * H // 2, w_crop * H // 2, 4 * C
+        )  # (num_images, h_crop*12, w_crop*12, 4096)
+
+        return image_features_hd
+
     def add_newline_embeds(self, image_features):
-        """
-        image_features_hd: (num_images, h_crop*12, w_crop*12, 4096)
-        output: (num_images, (h_crop*12) * (w_crop*12+1), 4096)
-        """
+        """Add the newline token embeds to the image feature patches"""
         num_images, h, w, hid_dim = image_features.shape
-        # add the newline token to the HD image feature patches
         newline_embeddings = self.sub_GN.expand(num_images, h, -1, -1)
         image_features_newline = torch.cat([image_features, newline_embeddings], dim=2)
-        image_features_newline = image_features_newline.reshape(num_images, -1, hid_dim)  # (n_img, h, 1, hid_dim)
+        image_features_newline = image_features_newline.reshape(num_images, -1, hid_dim)
         return image_features_newline
 
     def transform_image_embeds(self, hidden_states: torch.Tensor, image_sizes) -> torch.Tensor:
+        """Process the output of vision tower to obtain image embeddings suitable for multimodal model input."""
         global_image_features = hidden_states[:, 0]  # (num_images, 24*24, 1024)
-        global_image_features_hd = reshape_hd_patches_2x2merge(global_image_features, 1, 1)
+        global_image_features_hd = self.reshape_hd_patches_2x2merge(global_image_features, 1, 1)
         global_image_features_hd_newline = self.add_newline_embeds(global_image_features_hd)
 
         all_image_embeddings = []
@@ -220,7 +200,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
 
             # NOTE: real num_crops is padded (num_crops, 24*24, 1024)
             sub_image_features = hidden_states[i, 1 : 1 + num_crops]
-            sub_image_features_hd = reshape_hd_patches_2x2merge(sub_image_features, h_crop, w_crop)
+            sub_image_features_hd = self.reshape_hd_patches_2x2merge(sub_image_features, h_crop, w_crop)
             sub_image_features_hd_newline = self.add_newline_embeds(sub_image_features_hd)
 
             # [sub features, separator, global features]
@@ -238,8 +218,10 @@ class Phi3VModel(Phi3VPreTrainedModel):
         return image_embeds_proj
 
     def get_image_features(self, pixel_values: torch.Tensor, image_sizes, num_images, num_crops):
+        # Process image using CLIP model.
         vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
 
+        # Extract the hidden states from the second last layer.
         hidden_state = vision_outputs.hidden_states[-2][:, 1:]
         hidden_state = hidden_state.reshape(num_images, num_crops, -1, self.image_dim_out)
 
@@ -323,6 +305,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
 
 class Phi3VForConditionalGeneration(Phi3VPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
+    output_modalities = "text"
     _can_compile_fullgraph = True
 
     def __init__(self, config: Phi3VConfig):
@@ -408,7 +391,6 @@ class Phi3VForConditionalGeneration(Phi3VPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         # Overwritten -- extra custom processing
-
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -419,28 +401,11 @@ class Phi3VForConditionalGeneration(Phi3VPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
 
         model_inputs["image_sizes"] = image_sizes
         return model_inputs
-
-    def generate(
-        self,
-        inputs: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ):
-        # 1. Handle generation config and model kwargs
-        generation_config = kwargs.pop("generation_config", self.generation_config)
-        return super().generate(
-            inputs=inputs,
-            attention_mask=attention_mask,
-            generation_config=generation_config,
-            **kwargs,
-        )
 
 
 __all__ = ["Phi3VModel", "Phi3VPreTrainedModel", "Phi3VForConditionalGeneration"]
