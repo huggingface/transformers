@@ -3689,11 +3689,11 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs["past_key_values"] = outputs.past_key_values
                 past_length = current_length
 
-        model_kwargs["attention_mask"] = attention_mask
-        model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
-        _ = model_kwargs.pop("position_ids", None)
-
-        return model_kwargs
+            model_kwargs["attention_mask"] = attention_mask
+            model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
+            _ = model_kwargs.pop("position_ids", None)
+            # Latest outputs contain next token logits
+            return outputs
 
     def _init_optional_generate_output(
         self, generation_config: GenerationConfig, model_kwargs: dict[str, Any]
