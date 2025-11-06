@@ -88,17 +88,17 @@ jobs:
         run: |
           python -m pip install GitPython
           python utils/pr_slow_ci_models.py --message "$PR_COMMENT" | tee output.txt
-          echo 'models=$(tail -n 1 output.txt)' >> $GITHUB_ENV
+          echo "models=$(tail -n 1 output.txt)" >> $GITHUB_ENV
           python utils/pr_slow_ci_models.py --message "$PR_COMMENT" --quantization | tee output2.txt
-          echo 'quantizations=$(tail -n 1 output2.txt)' >> $GITHUB_ENV
+          echo "quantizations=$(tail -n 1 output2.txt)" >> $GITHUB_ENV
 
       - name: Show models to test
         id: models_to_run
         run: |
-          echo "${{ env.models }}"
-          echo "models=${{ env.models }}" >> $GITHUB_OUTPUT
-          echo "${{ env.quantizations }}"
-          echo "quantizations=${{ env.quantizations }}" >> $GITHUB_OUTPUT
+          echo "$models"
+          echo "models=$models" >> $GITHUB_OUTPUT
+          echo "$quantizations"
+          echo "quantizations=$quantizations" >> $GITHUB_OUTPUT
 
   # Report back if we are not able to get the tests (for example, security check is failing)
   report_error_earlier:
@@ -113,12 +113,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_repository: ${{ github.repository }}
+          pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
         run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
+            "repos/${github_repository}/issues/${pr_number}/comments" \
             -f body="💔 This comment contains \`run-slow\`, but unknown error occurred and [the workflow run]($GITHUB_RUN_URL) aborted!"
 
   reply_to_comment:
@@ -133,13 +135,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BODY: '\n\nmodels: ${{ needs.get-tests.outputs.models }}\nquantizations: ${{ needs.get-tests.outputs.quantizations }}'
+          github_repository: ${{ github.repository }}
+          pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
         run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
-            -f body="This comment contains \`run-slow\`, running the specified jobs: $(echo -e '${{ env.BODY }}')"
+            "repos/${github_repository}/issues/${pr_number}/comments" \
+            -f body="This comment contains \`run-slow\`, running the specified jobs: $(echo -e "$BODY")"
 
   create_run:
     name: Create run
@@ -155,12 +159,14 @@ jobs:
           # Create a commit status (pending) for a run of this workflow. The status has to be updated later in `update_run_status`.
           # See https://docs.github.com/en/rest/commits/statuses?apiVersion=2022-11-28#create-a-commit-status
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_repository: ${{ github.repository }}
+          pr_head_sha: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
         run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/statuses/${{ needs.check-timestamps.outputs.PR_HEAD_SHA }} \
+            "repos/${github_repository}/statuses/${pr_head_sha}" \
             -f "target_url=$GITHUB_RUN_URL" -f "state=pending" -f "description=Slow CI job" -f "context=pytest/custom-tests"
 
   model-ci:
@@ -205,9 +211,12 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Show reports from jobs
+        env:
+          MODEL_REPORT: ${{ needs.model-ci.outputs.report }}
+          QUANT_REPORT: ${{ needs.quantization-ci.outputs.report }}
         run: |
-          echo "${{ needs.model-ci.outputs.report }}"
-          echo "${{ needs.quantization-ci.outputs.report }}"
+          echo "$MODEL_REPORT"
+          echo "$QUANT_REPORT"
 
       - name: Process and filter reports
         env:
@@ -277,6 +286,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_repository: ${{ github.repository }}
+          pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          model_ci_result: ${{ needs.model-ci.result }}
+          quantization_ci_result: ${{ needs.quantization-ci.result }}
         run: |
           {
             echo '## CI Results'
@@ -284,8 +297,8 @@ jobs:
             echo ''
 
             # Check if both jobs were skipped or cancelled
-            if [[ "${{ needs.model-ci.result }}" == "skipped" || "${{ needs.model-ci.result }}" == "cancelled" ]] && \
-               [[ "${{ needs.quantization-ci.result }}" == "skipped" || "${{ needs.quantization-ci.result }}" == "cancelled" ]]; then
+            if [[ "$model_ci_result" == "skipped" || "$model_ci_result" == "cancelled" ]] && \
+               [[ "$quantization_ci_result" == "skipped" || "$quantization_ci_result" == "cancelled" ]]; then
               echo '⚠️ No test being reported (jobs are skipped or cancelled)!'
               echo "STATUS=error" >> $GITHUB_ENV
 
@@ -322,17 +335,20 @@ jobs:
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
+            "repos/${github_repository}/issues/${pr_number}/comments" \
             -F body=@comment_body.txt
 
       - name: Update PR commit statuses
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_repository: ${{ github.repository }}
+          pr_head_sha: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
+        # The env. variable `STATUS` used here is set in the previous step
         run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/statuses/${{ needs.check-timestamps.outputs.PR_HEAD_SHA }} \
-            -f "target_url=$GITHUB_RUN_URL" -f "state=${{ env.STATUS }}" -f "description=Slow CI job" -f "context=pytest/custom-tests"
+            "repos/${github_repository}/statuses/${pr_head_sha}" \
+            -f "target_url=$GITHUB_RUN_URL" -f "state=$STATUS" -f "description=Slow CI job" -f "context=pytest/custom-tests"
