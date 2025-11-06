@@ -2655,7 +2655,7 @@ class TrainingArguments:
         return self
 
     def _process_fsdp_args(self):
-        if self.fsdp is None:
+        if not self.fsdp:
             self.fsdp = []
         elif self.fsdp is True:
             self.fsdp = [FSDPOption.FULL_SHARD]
