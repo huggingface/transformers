@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from .feature_extraction_vibevoice import *
     from .modeling_vibevoice import *
     from .processing_vibevoice import *
-    from .tokenization_vibevoice import *
+    from .tokenization_vibevoice_fast import *
 else:
     import sys
 

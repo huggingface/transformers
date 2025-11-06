@@ -26,81 +26,13 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP
+
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
-from ..qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 from .configuration_vibevoice import VibeVoiceConfig, VibeVoiceDiffusionHeadConfig
 from .generation_vibevoice import VibeVoiceGenerationMixin
 
 
 logger = logging.get_logger(__name__)
-
-
-# TODO (ebezzam) Manually create tokenizer_vibevoice_fast? since only seems to generate for tokenization_vibevoice.py
-# # original: https://github.com/pengzhiliang/transformers/blob/main/src/transformers/models/vibevoice/tokenization_vibevoice.py
-@auto_docstring(
-    custom_intro="""
-    VibeVoice fast tokenizer, which is based on the Qwen2's fast tokenizer with additional special tokens for speech.
-    """
-)
-class VibeVoiceTokenizer(Qwen2TokenizerFast):
-    slow_tokenizer_class = None
-
-    def __init__(
-        self,
-        vocab_file=None,
-        merges_file=None,
-        tokenizer_file=None,
-        unk_token="<|endoftext|>",
-        bos_token=None,
-        eos_token="<|endoftext|>",
-        pad_token="<|endoftext|>",
-        speech_start_token="<|vision_start|>",
-        speech_end_token="<|vision_end|>",
-        speech_diffusion_token="<|vision_pad|>",
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_file=vocab_file,
-            merges_file=merges_file,
-            tokenizer_file=tokenizer_file,
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            **kwargs,
-        )
-
-        # Add VibeVoice-specific special tokens (using vision tokens as model was trained on them)
-        vibevoice_special_tokens = [
-            speech_start_token,
-            speech_end_token,
-            speech_diffusion_token,
-        ]
-
-        # Add special tokens to the tokenizer
-        special_tokens_dict = {"additional_special_tokens": vibevoice_special_tokens}
-        self.add_special_tokens(special_tokens_dict)
-
-        # Store token strings for property access
-        self._speech_start_token = speech_start_token
-        self._speech_end_token = speech_end_token
-        self._speech_diffusion_token = speech_diffusion_token
-
-    @property
-    def speech_start_id(self) -> int:
-        """Id of the speech start token."""
-        return self.convert_tokens_to_ids(self._speech_start_token)
-
-    @property
-    def speech_end_id(self) -> int:
-        """Id of the speech end token."""
-        return self.convert_tokens_to_ids(self._speech_end_token)
-
-    @property
-    def speech_diffusion_id(self) -> int:
-        """Id of the speech diffusion token."""
-        return self.convert_tokens_to_ids(self._speech_diffusion_token)
-
 
 
 @dataclass
@@ -440,4 +372,4 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         )
 
 
-__all__ = ["VibeVoicePreTrainedModel", "VibeVoiceForConditionalGeneration", "VibeVoiceDiffusionHead", "VibeVoiceTokenizer"]
+__all__ = ["VibeVoicePreTrainedModel", "VibeVoiceForConditionalGeneration", "VibeVoiceDiffusionHead"]

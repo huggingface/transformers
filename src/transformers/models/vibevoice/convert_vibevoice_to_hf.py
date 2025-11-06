@@ -29,7 +29,7 @@ from transformers import (
     VibeVoiceProcessor,
     VibeVoiceSemanticTokenizerConfig,
     VibeVoiceSemanticTokenizerModel,
-    VibeVoiceTokenizer,
+    VibeVoiceTokenizerFast,
 )
 
 
@@ -308,7 +308,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     if language_model_pretrained_name is None:
         language_model_pretrained_name = "Qwen/Qwen2.5-1.5B"
 
-    tokenizer = VibeVoiceTokenizer.from_pretrained(language_model_pretrained_name)
+    tokenizer = VibeVoiceTokenizerFast.from_pretrained(language_model_pretrained_name)
     processor = VibeVoiceProcessor(
         feature_extractor=VibeVoiceFeatureExtractor(**audio_config),
         tokenizer=tokenizer,

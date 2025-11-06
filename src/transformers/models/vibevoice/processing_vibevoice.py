@@ -58,18 +58,18 @@ class VibeVoiceProcessor(ProcessorMixin):
     r"""
     Constructs a VibeVoice processor which wraps a VibeVoice tokenizer and audio processor into a single processor.
 
-    [`VibeVoiceProcessor`] offers all the functionalities of [`VibeVoiceTokenizer`] and [`VibeVoiceFeatureExtractor`]. 
+    [`VibeVoiceProcessor`] offers all the functionalities of [`VibeVoiceTokenizerFast`] and [`VibeVoiceFeatureExtractor`]. 
     See the [`~VibeVoiceProcessor.__call__`] and [`~VibeVoiceProcessor.decode`] for more information.
 
     Args:
-        tokenizer (`VibeVoiceTokenizer`):
+        tokenizer (`VibeVoiceTokenizerFast`):
             The tokenizer for text processing.
         feature_extractor (`VibeVoiceFeatureExtractor`):
             The audio processor for speech processing.
     """
 
     feature_extractor_class = "VibeVoiceFeatureExtractor"
-    tokenizer_class = "VibeVoiceTokenizer"
+    tokenizer_class = "VibeVoiceTokenizerFast"
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
@@ -274,20 +274,6 @@ class VibeVoiceProcessor(ProcessorMixin):
             merged["streaming"] = audio_inputs["streaming"]
 
         return merged
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to VibeVoiceTokenizer's [`~PreTrainedTokenizer.batch_decode`].
-        Please refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to VibeVoiceTokenizer's [`~PreTrainedTokenizer.decode`].
-        Please refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
     @property
     def model_input_names(self):
