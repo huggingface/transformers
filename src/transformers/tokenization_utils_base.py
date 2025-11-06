@@ -1891,10 +1891,29 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if "extra_special_tokens" not in init_kwargs or not isinstance(init_kwargs.get("extra_special_tokens"), (list, tuple)):
                 init_kwargs["extra_special_tokens"] = extra_special_tokens_from_config
 
-        # V5: Model-specific tokens (e.g., prefix_token, middle_token) are already individual keys in init_kwargs
-        # They will be handled by __init__ as individual attributes, so we don't need to group them into extra_special_tokens
-        if isinstance(init_kwargs.get("extra_special_tokens"), dict):
-            pass
+        # V5: Get model-specific special tokens from config (saved as individual keys in special_tokens_map)
+        # These need to be grouped as extra_special_tokens dict so __init__ can save them to attributes
+        if "extra_special_tokens" not in init_kwargs or not isinstance(init_kwargs.get("extra_special_tokens"), dict):
+            default_attrs = set(cls.SPECIAL_TOKENS_ATTRIBUTES)
+            model_specific_tokens = {
+                key: init_kwargs.pop(key)
+                for key in list(init_kwargs.keys())
+                if key not in default_attrs
+                and key.endswith("_token")
+                and isinstance(init_kwargs[key], (str, AddedToken))
+            }
+            if model_specific_tokens:
+                # If extra_special_tokens is already a list, we need to preserve it
+                if "extra_special_tokens" in init_kwargs and isinstance(init_kwargs["extra_special_tokens"], (list, tuple)):
+                    # Keep the list as is, but also add model-specific tokens as a separate dict
+                    # Convert to model_specific_special_tokens so __init__ handles it
+                    init_kwargs["model_specific_special_tokens"] = model_specific_tokens
+                else:
+                    init_kwargs["extra_special_tokens"] = model_specific_tokens
+        elif isinstance(init_kwargs.get("extra_special_tokens"), dict):
+            # If extra_special_tokens is already a dict, convert it to model_specific_special_tokens
+            # so __init__ handles it properly
+            init_kwargs["model_specific_special_tokens"] = init_kwargs.pop("extra_special_tokens")
 
         # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
@@ -1968,6 +1987,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     if "extra_special_tokens" not in special_tokens_map and extra_special_tokens_before_map is not None:
                         if "extra_special_tokens" not in init_kwargs or not isinstance(init_kwargs.get("extra_special_tokens"), (list, tuple)):
                             init_kwargs["extra_special_tokens"] = extra_special_tokens_before_map
+                    
+                    # Convert extra_special_tokens dict to model_specific_special_tokens if it's a dict
+                    if isinstance(init_kwargs.get("extra_special_tokens"), dict):
+                        init_kwargs["model_specific_special_tokens"] = init_kwargs.pop("extra_special_tokens")
 
             # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
             # this is for legacy purpose. We don't add the tokens after init for efficiency.
