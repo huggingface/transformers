@@ -2040,7 +2040,7 @@ class ModelTesterMixin:
                 missing_keys = set(infos["missing_keys"])
 
                 extra_missing = missing_keys - param_names
-                # Remove tied weights from extra missing: they are normally not warned as missing if their tied
+                # IMPORTANT Remove tied weights from extra missing: they are normally not warned as missing if their tied
                 # counterpart is present but here there are no weights at all so we do get the warning.
                 ptrs = collections.defaultdict(list)
                 for name, tensor in model_reloaded.state_dict().items():
