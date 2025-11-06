@@ -141,12 +141,6 @@ class DeepseekOcrProcessor(ProcessorMixin):
         tokenizer_kwargs = text_kwargs.copy()
         if return_tensors is not None:
             tokenizer_kwargs["return_tensors"] = return_tensors
-        if (
-            tokenizer_kwargs.get("padding") == "max_length"
-            and "max_length" in tokenizer_kwargs
-            and "truncation" not in tokenizer_kwargs
-        ):
-            tokenizer_kwargs["truncation"] = True
         text_inputs = self.tokenizer(processed_text, **tokenizer_kwargs)
 
         input_ids = text_inputs["input_ids"]

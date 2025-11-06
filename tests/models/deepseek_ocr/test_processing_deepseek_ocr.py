@@ -69,7 +69,7 @@ class DeepseekOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             base_size={"height": 256, "width": 256},
             size={"height": 256, "width": 256},
             patch_size_side=256,
-            dynamic_hd=1,
+            max_crops=1,
         )
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
         processor_kwargs = self.prepare_processor_dict()
