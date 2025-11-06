@@ -117,6 +117,12 @@ jobs:
         with:
           script: |            
 
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: ${{ inputs.pr_number }}
+            });
+
             const { data: merge_commit }  = await github.rest.repos.getCommit({
               owner: pr.base.repo.owner.login,
               repo: pr.base.repo.name,
@@ -124,6 +130,24 @@ jobs:
             });
 
             core.setOutput('merge_commit_base_sha', merge_commit.parents[0].sha);
+
+      - name: Update clone 2
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        env:
+          commit_sha: ${{ inputs.commit_sha || github.sha }}
+        run: |
+          git fetch origin ${{ steps.pr_info.outputs.merge_commit_base_sha }} && git checkout ${{ steps.pr_info.outputs.merge_commit_base_sha }}
+          git log -n 3
+
+      - name: Update clone 3
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        env:
+          commit_sha: ${{ inputs.commit_sha || github.sha }}
+        run: |
+          git fetch origin "$commit_sha" && git checkout "$commit_sha"
+          git log -n 3
 
       # Usually, `END_SHA` should be the commit of the last previous workflow run of the **SAME** (scheduled) workflow.
       # (This is why we don't need to specify `workflow_id` which would be fetched automatically in the python script.)
