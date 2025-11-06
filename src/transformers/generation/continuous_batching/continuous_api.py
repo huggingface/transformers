@@ -555,9 +555,7 @@ class ContinuousBatchProcessor:
     @traced
     def _maybe_send_output(self, state: RequestState) -> None:
         """Send output to the queue based on streaming mode and request state."""
-        if state.streaming:
-            self.output_queue.put(state.to_generation_output())
-        elif state.status == RequestStatus.FINISHED:
+        if state.streaming or state.status == RequestStatus.FINISHED:
             self.output_queue.put(state.to_generation_output())
 
     @traced

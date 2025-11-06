@@ -348,9 +348,9 @@ class PagedAttentionCache:
             return None
         cm = self.group_cache_managers[0]  # if prefix sharing is on, there is only one group
         self._block_manager.mark_blocks_as_computed(
-            num_completed_blocks,
-            cm.get_allocated_blocks(state.request_id),
-            state.full_prompt_ids + state.static_outputs,
+            num_completed_blocks=num_completed_blocks,
+            allocated_blocks=cm.block_table[state.request_id],
+            prompt_ids=(state.full_prompt_ids + state.static_outputs),
         )
 
 

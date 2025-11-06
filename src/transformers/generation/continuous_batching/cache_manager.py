@@ -14,14 +14,23 @@
 # limitations under the License.
 from abc import ABC, abstractmethod
 from collections import deque
+from collections.abc import Iterator
 from math import ceil
-from typing import Optional
+from typing import Optional, TypeVar
 
 from .requests import logger
 
 
+T = TypeVar('T')
+def reverse_enumerate(xs: list[T]) -> Iterator[tuple[int, T]]:
+    index = len(xs) - 1
+    for x in xs[::-1]:
+        yield index, x
+        index -= 1
+
+
 class Block:
-    """A class to represent a block in the hash table of the block manager. We say that a block is computed when the KV
+    """A class to represent a block in the hash table of the block manager. We say that a block is completed when the KV
     cache it points to is fully computed, otherwise it is partial. A block can have a parent, which is the block that
     came before in the sequence. Once a block is computed, it is given a hash, which takes into account the tokens ids 
     of the block and its parent's hash."""
@@ -30,6 +39,7 @@ class Block:
         self.id: int = id_
         self.parent_id: int | None = parent_id
         self.hash: int | None = None
+        self.ref_count: int = 1
 
     @property
     def is_complete(self) -> bool:
@@ -47,7 +57,7 @@ class BlockManager:
         self._use_prefix_sharing = use_prefix_sharing
         # TODO: handle de-allocation for those strutures
         self._hash_to_id: dict[int, int] = {}
-        self._id_to_block: dict[int, Block]= {}
+        self._id_to_block: dict[int, Block] = {}
         # NOTE: one of those may be redundant
         # TODO: handle case where the last block of a finshed request is not complete
 
@@ -83,33 +93,54 @@ class BlockManager:
         # Look for the first complete block, starting from the last block
         parent_hash = None
         incomplete_blocks: list[Block] = []
-        block_start_position = self.block_size * (len(allocated_blocks) - 1)
-        for block_id in reversed(allocated_blocks):
+        for i, block_id in reverse_enumerate(allocated_blocks):
             block = self._id_to_block[block_id]
             if block.is_complete:
                 parent_hash = block.hash
                 break
-            incomplete_blocks.append(block)
-            block_start_position -= self.block_size
+            incomplete_blocks.append((i, block))
 
-        # Now go through the incomplete blocks and mark them as computed
-        blocks_to_mark_as_complete = incomplete_blocks[:num_completed_blocks]
-        for block in blocks_to_mark_as_complete:
-            # Compute hash
-            tokens = prompt_ids[block_start_position : block_start_position + self.block_size]
+        # Now go through the incomplete blocks and updated them
+        new_parent_id = None
+        for i, block in incomplete_blocks:
+            # If the parent id has been updated, we apply the change
+            if new_parent_id is not None:
+                block.parent_id = new_parent_id
+                new_parent_id = None
+
+            # If we have set the hash for all complete blocks, we can stop
+            if num_completed_blocks == 0:
+                break
+
+            # Otherwise, we compute the hash
+            num_completed_blocks -= 1
+            tokens = prompt_ids[i * self.block_size : (i + 1) * self.block_size]
             block.hash = hash((parent_hash, tuple(tokens)))
-            # Keep track of the hash in the hash to id mapping
-            self._hash_to_id[block.hash] = block.id
+
+            existing_block_id = self._hash_to_id.get(block.hash)
+            # If the block hash is already in the hash to id mapping, we reference the existing block instead
+            if existing_block_id is not None:
+                allocated_blocks[i] = existing_block_id
+                self._id_to_block[existing_block_id].ref_count += 1
+                new_parent_id = existing_block_id
+
+                self._id_to_block[block_id].ref_count -= 1
+                if self._id_to_block[block_id].ref_count == 0:
+                    self._id_to_block.pop(block_id)
+
+            # Otherwise, we add the completed block to the hash table
+            else:
+                self._hash_to_id[block.hash] = block.id
+
             # Update loop variables
             parent_hash = block.hash
-            block_start_position += self.block_size
 
 class CacheAllocator(ABC):
     """Abstract base class for cache managers. Cache managers keep track of per-request cache allocations, determine
     when a new physical block needs to be allocated and compute physical indices for reading or writing to the cache."""
 
     _index: int
-    _block_table: dict[str, list[int]]  # request_id -> list of block_ids allocated to the request
+    block_table: dict[str, list[int]]  # request_id -> list of block_ids allocated to the request
 
     @abstractmethod
     def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
@@ -118,8 +149,8 @@ class CacheAllocator(ABC):
 
     def free_blocks(self, request_id: str, block_manager: BlockManager) -> None:
         """Frees all blocks associated with a request_id."""
-        if request_id in self._block_table:
-            blocks_to_free = self._block_table.pop(request_id)
+        if request_id in self.block_table:
+            blocks_to_free = self.block_table.pop(request_id)
             block_manager.free_blocks(blocks_to_free)
         else:
             logger.warning(
@@ -138,11 +169,6 @@ class CacheAllocator(ABC):
     def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
         """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
 
-    def get_allocated_blocks(self, request_id: str) -> list[int] | None:
-        """Returns the list of allocated blocks for the given request_id or None if the request_id is not in the 
-        block table."""
-        return self._block_table.get(request_id, None)
-
 class FullAttentionCacheAllocator(CacheAllocator):
     """Cache manager for a group of full attention layers."""
 
@@ -154,29 +180,29 @@ class FullAttentionCacheAllocator(CacheAllocator):
         """
         self._index = index
         self.block_size = block_size
-        self._block_table = {}
+        self.block_table = {}
 
     def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
         """Allocate blocks for a given request_id. Returns the number of blocks allocated if successful and None
         otherwise. For group of full attention layers, we always allocate the number of requested blocks."""
         # Make sure the request_id is in the block table and get the first block id
-        if request_id not in self._block_table:
-            self._block_table[request_id] = []
+        if request_id not in self.block_table:
+            self.block_table[request_id] = []  # TODO: check the impact of making this a deque
             last_block_id = None
         else:
-            last_block_id = self._block_table[request_id][-1]
+            last_block_id = self.block_table[request_id][-1]
         # Actual allocation, return early if failed
         allocated_blocks = block_manager.get_free_blocks(n_blocks, last_block_id)
         if allocated_blocks is None:
             return None
-        self._block_table[request_id].extend(allocated_blocks)
+        self.block_table[request_id].extend(allocated_blocks)
         return n_blocks
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices of where to read request_id's cache. For a group of full attention layers, we
         first write the new cache to the cache tensor and then read the entire cache from the beginning to the end."""
         # Retrieve the block table for the request and raise an error if it doesn't exist
-        block_table = self._block_table.get(request_id)
+        block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
         # Compute the physical indices
@@ -191,7 +217,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices for writing to the cache. For a group of full attention layers, we write the new
         cache as a continuation of the existing cache for the same request."""
-        block_table = self._block_table.get(request_id)
+        block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
         # Compute the physical indices
@@ -223,16 +249,16 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         self.block_size = block_size
         self.sliding_window = sliding_window
         self._max_blocks_per_request = ceil(self.sliding_window / self.block_size)
-        self._block_table = {}
+        self.block_table = {}
 
     def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
         """Allocate blocks for a given request_id. Returns the number of blocks allocated if successful and None
         otherwise. For group of sliding window attention layers, we only allocate up to the point where we can fit an
         entire sliding window in the cache tensor."""
-        if request_id not in self._block_table:
-            self._block_table[request_id] = []
+        if request_id not in self.block_table:
+            self.block_table[request_id] = []
         # Early return if we are already at the max number of blocks per request
-        already_allocated = len(self._block_table[request_id])
+        already_allocated = len(self.block_table[request_id])
         if already_allocated == self._max_blocks_per_request:
             return 0
         # Compute actual number of blocks to allocate
@@ -242,7 +268,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         allocated_blocks = block_manager.get_free_blocks(actual_n_blocks, None)  # no prefix caching w/ sliding window
         if allocated_blocks is None:
             return None
-        self._block_table[request_id].extend(allocated_blocks)
+        self.block_table[request_id].extend(allocated_blocks)
         return actual_n_blocks
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
@@ -252,7 +278,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         sliding_window - 1 cache page and then manually add the new key / values states after. Hence the -1 indices
         which indicate where to store the new key or values indices."""
         # Retrieve the block table for the request and raise an error if it doesn't exist
-        block_table = self._block_table.get(request_id)
+        block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
         # Apply sliding window
@@ -273,7 +299,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         sliding window attention layers, we write the new cache in rolling-buffer kind of way: if we reach the end of
         the allocated physical cache, we start writing from the beginning of the physical cache again."""
         # Retrieve the block table for the request and raise an error if it doesn't exist
-        block_table = self._block_table.get(request_id)
+        block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
         # Apply sliding window
