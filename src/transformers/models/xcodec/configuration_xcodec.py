@@ -89,12 +89,12 @@ class XcodecConfig(PretrainedConfig):
         "sampling_rate": "sample_rate",
     }
     def __init__(
-        self,
+        self, 
         encoder_hidden_size=64,
         acoustic_hidden_size=256,
-        downsampling_ratios=[8, 5, 4, 2, 3],
+        downsampling_ratios=[8, 5, 4, 2],
         decoder_hidden_size=1024,
-        upsampling_ratios=[8, 5, 4, 2, 3],
+        upsampling_ratios=[8, 5, 4, 2],
         n_codebooks=9,
         strides=[1, 1],
         channel_ratios=[1, 1],
@@ -143,6 +143,10 @@ class XcodecConfig(PretrainedConfig):
         self.pad = pad
         self.upsampling_ratios = upsampling_ratios
 
+        self.num_layers = 2
+        self.num_residual_layers = 2
+        self.hidden_size = 256
+
         super().__init__(**kwargs)
 
     @property
@@ -157,9 +161,9 @@ class XcodecConfig(PretrainedConfig):
     def semantic_hidden_size(self) -> int:
         return self.semantic_config.hidden_size
 
-    @property
-    def hidden_size(self) -> int:
-        return self.acoustic_hidden_size + self.semantic_hidden_size
+    # @property
+    # def hidden_size(self) -> int:
+    #     return self.acoustic_hidden_size + self.semantic_hidden_size
 
     @property
     def semantic_downsample_factor(self) -> int:

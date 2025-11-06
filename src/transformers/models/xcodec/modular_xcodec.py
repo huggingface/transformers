@@ -26,22 +26,36 @@ from ..encodec.modeling_encodec import EncodecResidualVectorQuantizer
 from .configuration_xcodec import XcodecConfig
 
 
-class XcodecAcousticEncoder(DacEncoder):...
+class XcodecAcousticEncoder(DacEncoder): ...
 
 
-class XcodecSemanticEncoderLayer(nn.Module):
+class XcodecSemanticEncoderResidualLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.act_fn = nn.ELU()
-        self.conv1 = nn.Conv1d(config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=3, bias=False)
+        self.conv1 = nn.Conv1d(config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=3, padding=1, bias=False)
         self.conv2 = nn.Conv1d(config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=1, bias=False)
-        self.conv3 = nn.Conv1d(config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=3, bias=False)
 
     def forward(self, hidden_state):
         residual = hidden_state
         hidden_state = self.conv1(self.act_fn(hidden_state))
         hidden_state = self.conv2(self.act_fn(hidden_state))
         hidden_state = self.conv3(residual + hidden_state)
+        return hidden_state
+
+
+class XcodecSemanticEncoderLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.residual_layers = nn.ModuleList(
+            [XcodecSemanticEncoderResidualLayer(config) for _ in range(config.num_residual_layers)]
+        )
+        self.conv = nn.Conv1d(config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=3, padding=1)
+    
+    def forward(self, hidden_state):
+        for layer in self.residual_layers:
+            hidden_state = layer(hidden_state)
+        hidden_state = self.conv(hidden_state)
         return hidden_state
 
 
@@ -66,6 +80,10 @@ class XcodecEncoder(nn.Module):
         self.acoustic_encoder = XcodecAcousticEncoder(config)
         self.semantic_encoder = XcodecSemanticEncoder(config)
         self.semantic_model = AutoModel.from_config(config.semantic_config)
+        self.linear = nn.Linear(
+            config.semantic_hidden_size + config.acoustic_hidden_size,
+            config.semantic_hidden_size + config.acoustic_hidden_size
+        )
 
         self.sample_rate = config.sample_rate
         self.semantic_sample_rate = config.semantic_sample_rate
@@ -94,7 +112,7 @@ class XcodecEncoder(nn.Module):
         return input_embeds
 
 
-class XcodecDecoderBlock(DacDecoderBlock):
+class XcodecAcousticDecoderBlock(DacDecoderBlock):
     def __init__(self, config, stride: int = 1, stride_index: int = 1):
         super().__init__(config)
         input_dim = config.decoder_hidden_size // 2**stride_index
@@ -109,7 +127,7 @@ class XcodecDecoderBlock(DacDecoderBlock):
         )
 
 
-class XcodecDecoder(DacDecoder):
+class XcodecAcousticDecoder(DacDecoder):
     def __init__(self, config: XcodecConfig):
         super().__init__(config)
         input_channel = config.acoustic_hidden_size
@@ -126,8 +144,33 @@ class XcodecDecoder(DacDecoder):
         return hidden_states
 
 
-class XcodecResidualVectorQuantization(EncodecResidualVectorQuantizer): ...
+class XcodecSemanticDecoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.input_conv = nn.Conv1d(config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=3, padding=1, bias=False)
+        self.layers = nn.ModuleList(
+            [XcodecSemanticEncoderLayer(config) for _ in range(config.num_layers)]
+        )
+        self.output_conv = nn.Conv1d(config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=3, padding=1, bias=False)
+
+
+class XcodecResidualVectorQuantizer(EncodecResidualVectorQuantizer): ...
 
 
 # TODO: @eustlb, consider adding bandwidth handling in dac in order to standardize codec usage
-class XcodecModel(DacModel): ...
+class XcodecModel(DacModel):
+    def __init__(self, config: XcodecConfig):
+        super().__init__(config)
+        self.decoder = XcodecAcousticDecoder(config)
+        self.semantic_decoder = XcodecSemanticDecoder(config)
+        self.semantic_proj = nn.Linear(
+            config.semantic_hidden_size + config.acoustic_hidden_size,
+            config.semantic_hidden_size
+        )
+        self.acoustic_proj = nn.Linear(
+            config.semantic_hidden_size + config.acoustic_hidden_size,
+            config.acoustic_hidden_size
+        )
+
+
+__all__ = ["XcodecModel"]

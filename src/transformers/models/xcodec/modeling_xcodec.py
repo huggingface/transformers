@@ -30,7 +30,7 @@ import torch.nn.functional as F
 import torchaudio
 
 from ...modeling_utils import PreTrainedAudioTokenizerBase
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, auto_docstring
 from ..auto.modeling_auto import AutoModel
 from .configuration_xcodec import XcodecConfig
 
@@ -112,6 +112,8 @@ class XcodecEncoderBlock(nn.Module):
 
         return hidden_state
 
+class XcodecAcousticEncoder(nn.Module):
+    """XCODEC_ACOUSTIC Encoder"""
 
 class XcodecAcousticEncoder(nn.Module):
     """XCODEC_ACOUSTIC Encoder"""
@@ -146,19 +148,35 @@ class XcodecAcousticEncoder(nn.Module):
         return hidden_state
 
 
-class XcodecSemanticEncoderLayer(nn.Module):
+class XcodecSemanticEncoderResidualLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.act_fn = nn.ELU()
-        self.conv1 = nn.Conv1d(config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=3, bias=False)
+        self.conv1 = nn.Conv1d(
+            config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=3, padding=1, bias=False
+        )
         self.conv2 = nn.Conv1d(config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=1, bias=False)
-        self.conv3 = nn.Conv1d(config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=3, bias=False)
 
     def forward(self, hidden_state):
         residual = hidden_state
         hidden_state = self.conv1(self.act_fn(hidden_state))
         hidden_state = self.conv2(self.act_fn(hidden_state))
         hidden_state = self.conv3(residual + hidden_state)
+        return hidden_state
+
+
+class XcodecSemanticEncoderLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.residual_layers = nn.ModuleList(
+            [XcodecSemanticEncoderResidualLayer(config) for _ in range(config.num_residual_layers)]
+        )
+        self.conv = nn.Conv1d(config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=3, padding=1)
+
+    def forward(self, hidden_state):
+        for layer in self.residual_layers:
+            hidden_state = layer(hidden_state)
+        hidden_state = self.conv(hidden_state)
         return hidden_state
 
 
@@ -183,6 +201,10 @@ class XcodecEncoder(nn.Module):
         self.acoustic_encoder = XcodecAcousticEncoder(config)
         self.semantic_encoder = XcodecSemanticEncoder(config)
         self.semantic_model = AutoModel.from_config(config.semantic_config)
+        self.linear = nn.Linear(
+            config.semantic_hidden_size + config.acoustic_hidden_size,
+            config.semantic_hidden_size + config.acoustic_hidden_size,
+        )
 
         self.sample_rate = config.sample_rate
         self.semantic_sample_rate = config.semantic_sample_rate
@@ -211,8 +233,8 @@ class XcodecEncoder(nn.Module):
         return input_embeds
 
 
-class XcodecDecoderBlock(nn.Module):
-    """Decoder block used in XCODEC decoder."""
+class XcodecAcousticDecoderBlock(nn.Module):
+    """Decoder block used in XCODEC_ACOUSTIC decoder."""
 
     def __init__(self, config, stride: int = 1, stride_index: int = 1):
         super().__init__()
@@ -241,9 +263,42 @@ class XcodecDecoderBlock(nn.Module):
 
         return hidden_state
 
+        input_embeds = torch.cat([acoustic_embeds, semantic_embeds], dim=1)
+        return input_embeds
 
-class XcodecDecoder(nn.Module):
-    """XCODEC Decoder"""
+class XcodecDecoderBlock(nn.Module):
+    """Decoder block used in XCODEC decoder."""
+
+    def __init__(self, config: XcodecConfig, stride: int = 1, stride_index: int = 1):
+        super().__init__()
+
+        input_dim = config.decoder_hidden_size // 2**stride_index
+        output_dim = config.decoder_hidden_size // 2 ** (stride_index + 1)
+        self.snake1 = Snake1d(input_dim)
+        self.conv_t1 = nn.ConvTranspose1d(
+            input_dim,
+            output_dim,
+            kernel_size=2 * stride,
+            stride=stride,
+            padding=math.ceil(stride / 2),
+        )
+
+        self.res_unit1 = XcodecResidualUnit(output_dim, dilation=1)
+        self.res_unit2 = XcodecResidualUnit(output_dim, dilation=3)
+        self.res_unit3 = XcodecResidualUnit(output_dim, dilation=9)
+
+    def forward(self, hidden_state):
+        hidden_state = self.snake1(hidden_state)
+        hidden_state = self.conv_t1(hidden_state)
+        hidden_state = self.res_unit1(hidden_state)
+        hidden_state = self.res_unit2(hidden_state)
+        hidden_state = self.res_unit3(hidden_state)
+
+        return hidden_state
+
+
+class XcodecAcousticDecoder(nn.Module):
+    """XCODEC_ACOUSTIC Decoder"""
 
     def __init__(self, config: XcodecConfig):
         super().__init__()
@@ -273,6 +328,18 @@ class XcodecDecoder(nn.Module):
         hidden_states = self.conv2(hidden_states)
 
         return hidden_states
+
+
+class XcodecSemanticDecoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.input_conv = nn.Conv1d(
+            config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=3, padding=1, bias=False
+        )
+        self.layers = nn.ModuleList([XcodecSemanticEncoderLayer(config) for _ in range(config.num_layers)])
+        self.output_conv = nn.Conv1d(
+            config.semantic_hidden_size, config.semantic_hidden_size, kernel_size=3, padding=1, bias=False
+        )
 
 
 class XcodecEuclideanCodebook(nn.Module):
@@ -331,7 +398,7 @@ class XcodecVectorQuantization(nn.Module):
         return quantize
 
 
-class XcodecResidualVectorQuantization(nn.Module):
+class XcodecResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
 
     def __init__(self, config: XcodecConfig):
@@ -429,215 +496,6 @@ class XcodecDecoderOutput(ModelOutput):
     audio_values: Optional[torch.FloatTensor] = None
 
 
-class XcodecVectorQuantize(nn.Module):
-    """
-    Implementation of VQ similar to Karpathy's repo (https://github.com/karpathy/deep-vector-quantization)
-
-    Additionally uses following tricks from improved VQGAN
-    (https://huggingface.co/papers/2110.04627):
-        1. Factorized codes: Perform nearest neighbor lookup in low-dimensional space
-            for improved codebook usage
-        2. l2-normalized codes: Converts euclidean distance to cosine similarity which
-            improves training stability
-    """
-
-    def __init__(self, config: XcodecConfig):
-        super().__init__()
-
-        self.codebook_dim = config.codebook_dim
-        self.in_proj = nn.Conv1d(config.hidden_size, config.codebook_dim, kernel_size=1)
-        self.out_proj = nn.Conv1d(config.codebook_dim, config.hidden_size, kernel_size=1)
-        self.codebook = nn.Embedding(config.codebook_size, config.codebook_dim)
-
-    def forward(self, hidden_state):
-        """
-        Quantizes the input tensor using a fixed codebook and returns the corresponding codebook vectors.
-
-        Args:
-            hidden_state (`torch.FloatTensor` of shape `(batch_size, dimension, time_steps)`):
-                Input tensor.
-
-        Returns:
-            quantized_representation (`torch.Tensor`of shape `(batch_size, dimension, time_steps)`):
-                Quantized continuous representation of input.
-            commitment_loss (`torch.FloatTensor`of shape `(1)`):
-                Commitment loss to train encoder to predict vectors closer to codebook entries.
-            codebook_loss (`torch.FloatTensor`of shape `(1)`):
-                Codebook loss to update the codebook.
-            audio_codes (`torch.LongTensor` of shape `(batch_size, time_steps)`):
-                Codebook indices for each codebook, quantized discrete representation of input.
-            projected_latents (torch.FloatTensor of shape `(batch_size, num_codebooks * dimension, time_steps)`):
-                Projected latents (continuous representation of input before quantization).
-        """
-
-        projected_latents = self.in_proj(hidden_state)
-        quantized_representation, audio_codes = self.decode_latents(projected_latents)
-
-        commitment_loss = F.mse_loss(projected_latents, quantized_representation.detach(), reduction="mean")
-        codebook_loss = F.mse_loss(quantized_representation, projected_latents.detach(), reduction="mean")
-        # noop in forward pass, straight-through gradient estimator in backward pass
-        quantized_representation = projected_latents + (quantized_representation - projected_latents).detach()
-        quantized_representation = self.out_proj(quantized_representation)
-
-        return quantized_representation, commitment_loss, codebook_loss, audio_codes, projected_latents
-
-    def decode_latents(self, hidden_states):
-        batch_size, hidden_dim, sequence_length = hidden_states.shape
-        encodings = hidden_states.permute(0, 2, 1).reshape(batch_size * sequence_length, hidden_dim)
-        codebook = self.codebook.weight  # codebook: (N x D)
-
-        # L2 normalize encodings and codebook (ViT-VQGAN)
-        encodings = F.normalize(encodings)
-        codebook = F.normalize(codebook)
-
-        # Compute euclidean distance with codebook
-        l2_norm = encodings.pow(2).sum(1, keepdim=True)
-        dist = -(l2_norm - 2 * encodings @ codebook.t()) + codebook.pow(2).sum(1, keepdim=True).t()
-
-        indices = dist.max(1)[1]
-        indices = indices.reshape(hidden_states.size(0), -1)
-        quantized_representation = self.codebook(indices).transpose(1, 2)
-        return quantized_representation, indices
-
-
-class XcodecResidualVectorQuantize(nn.Module):
-    """
-    ResidualVectorQuantize block - Introduced in SoundStream: An end2end neural audio codec (https://huggingface.co/papers/2107.03312)
-    """
-
-    def __init__(self, config: XcodecConfig):
-        super().__init__()
-
-        n_codebooks = config.n_codebooks
-        quantizer_dropout = config.quantizer_dropout
-
-        self.n_codebooks = n_codebooks
-
-        self.quantizers = nn.ModuleList([XcodecVectorQuantize(config) for i in range(config.n_codebooks)])
-        self.quantizer_dropout = quantizer_dropout
-
-    def forward(self, hidden_state, n_quantizers: Optional[int] = None):
-        """
-        Quantizes the input tensor using a fixed set of codebooks and returns corresponding codebook vectors.
-        Args:
-            hidden_state (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
-                Input tensor to be quantized.
-            n_quantizers (`int`, *optional*):
-                Number of quantizers to use. If specified and `self.quantizer_dropout` is True,
-                this argument is ignored during training, and a random number of quantizers is used.
-
-        Returns:
-            quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
-                Quantized continuous representation of input.
-            audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
-                Codebook indices for each codebook (quantized discrete representation of input).
-            projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`):
-                Projected latents (continuous representation of input before quantization).
-            commitment_loss (`torch.Tensor` of shape `(1)`):
-                Commitment loss to train the encoder to predict vectors closer to codebook entries.
-            codebook_loss (`torch.Tensor` of shape `(1)`):
-                Codebook loss to update the codebook.
-        """
-
-        quantized_representation = 0
-        residual = hidden_state
-        commitment_loss = 0
-        codebook_loss = 0
-
-        audio_codes = []
-        projected_latents = []
-
-        n_quantizers = n_quantizers if n_quantizers is not None else self.n_codebooks
-        if self.training:
-            n_quantizers = torch.ones((hidden_state.shape[0],)) * self.n_codebooks + 1
-            dropout = torch.randint(1, self.n_codebooks + 1, (hidden_state.shape[0],))
-            n_dropout = int(hidden_state.shape[0] * self.quantizer_dropout)
-            n_quantizers[:n_dropout] = dropout[:n_dropout]
-            n_quantizers = n_quantizers.to(hidden_state.device)
-
-        for i, quantizer in enumerate(self.quantizers):
-            if self.training is False and i >= n_quantizers:
-                break
-
-            quantized_representation_i, commitment_loss_i, codebook_loss_i, indices_i, projected_latents_i = quantizer(
-                residual
-            )
-
-            # Create mask to apply quantizer dropout
-            mask = torch.full((hidden_state.shape[0],), fill_value=i, device=hidden_state.device) < n_quantizers
-            quantized_representation = quantized_representation + quantized_representation_i * mask[:, None, None]
-            residual = residual - quantized_representation_i
-
-            # Sum losses
-            commitment_loss += commitment_loss_i * mask
-            codebook_loss += codebook_loss_i * mask
-
-            audio_codes.append(indices_i)
-            projected_latents.append(projected_latents_i)
-
-        audio_codes = torch.stack(audio_codes, dim=1)
-        projected_latents = torch.cat(projected_latents, dim=1)
-
-        return quantized_representation, audio_codes, projected_latents, commitment_loss, codebook_loss
-
-    def from_codes(self, audio_codes: torch.Tensor):
-        """
-        Reconstructs the continuous representation from quantized codes.
-
-        Args:
-            audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
-                Quantized discrete representation of input.
-
-        Returns:
-            quantized_representation (`torch.Tensor`):
-                Quantized continuous representation of input.
-            projected_latents (`torch.Tensor`):
-                List of projected latents (continuous representations of input before quantization)
-                for each codebook.
-            audio_codes (`torch.Tensor`):
-                Codebook indices for each codebook.
-        """
-        quantized_representation = 0.0
-        projected_latents = []
-        n_codebooks = audio_codes.shape[1]
-        for i in range(n_codebooks):
-            projected_latents_i = self.quantizers[i].codebook(audio_codes[:, i, :]).transpose(1, 2)
-            projected_latents.append(projected_latents_i)
-            quantized_representation += self.quantizers[i].out_proj(projected_latents_i)
-        return quantized_representation, torch.cat(projected_latents, dim=1), audio_codes
-
-    def from_latents(self, latents: torch.Tensor):
-        """Reconstructs the quantized representation from unquantized latents.
-
-        Args:
-            latents (`torch.Tensor` of shape `(batch_size, total_latent_dimension, time_steps)`):
-                Continuous representation of input after projection.
-
-        Returns:
-            quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
-                Quantized representation of the full-projected space.
-            quantized_latents (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
-                Quantized representation of the latent space (continuous representation before quantization).
-        """
-        quantized_representation = 0
-        quantized_latents = []
-        codes = []
-        codebook_dims_tensor = torch.tensor([0] + [q.codebook_dim for q in self.quantizers])
-        dims = torch.cumsum(codebook_dims_tensor, dim=0)
-
-        n_codebooks = np.where(dims <= latents.shape[1])[0].max(axis=0, keepdims=True)[0]
-        for i in range(n_codebooks):
-            hidden_dim_j, hidden_dim_k = dims[i], dims[i + 1]
-            quantized_latents_i, codes_i = self.quantizers[i].decode_latents(latents[:, hidden_dim_j:hidden_dim_k, :])
-            quantized_latents.append(quantized_latents_i)
-            codes.append(codes_i)
-
-            quantized_representation_i = self.quantizers[i].out_proj(quantized_latents_i)
-            quantized_representation = quantized_representation + quantized_representation_i
-
-        return quantized_representation, torch.cat(quantized_latents, dim=1)
-
-
 @auto_docstring
 class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     config: XcodecConfig
@@ -647,7 +505,7 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     def _init_weights(self, module):
         if isinstance(module, nn.Conv1d):
             nn.init.trunc_normal_(module.weight, std=0.02)
-            nn.init.constant_(module.bias, 0)
+            # nn.init.constant_(module.bias, 0)
         elif isinstance(module, Snake1d):
             module.alpha.data.fill_(1.0)
         elif isinstance(module, nn.ConvTranspose1d):
@@ -731,13 +589,20 @@ class XcodecModel(XcodecPreTrainedModel):
         self.config = config
 
         self.encoder = XcodecEncoder(config)
-        self.decoder = XcodecDecoder(config)
+        self.decoder = XcodecAcousticDecoder(config)
 
-        self.quantizer = XcodecResidualVectorQuantize(config)
+        self.quantizer = XcodecResidualVectorQuantizer(config)
 
         self.bits_per_codebook = int(math.log2(self.config.codebook_size))
         if 2**self.bits_per_codebook != self.config.codebook_size:
             raise ValueError("The codebook_size must be a power of 2.")
+        self.semantic_decoder = XcodecSemanticDecoder(config)
+        self.semantic_proj = nn.Linear(
+            config.semantic_hidden_size + config.acoustic_hidden_size, config.semantic_hidden_size
+        )
+        self.acoustic_proj = nn.Linear(
+            config.semantic_hidden_size + config.acoustic_hidden_size, config.acoustic_hidden_size
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -748,6 +613,7 @@ class XcodecModel(XcodecPreTrainedModel):
         self,
         input_values: torch.Tensor,
         n_quantizers: Optional[int] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         input_values (`torch.Tensor of shape `(batch_size, 1, time_steps)`):
@@ -755,12 +621,17 @@ class XcodecModel(XcodecPreTrainedModel):
         n_quantizers (int, *optional*):
             Number of quantizers to use. If None, all quantizers are used. Default is None.
         """
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         quantized_representation = self.encoder(input_values)
         quantized_representation, audio_codes, projected_latents, commitment_loss, codebook_loss = self.quantizer(
             quantized_representation, n_quantizers
         )
 
         loss = self.config.commitment_loss_weight * commitment_loss + self.config.codebook_loss_weight * codebook_loss
+
+        if not return_dict:
+            return (loss, quantized_representation, audio_codes, projected_latents)
 
         return XcodecEncoderOutput(loss, quantized_representation, audio_codes, projected_latents)
 
@@ -770,6 +641,7 @@ class XcodecModel(XcodecPreTrainedModel):
         self,
         quantized_representation: Optional[torch.Tensor] = None,
         audio_codes: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`, *optional*):
@@ -778,15 +650,22 @@ class XcodecModel(XcodecPreTrainedModel):
             The codebook indices for each codebook, representing the quantized discrete
             representation of the input. This parameter should be provided if you want
             to decode directly from the audio codes (it will overwrite quantized_representation).
+        return_dict (`bool`, *optional*, defaults to `True`):
+            Whether to return a [`XcodecDecoderOutput`] instead of a plain tuple.
         """
 
         if quantized_representation is None and audio_codes is None:
             raise ValueError("Either `quantized_representation` or `audio_codes` must be provided.")
 
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         if audio_codes is not None:
             quantized_representation = self.quantizer.from_codes(audio_codes)[0]
 
         audio_values = self.decoder(quantized_representation).squeeze(1)
+
+        if not return_dict:
+            return (audio_values,)
 
         return XcodecDecoderOutput(audio_values)
 
@@ -795,6 +674,7 @@ class XcodecModel(XcodecPreTrainedModel):
         self,
         input_values: torch.Tensor,
         n_quantizers: Optional[int] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, time_steps)`):
@@ -823,6 +703,8 @@ class XcodecModel(XcodecPreTrainedModel):
         >>> # or the equivalent with a forward pass
         >>> audio_values = model(inputs["input_values"]).audio_values
         ```"""
+
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         length = input_values.shape[-1]
 
         loss, quantized_representation, audio_codes, projected_latents = self.encode(
@@ -830,4 +712,10 @@ class XcodecModel(XcodecPreTrainedModel):
         )
         audio_values = self.decode(quantized_representation, return_dict=False)[0][..., :length]
 
+        if not return_dict:
+            return (loss, audio_values, quantized_representation, audio_codes, projected_latents)
+
         return XcodecOutput(loss, audio_values, quantized_representation, audio_codes, projected_latents)
+
+
+__all__ = ["XcodecModel"]
