@@ -2414,7 +2414,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         try:
-            if isinstance(
+            if isinstance(module, PreTrainedModel):
+                return
+            elif isinstance(
                 module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)
             ):
                 module.weight.data.normal_(mean=0.0, std=std)
@@ -2510,18 +2512,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 continue
 
             target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
-            # if (
-            #     missing_keys != set()
-            #     and not re.search(rf"{target_name}", "\n".join(missing_keys))  # regex for modules
-            # ):
-            #     continue  # `can_use_safetensors` goes against this one
-            try:
-                if source_name.endswith(".bias") or source_name.endswith(".weight"):
-                    target_tensor = top_level.get_parameter_or_buffer(target_name)
-                else:
-                    target_tensor = top_level.get_submodule(target_name)
-            except AttributeError:
-                continue
+            # during post_init, don't tie if config does not tie
+            if (
+                not self.config.get_text_config().tie_word_embeddings or
+                (missing_keys != set()
+                and not re.search(rf"\n{source_name}", "\n".join(missing_keys)))  # regex for modules
+            ): # test_can_init_all_missing_weights need this to not skip
+                continue  # `can_use_safetensors` goes against this one
 
             if "d+" in target_name:
                 reg = re.compile(target_name)
@@ -2531,7 +2528,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         submodule, target_entity = target_n.rsplit(".", 1)
                         submodule = self.get_submodule(submodule)
                         setattr(submodule, target_entity, source_param_or_module)
-                        if not re.search(rf"{source_name}", "\n".join(missing_keys)):
+                        if missing_keys and not re.search(rf"{source_name}", "\n".join(missing_keys)):
                             missing_keys.discard(target_n)
             else:
                 if "." in target_name:
@@ -2540,7 +2537,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     setattr(submodule, weight, source_param_or_module)
                 else:
                     setattr(self, target_name, source_param_or_module)
-                if not re.search(rf"{source_name}", "\n".join(missing_keys)):
+                if missing_keys and not re.search(rf"{source_name}", "\n".join(missing_keys)):
                     missing_keys.discard(target_name)
 
     def tie_weights(self, missing_keys: Optional[set[str]] = None):
