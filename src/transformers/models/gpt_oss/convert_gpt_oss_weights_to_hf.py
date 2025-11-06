@@ -166,18 +166,14 @@ def write_model(
         if "rope_type" not in rope_parameters:
             rope_parameters["rope_type"] = "yarn"
     else:
-        # Old format: construct rope_parameters from individual keys
-        # Fallback to default values if rop_parameters is missing
+        # Old format: construct rope_parameters from individual keys with defaults matching GptOssConfig
         rope_parameters = {
-            # "beta_fast": float(original_config.pop("rope_ntk_beta")),
-            # "beta_slow": float(original_config.pop("rope_ntk_alpha")),
-            # "factor": float(original_config.pop("rope_parameters_factor")),
+            "factor": float(original_config.pop("rope_parameters_factor", 32.0)),
+            "beta_fast": float(original_config.pop("rope_ntk_beta", 32.0)),
+            "beta_slow": float(original_config.pop("rope_ntk_alpha", 1.0)),
             "rope_type": "yarn",
             "truncate": False,
             "original_max_position_embeddings": 4096,
-            "beta_fast": 32.0,
-            "beta_slow": 1.0,
-            "factor": 32.0,
         }
 
     config = GptOssConfig(
