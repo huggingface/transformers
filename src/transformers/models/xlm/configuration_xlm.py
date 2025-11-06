@@ -14,11 +14,7 @@
 # limitations under the License.
 """XLM configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -224,21 +220,4 @@ class XLMConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig
-class XLMOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("token_type_ids", dynamic_axis),
-            ]
-        )
-
-
-__all__ = ["XLMConfig", "XLMOnnxConfig"]
+__all__ = ["XLMConfig"]

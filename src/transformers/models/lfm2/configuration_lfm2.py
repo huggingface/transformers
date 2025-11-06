@@ -117,7 +117,7 @@ class Lfm2Config(PreTrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         conv_bias: Optional[bool] = False,
         conv_L_cache: Optional[int] = 3,
         block_multiple_of: Optional[int] = 256,

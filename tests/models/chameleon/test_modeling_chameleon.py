@@ -205,8 +205,6 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         else {}
     )
 
-    fx_compatible = False
-
     def setUp(self):
         self.model_tester = ChameleonModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=37)
@@ -257,8 +255,6 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
         if is_torch_available()
         else {}
     )
-
-    fx_compatible = False
 
     def setUp(self):
         self.model_tester = ChameleonVision2SeqModelTester(self)

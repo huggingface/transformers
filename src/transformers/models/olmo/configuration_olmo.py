@@ -134,7 +134,7 @@ class OlmoConfig(PreTrainedConfig):
         bos_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = 50279,
         tie_word_embeddings: Optional[int] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         clip_qkv: Optional[bool] = None,

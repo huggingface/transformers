@@ -173,7 +173,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SiglipVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -339,7 +338,6 @@ class SiglipTextModelTester:
 @require_torch
 class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     all_model_classes = (SiglipTextModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     model_split_percents = [0.5, 0.8, 0.9]
 
@@ -441,7 +439,6 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     additional_model_inputs = ["pixel_values"]
     all_model_classes = (SiglipModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": SiglipModel} if is_torch_available() else {}
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -533,7 +530,6 @@ class SiglipForImageClassificationModelTester(SiglipModelTester):
 class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SiglipForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": SiglipForImageClassification} if is_torch_available() else {}
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False

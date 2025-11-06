@@ -141,7 +141,6 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Owlv2VisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -304,7 +303,6 @@ class Owlv2TextModelTester:
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTTextModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2TextModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     def setUp(self):
         self.model_tester = Owlv2TextModelTester(self)
@@ -421,7 +419,6 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -546,7 +543,6 @@ class Owlv2ForObjectDetectionTester:
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2ForObjectDetection,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False

@@ -157,7 +157,7 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         global_attn_every_n_layers: Optional[int] = 3,
         layer_types: Optional[list[str]] = None,
         tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)

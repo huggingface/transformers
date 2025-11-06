@@ -260,7 +260,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
     model_split_percents = [0.5, 0.8, 0.9]
 

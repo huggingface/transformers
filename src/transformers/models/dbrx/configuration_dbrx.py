@@ -189,7 +189,7 @@ class DbrxConfig(PreTrainedConfig):
         use_cache: Optional[bool] = True,
         initializer_range: Optional[float] = 0.02,
         output_router_logits: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         pad_token_id: Optional[int] = None,
         bos_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
