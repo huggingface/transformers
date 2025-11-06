@@ -3007,6 +3007,45 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             **kwargs,
         )
 
+    def batch_decode(
+        self,
+        sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: Optional[bool] = None,
+        **kwargs,
+    ) -> list[str]:
+        """
+        Convert a list of lists of token ids into a list of strings by calling decode.
+
+        This method is provided for backwards compatibility. The `decode` method now handles batched input natively,
+        so you can use `decode` directly instead of `batch_decode`.
+
+        Args:
+            sequences (`Union[list[int], list[list[int]], np.ndarray, torch.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces`.
+            kwargs (additional keyword arguments, *optional*):
+                Will be passed to the underlying model specific decode method.
+
+        Returns:
+            `list[str]`: The list of decoded sentences.
+        """
+        # Forward to decode() which now handles batched input natively
+        result = self.decode(
+            token_ids=sequences,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+        # Ensure we always return a list for backwards compatibility
+        if isinstance(result, str):
+            return [result]
+        return result
+
     def _decode(
         self,
         token_ids: Union[int, list[int]],
