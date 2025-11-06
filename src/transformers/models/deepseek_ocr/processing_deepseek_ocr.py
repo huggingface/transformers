@@ -22,7 +22,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, TextInput
-from ...utils import TensorType, is_torch_available, is_vision_available, logging
+from ...utils import is_torch_available, is_vision_available, logging
 
 
 if is_torch_available():
@@ -136,22 +136,11 @@ class DeepseekOcrProcessor(ProcessorMixin):
             re.sub(re.escape(self.image_token), lambda _: self.image_token * next(image_count_iter), t) for t in text
         ]
 
-        text_kwargs = output_kwargs["text_kwargs"]
-        return_tensors = text_kwargs.pop("return_tensors", None)
-        tokenizer_kwargs = text_kwargs.copy()
-        if return_tensors is not None:
-            tokenizer_kwargs["return_tensors"] = return_tensors
-        text_inputs = self.tokenizer(processed_text, **tokenizer_kwargs)
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        text_inputs = self.tokenizer(processed_text, **output_kwargs["text_kwargs"], return_tensors=None)
 
         input_ids = text_inputs["input_ids"]
         if isinstance(input_ids, torch.Tensor):
-            if input_ids.ndim == 1:
-                input_ids = input_ids.unsqueeze(0)
-                text_inputs["input_ids"] = input_ids
-                for key in ("attention_mask", "position_ids", "token_type_ids"):
-                    value = text_inputs.get(key)
-                    if isinstance(value, torch.Tensor) and value.ndim == 1:
-                        text_inputs[key] = value.unsqueeze(0)
             image_attention_mask = (input_ids == self.image_token_id).to(dtype=torch.bool)
         elif isinstance(input_ids, list):
             image_attention_mask: list[list[bool]] = []
@@ -168,9 +157,7 @@ class DeepseekOcrProcessor(ProcessorMixin):
             "num_img_tokens": num_img_tokens,
         }
 
-        batch = BatchFeature(data=data, tensor_type=return_tensors)
-        batch["num_img_tokens"] = num_img_tokens
-        return batch
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -195,19 +182,6 @@ class DeepseekOcrProcessor(ProcessorMixin):
                 tokenizer_input_names + image_processor_input_names + ["image_attention_mask", "num_img_tokens"]
             )
         )
-
-    def apply_chat_template(self, conversations, chat_template=None, **kwargs):
-        outputs = super().apply_chat_template(conversations, chat_template=chat_template, **kwargs)
-        tensor_type = kwargs.get("return_tensors")
-        if hasattr(tensor_type, "value"):
-            tensor_type = tensor_type.value
-        if tensor_type == TensorType.PYTORCH:
-            tensor_type = "pt"
-        if isinstance(outputs, BatchFeature) and tensor_type == "pt" and "num_img_tokens" in outputs:
-            num_img_tokens = outputs["num_img_tokens"]
-            if not isinstance(num_img_tokens, torch.Tensor):
-                outputs["num_img_tokens"] = torch.tensor(num_img_tokens)
-        return outputs
 
     # All that follows is the original post-processing a bit tweaked that allows to have a nice OCR output on images.
     # unsure to keep there, why not, still belongs to processing utils.
