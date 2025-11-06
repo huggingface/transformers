@@ -236,7 +236,13 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
             vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
             vocab.update(self.added_tokens_encoder)
             return vocab
-        return dict(self.vocab, **self.added_tokens_encoder)
+        # base vocab
+        vocab = dict(self.vocab)
+        # + added_tokens_encoder
+        for token, index in self.added_tokens_encoder.items():
+            if token not in self.vocab:
+                vocab[token] = index
+        return vocab
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""

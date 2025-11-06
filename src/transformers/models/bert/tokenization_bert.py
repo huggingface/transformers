@@ -17,7 +17,8 @@
 import collections
 from typing import Optional
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+
 from tokenizers.models import WordPiece
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -135,6 +136,18 @@ class BertTokenizer(TokenizersBackend):
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
             **kwargs,
+        )
+
+        cls_token_id = self.cls_token_id if self.cls_token_id is not None else 2
+        sep_token_id = self.sep_token_id if self.sep_token_id is not None else 3
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{str(self.cls_token)}:0 $A:0 {str(self.sep_token)}:0",
+            pair=f"{str(self.cls_token)}:0 $A:0 {str(self.sep_token)}:0 $B:1 {str(self.sep_token)}:1",
+            special_tokens= [
+                (str(self.cls_token), cls_token_id),
+                (str(self.sep_token), sep_token_id),
+            ],
         )
 
 

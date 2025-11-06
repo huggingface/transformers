@@ -5153,7 +5153,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
         model = BasicTextGenerationModel(vocab_size=tokenizer.vocab_size, hidden_size=32)
         # Note that this class does not have a config attribute
-        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
+        max_len_single_sentence = tokenizer.model_max_length - tokenizer.num_special_tokens_to_add(pair=False)
 
         train_dataset = LineByLineTextDataset(
             tokenizer=tokenizer,

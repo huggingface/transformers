@@ -291,6 +291,13 @@ class BatchEncoding(UserDict):
     # provided by HuggingFace tokenizers library.
 
     @property
+    def is_fast(self) -> bool:
+        """
+        TOOD: ita i will rm this `bool`: Whether or not this BatchEncoding was created by a fast tokenizer.
+        """
+        return self._encodings is not None
+
+    @property
     def encodings(self) -> Optional[list[EncodingFast]]:
         """
         `Optional[list[tokenizers.Encoding]]`: The list all encodings from the tokenization process. Returns `None` if
@@ -1130,6 +1137,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             return 0
 
         # V5: Allowed keys are SPECIAL_TOKENS_ATTRIBUTES + "extra_special_tokens"
+        # Backward compatibility: convert "additional_special_tokens" to "extra_special_tokens"
+        special_tokens_dict = dict(special_tokens_dict)
+        if "additional_special_tokens" in special_tokens_dict and "extra_special_tokens" not in special_tokens_dict:
+            special_tokens_dict["extra_special_tokens"] = special_tokens_dict.pop("additional_special_tokens")
+        
         allowed_keys = set(self.SPECIAL_TOKENS_ATTRIBUTES) | {"extra_special_tokens"}
         tokens_to_add = []
         for key, value in special_tokens_dict.items():
@@ -1241,10 +1253,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if key == "extra_special_tokens":
                 if value is None:
                     self._extra_special_tokens = []
+                elif isinstance(value, dict):
+                    # Dict is treated as model-specific special tokens (such as multimodal tokens)
+                    self._set_model_specific_special_tokens(special_tokens=value)
                 elif isinstance(value, (list, tuple)):
                     self._extra_special_tokens = list(value)
                 else:
-                    raise ValueError(f"extra_special_tokens must be a list or tuple, got {type(value)}")
+                    raise ValueError(f"extra_special_tokens must be a list, tuple, or dict, got {type(value)}")
         else:
             super().__setattr__(key, value)
 
@@ -1285,6 +1300,38 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
         else:
             return super().__getattr__(key)
+
+    def get_special_tokens_mask(
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
+        """
+        Retrieve sequence ids from a token list that has no special tokens added.
+
+        For fast tokenizers, data collators call this with `already_has_special_tokens=True` to build a mask over an
+        already-formatted sequence. In that case, we compute the mask by checking membership in `all_special_ids`.
+
+        Args:
+            token_ids_0: List of IDs for the (possibly already formatted) sequence.
+            token_ids_1: Unused when `already_has_special_tokens=True`. Must be None in that case.
+            already_has_special_tokens: Whether the sequence is already formatted with special tokens.
+
+        Returns:
+            A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+        """
+        if already_has_special_tokens:
+            if token_ids_1 is not None:
+                raise ValueError(
+                    "You should not supply a second sequence if the provided sequence of ids is already formatted "
+                    "with special tokens for the model."
+                )
+            special_ids = set(self.all_special_ids)
+            return [1 if int(tid) in special_ids else 0 for tid in token_ids_0]
+
+        # Default base implementation for non-formatted sequences is not provided here.
+        # Concrete tokenizer classes should override this for their specific formatting rules.
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement get_special_tokens_mask for non-formatted sequences"
+        )
 
     @property
     def special_tokens_map(self) -> dict[str, str]:
@@ -1541,12 +1588,22 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         is_local = os.path.isdir(pretrained_model_name_or_path)
         single_file_id = None
         if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-            if len(cls.vocab_files_names) > 1 and not gguf_file:
+            # For legacy support: allow single-file loading if:
+            # 1. Only one vocab file is required, OR
+            # 2. It's a fast tokenizer with tokenizer_file (which is optional), OR
+            # 3. It's a GGUF file
+            vocab_files_count = len(cls.vocab_files_names)
+            has_optional_tokenizer_file = vocab_files_count > 1 and "tokenizer_file" in cls.vocab_files_names
+            
+            if vocab_files_count > 1 and not gguf_file and not has_optional_tokenizer_file:
                 raise ValueError(
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
                     "supported for this tokenizer. Use a model identifier or the path to a directory instead."
                 )
+            # Use first vocab file that's not tokenizer_file
             file_id = list(cls.vocab_files_names.keys())[0]
+            if file_id == "tokenizer_file" and vocab_files_count > 1:
+                file_id = [k for k in cls.vocab_files_names.keys() if k != "tokenizer_file"][0]
 
             vocab_files[file_id] = pretrained_model_name_or_path
             single_file_id = file_id
@@ -1817,6 +1874,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
+
+        # V5: Backward compatibility - convert old "additional_special_tokens" to "extra_special_tokens"
+        if "additional_special_tokens" in init_kwargs and "extra_special_tokens" not in init_kwargs:
+            init_kwargs["extra_special_tokens"] = init_kwargs.pop("additional_special_tokens")
 
         # V5: Get model-specific special tokens from config (saved as individual keys in special_tokens_map)
         # These need to be groupes as extra_special_tokens dict so __init__ can save them to attributes
@@ -2929,11 +2990,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # If we received batched input, decode each sequence
         if isinstance(token_ids, (list, tuple)) and (len(token_ids) == 0 or isinstance(token_ids[0], (list, tuple))):
+            clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
             return [
                 self._decode(
                     token_ids=seq,
                     skip_special_tokens=skip_special_tokens,
-                    clean_up_tokenization_spaces=False,
+                    clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     **kwargs,
                 )
                 for seq in token_ids

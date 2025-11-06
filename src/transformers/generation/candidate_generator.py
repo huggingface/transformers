@@ -490,7 +490,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         Returns:
             The converted token IDs.
         """
-        text = source_tokenizer.batch_decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        text = source_tokenizer.decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         dest_ids = destination_tokenizer(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
         return dest_ids.to(input_ids.device)
 
@@ -978,7 +978,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             # we have only one new token and we can directly convert it
             assistant_new_ids = self._atm_translator.target_to_assistant_input_ids.get(target_new_ids[0].item())
         if assistant_new_ids is None:
-            target_new_text = self.target_tokenizer.batch_decode(
+            target_new_text = self.target_tokenizer.decode(
                 target_new_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
             )
             assistant_new_ids = self.assistant_tokenizer(

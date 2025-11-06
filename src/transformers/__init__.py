@@ -175,14 +175,13 @@ _import_structure = {
     "processing_utils": ["ProcessorMixin"],
     "quantizers": [],
     "testing_utils": [],
-    "tokenization_sentencepiece": ["SentencePieceBackend"],
+    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils": ["PreTrainedTokenizer", "PythonBackend"],
     "tokenization_utils_base": [
         "AddedToken",
         "BatchEncoding",
         "CharSpan",
         "PreTrainedTokenizerBase",
-        "SpecialTokensMixin",
         "TokenSpan",
     ],
     "trainer_callback": [
