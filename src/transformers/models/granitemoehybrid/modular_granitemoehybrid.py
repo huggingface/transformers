@@ -35,8 +35,8 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedDecoderLayer,
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedMLP,
-    GraniteMoeSharedMoE,
     GraniteMoeSharedModel,
+    GraniteMoeSharedMoE,
     GraniteMoeSharedPreTrainedModel,
     eager_attention_forward,
 )
