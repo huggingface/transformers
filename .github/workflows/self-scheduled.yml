@@ -588,9 +588,6 @@ jobs:
     steps:
       - name: Checkout transformers
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-          ref: ${{ inputs.commit_sha || github.sha }}
 
       - name: Install transformers
         run: pip install transformers
