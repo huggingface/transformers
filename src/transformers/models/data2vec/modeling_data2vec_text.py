@@ -725,14 +725,6 @@ class Data2VecTextLMHead(nn.Module):
 
         return x
 
-    def _tie_weights(self):
-        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        # For accelerate compatibility and to not break backward compatibility
-        if self.decoder.bias.device.type == "meta":
-            self.decoder.bias = self.bias
-        else:
-            self.bias = self.decoder.bias
-
 
 class Data2VecTextClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
@@ -763,7 +755,7 @@ class Data2VecTextClassificationHead(nn.Module):
 )
 class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "data2vec_text.embedding.weight",
+        "lm_head.decoder.weight": "data2vec_text.embeddings.word_embeddings.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 

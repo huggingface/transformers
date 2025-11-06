@@ -1326,7 +1326,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     config: MllamaTextConfig
     _can_compile_fullgraph = True  # only the LLM without cross attn can do compile
     base_model_prefix = "language_model"
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config.get_text_config())

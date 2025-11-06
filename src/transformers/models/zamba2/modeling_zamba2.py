@@ -1629,6 +1629,7 @@ class Zamba2ForSequenceClassification(Zamba2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Zamba2Model(config)
+        self._tied_weights_keys = self.model._tied_weights_keys
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing

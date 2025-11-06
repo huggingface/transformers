@@ -2092,12 +2092,6 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.t2u_pad_token_id, self.config.t2u_decoder_start_token_id)
 
-    def _tie_weights(self) -> None:
-        if getattr(self.config, "tie_word_embeddings", True):
-            output_embeddings = self.get_output_embeddings()
-            if output_embeddings is not None:
-                self._tie_embedding_weights(output_embeddings, self.get_input_embeddings())
-
 
 ############ VOCODER related code ################
 
@@ -2705,7 +2699,10 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["text_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
 
-    _tied_weights_keys = {"lm_head.weight": "shared.weight"}
+    _tied_weights_keys = {
+        "lm_head.weight": "shared.weight",
+        "text_decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
@@ -2729,11 +2726,6 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.text_decoder.embed_tokens = value
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_COMMON_CUSTOM_ARGS)
     def forward(
@@ -2998,12 +2990,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.text_encoder.embed_tokens = value
         self.text_decoder.embed_tokens = value
         self.shared = value
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.text_encoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_COMMON_CUSTOM_ARGS)
     def forward(
@@ -3289,7 +3275,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
 
-    _tied_weights_keys = {"lm_head.weight": "shared.weight"}
+    _tied_weights_keys = {"lm_head.weight": "shared.weight", "text_decoder.embed_tokens.weight": "shared.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -3299,11 +3285,9 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.text_decoder = SeamlessM4TDecoder(config, self.shared)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4TCodeHifiGan(config)
+        self.post_init()
 
     def get_encoder(self):
         return self.speech_encoder
@@ -3316,11 +3300,6 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.text_decoder.embed_tokens = value
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_COMMON_CUSTOM_ARGS)
     def forward(
@@ -3670,12 +3649,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.text_encoder.embed_tokens = value
         self.text_decoder.embed_tokens = value
         self.shared = value
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.text_encoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_COMMON_CUSTOM_ARGS)
     def forward(

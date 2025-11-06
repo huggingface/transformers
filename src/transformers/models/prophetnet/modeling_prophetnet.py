@@ -1430,11 +1430,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         self.encoder.word_embeddings = self.word_embeddings
         self.decoder.word_embeddings = self.word_embeddings
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.word_embeddings, self.word_embeddings)
-            self._tie_embedding_weights(self.decoder.word_embeddings, self.word_embeddings)
-
     def get_encoder(self):
         return self.encoder
 
@@ -1557,10 +1552,6 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.prophetnet.word_embeddings, self.lm_head)
 
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings

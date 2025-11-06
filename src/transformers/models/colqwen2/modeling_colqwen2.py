@@ -105,9 +105,6 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
 )
 class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = {
-        "vlm.language_model.lm_head.weight": "vlm.model.language_model.shared.weight",
-    }
 
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)

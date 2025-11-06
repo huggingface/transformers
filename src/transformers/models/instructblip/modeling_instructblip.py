@@ -1155,12 +1155,6 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    # Copied from transformers.models.instructblip.modeling_instructblip.InstructBlipModel._tie_weights
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
-
     # Copied from transformers.models.instructblip.modeling_instructblip.InstructBlipModel._preprocess_accelerate
     def _preprocess_accelerate(self):
         r"""

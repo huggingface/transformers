@@ -1564,14 +1564,6 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
 
         return audio
 
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings list and the output embeddings list.
-        """
-        for module in self.modules():
-            if hasattr(module, "_tie_weights"):
-                module._tie_weights()
-
 
 __all__ = [
     "BarkFineModel",

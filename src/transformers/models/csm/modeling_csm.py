@@ -789,13 +789,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     def set_input_embeddings(self, value):
         self.backbone_model.embed_tokens = value
 
-    def _tie_weights(self):
-        if self.config.tie_codebooks_embeddings:
-            self._tie_embedding_weights(
-                self.backbone_model.embed_tokens.embed_audio_tokens,
-                self.depth_decoder.model.embed_tokens,
-            )
-
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         if kwargs.get("output_loading_info", False):
