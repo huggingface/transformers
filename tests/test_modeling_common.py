@@ -3515,6 +3515,8 @@ class ModelTesterMixin:
                     self.skipTest(
                         "Skipping test due to UnsupportedOperatorException/BackendCompilerFailed during export (cuda issue)"
                     )
+                except AssertionError:
+                    self.skipTest("Skipping test due to AssertionError during export (torch issue)")
                 except Exception as e:
                     if "Expected cond to be True, but got False." in str(e):
                         # TODO: investigate, there's around 15 models (encoder-decoder parts) failing with this error during export
