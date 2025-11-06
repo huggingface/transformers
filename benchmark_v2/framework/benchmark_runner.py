@@ -415,17 +415,19 @@ class BenchmarkRunner:
             self.cleanup()
             self.save_results(model_id, all_results, timestamp=timestamp)
 
+        if len(all_results) < 1:
+            raise RuntimeError("No benchmark was run succesfully")
+
         if pretty_print_summary:
             print()
             print("=" * 100)
             print(f"Finished benchmarks in {time.perf_counter() - start_time:.2f} seconds")
             print(f"Total number of benchmarks: {len(all_results)}")
-            if len(all_results) > 0:
-                print("First run metadata:")
-                first_key = list(all_results.keys())[0]
-                first_metadata = all_results[first_key]["metadata"].to_dict()
-                hardware_info = first_metadata.pop("hardware_info")
-                pretty_print_dict(first_metadata | hardware_info, tabs=1)
+            print("First run metadata:")
+            first_key = list(all_results.keys())[0]
+            first_metadata = all_results[first_key]["metadata"].to_dict()
+            hardware_info = first_metadata.pop("hardware_info")
+            pretty_print_dict(first_metadata | hardware_info, tabs=1)
             for result in all_results.values():
                 print("=" * 100)
                 print(f"Config: {result['config'].infer_name(compact=False)}\n")
