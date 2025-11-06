@@ -303,10 +303,10 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: Optional[int] =
 def get_num_frames_and_fps(sample_indices_fn: Union[partial, FunctionType]) -> tuple[Optional[int], Optional[float]]:
     """
     Extract num_frames and fps from a function or functools.partial.
-    
+
     Args:
         sample_indices_fn: function or functools.partial
-    
+
     Returns:
         num_frames (int or None), fps (float or None)
     """
@@ -326,7 +326,7 @@ def get_num_frames_and_fps(sample_indices_fn: Union[partial, FunctionType]) -> t
             }
             num_frames = closure_vars.get("num_frames")
             fps = closure_vars.get("fps")
-    
+
     # Otherwise, not supported
     return num_frames, fps
 
