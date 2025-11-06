@@ -58,7 +58,7 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             # pick the first item of the list as best guess (it's almost always a list of length 1 anyway)
             distribution_name = pkg_name if pkg_name in distributions else distributions[0]
             package_version = importlib.metadata.version(distribution_name)
-        except importlib.metadata.PackageNotFoundError:
+        except (importlib.metadata.PackageNotFoundError, KeyError):
             # If we cannot find the metadata (because of editable install for example), try to import directly.
             # Note that this branch will almost never be run, so we do not import packages for nothing here
             package = importlib.import_module(pkg_name)
