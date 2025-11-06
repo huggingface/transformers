@@ -467,18 +467,11 @@ def _end_ptr(tensor: torch.Tensor) -> int:
     return stop
 
 
-def _get_tied_weight_keys(module: nn.Module, prefix=""):
-    tied_weight_keys = []
-    if getattr(module, "_tied_weights_keys", None) is not None:
-        value_names = list(module._tied_weights_keys.keys())
-        names = [f"{prefix}.{k}" if prefix else k for k in value_names]
-        tied_weight_keys.extend(names)
-    if getattr(module, "_dynamic_tied_weights_keys", None) is not None:
-        names = [f"{prefix}.{k}" if prefix else k for k in module._dynamic_tied_weights_keys]
-        tied_weight_keys.extend(names)
-    for name, submodule in module.named_children():
-        local_prefix = f"{prefix}.{name}" if prefix else name
-        tied_weight_keys.extend(_get_tied_weight_keys(submodule, prefix=local_prefix))
+def _get_tied_weight_keys(module: nn.Module) -> list[str]:
+    tied_weight_keys: list[str] = []
+    for name, submodule in module.named_modules():
+        tied_weights_dict = getattr(submodule, "_tied_weights_keys", {}) or {}
+        tied_weight_keys.extend([f"{name}.{k}" if name else k for k in tied_weights_dict])
     return tied_weight_keys
 
 
@@ -3468,8 +3461,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if len(error_names) > 0:
                 raise RuntimeError(
                     f"The weights trying to be saved contained shared tensors {error_names} that are mismatching "
-                    "the transformers base configuration. Try saving using `safe_serialization=False`, setting the "
-                    "`_dynamic_tied_weights_keys` attribute for affected modules, or remove this tensor sharing.",
+                    "the transformers base configuration. Try saving using `safe_serialization=False` or remove this "
+                    "tensor sharing.",
                 )
 
         # Shard the model if it is too big.
