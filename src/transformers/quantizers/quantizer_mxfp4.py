@@ -418,7 +418,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     def get_quantize_ops(self):
         from ..integrations import Mxfp4Quantize
-        return Mxfp4Quantize()
+        return Mxfp4Quantize(self)
 
     def is_serializable(self, safe_serialization=None):
         return True

@@ -52,22 +52,22 @@ FP4_VALUES = [
 
 
 class Mxfp4Quantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
     def convert(
-        self, input_dict: dict[str, torch.Tensor], model: Optional[torch.nn.Module] = None, **kwargs
+        self, input_dict: dict[str, torch.Tensor], model: Optional[torch.nn.Module] = None, missing_keys: Optional[list[str]] = None, **kwargs
     ) -> dict[str, torch.Tensor]:
-        quant_config = kwargs.get("quant_config")
-        missing_keys = kwargs.get("missing_keys")
         target_key, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
         module, _ = get_module_from_name(model, target_key)
 
-        if ("blocks" in target_key or "scales" in target_key) and quant_config and quant_config.dequantize:
+        if ("blocks" in target_key or "scales" in target_key) and self.hf_quantizer.quantization_config.dequantize:
             # blocks and scales have the same length that's why this works for both
             module, _ = get_module_from_name(model, target_key[: -len("_blocks")])
         else:
             module, _ = get_module_from_name(model, target_key)
 
-        if quant_config and quant_config.dequantize:
+        if self.hf_quantizer.quantization_config.dequantize:
             # dq_param_name is the name of the parameter without the blocks or scales suffix, it's used in this case since we don't switch linears
             # so we only have the original param name
             dq_param_name = target_key[: -len("_blocks")]
