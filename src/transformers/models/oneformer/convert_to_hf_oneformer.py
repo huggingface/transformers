@@ -926,7 +926,7 @@ class OriginalOneFormerCheckpointToOursConverter:
         checkpoints: list[Path] = checkpoints_dir.glob("**/*.pth")
 
         for checkpoint in checkpoints:
-            logger.info(f"💪 Converting {checkpoint.stem}")
+            logger.info(f"[INFO] Converting {checkpoint.stem}")
             # find associated config file
             config: Path = config_dir / f"{checkpoint.stem}.yaml"
 
@@ -1175,7 +1175,7 @@ if __name__ == "__main__":
         )
 
         model_name = get_name(checkpoint_file)
-        logger.info(f"🪄 Saving {model_name}")
+        logger.info(f"[INFO] Saving {model_name}")
 
         processor.save_pretrained(save_directory / model_name)
         oneformer_for_universal_segmentation.save_pretrained(save_directory / model_name)
