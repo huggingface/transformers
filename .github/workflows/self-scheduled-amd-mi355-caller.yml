@@ -21,7 +21,7 @@ jobs:
       job: run_models_gpu
       slack_report_channel: "#amd-hf-ci"
       runner_group: hfc-amd-mi355
-      docker: huggingface/testing-rocm7.0-preview
+      docker: huggingface/transformers-pytorch-amd-gpu
       ci_event: Scheduled CI (AMD) - mi355
       report_repo_id: hf-transformers-bot/transformers-ci-dummy
     secrets: inherit
@@ -33,7 +33,7 @@ jobs:
       job: run_pipelines_torch_gpu
       slack_report_channel: "#amd-hf-ci"
       runner_group: hfc-amd-mi355
-      docker: huggingface/testing-rocm7.0-preview
+      docker: huggingface/transformers-pytorch-amd-gpu
       ci_event: Scheduled CI (AMD) - mi355
       report_repo_id: hf-transformers-bot/transformers-ci-dummy
     secrets: inherit
@@ -45,7 +45,7 @@ jobs:
       job: run_examples_gpu
       slack_report_channel: "#amd-hf-ci"
       runner_group: hfc-amd-mi355
-      docker: huggingface/testing-rocm7.0-preview
+      docker: huggingface/transformers-pytorch-amd-gpu
       ci_event: Scheduled CI (AMD) - mi355
       report_repo_id: hf-transformers-bot/transformers-ci-dummy
     secrets: inherit

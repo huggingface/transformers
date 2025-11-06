@@ -171,7 +171,6 @@ class TorchExportableModuleForVLM:
         Returns:
             Output with logits for text generation
         """
-        pass
 
     def generate(
         self, pixel_values=None, input_ids=None, max_new_tokens=50, do_sample=False, temperature=1.0, **kwargs
@@ -189,7 +188,6 @@ class TorchExportableModuleForVLM:
         Returns:
             Generated sequences
         """
-        pass
 
 
 class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):

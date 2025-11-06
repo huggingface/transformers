@@ -249,7 +249,7 @@ class Chat:
 
         # Generation settings
         config = load_generation_config(generation_config)
-        config.update(**{"do_sample": True, "max_new_tokens": 256})  # some default values
+        config.update(do_sample=True, max_new_tokens=256)  # some default values
         config.update(**parse_generate_flags(generate_flags))
         self.config = config
 
