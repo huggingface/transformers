@@ -305,15 +305,14 @@ class DbrxExperts(nn.Module):
     ) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.ffn_hidden_size)
-        next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
 
+        next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
         with torch.no_grad():
             expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
         split_expert_shape = (-1, self.ffn_hidden_size, self.hidden_size)
-
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
             with torch.no_grad():
