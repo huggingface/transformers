@@ -422,7 +422,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             return any(k.endswith(x) for x in mxfp4_keys)
         else:
             return ["gate_up_proj", "down_proj"]
-    
+
     def get_quantize_ops(self):
         from ..integrations import Mxfp4Quantize
         return Mxfp4Quantize(self)

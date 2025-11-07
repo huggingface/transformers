@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
+from ..core_model_loading import ConversionOps
 from ..utils import is_accelerate_available, is_torch_available, logging
 
-from typing import Optional
-from ..core_model_loading import ConversionOps
 
 if is_torch_available():
     import torch
@@ -28,6 +29,7 @@ import re
 from contextlib import contextmanager
 
 from ..quantizers.quantizers_utils import get_module_from_name
+
 
 logger = logging.get_logger(__name__)
 

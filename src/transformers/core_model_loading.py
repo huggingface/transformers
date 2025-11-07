@@ -31,9 +31,10 @@ from typing import Any, Optional, Union
 import torch
 
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer
-from .utils import logging, is_torch_greater_or_equal
 from .quantizers import HfQuantizer
+from .utils import is_torch_greater_or_equal, logging
 from .utils.quantization_config import QuantizationMethod
+
 
 _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
@@ -494,7 +495,7 @@ def convert_and_load_state_dict_in_model(
                 else:
                     unexpected_keys.add(t)
                     continue
-    
+
             if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, t):
                 converter.quantization_operation = hf_quantizer.get_quantize_ops()
                 # TODO: to clean later. We need to use the empty_param from the checkpoint to decide if we upcast the param to a specific dtype
