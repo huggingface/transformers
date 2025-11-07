@@ -32,6 +32,9 @@ jobs:
     name: Setup
     runs-on: ubuntu-22.04
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
       - name: Setup
         env:
           prev_workflow_run_id: ${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}
