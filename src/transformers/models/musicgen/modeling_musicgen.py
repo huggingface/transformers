@@ -1394,23 +1394,8 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
             )
 
         # tie text encoder, decoder weights if config set accordingly
-        self.tie_weights()
+        self.post_init()
 
-    def tie_weights(self, missing_keys=None):
-        # tie text encoder & decoder if needed
-        if self.config.tie_encoder_decoder:
-            # tie text encoder and decoder base model
-            decoder_base_model_prefix = self.decoder.base_model_prefix
-            tied_weights = self._tie_encoder_decoder_weights(
-                self.text_encoder,
-                self.decoder._modules[decoder_base_model_prefix],
-                self.decoder.base_model_prefix,
-                "text_encoder",
-            )
-            # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
-            # attributed not an instance member, therefore modifying it will modify the entire class
-            # Leading to issues on subsequent calls by different tests or subsequent calls.
-            self._dynamic_tied_weights_keys = tied_weights
 
     def get_audio_encoder(self):
         return self.audio_encoder

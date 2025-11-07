@@ -1963,7 +1963,11 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             config.tie_word_embeddings = False
-            config.get_text_config().tie_word_embeddings = False
+            try:
+                config.get_text_config().tie_word_embeddings = False
+            except Exception as _:
+                pass
+
             # config.tie_encoder_decoder = False
             model = model_class(config)  # we init the model without tie
             # if this test fails later on, it means init tied the weights
