@@ -59,27 +59,50 @@ class Mxfp4Quantize(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
-        module, _ = get_module_from_name(model, target_key)
-
-        if ("blocks" in target_key or "scales" in target_key) and self.hf_quantizer.quantization_config.dequantize:
-            # blocks and scales have the same length that's why this works for both
-            module, _ = get_module_from_name(model, target_key[: -len("_blocks")])
-        else:
+        if not self.hf_quantizer.pre_quantized:
             module, _ = get_module_from_name(model, target_key)
+            with torch.device(value.device):
+                if isinstance(module, Mxfp4GptOssExperts):
+                    triton_weight_tensor, weight_scale = quantize_to_mxfp4(value, triton_kernels_hub)
+                    PrecisionConfig, FlexCtx, InFlexData = (
+                        triton_kernels_hub.matmul_ogs.PrecisionConfig,
+                        triton_kernels_hub.matmul_ogs.FlexCtx,
+                        triton_kernels_hub.matmul_ogs.InFlexData,
+                    )
+                    triton_weight_tensor, weight_scale = swizzle_mxfp4(
+                        triton_weight_tensor, weight_scale, triton_kernels_hub
+                    )
 
-        if self.hf_quantizer.quantization_config.dequantize:
-            # dq_param_name is the name of the parameter without the blocks or scales suffix, it's used in this case since we don't switch linears
-            # so we only have the original param name
-            dq_param_name = target_key[: -len("_blocks")]
-            dequantize_convertops(module, target_key, value, value.device, missing_keys)
+                    proj = "gate_up_proj" if "gate_up_proj" in target_key else "down_proj"
+                    setattr(module, proj, triton_weight_tensor)
+                    setattr(
+                        module,
+                        f"{proj}_precision_config",
+                        PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+                    )
+                    missing_keys.discard(f"{target_key}_blocks")
+                    missing_keys.discard(f"{target_key}_scales")
+                    delattr(module, f"{proj}_blocks")
+                    delattr(module, f"{proj}_scales")
+
         else:
-            # Eagerly set tensors on the module and perform swizzle; this function will
-            # set the appropriate attributes and remove *_blocks/_scales when both are loaded.
-            load_and_swizzle_mxfp4_convertops(module, target_key, value, value.device, missing_keys, triton_kernels_hub)
 
-        # We return an empty mapping since the module was updated in-place. This prevents
-        # the loader from trying to materialize the original meta-parameter names again.
-        return {}
+            if ("blocks" in target_key or "scales" in target_key) and self.hf_quantizer.quantization_config.dequantize:
+                # blocks and scales have the same length that's why this works for both
+                module, _ = get_module_from_name(model, target_key[: -len("_blocks")])
+            else:
+                module, _ = get_module_from_name(model, target_key)
+
+            if self.hf_quantizer.quantization_config.dequantize:
+                dequantize_convertops(module, target_key, value, value.device, missing_keys)
+            else:
+                # Eagerly set tensors on the module and perform swizzle; this function will
+                # set the appropriate attributes and remove *_blocks/_scales when both are loaded.
+                load_and_swizzle_mxfp4_convertops(module, target_key, value, value.device, missing_keys, triton_kernels_hub)
+
+            # We return an empty mapping since the module was updated in-place. This prevents
+            # the loader from trying to materialize the original meta-parameter names again.
+            return {}
 
 
 @contextmanager
