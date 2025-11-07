@@ -29,6 +29,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
+    # used only within the post-processing methods
     from PIL import Image, ImageDraw, ImageFont
 
 
