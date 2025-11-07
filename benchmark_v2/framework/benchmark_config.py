@@ -36,6 +36,7 @@ class BenchmarkConfig:
         warmup_iterations: int = 5,
         measurement_iterations: int = 20,
         gpu_monitoring: bool = True,  # NOTE: you may want to disable this at times as we have obsvered it could heavily slow down benchmarks on AMD
+        continuous_batching: bool = False,
         batch_size: int = 1,
         sequence_length: int = 128,
         num_tokens_to_generate: int = 128,
@@ -51,6 +52,7 @@ class BenchmarkConfig:
         self.warmup_iterations = warmup_iterations
         self.measurement_iterations = measurement_iterations
         self.gpu_monitoring = gpu_monitoring
+        self.continuous_batching = continuous_batching
         # Input parameters
         self.batch_size = batch_size
         self.sequence_length = sequence_length
@@ -85,6 +87,22 @@ class BenchmarkConfig:
         if is_fa:
             logger.warning("Flash attention does not support compile mode. Turning off compile mode.")
             self.compile_mode = None
+        # Handle SDPA backend if not determined by the config (needs to be done before skipping duplicates)
+        if self.attn_implementation == "sdpa" and self.sdpa_backend is None:
+            default_backend = "flash_attention"  # FIXME: torch has a _cur_sdpa_kernel_backends but it fails
+            logger.warning(f"No SDPA backend provided, using {default_backend} instead.")
+            self.sdpa_backend = default_backend
+        if self.continuous_batching:
+            if self.attn_implementation == "flex_attention":
+                logger.error(
+                    "disabling continuous batching because of invalid configuration: flex attention is not supported"
+                )
+                self.continuous_batching = False
+            elif self.attn_implementation == "sdpa" and self.sdpa_backend is not None:
+                logger.warning(
+                    "when continuous batching is enabled, sdpa_backend must be None because of the attention mask, setting it to None"
+                )
+                self.sdpa_backend = "math"
 
     @property
     def hash(self) -> str:
@@ -100,6 +118,7 @@ class BenchmarkConfig:
             attn_code += f"_{self.sdpa_backend}" if self.attn_implementation == "sdpa" else ""
             compile_str = f"compiled_{self.compile_mode}" if self.compile_mode is not None else "uncompiled"
             kernelize_str = "kernelized" if self.kernelize else "unkernelized"
+            continuous_batching_str = "cb" if self.continuous_batching else "generate"
             sep = "-"
         else:
             iter_str = f"{self.warmup_iterations} warmup, {self.measurement_iterations} iterations"
@@ -109,8 +128,11 @@ class BenchmarkConfig:
             attn_code += f" with {self.sdpa_backend} backend" if self.attn_implementation == "sdpa" else ""
             compile_str = "compiled" if self.compile_mode is not None else "not compiled"
             kernelize_str = "kernelized" if self.kernelize else "not kernelized"
+            continuous_batching_str = "continuous batching" if self.continuous_batching else "regular generate"
             sep = ", "
-        return sep.join([iter_str, gpu_monitor_str, dimensions_str, attn_code, compile_str, kernelize_str])
+        return sep.join(
+            [iter_str, gpu_monitor_str, dimensions_str, attn_code, compile_str, kernelize_str, continuous_batching_str]
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -118,6 +140,7 @@ class BenchmarkConfig:
             "warmup_iterations": self.warmup_iterations,
             "measurement_iterations": self.measurement_iterations,
             "gpu_monitoring": self.gpu_monitoring,
+            "continuous_batching": self.continuous_batching,
             "batch_size": self.batch_size,
             "sequence_length": self.sequence_length,
             "num_tokens_to_generate": self.num_tokens_to_generate,
@@ -134,6 +157,7 @@ class BenchmarkConfig:
             warmup_iterations=data.get("warmup_iterations", 5),
             measurement_iterations=data.get("measurement_iterations", 20),
             gpu_monitoring=data.get("gpu_monitoring", False),
+            continuous_batching=data.get("continuous_batching", False),
             batch_size=data.get("batch_size", 1),
             sequence_length=data.get("sequence_length", 128),
             num_tokens_to_generate=data.get("num_tokens_to_generate", 128),
@@ -191,15 +215,17 @@ def get_config_by_level(level: int) -> list[BenchmarkConfig]:
             # Usually there is not much to gain by compiling with other modes, but we allow it for level 4
             compile_modes = BenchmarkConfig.all_compiled_modes if level >= 4 else [None, "default"]
             for cm in compile_modes:
-                for kernelize_on in [False, KERNELIZATION_AVAILABLE]:
-                    configs.append(
-                        BenchmarkConfig(
-                            attn_implementation=attn_implementation,
-                            sdpa_backend=sdpa_backend,
-                            compile_mode=cm,
-                            kernelize=kernelize_on,
+                for kernelize_on in {False, KERNELIZATION_AVAILABLE}:
+                    for cb_on in [False, True]:
+                        configs.append(
+                            BenchmarkConfig(
+                                attn_implementation=attn_implementation,
+                                sdpa_backend=sdpa_backend,
+                                compile_mode=cm,
+                                kernelize=kernelize_on,
+                                continuous_batching=cb_on,
+                            )
                         )
-                    )
         return configs
     # Otherwise, we add the configs for the given level
     if level >= 0:
@@ -207,8 +233,10 @@ def get_config_by_level(level: int) -> list[BenchmarkConfig]:
     if level >= 1:
         configs.append(BenchmarkConfig(attn_implementation="flash_attention_2"))
         configs.append(BenchmarkConfig(attn_implementation="eager", compile_mode="default"))
+        configs.append(BenchmarkConfig(attn_implementation="flash_attention_2", continuous_batching=True))
     if level >= 2:
         configs.append(BenchmarkConfig(attn_implementation="sdpa", compile_mode="default"))
         configs.append(BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", kernelize=True))
         configs.append(BenchmarkConfig(attn_implementation="flash_attention_2", kernelize=True))
+        configs.append(BenchmarkConfig(attn_implementation="paged|sdpa", continuous_batching=True))
     return configs

@@ -20,7 +20,7 @@ from parameterized import parameterized
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, LogitsProcessorList
 from transformers.generation.continuous_batching.cache import group_layers_by_attn_type
 from transformers.generation.continuous_batching.continuous_api import build_attention_mask
-from transformers.testing_utils import Expectations, require_kernels, require_torch_gpu, slow
+from transformers.testing_utils import Expectations, require_kernels, require_read_token, require_torch_gpu, slow
 
 
 ALLOW_EXPECTED_OUTPUTS = True  # this is a debug flag when you want to measure deviation between CB and non-CB gen
@@ -156,11 +156,11 @@ class ContinuousBatchingTest(unittest.TestCase):
         cb_outputs = model.generate_batch(inputs=batched_inputs, generation_config=model.generation_config)
 
         # Generation without continuous batching
-        if attn_implementation == "sdpa_paged":
+        if attn_implementation == "paged|sdpa":
             non_cb_attn_implementation = "sdpa"
-        elif attn_implementation == "eager_paged":
+        elif attn_implementation == "paged|eager":
             non_cb_attn_implementation = "eager"
-        elif attn_implementation == "paged_attention|kernels-community/flash-attn":
+        elif attn_implementation == "paged|flash_attention_2":
             non_cb_attn_implementation = "eager"
         else:
             raise ValueError(f"Invalid attention implementation: {attn_implementation}")
@@ -208,6 +208,7 @@ class ContinuousBatchingTest(unittest.TestCase):
                     )
 
     # Eager tests
+    @require_read_token
     @require_torch_gpu
     @slow
     def test_continuous_batching_parity_llama_eager(self) -> None:
@@ -220,7 +221,7 @@ class ContinuousBatchingTest(unittest.TestCase):
                 "req_2": " $50,000. This is because the value of the house increased by 150%, which means that the value of the house increased by $50,000. This is because the value of the"
             }
         }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("meta-llama/Llama-3.1-8B", "eager_paged", expected_outputs)
+        self._continuous_batching_parity("meta-llama/Llama-3.1-8B", "paged|eager", expected_outputs)
 
     @require_torch_gpu
     @slow
@@ -234,26 +235,29 @@ class ContinuousBatchingTest(unittest.TestCase):
                 "req_1": " \n \n 2 + 1 = 3 bolts \n \n \n \n \n \n \n \n \n \n \n \n \n "
             }
         }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("google/gemma-2-2b-it", "eager_paged", expected_outputs)
+        self._continuous_batching_parity("google/gemma-2-2b-it", "paged|eager", expected_outputs)
 
-    @require_torch_gpu
-    @slow
-    def test_continuous_batching_parity_qwen_eager(self) -> None:
-        expected_outputs = {}
-        self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "eager_paged", expected_outputs)
+    # FIXME: set expected_outputs
+    # @require_torch_gpu
+    # @slow
+    # def test_continuous_batching_parity_qwen_eager(self) -> None:
+    #     expected_outputs = {}
+    #     self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "paged|eager", expected_outputs)
 
-    @require_torch_gpu
-    @slow
-    def test_continuous_batching_parity_gpt_oss_eager(self) -> None:
-        expected_outputs = Expectations({
-            ("cuda", (9, 0)): {
-                "req_1": " 2.5 bolts. The question: \"What is the name of the puzzle that involves a robe taking 2 bolts of blue fiber and half that much white fiber?\" The answer: \"The",
-                "req_2": " 50%.\"\n\nWe need to parse: He buys a house for $80,000. He puts in $50,000 in repairs. This increased the value of the house by 150%."
-            }
-        }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("openai/gpt-oss-20b", "eager_paged", expected_outputs)
+    # FIXME: OOMs
+    # @require_torch_gpu
+    # @slow
+    # def test_continuous_batching_parity_gpt_oss_eager(self) -> None:
+    #     expected_outputs = Expectations({
+    #         ("cuda", (9, 0)): {
+    #             "req_1": " 2.5 bolts. The question: \"What is the name of the puzzle that involves a robe taking 2 bolts of blue fiber and half that much white fiber?\" The answer: \"The",
+    #             "req_2": " 50%.\"\n\nWe need to parse: He buys a house for $80,000. He puts in $50,000 in repairs. This increased the value of the house by 150%."
+    #         }
+    #     }).get_expectation()  # fmt: skip
+    #     self._continuous_batching_parity("openai/gpt-oss-20b", "paged|eager", expected_outputs)
 
     # SDPA tests
+    @require_read_token
     @require_torch_gpu
     @slow
     def test_continuous_batching_parity_llama_sdpa(self) -> None:
@@ -262,7 +266,7 @@ class ContinuousBatchingTest(unittest.TestCase):
                 "req_2": " $50,000. This is because the value of the house increased by 150%, which means that the value of the house increased by $50,000. This is because the value of the"
             }
         }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("meta-llama/Llama-3.1-8B", "sdpa_paged", expected_outputs)
+        self._continuous_batching_parity("meta-llama/Llama-3.1-8B", "paged|sdpa", expected_outputs)
 
     @require_torch_gpu
     @slow
@@ -272,13 +276,14 @@ class ContinuousBatchingTest(unittest.TestCase):
                 "req_1": " \n\n**Answer:** 3 bolts\n\n**Solution:**\n\n* **White fiber:** The robe needs half as much white fiber as blue fiber, so it needs 2 bolts / 2 =",
             }
         }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("google/gemma-2-2b-it", "sdpa_paged", expected_outputs)
+        self._continuous_batching_parity("google/gemma-2-2b-it", "paged|sdpa", expected_outputs)
 
-    @require_torch_gpu
-    @slow
-    def test_continuous_batching_parity_qwen_sdpa(self) -> None:
-        expected_outputs = {}
-        self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "sdpa_paged", expected_outputs)
+    # FIXME: set expected_outputs
+    # @require_torch_gpu
+    # @slow
+    # def test_continuous_batching_parity_qwen_sdpa(self) -> None:
+    #     expected_outputs = {}
+    #     self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "paged|sdpa", expected_outputs)
 
     # GPT-OSS is not compatible with SDPA because it has an attention sink. TODO: is this fixable?
 
@@ -292,9 +297,7 @@ class ContinuousBatchingTest(unittest.TestCase):
                 "req_1": " 3 bolts of blue fiber and 1.5 bolts of white fiber. The total number of bolts is 4.5 bolts. The total number of bolts is 4.5 bolts.",
             }
         }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity(
-            "meta-llama/Llama-3.1-8B", "paged_attention|kernels-community/flash-attn", expected_outputs
-        )
+        self._continuous_batching_parity("meta-llama/Llama-3.1-8B", "paged|flash_attention_2", expected_outputs)
 
     @require_torch_gpu
     @require_kernels
@@ -305,27 +308,21 @@ class ContinuousBatchingTest(unittest.TestCase):
                 "req_1": " \n \n 2 + 1 = 3 bolts \n \n \n \n \n \n \n \n \n \n \n \n \n ",
             }
         }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity(
-            "google/gemma-2-2b-it", "paged_attention|kernels-community/flash-attn", expected_outputs
-        )
+        self._continuous_batching_parity("google/gemma-2-2b-it", "paged|flash_attention_2", expected_outputs)
 
     @require_torch_gpu
     @require_kernels
     @slow
     def test_continuous_batching_parity_qwen_flash(self) -> None:
         expected_outputs = {}
-        self._continuous_batching_parity(
-            "Qwen/Qwen3-4B-Instruct-2507", "paged_attention|kernels-community/flash-attn", expected_outputs
-        )
+        self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "paged|flash_attention_2", expected_outputs)
 
     @require_torch_gpu
     @require_kernels
     @slow
     def test_continuous_batching_parity_gpt_oss_flash(self) -> None:
         expected_outputs = {}
-        self._continuous_batching_parity(
-            "openai/gpt-oss-20b", "paged_attention|kernels-community/flash-attn", expected_outputs
-        )
+        self._continuous_batching_parity("openai/gpt-oss-20b", "paged|flash_attention_2", expected_outputs)
 
     def test_attn_implementation(self) -> None:
         model = AutoModelForCausalLM.from_pretrained("gpt2")

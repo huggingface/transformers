@@ -36,16 +36,17 @@ def add_unit_to_duration(stats: dict[str, float]) -> dict[str, str]:
     return stats
 
 
-def equalize_lengths_and_collate(stats: list[dict[str, str]]) -> list[str]:
+def equalize_lengths_and_collate(stats: dict[str, dict[str, str]]) -> dict[str, str]:
+    """Note: This operation is destructive as it will update values in place before returning a new correctly formatted dict"""
     keys = ["avg", "std", "min", "med", "max", "p95"]
     for key in keys:
-        max_length = max(len(stat[key]) for stat in stats)
-        for stat in stats:
+        max_length = max(len(stat[key]) for stat in stats.values())
+        for stat in stats.values():
             stat[key] = stat[key].ljust(max_length, " ")
-    return [" ".join([f"{key}={stat[key]}" for key in keys]) for stat in stats]
+    return {name: " ".join([f"{key}={stat[key]}" for key in keys]) for name, stat in stats.items()}
 
 
-def pretty_print_dict(data: dict[str, Any], tabs: int = 0) -> None:
+def pretty_print_dict(data: dict[str, str], tabs: int = 0) -> None:
     max_key_length = max([len(key) for key in data.keys()])
     for key, value in data.items():
         tabs_str = "  " * tabs
@@ -141,27 +142,19 @@ class BenchmarkResult:
     def get_measured_itl(self) -> list[float]:
         return [(dt[-1] - dt[0]) / (len(dt) - 1) for dt in self.token_generation_times if len(dt) > 1]
 
-    def get_throughput(self, batch_size: int) -> float:
-        return [
-            batch_size * len(dt) / e2e_latency
-            for e2e_latency, dt in zip(self.e2e_latency, self.token_generation_times)
-        ]
+    def get_throughput(self, total_generated_tokens: int) -> list[float]:
+        return [total_generated_tokens / e2e_latency for e2e_latency in self.e2e_latency]
 
-    def pprint(self, batch_size: int = 0, tabs: int = 0) -> None:
-        stats_to_collate = [
-            add_unit_to_duration(compute_basic_statistics(self.e2e_latency)),
-            add_unit_to_duration(compute_basic_statistics(self.get_measured_ttft())),
-            add_unit_to_duration(compute_basic_statistics(self.get_measured_itl())),
-        ]
-        if batch_size > 0:
-            throughput_stats = compute_basic_statistics(self.get_throughput(batch_size))
-            stats_to_collate.append({key: f"{value:.2f}tok/s" for key, value in throughput_stats.items()})
-        collated_stats = equalize_lengths_and_collate(stats_to_collate)
-        dict_to_pprint = {
-            "E2E Latency": collated_stats[0],
-            "Time to First Token": collated_stats[1],
-            "Inter-Token Latency": collated_stats[2],
+    def pprint(self, batch_size: int = 0, num_generated_tokens: int = 0, tabs: int = 0) -> None:
+        measurements = {
+            "E2E Latency": add_unit_to_duration(compute_basic_statistics(self.e2e_latency)),
+            "Time to First Token": add_unit_to_duration(compute_basic_statistics(self.get_measured_ttft())),
         }
+        itl_values = self.get_measured_itl()
+        if len(itl_values) > 0:
+            measurements["Inter-Token Latency"] = add_unit_to_duration(compute_basic_statistics(itl_values))
         if batch_size > 0:
-            dict_to_pprint["Throughput"] = collated_stats[3]
+            throughput_stats = compute_basic_statistics(self.get_throughput(batch_size * num_generated_tokens))
+            measurements["Throughput"] = {key: f"{value:.2f}tok/s" for key, value in throughput_stats.items()}
+        dict_to_pprint = equalize_lengths_and_collate(measurements)
         pretty_print_dict(dict_to_pprint, tabs=tabs)
