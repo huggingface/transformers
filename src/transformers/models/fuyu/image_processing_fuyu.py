@@ -29,6 +29,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    SizeDict,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
@@ -37,6 +38,7 @@ from ...image_utils import (
     to_numpy_array,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -68,6 +70,21 @@ def make_list_of_list_of_images(
         return [make_list_of_images(image) for image in images]
 
     raise ValueError("images must be a list of list of images or a list of images or an image.")
+
+
+class FuyuImagesKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 30, "width": 30}`):
+        Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
+    padding_value (`float`, *optional*, defaults to 1.0):
+        The value to pad the image with.
+    padding_mode (`str`, *optional*, defaults to "constant"):
+        The padding mode to use when padding the image.
+    """
+
+    patch_size: Optional[SizeDict]
+    padding_value: float
+    padding_mode: str
 
 
 class FuyuBatchFeature(BatchFeature):
@@ -232,6 +249,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         "image_patch_indices_per_batch",
         "image_patch_indices_per_subsequence",
     ]
+    valid_kwargs = FuyuImagesKwargs
 
     def __init__(
         self,
