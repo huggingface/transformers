@@ -36,6 +36,9 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: debug
+        run: pwd
+
       - name: Install benchmark script dependencies
         run: python3 -m pip install -r benchmark_v2/requirements.txt kernels
 
