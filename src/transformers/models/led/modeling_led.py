@@ -2256,7 +2256,6 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
 
 @auto_docstring
 class LEDForQuestionAnswering(LEDPreTrainedModel):
-    _tied_weights_keys = {"decoder.embed_tokens.weight": "led.encoder.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)
