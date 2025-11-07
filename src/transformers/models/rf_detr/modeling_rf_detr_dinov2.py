@@ -81,7 +81,7 @@ class RfDetrDinov2Embeddings(nn.Module):
 
         Adapted from:
         - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/rf_detr_dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/rf_detr_dinov2/models/vision_transformer.py#L179-L211
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
 
         num_patches = embeddings.shape[1] - 1
@@ -108,6 +108,7 @@ class RfDetrDinov2Embeddings(nn.Module):
             size=(new_height, new_width),
             mode="bicubic",
             align_corners=False,
+            antialias=True,
         ).to(dtype=target_dtype)
 
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
@@ -368,19 +369,23 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
         shortcut = hidden_states
         if remove_windows:
             # reshape x to remove windows
-            B, HW, C = hidden_states.shape
+            batch_size, image_size, channels = hidden_states.shape
             num_windows_squared = self.num_windows**2
-            hidden_states = hidden_states.view(B // num_windows_squared, num_windows_squared * HW, C)
+            hidden_states = hidden_states.view(
+                batch_size // num_windows_squared, num_windows_squared * image_size, channels
+            )
 
         hidden_states_norm = self.norm1(hidden_states)
         self_attention_output = self.attention(hidden_states_norm)
 
         if remove_windows:
             # reshape x to add windows back
-            B, HW, C = hidden_states.shape
+            batch_size, image_size, channels = hidden_states.shape
             num_windows_squared = self.num_windows**2
-            # hidden_states = hidden_states.view(B * num_windows_squared, HW // num_windows_squared, C)
-            self_attention_output = self_attention_output.view(B * num_windows_squared, HW // num_windows_squared, C)
+            # hidden_states = hidden_states.view(batch_size * num_windows_squared, image_size // num_windows_squared, channels)
+            self_attention_output = self_attention_output.view(
+                batch_size * num_windows_squared, image_size // num_windows_squared, channels
+            )
 
         self_attention_output = self.layer_scale1(self_attention_output)
 
@@ -552,21 +557,23 @@ class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
 
                     num_h_patches = height // patch_size
                     num_w_patches = width // patch_size
+                    hidden_batch_size, seq_len, channels = hidden_state.shape
 
                     if self.config.num_windows > 1:
                         # undo windowing
                         num_windows_squared = self.config.num_windows**2
-                        B, HW, C = hidden_state.shape
                         num_h_patches_per_window = num_h_patches // self.config.num_windows
                         num_w_patches_per_window = num_w_patches // self.config.num_windows
-                        hidden_state = hidden_state.reshape(B // num_windows_squared, num_windows_squared * HW, C)
+                        hidden_state = hidden_state.reshape(
+                            hidden_batch_size // num_windows_squared, num_windows_squared * seq_len, channels
+                        )
                         hidden_state = hidden_state.view(
-                            B // num_windows_squared,
+                            hidden_batch_size // num_windows_squared,
                             self.config.num_windows,
                             self.config.num_windows,
                             num_h_patches_per_window,
                             num_w_patches_per_window,
-                            C,
+                            channels,
                         )
                         hidden_state = hidden_state.permute(0, 1, 3, 2, 4, 5)
 
