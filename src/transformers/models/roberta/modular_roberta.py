@@ -165,7 +165,6 @@ class RobertaPreTrainedModel(PreTrainedModel):
         "cross_attentions": RobertaCrossAttention,
     }
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with BertLMPredictionHead->RobertaLMHead
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""

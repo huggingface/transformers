@@ -263,7 +263,6 @@ class RegNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     _no_split_modules = ["RegNetYLayer"]
 
-    # Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel._init_weights
     @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):

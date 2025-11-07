@@ -627,7 +627,6 @@ class XmodPreTrainedModel(PreTrainedModel):
         "cross_attentions": XmodCrossAttention,
     }
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with BertLMPredictionHead->XmodLMHead
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""

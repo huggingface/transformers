@@ -592,9 +592,9 @@ class UMT5PreTrainedModel(PreTrainedModel):
 
 
 class UMT5Stack(UMT5PreTrainedModel):
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config):
         super().__init__(config)
-        self.embed_tokens = embed_tokens
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
         self.is_decoder = config.is_decoder
         self.block = nn.ModuleList([UMT5Block(config, layer_idx=i) for i in range(config.num_layers)])
         self.final_layer_norm = UMT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
@@ -928,13 +928,13 @@ class UMT5Model(UMT5PreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = UMT5Stack(encoder_config, self.shared)
+        self.encoder = UMT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = UMT5Stack(decoder_config, self.shared)
+        self.decoder = UMT5Stack(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1110,13 +1110,13 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = UMT5Stack(encoder_config, self.shared)
+        self.encoder = UMT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = UMT5Stack(decoder_config, self.shared)
+        self.decoder = UMT5Stack(decoder_config)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -1315,7 +1315,7 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = UMT5Stack(encoder_config, self.shared)
+        self.encoder = UMT5Stack(encoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1620,13 +1620,13 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = UMT5Stack(encoder_config, self.shared)
+        self.encoder = UMT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = UMT5Stack(decoder_config, self.shared)
+        self.decoder = UMT5Stack(decoder_config)
 
         self.num_labels = config.num_labels
         self.qa_outputs = nn.Linear(config.d_model, config.num_labels)

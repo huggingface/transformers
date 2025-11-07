@@ -332,8 +332,8 @@ class PhimoeExperts(nn.Module):
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(
@@ -622,6 +622,16 @@ class PhimoePreTrainedModel(PreTrainedModel):
         "hidden_states": PhimoeDecoderLayer,
         "attentions": PhimoeAttention,
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, PhimoeExperts):
+            module.gate_up_proj.normal_(mean=0.0, std=std)
+            module.down_proj.normal_(mean=0.0, std=std)
+        elif isinstance(module, PhimoeTopKRouter):
+            module.weight.normal_(mean=0.0, std=std)
 
 
 @auto_docstring

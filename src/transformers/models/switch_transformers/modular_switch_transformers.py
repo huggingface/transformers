@@ -680,12 +680,12 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = SwitchTransformersStack(encoder_config, self.shared)
+        self.encoder = SwitchTransformersStack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
-        self.decoder = SwitchTransformersStack(decoder_config, self.shared)
+        self.decoder = SwitchTransformersStack(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -769,13 +769,13 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = SwitchTransformersStack(encoder_config, self.shared)
+        self.encoder = SwitchTransformersStack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = SwitchTransformersStack(decoder_config, self.shared)
+        self.decoder = SwitchTransformersStack(decoder_config)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -929,7 +929,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = SwitchTransformersStack(encoder_config, self.shared)
+        self.encoder = SwitchTransformersStack(encoder_config)
         self.post_init()
 
     def get_input_embeddings(self):

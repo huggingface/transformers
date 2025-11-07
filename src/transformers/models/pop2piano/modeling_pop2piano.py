@@ -607,10 +607,10 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
 
 class Pop2PianoStack(Pop2PianoPreTrainedModel):
     # Copied from transformers.models.t5.modeling_t5.T5Stack.__init__ with T5->Pop2Piano,t5->pop2piano
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config):
         super().__init__(config)
 
-        self.embed_tokens = embed_tokens
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
         self.is_decoder = config.is_decoder
 
         self.block = nn.ModuleList(
@@ -964,13 +964,13 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
 
-        self.encoder = Pop2PianoStack(encoder_config, self.shared)
+        self.encoder = Pop2PianoStack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = Pop2PianoStack(decoder_config, self.shared)
+        self.decoder = Pop2PianoStack(decoder_config)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 

@@ -316,43 +316,46 @@ class LoadedParameter(torch.nn.Parameter):
         return fn(*a, **k)
 
     def normal_(self, *a, **k):
-        return self._guard(super().normal_, *a, **k)
+        return self
 
     def uniform_(self, *a, **k):
-        return self._guard(super().uniform_, *a, **k)
+        return self
 
     def zero_(self):
-        return self._guard(super().zero_)
+        return self
 
     def fill_(self, *a, **k):
-        return self._guard(super().fill_, *a, **k)
+        return self
 
     def copy_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
+        return self
 
     def mul_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
+        return self
 
     def add_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
+        return self
 
     def clamp_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
+        return self
 
     def erfinv_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
-
+        return self
     def log_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
+        return self
 
     def neg_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
+        return self
 
     def exp_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
+        return self
 
     def sub_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
+        return self
+
+    def __getitem__(self, *a, **k):
+        return self
+
 
 
 def _materialize_copy(tensor, dtype):

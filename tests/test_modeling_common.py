@@ -1964,7 +1964,7 @@ class ModelTesterMixin:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             config.tie_word_embeddings = False
             config.get_text_config().tie_word_embeddings = False
-            config.tie_encoder_decoder = False
+            # config.tie_encoder_decoder = False
             model = model_class(config)  # we init the model without tie
             # if this test fails later on, it means init tied the weights
             with tempfile.TemporaryDirectory() as d:

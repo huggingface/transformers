@@ -1447,7 +1447,7 @@ class UdopModel(UdopPreTrainedModel):
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = UdopStack(decoder_config, self.shared)
+        self.decoder = UdopStack(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1623,7 +1623,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = UdopStack(decoder_config, self.shared)
+        self.decoder = UdopStack(decoder_config)
 
         # The weights of the language modeling head are shared with those of the encoder and decoder
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)

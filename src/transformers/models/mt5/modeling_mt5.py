@@ -645,10 +645,10 @@ class MT5PreTrainedModel(PreTrainedModel):
 
 # Copied from transformers.models.t5.modeling_t5.T5Stack with T5->MT5
 class MT5Stack(MT5PreTrainedModel):
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config):
         super().__init__(config)
 
-        self.embed_tokens = embed_tokens
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
         self.is_decoder = config.is_decoder
 
         self.block = nn.ModuleList(
@@ -1000,13 +1000,13 @@ class MT5Model(MT5PreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = MT5Stack(encoder_config, self.shared)
+        self.encoder = MT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = MT5Stack(decoder_config, self.shared)
+        self.decoder = MT5Stack(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1186,13 +1186,13 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = MT5Stack(encoder_config, self.shared)
+        self.encoder = MT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = MT5Stack(decoder_config, self.shared)
+        self.decoder = MT5Stack(decoder_config)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -1392,7 +1392,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
         encoder_config = config
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = MT5Stack(encoder_config, self.shared)
+        self.encoder = MT5Stack(encoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1698,13 +1698,13 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = MT5Stack(encoder_config, self.shared)
+        self.encoder = MT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = MT5Stack(decoder_config, self.shared)
+        self.decoder = MT5Stack(decoder_config)
 
         self.num_labels = config.num_labels
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
