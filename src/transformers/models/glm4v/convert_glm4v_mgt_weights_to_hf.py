@@ -18,14 +18,10 @@ import json
 import os
 import pickle
 import re
-from collections.abc import Callable
 from pathlib import Path
-from typing import Optional
 
 import torch
 from safetensors.torch import save_file
-
-from ...utils import strtobool
 
 
 # Avoid Using Megatron Lib
@@ -49,20 +45,68 @@ def dict_access_multi(a_dict, keys):
     return dict_access_multi(a_dict[keys[0]], keys[1:])
 
 
+def _build_neox_to_llama_perm(rotary_dim: int) -> torch.Tensor:
+    half = rotary_dim // 2
+    perm = torch.empty(rotary_dim, dtype=torch.long)
+    perm[0::2] = torch.arange(0, half)
+    perm[1::2] = torch.arange(half, rotary_dim)
+    return perm
+
+
+def _apply_rope_permute(q_or_k: torch.Tensor, blocks: int, head_dim: int, rotary_dim: int, neox_to_llama: bool = True):
+    if rotary_dim == 0:
+        return q_or_k
+
+    if neox_to_llama:
+        perm = _build_neox_to_llama_perm(rotary_dim).to(q_or_k.device)
+    else:
+        perm = torch.empty(rotary_dim, dtype=torch.long, device=q_or_k.device)
+        half = rotary_dim // 2
+        perm[0::2] = torch.arange(0, half, device=q_or_k.device)
+        perm[1::2] = torch.arange(half, rotary_dim, device=q_or_k.device)
+        inv = torch.empty_like(perm)
+        inv[perm] = torch.arange(rotary_dim, device=q_or_k.device)
+        perm = inv
+
+    if q_or_k.dim() == 2:
+        h = q_or_k.view(blocks, head_dim, -1)
+        h[:, :rotary_dim, ...] = h[:, perm, ...]
+        return h.reshape(q_or_k.shape)
+    else:
+        h = q_or_k.view(blocks, head_dim)
+        h[:, :rotary_dim] = h[:, perm]
+        return h.reshape(q_or_k.shape)
+
+
 def merge_qkv(
     sd_list,
     original_tp,
     num_attention_heads,
     multi_query_group_num,
     attention_dim,
-    multi_query_attention,
     interleaved_qkv,
+    convert_neox_to_llama: bool = True,
 ):
-    if not multi_query_attention and interleaved_qkv:
-        return torch.cat(sd_list, dim=0)
-    q, k, v = [], [], []
+    rotary_dim = attention_dim // 2
+    group_size = (num_attention_heads // multi_query_group_num + 2) * attention_dim
+    q_chunks, k_chunks, v_chunks = [], [], []
+
     for sd in sd_list:
-        if multi_query_attention:
+        if interleaved_qkv:
+            shape = sd.shape
+            x = sd.view((multi_query_group_num // original_tp, group_size) + shape[1:])
+            q_, k_, v_ = x.split(
+                [
+                    (num_attention_heads // multi_query_group_num) * attention_dim,
+                    attention_dim,
+                    attention_dim,
+                ],
+                dim=1,
+            )
+            q_chunks.append(q_.reshape((-1,) + shape[1:]).clone())
+            k_chunks.append(k_.reshape((-1,) + shape[1:]).clone())
+            v_chunks.append(v_.reshape((-1,) + shape[1:]).clone())
+        else:
             q_, k_, v_ = sd.split(
                 [
                     num_attention_heads * attention_dim // original_tp,
@@ -71,34 +115,45 @@ def merge_qkv(
                 ],
                 dim=0,
             )
-        else:
-            q_, k_, v_ = sd.chunk(dim=0, chunks=3)
+            q_chunks.append(q_.clone())
+            k_chunks.append(k_.clone())
+            v_chunks.append(v_.clone())
+
+    q = torch.cat(q_chunks, dim=0)
+    k = torch.cat(k_chunks, dim=0)
+    v = torch.cat(v_chunks, dim=0)
+
+    if convert_neox_to_llama and rotary_dim > 0:
+        q = _apply_rope_permute(q, num_attention_heads, attention_dim, rotary_dim, neox_to_llama=True)
+        k = _apply_rope_permute(k, multi_query_group_num, attention_dim, rotary_dim, neox_to_llama=True)
+
+    return q, k, v
+
+
+def merge_qkv_vit(sd_list, original_tp, num_attention_heads, multi_query_group_num, attention_dim):
+    group_size = (num_attention_heads // multi_query_group_num + 2) * attention_dim
+    q, k, v = [], [], []
+    for sd in sd_list:
+        shape = sd.shape
+        q_, k_, v_ = sd.view((multi_query_group_num // original_tp, group_size) + (shape[1:])).split(
+            [
+                (num_attention_heads // multi_query_group_num * attention_dim),
+                attention_dim,
+                attention_dim,
+            ],
+            dim=1,
+        )
+        q_ = q_.reshape((-1,) + (shape[1:]))
+        k_ = k_.reshape((-1,) + (shape[1:]))
+        v_ = v_.reshape((-1,) + (shape[1:]))
         q.append(q_.clone())
         k.append(k_.clone())
         v.append(v_.clone())
+
     q = torch.cat(q, dim=0)
     k = torch.cat(k, dim=0)
     v = torch.cat(v, dim=0)
-    if not interleaved_qkv:
-        rotary_dim = attention_dim // 2
-        half_rot = rotary_dim // 2
-        perm_rot = torch.empty(rotary_dim, dtype=torch.long)
-        perm_rot[0::2] = torch.arange(0, half_rot)
-        perm_rot[1::2] = torch.arange(half_rot, rotary_dim)
-        if q.dim() == 2:
-            qh = q.view(num_attention_heads, attention_dim, -1)
-            kh = k.view(multi_query_group_num, attention_dim, -1)
-            qh[:, :rotary_dim, :] = qh[:, perm_rot, :]
-            kh[:, :rotary_dim, :] = kh[:, perm_rot, :]
-            q = qh.reshape(-1, q.size(-1))
-            k = kh.reshape(-1, k.size(-1))
-        else:
-            qh = q.view(num_attention_heads, attention_dim)
-            kh = k.view(multi_query_group_num, attention_dim)
-            qh[:, :rotary_dim] = qh[:, perm_rot]
-            kh[:, :rotary_dim] = kh[:, perm_rot]
-            q = qh.reshape(-1)
-            k = kh.reshape(-1)
+
     return q, k, v
 
 
@@ -111,6 +166,8 @@ def merge_glu(sd_list):
 
 
 def merge_glu_vit(sd_list, original_tp=None):
+    if not isinstance(sd_list, list):
+        sd_list = [sd_list]
     gate_proj = torch.cat([sd.chunk(dim=0, chunks=2)[0].clone() for sd in sd_list], dim=0)
     up_proj = torch.cat([sd.chunk(dim=0, chunks=2)[1].clone() for sd in sd_list], dim=0)
     return gate_proj, up_proj
@@ -124,36 +181,6 @@ def split_glu(sd, cnt, idx):
         ),
         dim=0,
     )
-
-
-def merge_qkv_vit(sd_list, original_tp=None):
-    q, k, v = [], [], []
-    for sd in sd_list:
-        q_, k_, v_ = sd.chunk(dim=0, chunks=3)
-        q.append(q_.clone().contiguous())
-        k.append(k_.clone().contiguous())
-        v.append(v_.clone().contiguous())
-    q = torch.cat(q, dim=0)
-    k = torch.cat(k, dim=0)
-    v = torch.cat(v, dim=0)
-    combined = torch.cat([q, k, v], dim=0)
-    return combined
-
-
-def merge_tensors_vit(
-    tp_sd: list[dict],
-    keys: list[str],
-    original_tp: int,
-    target_tp: int,
-    slice_dim: Optional[int] = None,
-    merge_fn: Optional[Callable] = None,
-):
-    cnt = original_tp // target_tp
-    sd_list = [dict_access_multi(tp_sd[i], keys) for i in range(cnt)]
-    if slice_dim is not None:
-        return torch.cat(sd_list, dim=slice_dim)
-    assert merge_fn is not None
-    return merge_fn(sd_list, original_tp)
 
 
 def merge_tensors(
@@ -184,6 +211,9 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
 
         for key, value in state_dict.items():
             if f"model.language_model.layers.{layer_idx}." in key:
+                if isinstance(value, list):
+                    assert len(value) == 1, f"{key} {value}"
+                    value = value[0]
                 layered_dict[layer_key][key] = value
 
     for layer_idx in range(vision_num_layers):
@@ -203,9 +233,9 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
 
     # Determine layer ordering
     layer_order = []
-    for i in range(40):
+    for i in range(num_layers):
         layer_order.append(f"layer_{i}")
-    for i in range(24):
+    for i in range(vision_num_layers):
         layer_order.append(f"visual_layer_{i}")
     layer_order.append("others")
 
@@ -251,323 +281,390 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
 
 
 def merge_tp_weights(model_path, output_path, vllm_config_path=None):
-    if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
-        raise ValueError(
-            "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
-            "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
-            "that could have been tampered with. If you already verified the pickle data and decided to use it, "
-            "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
-        )
+    origin_tp, origin_ep, origin_pp = -1, -1, -1
 
-    tp_size = 0
+    check_ep_or_pp_later = False
     for item in Path(model_path).iterdir():
         if item.is_dir():
-            match = re.match(r"mp_rank_(\d{2})", item.name)
+            match = re.match(r"mp_rank_(\d{2})(?:_(\d{3}))?(?:_(\d{3}))?", item.name)
             if match:
-                tp = int(match.group(1))
-                tp_size = max(tp_size, tp + 1)
+                groups = match.groups()
+                tp = int(groups[0])
+                origin_tp = max(origin_tp, tp + 1)
+                # maybe TP-EP or TP-PP, need check later
+                if groups[1] is not None and groups[2] is None:
+                    pp = int(groups[1])
+                    origin_pp = max(origin_pp, pp + 1)
+                    origin_ep = 1
+                    check_ep_or_pp_later = True
+                elif groups[1] is not None and groups[2] is not None:
+                    pp = int(groups[1])
+                    ep = int(groups[2])
+                    origin_pp = max(origin_pp, pp + 1)
+                    origin_ep = max(origin_ep, ep + 1)
+                else:
+                    origin_ep = 1
+                    origin_pp = 1
 
-    print(f"Detected tensor parallel degree TP={tp_size}")
+    tensor_names_by_file = {}
+    mgt_sd = {}
+    for item in Path(model_path).iterdir():
+        if item.is_dir():
+            match = re.match(r"mp_rank_(\d{2})(?:_(\d{3}))?(?:_(\d{3}))?$", item.name)
+            if match:
+                groups = match.groups()
+                tp = int(groups[0])
+                pp = int(groups[1]) if groups[1] is not None else 0
+                ep = int(groups[2]) if groups[2] is not None else 0
 
-    if tp_size <= 1:
-        print("Model is already at TP=1, no need to merge")
-        return
+                file_path = item / "model_optim_rng.pt"
+                assert file_path.exists(), f"model_optim_rng.pt not found in {item}"
+
+                file_sd = torch.load(file_path, map_location="cpu", weights_only=False)
+
+                for k in list(file_sd.keys()):
+                    if "_extra_state" in k or "dummy_parameter" in k:
+                        file_sd.pop(k)
+
+                mgt_sd[(tp, pp, ep)] = file_sd
+
+                tensor_names = set()
+                if "model" in file_sd:
+                    for key in file_sd["model"].keys():
+                        tensor_names.add(key)
+                tensor_names_by_file[(tp, pp, ep)] = tensor_names
+
+    change_pp_to_ep = False
+    if check_ep_or_pp_later:
+        prefix_distribution = {}
+
+        for (tp, pp, ep), prefixes in tensor_names_by_file.items():
+            for prefix in prefixes:
+                if prefix not in prefix_distribution:
+                    prefix_distribution[prefix] = set()
+                prefix_distribution[prefix].add((tp, pp, ep))
+
+        for prefix, locations in prefix_distribution.items():
+            if len(locations) > 1:
+                pp_values = {loc[1] for loc in locations}
+                if len(pp_values) > 1:
+                    print(f"find '{prefix}' in multi ranks {pp_values} the parallelism should be TP-EP")
+                    origin_ep = origin_pp
+                    origin_pp = 1
+                    change_pp_to_ep = True
+                    break
+                else:
+                    print(f"find '{prefix}' only in one ep, parallelism should be TP-PP")
+                    break
+
+    print(f"Detected tensor parallel degree TP={origin_tp} EP={origin_ep} PP={origin_pp}")
+    assert max(origin_tp, origin_ep) * origin_pp == len(tensor_names_by_file), "maybe some problem in origin weight"
+
+    organized_sd = {}
+    for (tp, pp, ep), file_sd in mgt_sd.items():
+        if change_pp_to_ep:
+            pp, ep = ep, pp
+        organized_sd.setdefault(pp, {})
+        organized_sd[pp][(ep, tp)] = file_sd
+        find_vpp = "model0" in file_sd
+
+    # support VPP, if each pp rank has n vpp blocks, we will treat the original model
+    # was parallel as pp n * origin_pp
+    if find_vpp:
+        organized_sd_vpp = {}
+        for i in range(origin_pp):
+            for (ep, tp), file_sd in organized_sd[i].items():
+                model_keys = sorted(
+                    [key for key in file_sd.keys() if key.startswith("model") and key[5:].isdigit()],
+                    key=lambda x: int(x[5:]),
+                )
+                vp_blocks = len(model_keys)
+                for idx, key in enumerate(model_keys):
+                    assert key in file_sd, f"model {key} not found"
+                    organized_sd_vpp.setdefault(idx * origin_pp + i, {})
+                    organized_sd_vpp[idx * origin_pp + i][(ep, tp)] = {"model": file_sd[key]}
+        origin_pp = origin_pp * vp_blocks
+        organized_sd = organized_sd_vpp
+
+    ignore_list = ["_extra_state", "dummy_parameter"]
+    layer_share_list = [
+        "norm",
+        "conv3d",
+        "downsample",
+        "router",
+        "mlp.linear_fc2.bias",
+        "self_attention.linear_proj.bias",
+        "position_embeddings",
+    ]
+
+    full_weights = {}
+
+    vit_layer_offset = 0
+    llm_layer_offset = 0
+    llm_layer_pattern = re.compile(r"^(decoder\.layers\.)(\d+)(\..*)$")
+    vit_layer_pattern = re.compile(r"^(vision_model\.transformer\.layers\.)(\d+)(\..*)$")
+    for pp in sorted(organized_sd.keys()):
+        pp_dict = organized_sd[pp]
+        next_llm_layer_offset = llm_layer_offset
+        next_vit_layer_offset = vit_layer_offset
+        ep_map = {}
+        tp_map = {}
+        tp_seen = set()
+        for (ep, tp), item in pp_dict.items():
+            if tp not in tp_seen:
+                tp_seen.add(tp)
+                tp_map[tp] = item
+            ep_map[ep] = item
+
+        for tp in sorted(tp_map.keys()):
+            sd = tp_map[tp]
+            for full_name, tensor in sd["model"].items():
+                if any(x in full_name for x in ignore_list):
+                    continue
+                llm_name_match = llm_layer_pattern.match(full_name)
+                if llm_name_match:
+                    # Use a closure to avoid global variable issues
+                    def offset_layer(x, offset=llm_layer_offset):
+                        nonlocal next_llm_layer_offset
+                        _real_layer = int(x.group(2)) + offset
+                        next_llm_layer_offset = max(next_llm_layer_offset, _real_layer + 1)
+                        return f"{x.group(1)}{_real_layer}{x.group(3)}"
+
+                    full_name = llm_layer_pattern.sub(offset_layer, full_name)
+                vit_name_match = vit_layer_pattern.match(full_name)
+                if vit_name_match:
+                    # Use a closure to avoid global variable issues
+                    def offset_layer(x, offset=vit_layer_offset):
+                        nonlocal next_vit_layer_offset
+                        _real_layer = int(x.group(2)) + offset
+                        next_vit_layer_offset = max(next_vit_layer_offset, _real_layer + 1)
+                        return f"{x.group(1)}{_real_layer}{x.group(3)}"
+
+                    full_name = vit_layer_pattern.sub(offset_layer, full_name)
+                if layer_share_list and any(x in full_name for x in layer_share_list):
+                    if full_name not in full_weights:
+                        full_weights[full_name] = tensor
+                    else:
+                        assert torch.equal(tensor, full_weights[full_name]), (
+                            f"detect diff param in tp named: {full_name}"
+                        )
+                elif not re.search(r"\.experts\.", full_name):
+                    full_weights.setdefault(full_name, [None for _ in range(origin_tp)])
+                    full_weights[full_name][tp] = tensor
+
+        for ep in sorted(ep_map.keys()):
+            sd = ep_map[ep]
+            for full_name, tensor in sd["model"].items():
+                if any(x in full_name for x in ignore_list):
+                    continue
+                name_match = llm_layer_pattern.match(full_name)
+                if name_match:
+                    # Use a closure to avoid global variable issues
+                    def offset_layer(x, offset=llm_layer_offset):
+                        nonlocal next_llm_layer_offset
+                        _real_layer = int(x.group(2)) + offset
+                        next_llm_layer_offset = max(next_llm_layer_offset, _real_layer + 1)
+                        return f"{x.group(1)}{_real_layer}{x.group(3)}"
+
+                    full_name = llm_layer_pattern.sub(offset_layer, full_name)
+                if re.search(r"\.experts\.", full_name):
+                    full_weights.setdefault(full_name, [None for _ in range(origin_ep)])
+                    full_weights[full_name][ep] = tensor
+        llm_layer_offset = next_llm_layer_offset
+        vit_layer_offset = next_vit_layer_offset
+
+    for k in sorted(full_weights.keys()):
+        item = full_weights[k]
+        if isinstance(item, list):
+            print(f"{k} {len(item)} {item[0].shape} {item[0].dtype}", flush=True)
+        else:
+            print(f"{k} {item.shape} {item.dtype}", flush=True)
 
     print(f"Loading vLLM configuration file: {vllm_config_path}")
     with open(vllm_config_path, "r") as f:
         model_config = json.load(f)
-        num_layers = model_config.get("num_layers", 40)
-        vision_num_layers = model_config.get("vision_config", {}).get("num_hidden_layers", 24)
-        num_heads = model_config.get("num_attention_heads", 32)
-        num_kv_heads = model_config.get("num_query_groups", 2)
+        text_config = model_config.get("text_config", {})
+        vision_config = model_config.get("vision_config", {})
+
+        num_layers = text_config.get("num_hidden_layers", 40)
+        num_heads = text_config.get("num_attention_heads", 32)
+        num_kv_heads = text_config.get("num_key_value_heads", 2)
         hidden_size = model_config.get("hidden_size", 4096)
         head_dim = model_config.get("attention_dim", hidden_size // num_heads)
+        vision_num_layers = vision_config.get("depth", 24)
+        vit_n_head = vision_config.get("num_heads", 12)
 
     print(
         f"Model parameters: num_layers={num_layers}, vision_num_layers={vision_num_layers}, "
-        f"num_heads={num_heads}, multi_query_group_num={num_kv_heads}, hidden_size={hidden_size}"
+        f"num_heads={num_heads}, multi_query_group_num={num_kv_heads}"
     )
 
-    weights = []
-    for tp_rank in range(tp_size):
-        print(f"Loading TP shard {tp_rank}...")
-        weight_path = Path(model_path) / f"mp_rank_{tp_rank:02d}" / "model_optim_rng.pt"
-        sd = torch.load(weight_path, map_location="cpu", pickle_module=pickle)
-
-        for k in list(sd.keys()):
-            if "_extra_state" in k or "dummy_parameter" in k:
-                sd.pop(k)
-
-        if "model" in sd:
-            weights.append(sd["model"])
-        else:
-            raise ValueError(f"'model' key not found in {weight_path}")
-
-    if not weights:
-        raise ValueError("No valid weight files found")
-
     print("Merging tensor parallel weights...")
-    original_pp_enabled = os.path.exists(Path(model_path) / "mp_rank_00_000")
-    original_tp, original_pp = tp_size, 1
-    target_tp = 1
-    print(f"TP and PP INFO: original_tp: {original_tp}, original_pp:{original_pp}, target_tp: {target_tp}")
-    mgt_sd = [
-        [
-            torch.load(
-                Path(model_path)
-                / (f"mp_rank_{j:02d}_{i:03d}" if original_pp_enabled else f"mp_rank_{j:02d}")
-                / "model_optim_rng.pt",
-                map_location="cpu",
-                pickle_module=pickle,
-            )
-            for j in range(original_tp)
-        ]
-        for i in range(original_pp)
-    ]
 
-    interleaved_qkv = False
-    multi_query_attention = True
+    interleaved_qkv = True
     num_attention_heads = num_heads
     multi_query_group_num = num_kv_heads
     attention_dim = head_dim
     complete_state_dict = {}
-    keys = ["model"]
-    rank = 0
 
     # LLM
-    for pp in range(original_pp):
-        layer_i = 0
-        mgt_encoder_tp_0 = dict_access_multi(mgt_sd[pp][rank], keys)
+    layer_i = 0
+    while f"decoder.layers.{layer_i}.self_attention.linear_qkv.layer_norm_weight" in full_weights:
+        if f"decoder.layers.{layer_i}.self_attention.linear_qkv.layer_norm_weight" in full_weights:
+            complete_state_dict[f"model.language_model.layers.{layer_i}.input_layernorm.weight"] = full_weights[
+                f"decoder.layers.{layer_i}.self_attention.linear_qkv.layer_norm_weight"
+            ]
 
-        while f"decoder.layers.{layer_i}.self_attention.linear_qkv.layer_norm_weight" in mgt_encoder_tp_0:
-            complete_state_dict.update(
-                {
-                    f"model.language_model.layers.{layer_i}.input_layernorm.weight": mgt_encoder_tp_0[
-                        f"decoder.layers.{layer_i}.self_attention.linear_qkv.layer_norm_weight"
-                    ],
-                    f"model.language_model.layers.{layer_i}.post_attention_layernorm.weight": mgt_encoder_tp_0[
-                        f"decoder.layers.{layer_i}.mlp.linear_fc1.layer_norm_weight"
-                    ],
-                    f"model.language_model.layers.{layer_i}.post_self_attn_layernorm.weight": mgt_encoder_tp_0[
-                        f"decoder.layers.{layer_i}.post_self_attn_layernorm.weight"
-                    ],
-                    f"model.language_model.layers.{layer_i}.post_mlp_layernorm.weight": mgt_encoder_tp_0[
-                        f"decoder.layers.{layer_i}.post_mlp_layernorm.weight"
-                    ],
-                }
+        if f"decoder.layers.{layer_i}.pre_mlp_layernorm.weight" in full_weights:
+            complete_state_dict[f"model.language_model.layers.{layer_i}.post_attention_layernorm.weight"] = (
+                full_weights[f"decoder.layers.{layer_i}.pre_mlp_layernorm.weight"]
+            )
+        elif f"decoder.layers.{layer_i}.mlp.linear_fc1.layer_norm_weight" in full_weights:
+            complete_state_dict[f"model.language_model.layers.{layer_i}.post_attention_layernorm.weight"] = (
+                full_weights[f"decoder.layers.{layer_i}.mlp.linear_fc1.layer_norm_weight"]
             )
 
-            q, k, v = merge_tensors(
-                tp_sd=mgt_sd[pp],
-                keys=keys + [f"decoder.layers.{layer_i}.self_attention.linear_qkv.weight"],
-                original_tp=original_tp,
-                target_tp=target_tp,
-                current_tp=0,
-                merge_fn=lambda sd_list: merge_qkv(
-                    sd_list,
-                    original_tp,
-                    num_attention_heads,
-                    multi_query_group_num,
-                    attention_dim,
-                    multi_query_attention,
-                    interleaved_qkv,
-                ),
+        # GLM-4.1V Only
+        if f"decoder.layers.{layer_i}.post_mlp_layernorm.weight" in full_weights:
+            complete_state_dict[f"model.language_model.layers.{layer_i}.post_mlp_layernorm.weight"] = full_weights[
+                f"decoder.layers.{layer_i}.post_mlp_layernorm.weight"
+            ]
+
+        if f"decoder.layers.{layer_i}.post_self_attn_layernorm.weight" in full_weights:
+            complete_state_dict[f"model.language_model.layers.{layer_i}.post_self_attn_layernorm.weight"] = (
+                full_weights[f"decoder.layers.{layer_i}.post_self_attn_layernorm.weight"]
             )
 
-            complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.weight"] = q.clone()
-            complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.weight"] = k.clone()
-            complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.v_proj.weight"] = v.clone()
+        q, k, v = merge_qkv(
+            sd_list=full_weights[f"decoder.layers.{layer_i}.self_attention.linear_qkv.weight"],
+            original_tp=origin_tp,
+            num_attention_heads=num_attention_heads,
+            multi_query_group_num=multi_query_group_num,
+            attention_dim=attention_dim,
+            interleaved_qkv=interleaved_qkv,
+        )
 
-            if f"decoder.layers.{layer_i}.self_attention.linear_qkv.bias" in mgt_encoder_tp_0:
-                q_bias, k_bias, v_bias = merge_tensors(
-                    tp_sd=mgt_sd[pp],
-                    keys=keys + [f"decoder.layers.{layer_i}.self_attention.linear_qkv.bias"],
-                    original_tp=original_tp,
-                    target_tp=target_tp,
-                    current_tp=0,
-                    merge_fn=lambda sd_list: merge_qkv(
-                        sd_list,
-                        original_tp,
-                        num_attention_heads,
-                        multi_query_group_num,
-                        attention_dim,
-                        multi_query_attention,
-                        interleaved_qkv,
-                    ),
-                )
-                complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.bias"] = q_bias.clone()
-                complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.bias"] = k_bias.clone()
-                complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.v_proj.bias"] = v_bias.clone()
+        complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.weight"] = q.clone()
+        complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.weight"] = k.clone()
+        complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.v_proj.weight"] = v.clone()
 
-            o_proj = merge_tensors(
-                tp_sd=mgt_sd[pp],
-                keys=keys + [f"decoder.layers.{layer_i}.self_attention.linear_proj.weight"],
-                original_tp=original_tp,
-                target_tp=target_tp,
-                current_tp=0,
-                slice_dim=1,
+        if f"decoder.layers.{layer_i}.self_attention.linear_qkv.bias" in full_weights:
+            q_bias, k_bias, v_bias = merge_qkv(
+                sd_list=full_weights[f"decoder.layers.{layer_i}.self_attention.linear_qkv.bias"],
+                original_tp=origin_tp,
+                num_attention_heads=num_attention_heads,
+                multi_query_group_num=multi_query_group_num,
+                attention_dim=attention_dim,
+                interleaved_qkv=interleaved_qkv,
             )
-            complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.o_proj.weight"] = o_proj.clone()
+            complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.bias"] = q_bias.clone()
+            complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.bias"] = k_bias.clone()
+            complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.v_proj.bias"] = v_bias.clone()
 
-            # MLP - Use gate_up_proj
-            complete_state_dict[f"model.language_model.layers.{layer_i}.mlp.gate_up_proj.weight"] = merge_tensors(
-                tp_sd=mgt_sd[pp],
-                keys=keys + [f"decoder.layers.{layer_i}.mlp.linear_fc1.weight"],
-                original_tp=original_tp,
-                target_tp=target_tp,
-                current_tp=0,
-                merge_fn=merge_glu,
-            ).clone()
-            complete_state_dict[f"model.language_model.layers.{layer_i}.mlp.down_proj.weight"] = merge_tensors(
-                tp_sd=mgt_sd[pp],
-                keys=keys + [f"decoder.layers.{layer_i}.mlp.linear_fc2.weight"],
-                original_tp=original_tp,
-                target_tp=target_tp,
-                current_tp=0,
-                slice_dim=1,
-            )
-            layer_i += 1
+        o_proj = torch.cat(full_weights[f"decoder.layers.{layer_i}.self_attention.linear_proj.weight"], dim=1)
+        complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.o_proj.weight"] = o_proj.clone()
 
-    # Embedded Model, LM Head, and Norm
-    embed_tokens = merge_tensors(
-        tp_sd=mgt_sd[0],
-        keys=["model", "embedding.word_embeddings.weight"],
-        original_tp=original_tp,
-        target_tp=target_tp,
-        current_tp=0,
-        slice_dim=0,
-    )
+        # MLP - Use gate_up_proj
+        gate_up_proj = torch.cat(full_weights[f"decoder.layers.{layer_i}.mlp.linear_fc1.weight"], dim=0)
+        complete_state_dict[f"model.language_model.layers.{layer_i}.mlp.gate_up_proj.weight"] = gate_up_proj.clone()
+        complete_state_dict[f"model.language_model.layers.{layer_i}.mlp.down_proj.weight"] = torch.cat(
+            full_weights[f"decoder.layers.{layer_i}.mlp.linear_fc2.weight"], dim=1
+        )
+        layer_i += 1
+
+    # Embedd Model, LM Head, and Norm
+    embed_tokens = torch.cat(full_weights["embedding.word_embeddings.weight"], dim=0)
     complete_state_dict["model.language_model.embed_tokens.weight"] = embed_tokens.clone()
-    lm_head = merge_tensors(
-        tp_sd=mgt_sd[-1],
-        keys=["model", "output_layer.weight"],
-        original_tp=original_tp,
-        target_tp=target_tp,
-        current_tp=0,
-        slice_dim=0,
-    )
+
+    lm_head = torch.cat(full_weights["output_layer.weight"], dim=0)
     complete_state_dict["lm_head.weight"] = lm_head.clone()
-    complete_state_dict["model.language_model.norm.weight"] = mgt_sd[-1][rank]["model"][
-        "decoder.final_layernorm.weight"
-    ].clone()
-    mgt_encoder_tp_0 = dict_access_multi(mgt_sd[0][0], keys)
+    complete_state_dict["model.language_model.norm.weight"] = full_weights["decoder.final_layernorm.weight"].clone()
 
     # VLM
     for layer_i in range(vision_num_layers):
-        complete_state_dict[f"model.visual.blocks.{layer_i}.norm1.weight"] = mgt_encoder_tp_0[
-            f"vision_model.transformer.layers.{layer_i}.input_layernorm.weight"
+        complete_state_dict[f"model.visual.blocks.{layer_i}.norm1.weight"] = full_weights[
+            f"vision_model.transformer.layers.{layer_i}.self_attention.linear_qkv.layer_norm_weight"
         ]
-        complete_state_dict[f"model.visual.blocks.{layer_i}.norm2.weight"] = mgt_encoder_tp_0[
-            f"vision_model.transformer.layers.{layer_i}.pre_mlp_layernorm.weight"
+        complete_state_dict[f"model.visual.blocks.{layer_i}.norm2.weight"] = full_weights[
+            f"vision_model.transformer.layers.{layer_i}.mlp.linear_fc1.layer_norm_weight"
         ]
 
-        qkv_weight = merge_tensors_vit(
-            tp_sd=mgt_sd[0],
-            keys=keys + [f"vision_model.transformer.layers.{layer_i}.self_attention.linear_qkv.weight"],
-            original_tp=original_tp,
-            target_tp=target_tp,
-            merge_fn=merge_qkv_vit,
+        q, k, v = merge_qkv_vit(
+            sd_list=full_weights[f"vision_model.transformer.layers.{layer_i}.self_attention.linear_qkv.weight"],
+            original_tp=origin_tp,
+            num_attention_heads=vit_n_head,
+            multi_query_group_num=vit_n_head,
+            attention_dim=attention_dim,
         )
-        complete_state_dict[f"model.visual.blocks.{layer_i}.attn.qkv.weight"] = qkv_weight.clone()
+        complete_state_dict[f"model.visual.blocks.{layer_i}.attn.qkv.weight"] = torch.cat((q, k, v), dim=0)
 
-        proj_weight = merge_tensors_vit(
-            tp_sd=mgt_sd[0],
-            keys=keys + [f"vision_model.transformer.layers.{layer_i}.self_attention.linear_proj.weight"],
-            original_tp=original_tp,
-            target_tp=target_tp,
-            slice_dim=1,
+        proj_weight = torch.cat(
+            full_weights[f"vision_model.transformer.layers.{layer_i}.self_attention.linear_proj.weight"], dim=1
         )
         complete_state_dict[f"model.visual.blocks.{layer_i}.attn.proj.weight"] = proj_weight.clone()
 
-        gate_proj_weight, up_proj_weight = merge_tensors_vit(
-            tp_sd=mgt_sd[0],
-            keys=keys + [f"vision_model.transformer.layers.{layer_i}.mlp.linear_fc1.weight"],
-            original_tp=original_tp,
-            target_tp=target_tp,
-            merge_fn=lambda sd_list, original_tp: merge_glu_vit(sd_list, original_tp),
+        gate_proj_weight, up_proj_weight = merge_glu_vit(
+            full_weights[f"vision_model.transformer.layers.{layer_i}.mlp.linear_fc1.weight"]
         )
+
         complete_state_dict[f"model.visual.blocks.{layer_i}.mlp.gate_proj.weight"] = gate_proj_weight.clone()
         complete_state_dict[f"model.visual.blocks.{layer_i}.mlp.up_proj.weight"] = up_proj_weight.clone()
 
-        down_proj_weight = merge_tensors_vit(
-            tp_sd=mgt_sd[0],
-            keys=keys + [f"vision_model.transformer.layers.{layer_i}.mlp.linear_fc2.weight"],
-            original_tp=original_tp,
-            target_tp=target_tp,
-            slice_dim=1,
+        down_proj_weight = torch.cat(
+            full_weights[f"vision_model.transformer.layers.{layer_i}.mlp.linear_fc2.weight"], dim=1
         )
         complete_state_dict[f"model.visual.blocks.{layer_i}.mlp.down_proj.weight"] = down_proj_weight.clone()
 
     complete_state_dict["model.visual.downsample.weight"] = (
-        mgt_sd[0][0]["model"]["vision_model.downsample.weight"].clone().contiguous()
+        full_weights["vision_model.downsample.weight"].clone().contiguous()
     )
     complete_state_dict["model.visual.downsample.bias"] = (
-        mgt_sd[0][0]["model"]["vision_model.downsample.bias"].clone().contiguous()
+        full_weights["vision_model.downsample.bias"].clone().contiguous()
     )
 
     # Merger
-    gate_proj, up_proj = merge_tensors_vit(
-        tp_sd=mgt_sd[0],
-        keys=keys + ["vision_projection.encoder.linear_fc1.weight"],
-        original_tp=original_tp,
-        target_tp=target_tp,
-        merge_fn=merge_glu_vit,
-    )
+    gate_proj, up_proj = merge_glu_vit(full_weights["vision_projection.encoder.linear_fc1.weight"])
 
-    down_proj = merge_tensors_vit(
-        tp_sd=mgt_sd[0],
-        keys=keys + ["vision_projection.encoder.linear_fc2.weight"],
-        original_tp=original_tp,
-        target_tp=target_tp,
-        slice_dim=1,
-    )
-    proj = merge_tensors_vit(
-        tp_sd=mgt_sd[0],
-        keys=keys + ["vision_projection.encoder.linear_fc_extra.weight"],
-        original_tp=original_tp,
-        target_tp=target_tp,
-        slice_dim=0,
-    )
+    down_proj = torch.cat(full_weights["vision_projection.encoder.linear_fc2.weight"], dim=1)
+    proj = torch.cat(full_weights["vision_projection.linear_fc_extra.weight"], dim=0)
 
     complete_state_dict["model.visual.merger.gate_proj.weight"] = gate_proj.clone().contiguous()
     complete_state_dict["model.visual.merger.up_proj.weight"] = up_proj.clone().contiguous()
     complete_state_dict["model.visual.merger.down_proj.weight"] = down_proj.clone().contiguous()
     complete_state_dict["model.visual.merger.proj.weight"] = proj.clone().contiguous()
 
-    complete_state_dict["model.visual.merger.post_projection_norm.weight"] = (
-        mgt_sd[0][0]["model"]["vision_projection.encoder.layer_norm.weight"].clone().contiguous()
-    )
-    complete_state_dict["model.visual.merger.post_projection_norm.bias"] = (
-        mgt_sd[0][0]["model"]["vision_projection.encoder.layer_norm.bias"].clone().contiguous()
-    )
+    if "vision_projection.layer_norm.weight" in full_weights:
+        complete_state_dict["model.visual.merger.post_projection_norm.weight"] = full_weights[
+            "vision_projection.layer_norm.weight"
+        ]
+    if "vision_projection.layer_norm.bias" in full_weights:
+        complete_state_dict["model.visual.merger.post_projection_norm.bias"] = full_weights[
+            "vision_projection.layer_norm.bias"
+        ]
+
     complete_state_dict["model.visual.embeddings.position_embedding.weight"] = (
-        mgt_sd[0][0]["model"]["vision_model.position_embeddings.weight"].clone().contiguous()
+        full_weights["vision_model.position_embeddings.weight"].clone().contiguous()
     )
     complete_state_dict["model.visual.patch_embed.proj.weight"] = (
-        mgt_sd[0][0]["model"]["vision_model.conv3d.weight"].clone().contiguous()
+        full_weights["vision_model.conv3d.weight"].clone().contiguous()
     )
     complete_state_dict["model.visual.patch_embed.proj.bias"] = (
-        mgt_sd[0][0]["model"]["vision_model.conv3d.bias"].clone().contiguous()
+        full_weights["vision_model.conv3d.bias"].clone().contiguous()
     )
 
     # Check for additional vision model norm layers mentioned in the expected output
-    if "vision_model.post_conv_layernorm.weight" in mgt_encoder_tp_0:
+    if "vision_model.post_conv_layernorm.weight" in full_weights:
         complete_state_dict["model.visual.post_conv_layernorm.weight"] = (
-            mgt_sd[0][0]["model"]["vision_model.post_conv_layernorm.weight"].clone().contiguous()
+            full_weights["vision_model.post_conv_layernorm.weight"].clone().contiguous()
         )
 
-    if "vision_model.post_layernorm.weight" in mgt_encoder_tp_0:
+    if "vision_model.post_layernorm.weight" in full_weights:
         complete_state_dict["model.visual.post_layernorm.weight"] = (
-            mgt_sd[0][0]["model"]["vision_model.post_layernorm.weight"].clone().contiguous()
+            full_weights["vision_model.post_layernorm.weight"].clone().contiguous()
         )
 
     print(f"Total keys in state dict: {len(complete_state_dict)}")
 
-    for key, value in complete_state_dict.items():
-        if isinstance(value, torch.Tensor):
-            complete_state_dict[key] = value.to(torch.bfloat16)
-    print("Converted all tensors to bfloat16")
-    # Save Model weight
     save_sharded_model(
         complete_state_dict,
         output_path=output_path,
@@ -579,33 +676,37 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
     hf_config = {
         "architectures": ["Glm4vForConditionalGeneration"],
         "model_type": "glm4v",
-        "attention_bias": model_config.get("add_qkv_bias", True),
-        "attention_dropout": 0.0,
-        "pad_token_id": model_config.get("pad_token_id", 151329),
-        "eos_token_id": model_config.get("eos_token_id", [151329, 151336, 151338]),
         "image_start_token_id": model_config.get("image_start_token_id", 151339),
         "image_end_token_id": model_config.get("image_end_token_id", 151340),
         "video_start_token_id": model_config.get("video_start_token_id", 151341),
         "video_end_token_id": model_config.get("video_end_token_id", 151342),
-        "image_token_id": model_config.get("image_token_id", 151343),
-        "video_token_id": model_config.get("video_token_id", 151344),
-        "hidden_act": model_config.get("hidden_act", "silu"),
-        "hidden_size": model_config.get("hidden_size", 4096),
-        "initializer_range": 0.02,
-        "intermediate_size": model_config.get("ffn_hidden_size", 13696),
-        "max_position_embeddings": model_config.get("seq_length", 32768),
-        "num_attention_heads": model_config.get("num_attention_heads", 32),
-        "num_hidden_layers": model_config.get("num_layers", 40),
-        "num_key_value_heads": model_config.get("multi_query_group_num", 2),
-        "rms_norm_eps": model_config.get("layernorm_epsilon", 1e-05),
-        "rope_theta": model_config.get("rotary_base", 10000.0),
-        "tie_word_embeddings": False,
-        "dtype": model_config.get("dtype", "bfloat16"),
-        "transformers_version": "4.53.0dev",
-        "use_cache": model_config.get("use_cache", True),
-        "vocab_size": model_config.get("vocab_size", 151552),
-        "partial_rotary_factor": 0.5,
+        "transformers_version": "4.57.1",
     }
+    txt_config = {
+        "model_type": "glm4v_text",
+        "attention_bias": model_config.get("add_qkv_bias", True),
+        "attention_dropout": 0.0,
+        "pad_token_id": model_config.get("pad_token_id", 151329),
+        "eos_token_id": model_config.get("eos_token_id", [151329, 151336, 151338]),
+        "image_token_id": model_config.get("image_token_id", 151363),
+        "video_token_id": model_config.get("video_token_id", 151364),
+        "hidden_act": text_config.get("hidden_act", "silu"),
+        "hidden_size": text_config.get("hidden_size", 4096),
+        "initializer_range": 0.02,
+        "intermediate_size": text_config.get("intermediate_size", 13696),
+        "max_position_embeddings": text_config.get("seq_length", 131072),
+        "num_attention_heads": text_config.get("num_attention_heads", 32),
+        "num_hidden_layers": text_config.get("num_layers", 40),
+        "num_key_value_heads": text_config.get("num_key_value_heads", 2),
+        "rms_norm_eps": text_config.get("layernorm_epsilon", 1e-05),
+        "dtype": text_config.get("torch_dtype", "bfloat16"),
+        "use_cache": text_config.get("use_cache", True),
+        "vocab_size": text_config.get("vocab_size", 151552),
+        "partial_rotary_factor": 0.5,
+        "tie_word_embeddings": False,
+        "rope_parameters": {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [8, 12, 12]},
+    }
+    hf_config["text_config"] = txt_config
 
     if "vision_config" in model_config:
         vision_config = {
@@ -625,9 +726,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             "temporal_patch_size": model_config["vision_config"].get("t_patch", 2),
         }
         hf_config["vision_config"] = vision_config
-
-    if "rope_parameters" in model_config:
-        hf_config["rope_parameters"] = model_config["rope_parameters"]
 
     config_path = os.path.join(output_path, "config.json")
     with open(config_path, "w") as f:
