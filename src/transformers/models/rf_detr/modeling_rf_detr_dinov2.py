@@ -382,20 +382,20 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
             self.mlp = RfDetrDinov2MLP(config)
         self.layer_scale2 = RfDetrDinov2LayerScale(config)
         self.num_windows = config.num_windows
+        self.global_attention = layer_idx not in config.window_block_indexes
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        remove_windows: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         shortcut = hidden_states
-        if remove_windows:
+        if self.global_attention:
             hidden_states = window_unpartition_before_attention(hidden_states, self.num_windows)
 
         hidden_states_norm = self.norm1(hidden_states)
         self_attention_output = self.attention(hidden_states_norm)
 
-        if remove_windows:
+        if self.global_attention:
             self_attention_output = window_partition_after_attention(
                 hidden_states, self_attention_output, self.num_windows
             )
@@ -420,18 +420,13 @@ class RfDetrDinov2Encoder(nn.Module):
     def __init__(self, config: RfDetrDinov2Config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([RfDetrDinov2Layer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([RfDetrDinov2Layer(config, i) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_hidden_states: bool = False,
-    ) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor, output_hidden_states: bool = False) -> BaseModelOutput:
         all_hidden_states = [hidden_states] if output_hidden_states else None
         for i, layer_module in enumerate(self.layer):
-            remove_windows = i not in self.config.window_block_indexes
-            hidden_states = layer_module(hidden_states, remove_windows=remove_windows)
+            hidden_states = layer_module(hidden_states)
             if all_hidden_states:
                 all_hidden_states.append(hidden_states)
 
