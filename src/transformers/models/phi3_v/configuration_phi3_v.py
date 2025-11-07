@@ -24,9 +24,6 @@ from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-# from ..llava.modeling_llava import
-
-
 logger = logging.get_logger(__name__)
 
 

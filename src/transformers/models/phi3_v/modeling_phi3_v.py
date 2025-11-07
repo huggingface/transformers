@@ -138,7 +138,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
         self.config = config
         self.image_dim_out = config.vision_config.hidden_size
 
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_model = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.image_projection = Phi3VImageProjection(config)
 
@@ -184,7 +184,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
         return image_features_newline
 
     def transform_image_embeds(self, hidden_states: torch.Tensor, image_sizes) -> torch.Tensor:
-        """Process the output of vision tower to obtain image embeddings suitable for multimodal model input."""
+        """Process the output of vision model to obtain image embeddings suitable for multimodal model input."""
         global_image_features = hidden_states[:, 0]  # (num_images, 24*24, 1024)
         global_image_features_hd = self.reshape_hd_patches_2x2merge(global_image_features, 1, 1)
         global_image_features_hd_newline = self.add_newline_embeds(global_image_features_hd)
@@ -194,8 +194,8 @@ class Phi3VModel(Phi3VPreTrainedModel):
         # (patch arrangement is different for each image)
         for i, img_size in enumerate(image_sizes):
             h, w = img_size
-            h_crop = h // 336
-            w_crop = w // 336
+            h_crop = h // self.config.vision_config.image_size
+            w_crop = w // self.config.vision_config.image_size
             num_crops = h_crop * w_crop
 
             # NOTE: real num_crops is padded (num_crops, 24*24, 1024)
@@ -219,7 +219,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
 
     def get_image_features(self, pixel_values: torch.Tensor, image_sizes, num_images, num_crops):
         # Process image using CLIP model.
-        vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        vision_outputs = self.vision_model(pixel_values, output_hidden_states=True)
 
         # Extract the hidden states from the second last layer.
         hidden_state = vision_outputs.hidden_states[-2][:, 1:]
