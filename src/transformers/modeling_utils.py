@@ -2480,8 +2480,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         if getattr(module, "_is_hf_initialized", False):
             return
+
         self._init_weights(module)
         module._is_hf_initialized = True
+        for p in module.parameters(recurse=False):
+            setattr(p, "_is_hf_initialized", True)
+            setattr(p, "__class__", nn.Parameter)
+
 
     @torch.no_grad()
     @guard_nn_init_functions()
@@ -2497,41 +2502,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         `torch.nn.init` functions (which are all no_grad by default), but simply do in-place ops such as
         `module.weight.zero_()`.
         """
-
-        def _custom_init_fn(m):
-            # return the bound method if class defines _init_weights itself (not inherited)
-            if isinstance(m, PreTrainedModel) and "_init_weights" in type(m).__dict__:
-                fn = type(m).__dict__["_init_weights"]
-                return fn.__get__(m, type(m))  # bind to instance
-            return None
-
         # Sort by depth (stable) then name for deterministic order.
-        modules = sorted(self.named_modules(), key=lambda kv: (kv[0].count("."), kv[0]))
+        if not hasattr(torch.nn.Module, "smart_apply"):
+            # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function
+            # to apply as we go down the graph
+            def smart_apply(self, fn):
+                for module in self.children():
+                    # We found a sub-model: recursively dispatch its own init function now!
+                    if isinstance(module, PreTrainedModel):
+                        module.smart_apply(module._initialize_weights)
+                    else:
+                        module.smart_apply(fn)
+                fn(self)
+                return self
 
-        stack = []  # active init funcs by depth; stack[d-1] = init fn for that depth
-        for name, mod in modules:
-            depth = 0 if name == "" else name.count(".") + 1
+            torch.nn.Module.smart_apply = smart_apply
 
-            # trim stack to parent depth
-            stack = stack[: max(depth - 1, 0)]
-
-            # inherit scheme from parent (if any)
-            active = stack[-1] if stack else None
-
-            # override if this module’s class defines its own _init_weights
-            custom = _custom_init_fn(mod)
-            if custom:
-                active = custom
-
-            # apply to this module's OWN params if any are uninitialized
-            if active:
-                active(mod)
-                for p in mod.parameters(recurse=False):
-                    setattr(p, "_is_hf_initialized", True)
-                    setattr(p, "__class__", nn.Parameter)
-
-            # push current scheme for children
-            stack.append(active)
+        # Let the magic happen with this simple call
+        self.smart_apply(self._initialize_weights)
 
     def tie_weight_source_and_target(
         self,
