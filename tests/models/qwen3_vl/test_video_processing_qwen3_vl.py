@@ -41,7 +41,7 @@ class Qwen3VLVideoProcessingTester:
         num_channels=3,
         min_resolution=32,
         max_resolution=80,
-        temporal_patch_size=3,
+        temporal_patch_size=2,
         patch_size=16,
         merge_size=2,
         do_resize=True,
