@@ -5170,6 +5170,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
 
             if modules_info:
+
                 def _initialize_modules():
                     with torch.no_grad():
                         for module_path, module, module_missing_params, module_missing_buffers in modules_info:
@@ -5219,9 +5220,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                             all_param_names = set(immediate_params.keys())
                             all_buffer_names = set(persistent_buffers.keys())
-                            fully_missing = (
-                                (not all_param_names or missing_params == all_param_names)
-                                and (not all_buffer_names or missing_buffers == all_buffer_names)
+                            fully_missing = (not all_param_names or missing_params == all_param_names) and (
+                                not all_buffer_names or missing_buffers == all_buffer_names
                             )
 
                             if fully_missing:

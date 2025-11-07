@@ -3931,9 +3931,9 @@ def test_missing_tied_decoder_weight_preserves_embeddings():
     config = BertConfig(hidden_size=8, intermediate_size=16, num_attention_heads=2, num_hidden_layers=1, num_labels=2)
     base_model = BertModel(config)
     with torch.no_grad():
-        sentinel = torch.arange(
-            base_model.embeddings.word_embeddings.weight.numel(), dtype=torch.float32
-        ).view_as(base_model.embeddings.word_embeddings.weight)
+        sentinel = torch.arange(base_model.embeddings.word_embeddings.weight.numel(), dtype=torch.float32).view_as(
+            base_model.embeddings.word_embeddings.weight
+        )
         base_model.embeddings.word_embeddings.weight.copy_(sentinel)
         expected_embeddings = base_model.embeddings.word_embeddings.weight.detach().clone()
 
