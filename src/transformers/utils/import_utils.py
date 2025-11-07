@@ -58,7 +58,7 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             # pick the first item of the list as best guess (it's almost always a list of length 1 anyway)
             distribution_name = pkg_name if pkg_name in distributions else distributions[0]
             package_version = importlib.metadata.version(distribution_name)
-        except importlib.metadata.PackageNotFoundError:
+        except (importlib.metadata.PackageNotFoundError, KeyError):
             # If we cannot find the metadata (because of editable install for example), try to import directly.
             # Note that this branch will almost never be run, so we do not import packages for nothing here
             package = importlib.import_module(pkg_name)
@@ -87,6 +87,7 @@ VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
+KERNELS_MIN_VERSION = "0.9.0"
 
 
 @lru_cache
@@ -513,8 +514,9 @@ def is_kenlm_available() -> bool:
 
 
 @lru_cache
-def is_kernels_available() -> bool:
-    return _is_package_available("kernels")
+def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION) -> bool:
+    is_available, kernels_version = _is_package_available("kernels", return_version=True)
+    return is_available and version.parse(kernels_version) >= version.parse(MIN_VERSION)
 
 
 @lru_cache
@@ -971,13 +973,13 @@ def is_quark_available() -> bool:
 @lru_cache
 def is_fp_quant_available():
     is_available, fp_quant_version = _is_package_available("fp_quant", return_version=True)
-    return is_available and version.parse(fp_quant_version) >= version.parse("0.2.0")
+    return is_available and version.parse(fp_quant_version) >= version.parse("0.3.2")
 
 
 @lru_cache
 def is_qutlass_available():
     is_available, qutlass_version = _is_package_available("qutlass", return_version=True)
-    return is_available and version.parse(qutlass_version) >= version.parse("0.1.0")
+    return is_available and version.parse(qutlass_version) >= version.parse("0.2.0")
 
 
 @lru_cache
