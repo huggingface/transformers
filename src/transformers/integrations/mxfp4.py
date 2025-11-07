@@ -71,11 +71,11 @@ class Mxfp4Quantize(ConversionOps):
             # dq_param_name is the name of the parameter without the blocks or scales suffix, it's used in this case since we don't switch linears
             # so we only have the original param name
             dq_param_name = target_key[: -len("_blocks")]
-            dequantize(module, target_key, value, value.device, dq_param_name)
+            dequantize_convertops(module, target_key, value, value.device, missing_keys)
         else:
             # Eagerly set tensors on the module and perform swizzle; this function will
             # set the appropriate attributes and remove *_blocks/_scales when both are loaded.
-            load_and_swizzle_mxfp4_(module, target_key, value, value.device, missing_keys, triton_kernels_hub)
+            load_and_swizzle_mxfp4_convertops(module, target_key, value, value.device, missing_keys, triton_kernels_hub)
 
         # We return an empty mapping since the module was updated in-place. This prevents
         # the loader from trying to materialize the original meta-parameter names again.
@@ -387,6 +387,20 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
 
+def dequantize_convertops(module, param_name, param_value, target_device, missing_keys):
+    for proj in ["gate_up_proj", "down_proj"]:
+        if proj in param_name:
+            blocks_attr = f"{proj}_blocks"
+            scales_attr = f"{proj}_scales"
+            setattr(module, param_name.rsplit(".", 1)[1], param_value)
+            if hasattr(module, blocks_attr) and hasattr(module, scales_attr):
+                dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
+                if target_device == "cpu" and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                setattr(module, proj, torch.nn.Parameter(dequantized.to(target_device)))
+                missing_keys.discard(param_name.rsplit("_", 1)[0])
+                delattr(module, blocks_attr)
+                delattr(module, scales_attr)
 
 def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, triton_kernels_hub, **kwargs):
     """
@@ -455,7 +469,7 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
         del blocks
 
 
-def load_and_swizzle_mxfp4_(module, param_name, param_value, target_device, missing_keys, triton_kernels_hub, **kwargs):
+def load_and_swizzle_mxfp4_convertops(module, param_name, param_value, target_device, missing_keys, triton_kernels_hub):
     """
     This transforms the weights obtained using `convert_gpt_oss.py` to load them into `Mxfp4GptOssExperts`.
     """
