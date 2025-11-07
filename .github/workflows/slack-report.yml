@@ -38,6 +38,10 @@ jobs:
     runs-on: ubuntu-22.04
     if: always() && !cancelled()
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Preliminary job status
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
@@ -49,7 +53,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-          ref: ${{ inputs.commit_sha || github.sha }}
+          # Security: checkout to the `main` branch for untrusted triggers (issue_comment, pull_request_target), otherwise use the specified ref
+          ref: ${{ (github.event_name == 'issue_comment' || github.event_name == 'pull_request_target') && 'main' || (inputs.commit_sha || github.sha) }}
 
       - uses: actions/download-artifact@v4
 
