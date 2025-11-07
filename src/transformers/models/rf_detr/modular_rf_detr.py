@@ -1,11 +1,12 @@
-from typing import Optional
+from typing import Optional, Unpack
 
 import torch
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
+from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import CONFIG_MAPPING
 from ..lw_detr.modeling_lw_detr import (
     LwDetrC2FLayer,
@@ -13,6 +14,7 @@ from ..lw_detr.modeling_lw_detr import (
     LwDetrForObjectDetection,
     LwDetrLayerNorm,
     LwDetrModel,
+    LwDetrModelOutput,
     LwDetrPreTrainedModel,
     LwDetrSamplingLayer,
     LwDetrScaleProjector,
@@ -22,6 +24,10 @@ from .modeling_rf_detr_dinov2 import RfDetrDinov2Config
 
 
 logger = logging.get_logger(__name__)
+
+
+class RfDetrModelOutput(LwDetrModelOutput):
+    pass
 
 
 class RfDetrConfig(PretrainedConfig):

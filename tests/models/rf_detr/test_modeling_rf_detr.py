@@ -58,6 +58,7 @@ def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
 
+
 class RfDetrModelTester:
     def __init__(
         self,
