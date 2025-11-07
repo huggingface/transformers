@@ -37,7 +37,7 @@ from transformers import (
 
 
 MAPPINGS = {
-    r"model.vision_embed_tokens.img_processor": r"model.vision_tower",
+    r"model.vision_embed_tokens.img_processor": r"model.vision_model",
     r"model.vision_embed_tokens.img_projection.0": r"model.image_projection.fc1",
     r"model.vision_embed_tokens.img_projection.2": r"model.image_projection.fc2",
     r"model.vision_embed_tokens.glb_GN": r"model.glb_GN",
