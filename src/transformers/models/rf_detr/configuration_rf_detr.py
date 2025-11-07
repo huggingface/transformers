@@ -5,17 +5,17 @@
 #                          modular_rf_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from .modeling_rf_detr_dinov2 import RfDetrDinov2Config
 
 
 logger = logging.get_logger(__name__)
 
 
-class RfDetrConfig(PretrainedConfig):
+class RfDetrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RfDetrModel`]. It is used to instantiate
     a LW-DETR model according to the specified arguments, defining the model architecture. Instantiating a
@@ -124,6 +124,7 @@ class RfDetrConfig(PretrainedConfig):
         "num_attention_heads": "decoder_self_attention_heads",
         "num_key_value_heads": "decoder_self_attention_heads",
     }
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
