@@ -2475,7 +2475,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif (hasattr(module, "gate_up_proj")):
                 module.gate_up_proj.normal_(mean=0.0, std=std)
             elif (hasattr(module, "down_proj")):
-                module.gate_up_proj.normal_(mean=0.0, std=std)
+                module.down_proj.normal_(mean=0.0, std=std)
             elif (hasattr(module, "gate")):
                 module.gate.normal_(mean=0.0, std=std)
         except Exception as e:
