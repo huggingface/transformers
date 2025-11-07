@@ -41,7 +41,7 @@ class Qwen3VLVideoProcessingTester:
         num_channels=3,
         min_resolution=32,
         max_resolution=80,
-        temporal_patch_size=2,
+        temporal_patch_size=3,
         patch_size=16,
         merge_size=2,
         do_resize=True,
@@ -328,3 +328,39 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
                 self.video_processor_tester.min_resolution = prev_min_resolution
             if prev_max_resolution is not None:
                 self.video_processor_tester.max_resolution = prev_max_resolution
+
+    def test_image_input(self):
+        for video_processing_class in self.video_processor_list:
+            video_processor_dict = self.video_processor_dict.copy()
+            video_processor_dict["size"] = {"longest_edge": 40960, "shortest_edge": 4096}
+            video_processor_dict["do_sample_frames"] = False
+            video_processor_dict["temporal_patch_size"] = 3
+            video_processing = video_processing_class(**video_processor_dict)
+
+            n, w, h = 1, 64, 64
+            video_inputs = [(np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)) for _ in range(n)]
+
+            video_processed = video_processing(video_inputs, return_tensors="pt")
+            encoded_videos = video_processed[self.input_name]
+            self.assertEqual(list(encoded_videos.shape), [16, 2304])
+
+            video_grid_thw = video_processed["video_grid_thw"]
+            self.assertEqual(video_grid_thw.tolist(), [[1, 4, 4]])
+
+    def test_num_frames_equal_temporal_patch_size_plus_two(self):
+        for video_processing_class in self.video_processor_list:
+            video_processor_dict = self.video_processor_dict.copy()
+            video_processor_dict["size"] = {"longest_edge": 40960, "shortest_edge": 4096}
+            video_processor_dict["do_sample_frames"] = False
+            video_processor_dict["temporal_patch_size"] = 3
+            video_processing = video_processing_class(**video_processor_dict)
+
+            n, w, h = 5, 64, 64
+            video_inputs = [(np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)) for _ in range(n)]
+
+            video_processed = video_processing(video_inputs, return_tensors="pt")
+            encoded_videos = video_processed[self.input_name]
+            self.assertEqual(list(encoded_videos.shape), [32, 2304])
+
+            video_grid_thw = video_processed["video_grid_thw"]
+            self.assertEqual(video_grid_thw.tolist(), [[2, 4, 4]])
