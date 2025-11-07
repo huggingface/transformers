@@ -376,7 +376,7 @@ class XGLMPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class XGLMModel(XGLMPreTrainedModel):
-    def __init__(self, config: XGLMConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: XGLMConfig):
         r"""
         embed_tokens (`nn.Embedding`, *optional*):
             output embeddings
@@ -388,10 +388,7 @@ class XGLMModel(XGLMPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = XGLMScaledWordEmbedding(
+        self.embed_tokens = XGLMScaledWordEmbedding(
                 config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
             )
 

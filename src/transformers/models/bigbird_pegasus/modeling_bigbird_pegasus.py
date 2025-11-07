@@ -1575,7 +1575,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: BigBirdPegasusConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
 
         self.attention_type = config.attention_type
@@ -1592,9 +1592,6 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         self.embed_tokens = BigBirdPegasusScaledWordEmbedding(
             config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
         )
-
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = BigBirdPegasusLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -1850,7 +1847,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: BigBirdPegasusConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -1862,8 +1859,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
             config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
         )
 
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
+
 
         self.embed_positions = BigBirdPegasusLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -2090,8 +2086,8 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
             vocab_size, config.d_model, padding_idx, embed_scale=embed_scale
         )
 
-        self.encoder = BigBirdPegasusEncoder(config, self.shared)
-        self.decoder = BigBirdPegasusDecoder(config, self.shared)
+        self.encoder = BigBirdPegasusEncoder(config)
+        self.decoder = BigBirdPegasusDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()

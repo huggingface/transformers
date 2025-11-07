@@ -485,7 +485,7 @@ class MarianEncoder(MarianPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: MarianConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: MarianConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -496,10 +496,7 @@ class MarianEncoder(MarianPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         self.embed_positions = MarianSinusoidalPositionalEmbedding(
             config.max_position_embeddings, embed_dim, self.padding_idx
@@ -627,7 +624,7 @@ class MarianDecoder(MarianPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: MarianConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: MarianConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -635,10 +632,7 @@ class MarianDecoder(MarianPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.decoder_vocab_size, config.d_model, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.decoder_vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = MarianSinusoidalPositionalEmbedding(
             config.max_position_embeddings, config.d_model, self.padding_idx

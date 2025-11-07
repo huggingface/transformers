@@ -1983,7 +1983,7 @@ class ModelTesterMixin:
                             )
 
                 # Checking there was no complain of missing weights
-                self.assertEqual(infos["missing_keys"], set())
+                self.assertEqual(infos["missing_keys"], set(), "Given that the loaded weights are the same, the issue is in `tie_weights`: it tied these keys and removed them from serialization. But because of tiying (hardcoded or not) the previous check is fine.")
 
     def test_tied_weights_keys(self):
         original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()

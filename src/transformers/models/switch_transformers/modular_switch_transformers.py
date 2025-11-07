@@ -412,11 +412,9 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         "router_logits": SwitchTransformersTop1Router,
     }
 
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.is_decoder = config.is_decoder
 

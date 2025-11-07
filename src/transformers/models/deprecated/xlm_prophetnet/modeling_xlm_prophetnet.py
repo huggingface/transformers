@@ -1170,14 +1170,10 @@ class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
         embeddings instead of randomly initialized word embeddings.
     """
 
-    def __init__(self, config: XLMProphetNetConfig, word_embeddings: Optional[nn.Embedding] = None):
+    def __init__(self, config: XLMProphetNetConfig):
         super().__init__(config)
 
-        self.word_embeddings = (
-            word_embeddings
-            if word_embeddings is not None
-            else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        )
+        self.word_embeddings =  nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = XLMProphetNetPositionalEmbeddings(config)
         self.embeddings_layer_norm = LayerNorm(config.hidden_size)
 
@@ -1288,7 +1284,7 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
         embeddings instead of randomly initialized word embeddings.
     """
 
-    def __init__(self, config: XLMProphetNetConfig, word_embeddings: Optional[nn.Embedding] = None):
+    def __init__(self, config: XLMProphetNetConfig):
         super().__init__(config)
 
         self.ngram = config.ngram
@@ -1297,11 +1293,7 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
         self.dropout = config.dropout
         self.max_target_positions = config.max_position_embeddings
 
-        self.word_embeddings = (
-            word_embeddings
-            if word_embeddings is not None
-            else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        )
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = XLMProphetNetPositionalEmbeddings(config)
 
         self.ngram_embeddings = nn.Embedding(self.ngram, config.hidden_size, None)
@@ -1624,12 +1616,12 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_encoder_decoder = False
         encoder_config.use_cache = False
-        self.encoder = XLMProphetNetEncoder(encoder_config, self.word_embeddings)
+        self.encoder = XLMProphetNetEncoder(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
-        self.decoder = XLMProphetNetDecoder(decoder_config, self.word_embeddings)
+        self.decoder = XLMProphetNetDecoder(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()

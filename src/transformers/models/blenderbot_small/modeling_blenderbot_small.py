@@ -468,7 +468,7 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: BlenderbotSmallConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: BlenderbotSmallConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -479,10 +479,7 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         self.embed_positions = BlenderbotSmallLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -613,7 +610,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: BlenderbotSmallConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: BlenderbotSmallConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -621,10 +618,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = BlenderbotSmallLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -850,8 +844,8 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = BlenderbotSmallEncoder(config, self.shared)
-        self.decoder = BlenderbotSmallDecoder(config, self.shared)
+        self.encoder = BlenderbotSmallEncoder(config)
+        self.decoder = BlenderbotSmallDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -515,7 +515,7 @@ class MBartEncoder(MBartPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: MBartConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: MBartConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -530,8 +530,7 @@ class MBartEncoder(MBartPreTrainedModel):
             config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
         )
 
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
+
 
         self.embed_positions = MBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -671,7 +670,7 @@ class MBartDecoder(MBartPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: MBartConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: MBartConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -683,8 +682,7 @@ class MBartDecoder(MBartPreTrainedModel):
             config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
         )
 
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
+
 
         self.embed_positions = MBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -911,8 +909,8 @@ class MBartModel(MBartPreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = MBartScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
 
-        self.encoder = MBartEncoder(config, self.shared)
-        self.decoder = MBartDecoder(config, self.shared)
+        self.encoder = MBartEncoder(config)
+        self.decoder = MBartDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()

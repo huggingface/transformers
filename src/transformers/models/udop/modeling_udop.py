@@ -1060,11 +1060,11 @@ class UdopStack(UdopPreTrainedModel):
         r"relative_bias.biases.(\d+).relative_attention_bias.weight": "block.0.layer.0.SelfAttention.relative_attention_bias.weight",
     }  # TODO IN THIS PR ARTHUR TODO support glob or re but better than iterating
 
-    def __init__(self, config, embed_tokens=None, embed_patches=None):
+    def __init__(self, config):
         super().__init__(config)
-
-        self.embed_tokens = embed_tokens
-        self.embed_patches = embed_patches
+        # text and image embeddings
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
+        self.embed_patches = UdopPatchEmbeddings(config)
         self.is_decoder = config.is_decoder
         self._max_length = config.max_length
         self.num_layers = config.num_layers
@@ -1427,7 +1427,8 @@ class UdopModel(UdopPreTrainedModel):
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
         "decoder.embed_tokens.weight": "shared.weight",
-        "encoder.embed_patches.proj": "patch_embed.proj",  # TODO tie weights for patch embeddings not working
+        "encoder.embed_patches.proj.weight": "patch_embed.proj.weight",  # TODO tie weights for patch embeddings not working
+        "encoder.embed_patches.proj.bias": "patch_embed.proj.bias",  # TODO tie weights for patch embeddings not working
     }
 
     def __init__(self, config):
@@ -1441,7 +1442,7 @@ class UdopModel(UdopPreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
+        self.encoder = UdopStack(encoder_config)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
@@ -1600,7 +1601,8 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
         "decoder.embed_tokens.weight": "shared.weight",
-        "encoder.embed_patches.proj": "patch_embed.proj",
+        "encoder.embed_patches.proj.weight": "patch_embed.proj.weight",
+        "encoder.embed_patches.proj.bias": "patch_embed.proj.bias",
         "encoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
         "decoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
         "lm_head.weight": "shared.weight",
@@ -1617,7 +1619,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
+        self.encoder = UdopStack(encoder_config)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
@@ -1791,7 +1793,8 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
 class UdopEncoderModel(UdopPreTrainedModel):
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
-        "encoder.embed_patches.proj": "patch_embed.proj",
+        "encoder.embed_patches.proj.weight": "patch_embed.proj.weight",
+        "encoder.embed_patches.proj.bias": "patch_embed.proj.bias",
         "encoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
     }
 
@@ -1806,7 +1809,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
+        self.encoder = UdopStack(encoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
