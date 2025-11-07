@@ -852,18 +852,11 @@ class MarianModel(MarianPreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
 
         # We always use self.shared for token embeddings to ensure compatibility with all marian models
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
         if self.config.share_encoder_decoder_embeddings:
-            encoder_embed_tokens = decoder_embed_tokens = self.shared
-        else:
-            # Since the embeddings are not shared, deepcopy the embeddings here for encoder
-            # and decoder to make sure they are not tied.
-            encoder_embed_tokens = copy.deepcopy(self.shared)
-            decoder_embed_tokens = copy.deepcopy(self.shared)
-            self.shared = None
+            self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = MarianEncoder(config, encoder_embed_tokens)
-        self.decoder = MarianDecoder(config, decoder_embed_tokens)
+        self.encoder = MarianEncoder(config)
+        self.decoder = MarianDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
