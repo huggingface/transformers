@@ -2546,7 +2546,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             source_is_there = missing_keys and not re.search(
                 rf"^{re.escape(source_name)}", "\n".join(missing_keys), flags=re.MULTILINE
             )
-            if source_is_there or missing_keys is None:
+
+            # if neither are here, we still want to the training to have same grads
+            target_is_not_there = missing_keys and re.search(target_name, "\n".join(missing_keys), flags=re.MULTILINE) and not source_is_there
+            if source_is_there or missing_keys is None or target_is_not_there:
                 try:
                     if source_name.endswith(".bias") or source_name.endswith(".weight"):
                         source_param_or_module = top_level.get_parameter_or_buffer(source_name)
@@ -4405,9 +4408,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for k in all_pointer:  # finally close all opened file pointers TODO async
             k.__exit__(None, None, None)
 
-        #!!!!!!!!!!!!!!!!!!!!!!! POST PROCESS!!!!!!!!!!!!!!!!!!
-        # sub configs can set tie weights so we still call it
-        model.tie_weights(missing_keys)
+
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
@@ -4420,6 +4421,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
             missing_keys, unexpected_keys, False, model
         )
+
+        # We make sure we TIE after _init_
+        model.tie_weights(missing_keys)
 
         # Post-processing for tensor parallelism
         if device_mesh is not None:
