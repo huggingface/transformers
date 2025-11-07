@@ -4209,7 +4209,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if device_map is not None:
             # simple solution as deepcopy don't work. We want to tie the weights afterwards.
             copy_model.tie_weights()
-            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, dtype)
+            device_map = _get_device_map(copy_model, device_map, max_memory, hf_quantizer, dtype)
 
         # restore default dtype
         if dtype_orig is not None:
