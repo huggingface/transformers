@@ -103,15 +103,11 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     rescale_factor = 1 / 255
     do_normalize = True
     do_pad = True
-    model_input_names = ["pixel_values", "pixel_mask"]
     size_divisor = 32
     do_reduce_labels = False
     valid_kwargs = Mask2FormerImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[Mask2FormerImageProcessorKwargs]) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
-
         size = kwargs.pop("size", None)
         max_size = kwargs.pop("max_size", None)
 

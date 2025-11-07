@@ -212,7 +212,6 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             annotations,
             return_tensors="pt",
             instance_id_to_semantic_id=instance_id_to_semantic_id,
-            pad_and_return_pixel_mask=True,
         )
 
         return inputs
