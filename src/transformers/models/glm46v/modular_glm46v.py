@@ -138,4 +138,5 @@ __all__ = [
     "Glm46VModel",
     "Glm46VPreTrainedModel",
     "Glm46VTextModel",
+    "Glm46vProcessor"
 ]
