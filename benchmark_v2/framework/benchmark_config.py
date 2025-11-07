@@ -233,17 +233,10 @@ def get_config_by_level(level: int) -> list[BenchmarkConfig]:
     if level >= 1:
         configs.append(BenchmarkConfig(attn_implementation="flash_attention_2"))
         configs.append(BenchmarkConfig(attn_implementation="eager", compile_mode="default"))
-        configs.append(
-            BenchmarkConfig(attn_implementation="paged|sdpa", compile_mode="default", continuous_batching=True)
-        )
+        configs.append(BenchmarkConfig(attn_implementation="flash_attention_2", continuous_batching=True))
     if level >= 2:
         configs.append(BenchmarkConfig(attn_implementation="sdpa", compile_mode="default"))
         configs.append(BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", kernelize=True))
         configs.append(BenchmarkConfig(attn_implementation="flash_attention_2", kernelize=True))
-        configs.append(
-            BenchmarkConfig(attn_implementation="paged|sdpa", compile_mode="default", continuous_batching=True)
-        )
-        configs.append(
-            BenchmarkConfig(attn_implementation="flash_attention_2", kernelize=True, continuous_batching=True)
-        )
+        configs.append(BenchmarkConfig(attn_implementation="paged|sdpa", continuous_batching=True))
     return configs
