@@ -66,14 +66,6 @@ class Wav2Vec2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
-    @unittest.skip("Wav2Vec2BertProcessor changes input_features")
-    def test_overlapping_text_audio_kwargs_handling(self):
-        pass
-
-    @unittest.skip("Wav2Vec2BertProcessor changes input_features")
-    def test_processor_with_multiple_inputs(self):
-        pass
-
     def test_feature_extractor(self):
         feature_extractor = self.get_component("feature_extractor")
         processor = self.get_processor()

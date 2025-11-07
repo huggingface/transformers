@@ -56,21 +56,12 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
         return tokenizer_class.from_pretrained(cls.tmpdirname, **add_kwargs_tokens_map)
 
-    # todo: check why this test is failing
-    @unittest.skip("Failing for unknown reason")
-    def test_overlapping_text_audio_kwargs_handling(self):
-        pass
-
     @unittest.skip("Wav2Vec2BertProcessor changes input_features")
     def test_processor_with_multiple_inputs(self):
         pass
 
     @unittest.skip("Wav2Vec2BertProcessor changes input_features")
     def test_overlapping_text_audio_kwargs_handling(self):
-        pass
-
-    @unittest.skip("Wav2Vec2BertProcessor changes input_features")
-    def test_processor_with_multiple_inputs(self):
         pass
 
     def test_feature_extractor(self):
