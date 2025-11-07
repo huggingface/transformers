@@ -53,7 +53,7 @@ class MistralAttention(LlamaAttention):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
     def _get_llama4_attn_scale(self, positions_ids: torch.Tensor) -> torch.Tensor:
-        scaling = 1 + self.config.rope_parameters.llama_4_scaling_beta * torch.log(
+        scaling = 1 + self.config.rope_parameters.get("llama_4_scaling_beta") * torch.log(
             1 + torch.floor(positions_ids / self.config.rope_parameters.original_max_position_embeddings)
         )
         return scaling.unsqueeze(-1)
@@ -77,7 +77,7 @@ class MistralAttention(LlamaAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if self.config.rope_parameters.llama_4_scaling_beta is not None:
+        if self.config.rope_parameters.get("llama_4_scaling_beta") is not None:
             query_states = query_states * self._get_llama4_attn_scale(cache_position).to(query_states.dtype)
 
         if past_key_values is not None:
