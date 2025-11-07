@@ -53,7 +53,7 @@ First, create a [`SinqConfig`] and specifying the following parameters:
 | `--tiling_mode` | Weight matrix tiling strategy | str | 1D, 2D | 1D |
 | `--group_size` | Weights per quantization group | int | 64, 128 | 64 |
 | `--method` | Quantization method | str | sinq, asinq | sinq |
-| `--dtype` | Data type of the original model | str | auto, float16, float32, etc | auto (bfloaf16) |
+| `--dtype` | Data type of the original model | str | auto, float16, float32 | auto (bfloaf16) |
 | `--modules_to_not_convert` | List of the layers that are NOT quantize | List of str | [lm_head, ...] | [lm_head] |
 | `--device` | Device on which the model is loaded | str | cpu, cuda:0, cuda:1, etc | cuda:0 |
 
