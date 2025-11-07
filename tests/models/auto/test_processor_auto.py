@@ -114,7 +114,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
 
-    def test_subcomponent_get_config_dict__saved_as_nested_config(self):
+    def test_subcomponent_get_config_dict_saved_as_nested_config(self):
         """
         Tests that we can get config dict of a subcomponents of a processor,
         even if they were saved as nested dict in `processor_config.json`

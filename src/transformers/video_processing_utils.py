@@ -643,10 +643,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             video_processor_file = VIDEO_PROCESSOR_NAME
             try:
                 # Try to load with a new config name first and if not successful try with the old file name
-                # NOTE: we will gradually change to saving all processor configs as nested dict in PROCESSOR_NAME
+                # NOTE: we save all processor configs as nested dict in PROCESSOR_NAME from v5, which is the standard
                 resolved_video_processor_files = [
                     resolved_file
-                    for filename in [VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME, PROCESSOR_NAME]
+                    for filename in [PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME]
                     if (
                         resolved_file := cached_file(
                             pretrained_model_name_or_path,

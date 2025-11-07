@@ -290,7 +290,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_image_processor_files = [
                     resolved_file
-                    for filename in [image_processor_file, PROCESSOR_NAME]
+                    for filename in [PROCESSOR_NAME, image_processor_file]
                     if (
                         resolved_file := cached_file(
                             pretrained_model_name_or_path,

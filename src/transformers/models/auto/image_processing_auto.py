@@ -306,9 +306,10 @@ def get_image_processor_config(
     image_processor.save_pretrained("image-processor-test")
     image_processor_config = get_image_processor_config("image-processor-test")
     ```"""
+    # Load with a priority given to the nested processor config, if available in repo
     resolved_config_files = [
         resolved_file
-        for filename in [IMAGE_PROCESSOR_NAME, PROCESSOR_NAME]
+        for filename in [PROCESSOR_NAME, IMAGE_PROCESSOR_NAME]
         if (
             resolved_file := cached_file(
                 pretrained_model_name_or_path,

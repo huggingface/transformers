@@ -167,9 +167,10 @@ def get_feature_extractor_config(
     feature_extractor.save_pretrained("feature-extractor-test")
     feature_extractor_config = get_feature_extractor_config("feature-extractor-test")
     ```"""
+    # Load with a priority given to the nested processor config, if available in repo
     resolved_config_files = [
         resolved_file
-        for filename in [FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME]
+        for filename in [PROCESSOR_NAME, FEATURE_EXTRACTOR_NAME]
         if (
             resolved_file := cached_file(
                 pretrained_model_name_or_path,

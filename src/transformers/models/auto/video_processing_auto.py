@@ -23,7 +23,15 @@ from typing import TYPE_CHECKING, Optional, Union
 # Build the list of all video processors
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...utils import CONFIG_NAME, PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, cached_file, is_torchvision_available, logging
+from ...utils import (
+    CONFIG_NAME,
+    IMAGE_PROCESSOR_NAME,
+    PROCESSOR_NAME,
+    VIDEO_PROCESSOR_NAME,
+    cached_file,
+    is_torchvision_available,
+    logging,
+)
 from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
@@ -167,9 +175,10 @@ def get_video_processor_config(
     video_processor.save_pretrained("video-processor-test")
     video_processor = get_video_processor_config("video-processor-test")
     ```"""
+    # Load with a priority given to the nested processor config, if available in repo
     resolved_config_files = [
         resolved_file
-        for filename in [VIDEO_PROCESSOR_NAME, PROCESSOR_NAME]
+        for filename in [PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME]
         if (
             resolved_file := cached_file(
                 pretrained_model_name_or_path,

@@ -437,7 +437,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_feature_extractor_files = [
                     resolved_file
-                    for filename in [feature_extractor_file, PROCESSOR_NAME]
+                    for filename in [PROCESSOR_NAME, feature_extractor_file]
                     if (
                         resolved_file := cached_file(
                             pretrained_model_name_or_path,
