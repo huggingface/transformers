@@ -1273,7 +1273,6 @@ class ProcessorMixin(PushToHubMixin):
                     set(preprocessor_valid_kwargs.__annotations__ if preprocessor_valid_kwargs is not None else [])
                 )
             for modality_key in modality_valid_kwargs:
-                kwarg_value = "__empty__"
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
                     kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
@@ -1283,10 +1282,12 @@ class ProcessorMixin(PushToHubMixin):
                             f"Keyword argument {modality_key} was passed two times:\n"
                             f"in a dictionary for {modality} and as a **kwarg."
                         )
-                if kwarg_value == "__empty__" and modality_key in kwargs:
+                elif modality_key in kwargs:
                     # we get a modality_key instead of popping it because modality-specific processors
                     # can have overlapping kwargs
                     kwarg_value = kwargs.get(modality_key, "__empty__")
+                else:
+                    kwarg_value = "__empty__"
                 if not isinstance(kwarg_value, str) or kwarg_value != "__empty__":
                     output_kwarg[modality_key] = kwarg_value
                     used_keys.add(modality_key)
