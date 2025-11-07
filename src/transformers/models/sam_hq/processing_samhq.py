@@ -65,9 +65,6 @@ class SamHQProcessor(ProcessorMixin):
             An instance of [`SamImageProcessor`]. The image processor is a required input.
     """
 
-    attributes = ["image_processor"]
-    image_processor_class = "SamImageProcessor"
-
     def __init__(self, image_processor):
         super().__init__(image_processor)
         # Ensure image_processor is properly initialized

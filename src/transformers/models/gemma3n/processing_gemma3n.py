@@ -51,11 +51,6 @@ class Gemma3nProcessor(ProcessorMixin):
             The number of image soft tokens that should be added to
     """
 
-    attributes = ["feature_extractor", "image_processor", "tokenizer"]
-    feature_extractor_class = "AutoFeatureExtractor"
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         feature_extractor,

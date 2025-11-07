@@ -66,10 +66,6 @@ class Owlv2Processor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("Owlv2ImageProcessor", "Owlv2ImageProcessorFast")
-    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
-
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)
 

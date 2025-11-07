@@ -35,24 +35,6 @@ from .audio_utils import AudioInput, load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available
-from .utils.chat_template_utils import render_jinja_template
-from .utils.type_validators import (
-    device_validator,
-    image_size_validator,
-    padding_validator,
-    positive_any_number,
-    positive_int,
-    resampling_validator,
-    tensor_type_validator,
-    truncation_validator,
-    video_metadata_validator,
-)
-from .video_utils import VideoInput, VideoMetadataType
-
-
-if is_vision_available():
-    from .image_utils import PILImageResampling
-
 from .tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -78,12 +60,27 @@ from .utils import (
     list_repo_templates,
     logging,
 )
+from .utils.chat_template_utils import render_jinja_template
 from .utils.deprecation import deprecate_kwarg
+from .utils.type_validators import (
+    device_validator,
+    image_size_validator,
+    padding_validator,
+    positive_any_number,
+    positive_int,
+    resampling_validator,
+    tensor_type_validator,
+    truncation_validator,
+    video_metadata_validator,
+)
+from .video_utils import VideoInput, VideoMetadataType
 
 
 if is_torch_available():
     from .modeling_utils import PreTrainedAudioTokenizerBase
 
+if is_vision_available():
+    from .image_utils import PILImageResampling
 
 logger = logging.get_logger(__name__)
 
@@ -94,11 +91,43 @@ SpecificProcessorType = TypeVar("SpecificProcessorType", bound="ProcessorMixin")
 transformers_module = direct_transformers_import(Path(__file__).parent)
 
 
-AUTO_TO_BASE_CLASS_MAPPING = {
-    "AutoTokenizer": "PreTrainedTokenizerBase",
-    "AutoFeatureExtractor": "FeatureExtractionMixin",
-    "AutoImageProcessor": "ImageProcessingMixin",
-    "AutoVideoProcessor": "BaseVideoProcessor",
+class _LazyAutoProcessorMapping(dict):
+    """
+    Lazy dictionary to avoid circular imports.
+    The mapping names are only imported when accessed.
+    """
+
+    _MAPPING_NAMES = {
+        "image_processor": ("transformers.models.auto.image_processing_auto", "AutoImageProcessor"),
+        "video_processor": ("transformers.models.auto.video_processing_auto", "AutoVideoProcessor"),
+        "feature_extractor": ("transformers.models.auto.feature_extraction_auto", "AutoFeatureExtractor"),
+        "audio_processor": ("transformers.models.auto.feature_extraction_auto", "AutoFeatureExtractor"),
+        "tokenizer": ("transformers.models.auto.tokenization_auto", "AutoTokenizer"),
+    }
+
+    def __getitem__(self, key):
+        if key not in self._MAPPING_NAMES:
+            raise KeyError(key)
+        module_name, attr_name = self._MAPPING_NAMES[key]
+        module = __import__(module_name, fromlist=[attr_name])
+        return getattr(module, attr_name)
+
+    def __contains__(self, key):
+        return key in self._MAPPING_NAMES
+
+    def keys(self):
+        return self._MAPPING_NAMES.keys()
+
+
+MODALITY_TO_AUTOPROCESSOR_MAPPING = _LazyAutoProcessorMapping()
+
+MODALITY_TO_BASE_CLASS_MAPPING = {
+    "audio_tokenizer": "DacModel",
+    "audio_processor": "FeatureExtractionMixin",
+    "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonTokenizer"),
+    "feature_extractor": "FeatureExtractionMixin",
+    "image_processor": "ImageProcessingMixin",
+    "video_processor": "BaseVideoProcessor",
 }
 
 if sys.version_info >= (3, 11):
@@ -526,11 +555,7 @@ class ProcessorMixin(PushToHubMixin):
     This is a mixin used to provide saving/loading functionality for all processor classes.
     """
 
-    attributes = ["feature_extractor", "tokenizer"]
-    optional_call_args: list[str] = []
     # Names need to be attr_class for attr in attributes
-    feature_extractor_class = None
-    tokenizer_class = None
     _auto_class = None
     valid_processor_kwargs = ProcessingKwargs
 
@@ -551,17 +576,17 @@ class ProcessorMixin(PushToHubMixin):
 
         # Sanitize args and kwargs
         for key in kwargs:
-            if key not in self.attributes:
+            if key not in self.get_attributes():
                 raise TypeError(f"Unexpected keyword argument {key}.")
-        for arg, attribute_name in zip(args, self.attributes):
+        for arg, attribute_name in zip(args, self.get_attributes()):
             if attribute_name in kwargs:
                 raise TypeError(f"Got multiple values for argument {attribute_name}.")
             else:
                 kwargs[attribute_name] = arg
 
-        if len(kwargs) != len(self.attributes):
+        if len(kwargs) != len(self.get_attributes()):
             raise ValueError(
-                f"This processor requires {len(self.attributes)} arguments: {', '.join(self.attributes)}. Got "
+                f"This processor requires {len(self.get_attributes())} arguments: {', '.join(self.get_attributes())}. Got "
                 f"{len(args)} arguments instead."
             )
 
@@ -621,7 +646,7 @@ class ProcessorMixin(PushToHubMixin):
             "feature_extractor": (audio, "audio_kwargs"),
         }
         outputs = {}
-        for attribute_name in self.attributes:
+        for attribute_name in self.get_attributes():
             attribute = getattr(self, attribute_name, None)
             input_data, input_kwargs = attribute_to_kwargs[attribute_name]
             if input_data is not None and attribute is not None:
@@ -636,9 +661,9 @@ class ProcessorMixin(PushToHubMixin):
         mismatch between expected and actual class, an error is raise. Otherwise, the proper retrieved class
         is returned.
         """
-        class_name = getattr(self, f"{argument_name}_class")
-        # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
-        class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
+        if argument_name not in MODALITY_TO_BASE_CLASS_MAPPING and "tokenizer" in argument_name:
+            argument_name = "tokenizer"
+        class_name = MODALITY_TO_BASE_CLASS_MAPPING.get(argument_name)
         if isinstance(class_name, tuple):
             proper_class = tuple(self.get_possibly_dynamic_module(n) for n in class_name if n is not None)
         else:
@@ -664,7 +689,7 @@ class ProcessorMixin(PushToHubMixin):
         sig = inspect.signature(self.__init__)
         # Only save the attributes that are presented in the kwargs of `__init__`.
         # or in the attributes
-        attrs_to_save = list(sig.parameters) + self.__class__.attributes
+        attrs_to_save = list(sig.parameters) + self.__class__.get_attributes()
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
@@ -748,7 +773,7 @@ class ProcessorMixin(PushToHubMixin):
             writer.write(self.to_json_string())
 
     def __repr__(self):
-        attributes_repr = [f"- {name}: {repr(getattr(self, name))}" for name in self.attributes]
+        attributes_repr = [f"- {name}: {repr(getattr(self, name))}" for name in self.get_attributes()]
         attributes_repr = "\n".join(attributes_repr)
         return f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
 
@@ -786,12 +811,12 @@ class ProcessorMixin(PushToHubMixin):
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
         if self._auto_class is not None:
-            attrs = [getattr(self, attribute_name) for attribute_name in self.attributes]
+            attrs = [getattr(self, attribute_name) for attribute_name in self.get_attributes()]
             configs = [(a.init_kwargs if isinstance(a, PreTrainedTokenizerBase) else a) for a in attrs]
             configs.append(self)
             custom_object_save(self, save_directory, config=configs)
 
-        for attribute_name in self.attributes:
+        for attribute_name in self.get_attributes():
             attribute = getattr(self, attribute_name)
             if hasattr(attribute, "_set_processor_class"):
                 attribute._set_processor_class(self.__class__.__name__)
@@ -799,12 +824,16 @@ class ProcessorMixin(PushToHubMixin):
             # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
             if attribute_name == "tokenizer":
                 attribute.save_pretrained(save_directory)
+            # if a model has multiple tokenizers, save the additional tokenizers in their own folders.
+            # Note that the additional tokenizers must have "tokenizer" in their attribute name.
+            elif "tokenizer" in attribute_name:
+                attribute.save_pretrained(os.path.join(save_directory, attribute_name))
             elif attribute._auto_class is not None:
                 custom_object_save(attribute, save_directory, config=attribute)
 
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.
-            for attribute_name in self.attributes:
+            for attribute_name in self.get_attributes():
                 attribute = getattr(self, attribute_name)
                 if isinstance(attribute, PreTrainedTokenizerBase):
                     del attribute.init_kwargs["auto_map"]
@@ -1121,7 +1150,7 @@ class ProcessorMixin(PushToHubMixin):
 
         # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
         # If we don't pop, some specific kwargs will raise a warning or error
-        for unused_kwarg in cls.attributes + ["auto_map", "processor_class"]:
+        for unused_kwarg in cls.get_attributes() + ["auto_map", "processor_class"]:
             processor_dict.pop(unused_kwarg, None)
 
         # override processor_dict with given kwargs
@@ -1375,6 +1404,18 @@ class ProcessorMixin(PushToHubMixin):
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod
+    def get_attributes(cls):
+        args_in_init = inspect.signature(cls.__init__).parameters.keys()
+        attributes = []
+        for sub_processor_type in args_in_init:
+            # don't treat audio_tokenizer as an attribute
+            if sub_processor_type == "audio_tokenizer":
+                continue
+            if sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING or "tokenizer" in sub_processor_type:
+                attributes.append(sub_processor_type)
+        return attributes
+
+    @classmethod
     def register_for_auto_class(cls, auto_class="AutoProcessor"):
         """
         Register this class with a given auto class. This should only be used for custom feature extractors as the ones
@@ -1399,37 +1440,29 @@ class ProcessorMixin(PushToHubMixin):
     @classmethod
     def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         """
-        Identify and instantiate the subcomponents of Processor classes, like image processors and
-        tokenizers. This method uses the Processor attributes like `tokenizer_class` to figure out what class those
-        subcomponents should be. Note that any subcomponents must either be library classes that are accessible in
-        the `transformers` root, or they must be custom code that has been registered with the relevant autoclass,
-        via methods like `AutoTokenizer.register()`. If neither of these conditions are fulfilled, this method
-        will be unable to find the relevant subcomponent class and will raise an error.
+        Identify and instantiate the subcomponents of Processor classes, such as image processors, tokenizers,
+        and feature extractors. This method inspects the processor's `__init__` signature to identify parameters
+        that correspond to known modality types (image_processor, tokenizer, feature_extractor, etc.) or contain
+        "tokenizer" in their name. It then uses the appropriate Auto class (AutoImageProcessor, AutoTokenizer, etc.)
+        from `MODALITY_TO_AUTOPROCESSOR_MAPPING` to load each subcomponent via `.from_pretrained()`. For tokenizer-like
+        parameters not explicitly in the mapping, the method uses AutoTokenizer with a subfolder argument.
         """
         args = []
-        for attribute_name in cls.attributes:
-            class_name = getattr(cls, f"{attribute_name}_class")
-            if isinstance(class_name, tuple):
-                classes = tuple(cls.get_possibly_dynamic_module(n) if n is not None else None for n in class_name)
-                if attribute_name == "image_processor":
-                    # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
-                    use_fast = kwargs.get("use_fast")
-                    if use_fast is None:
-                        logger.warning_once(
-                            "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
-                            "`use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. "
-                            "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
-                        )
-                else:
-                    use_fast = kwargs.get("use_fast", True)
-                if use_fast and classes[1] is not None:
-                    attribute_class = classes[1]
-                else:
-                    attribute_class = classes[0]
-            else:
-                attribute_class = cls.get_possibly_dynamic_module(class_name)
-
-            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+        # get args from processor init signature
+        sub_processors = cls.get_attributes()
+        for sub_processor_type in sub_processors:
+            if sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING:
+                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
+                sub_processor = auto_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                args.append(sub_processor)
+            elif "tokenizer" in sub_processor_type:
+                # Special case: tokenizer-like parameters not in the mapping (e.g., "protein_tokenizer")
+                # Load using AutoTokenizer with subfolder
+                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
+                sub_processor = auto_processor_class.from_pretrained(
+                    pretrained_model_name_or_path, subfolder=sub_processor_type, **kwargs
+                )
+                args.append(sub_processor)
 
         return args
 
@@ -1479,7 +1512,7 @@ class ProcessorMixin(PushToHubMixin):
     @property
     def model_input_names(self):
         model_input_names = []
-        for attribute_name in self.attributes:
+        for attribute_name in self.get_attributes():
             attribute = getattr(self, attribute_name, None)
             attr_input_names = getattr(attribute, "model_input_names")
             model_input_names.extend(attr_input_names)

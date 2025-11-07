@@ -50,10 +50,6 @@ class MgpstrProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "char_tokenizer"]
-    image_processor_class = ("ViTImageProcessor", "ViTImageProcessorFast")
-    char_tokenizer_class = "MgpstrTokenizer"
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         self.char_tokenizer = tokenizer
         self.bpe_tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")

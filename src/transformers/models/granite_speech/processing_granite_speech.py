@@ -30,10 +30,6 @@ logger = logging.get_logger(__name__)
 
 
 class GraniteSpeechProcessor(ProcessorMixin):
-    attributes = ["audio_processor", "tokenizer"]
-    audio_processor_class = "GraniteSpeechFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         audio_processor,

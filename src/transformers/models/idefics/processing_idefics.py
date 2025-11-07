@@ -153,10 +153,6 @@ class IdeficsProcessor(ProcessorMixin):
             The string representation of token representing end of utterance
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "IdeficsImageProcessor"
-    tokenizer_class = "LlamaTokenizerFast"
-
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
         super().__init__(image_processor, tokenizer)
         self.image_token_id = (

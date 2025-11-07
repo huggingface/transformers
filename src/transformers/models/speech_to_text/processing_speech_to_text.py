@@ -37,9 +37,6 @@ class Speech2TextProcessor(ProcessorMixin):
             An instance of [`Speech2TextTokenizer`]. The tokenizer is a required input.
     """
 
-    feature_extractor_class = "Speech2TextFeatureExtractor"
-    tokenizer_class = "Speech2TextTokenizer"
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 

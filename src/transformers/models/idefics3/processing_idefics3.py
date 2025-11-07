@@ -121,10 +121,6 @@ class Idefics3Processor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Idefics3ImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: Optional[str] = None, **kwargs
     ):

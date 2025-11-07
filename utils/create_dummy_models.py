@@ -300,7 +300,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
         # Try to build each component (tokenizer & feature extractor) of a `ProcessorMixin`.
         if issubclass(processor_class, ProcessorMixin):
             attrs = {}
-            for attr_name in processor_class.attributes:
+            for attr_name in processor_class.get_attributes():
                 attrs[attr_name] = []
                 # This could be a tuple (for tokenizers). For example, `CLIPProcessor` has
                 #   - feature_extractor_class = "CLIPFeatureExtractor"
