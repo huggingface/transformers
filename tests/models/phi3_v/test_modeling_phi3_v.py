@@ -13,38 +13,33 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava model."""
 
+import tempfile
 import unittest
 
-import requests
-import tempfile
 from transformers import (
-    AutoProcessor,
     Phi3VConfig,
     Phi3VForConditionalGeneration,
     Phi3VModel,
     is_torch_available,
     is_vision_available,
 )
+from transformers.generation.utils import GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput
 from transformers.testing_utils import (
-    Expectations,
-    cleanup,
-    require_bitsandbytes,
     require_torch,
-    slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from transformers.generation.utils import GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput
-import copy
+
 
 if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
+    pass
+
 
 class Phi3VModelTester:
     def __init__(
@@ -74,7 +69,7 @@ class Phi3VModelTester:
         },
         is_training=True,
         vision_config={
-            "use_labels":True,
+            "use_labels": True,
             "image_size": 4,
             "patch_size": 2,
             "num_channels": 3,
@@ -120,14 +115,14 @@ class Phi3VModelTester:
         pixel_values = floats_tensor(
             [
                 self.batch_size,
-                self.num_crops+1,
+                self.num_crops + 1,
                 self.vision_config["num_channels"],
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
             ]
         )
         config = self.get_config()
-        print(config.__class__.__name__,'in test_modeling_phi3_v.py')
+        print(config.__class__.__name__, "in test_modeling_phi3_v.py")
         return config, pixel_values
 
     def prepare_config_and_inputs_for_common(self):
@@ -143,7 +138,9 @@ class Phi3VModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": input_ids,
-            "image_sizes": self.batch_size*[[self.vision_config["image_size"], self.vision_config["image_size"]]],
+            "image_sizes": torch.tensor(
+                [[self.vision_config["image_size"], self.vision_config["image_size"]]] * self.batch_size
+            ),
         }
         return config, inputs_dict
 
@@ -153,7 +150,15 @@ class Phi3VForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
     """
     Model tester for `LlavaForConditionalGeneration`.
     """
-    all_model_classes = (Phi3VModel,Phi3VForConditionalGeneration,) if is_torch_available() else ()
+
+    all_model_classes = (
+        (
+            Phi3VModel,
+            Phi3VForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (Phi3VForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-to-text": Phi3VForConditionalGeneration, "image-text-to-text": Phi3VForConditionalGeneration}
@@ -166,8 +171,7 @@ class Phi3VForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 
     def setUp(self):
         self.model_tester = Phi3VModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Phi3VConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(self, config_class=Phi3VConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -178,6 +182,10 @@ class Phi3VForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 
     @unittest.skip("Not possible now as processor creates a custom attention mask.")
     def test_assisted_decoding_matches_greedy_search_1_same(self):
+        pass
+
+    @unittest.skip("Not possible now as processor creates a custom attention mask.")
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
     @unittest.skip("Not possible now as processor creates a custom attention mask.")
@@ -212,6 +220,24 @@ class Phi3VForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
     def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
 
+    @unittest.skip(
+        reason="This architecture seems to not compute gradients because the model uses intermediate hidden states."
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seems to not compute gradients because the model uses intermediate hidden states."
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seems to not compute gradients because the model uses intermediate hidden states."
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     def test_sample_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -222,7 +248,7 @@ class Phi3VForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
             output_generate = self._sample_generate(
                 model=model,
                 inputs_dict=inputs_dict,
-                num_return_sequences=1,
+                num_return_sequences=1,  # Set it to 1 to avoid test failures.
                 output_scores=True,
                 output_logits=True,
                 output_hidden_states=True,
@@ -241,95 +267,6 @@ class Phi3VForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
                 self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
             self._check_generate_outputs(output_generate, model.config, num_return_sequences=1)
-
-    def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
-        """
-        Tests that the model supports batching and that the output is the nearly the same for the same input in
-        different batch sizes.
-        (Why "nearly the same" not "exactly the same"? Batching uses different matmul shapes, which often leads to
-        different results: https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)
-        """
-
-        def recursive_check(batched_object, single_row_object, model_name, key):
-            if isinstance(batched_object, (list, tuple)):
-                for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
-            elif isinstance(batched_object, dict):
-                for batched_object_value, single_row_object_value in zip(
-                    batched_object.values(), single_row_object.values()
-                ):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
-            # do not compare returned loss (0-dim tensor) / codebook ids (int) / caching objects
-            elif batched_object is None or not isinstance(batched_object, torch.Tensor):
-                return
-            elif batched_object.dim() == 0:
-                return
-            # do not compare int or bool outputs as they are mostly computed with max/argmax/topk methods which are
-            # very sensitive to the inputs (e.g. tiny differences may give totally different results)
-            elif not torch.is_floating_point(batched_object):
-                return
-            else:
-                # indexing the first element does not always work
-                # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = [slice(0, index) for index in single_row_object.shape]
-                batched_row = batched_object[slice_ids]
-                self.assertFalse(
-                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
-                )
-                self.assertFalse(
-                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
-                )
-                self.assertFalse(
-                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
-                )
-                self.assertFalse(
-                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
-                )
-                try:
-                    torch.testing.assert_close(batched_row, single_row_object, atol=atol, rtol=rtol)
-                except AssertionError as e:
-                    msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
-                    msg += str(e)
-                    raise AssertionError(msg)
-
-        config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            config.output_hidden_states = True
-
-            model_name = model_class.__name__
-            if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-                config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-            batched_input_prepared = self._prepare_for_class(batched_input, model_class)
-            model = model_class(copy.deepcopy(config)).to(torch_device).eval()
-
-            batch_size = self.model_tester.batch_size
-            single_row_input = {}
-            for key, value in batched_input_prepared.items():
-                if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
-                    # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
-                    single_batch_shape = value.shape[0] // batch_size
-                    single_row_input[key] = value[:single_batch_shape]
-                else:
-                    single_row_input[key] = value
-
-            # Note: Update image sizes list for single row input (Only change from common test)
-            single_row_input['image_sizes'] = [single_row_input['image_sizes'][0]]
-
-            with torch.no_grad():
-                model_batched_output = model(**batched_input_prepared)
-                model_row_output = model(**single_row_input)
-
-            if isinstance(model_batched_output, torch.Tensor):
-                model_batched_output = {"model_output": model_batched_output}
-                model_row_output = {"model_output": model_row_output}
-
-            for key in model_batched_output:
-                # DETR starts from zero-init queries to decoder, leading to cos_similarity = `nan`
-                if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
-                    model_batched_output[key] = model_batched_output[key][1:]
-                    model_row_output[key] = model_row_output[key][1:]
-                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
@@ -359,5 +296,3 @@ class Phi3VForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 
             self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
             self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-

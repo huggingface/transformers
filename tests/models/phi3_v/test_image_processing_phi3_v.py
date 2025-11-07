@@ -73,7 +73,6 @@ class Phi3VImageProcessingTester:
             "num_crops": self.num_crops,
         }
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.prepare_image_inputs
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
             batch_size=self.batch_size,
@@ -96,13 +95,11 @@ class Phi3VImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     fast_image_processing_class = Phi3VImageProcessorFast if is_torchvision_available() else None
     test_slow_image_processor = False
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->Phi3V
     def setUp(self):
         super().setUp()
         self.image_processor_tester = Phi3VImageProcessingTester(self)
 
     @property
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
