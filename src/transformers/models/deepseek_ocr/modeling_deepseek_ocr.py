@@ -1509,9 +1509,7 @@ class DeepseekOcrTextModel(DeepseekOcrTextPreTrainedModel):
     """
 )
 class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
-
     _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
-
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
@@ -1669,7 +1667,6 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
             feature_lens.append(combined.size(0))
 
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0][0].device)
-        
         return new_image_features, feature_lens
 
     def get_image_features(
@@ -1706,6 +1703,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
         proj_list_flat = self._project_image_patches(pixel_values)
         proj = torch.stack(proj_list_flat, dim=0)
+
         proj_list = torch.split(proj, image_num_patches, dim=0)
 
         new_image_features, _ = self.pack_image_features(
@@ -1849,6 +1847,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
         sam_features = self.sam_model(pixel_batch)
         sam_seq = sam_features.flatten(2).permute(0, 2, 1)
+
         clip_out = self.clip_model(
             pixel_values=pixel_batch,
             patch_embeds=sam_features,
@@ -1856,6 +1855,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         )
 
         clip_seq = clip_out.last_hidden_state
+
         clip_seq = clip_seq[:, 1:]
 
         fused = torch.cat([clip_seq, sam_seq], dim=-1)
@@ -1871,7 +1871,6 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
     ):
         batch_size = pixel_values_global.shape[0]
         device = pixel_values_global.device
-
 
         if num_local_crops is None:
             if image_spatial_crops is not None:
@@ -1972,6 +1971,7 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
         )
+
     # Make modules available through conditional class for BC
     @property
     def language_model(self):

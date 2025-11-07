@@ -896,6 +896,7 @@ class DeepseekOcrTextModel(DeepseekV2Model):
             if isinstance(module.mlp, DeepseekOcrTextMoe):
                 module.mlp.gate.weight.data.normal_(mean=0.0, std=config.initializer_range)
 
+
 @auto_docstring(
     custom_intro="""
     The Deepseek-OCR model which consists of two vision backbones and a language model without language modeling head.
@@ -1042,7 +1043,7 @@ class DeepseekOcrModel(LlavaNextModel):
 
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0][0].device)
         return new_image_features, feature_lens
-    
+
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor],
@@ -1078,7 +1079,6 @@ class DeepseekOcrModel(LlavaNextModel):
         proj_list_flat = self._project_image_patches(pixel_values)
         proj = torch.stack(proj_list_flat, dim=0)
 
-
         proj_list = torch.split(proj, image_num_patches, dim=0)
 
         new_image_features, _ = self.pack_image_features(
@@ -1109,7 +1109,7 @@ class DeepseekOcrModel(LlavaNextModel):
         )
 
         clip_seq = clip_out.last_hidden_state
-        
+
         clip_seq = clip_seq[:, 1:]
 
         fused = torch.cat([clip_seq, sam_seq], dim=-1)
@@ -1125,7 +1125,6 @@ class DeepseekOcrModel(LlavaNextModel):
     ):
         batch_size = pixel_values_global.shape[0]
         device = pixel_values_global.device
-
 
         if num_local_crops is None:
             if image_spatial_crops is not None:
@@ -1227,6 +1226,7 @@ class DeepseekOcrModel(LlavaNextModel):
                     image_sizes = inferred_sizes
 
         image_hidden_states = None
+
         if pixel_values is not None and pixel_values.abs().sum().item() != 0 or pixel_values_global is not None:
             if image_sizes is None:
                 raise ValueError("image_sizes must be provided when pixel values are passed to the model.")
@@ -1241,7 +1241,6 @@ class DeepseekOcrModel(LlavaNextModel):
 
             token_mask = self.get_placeholder_mask(input_ids, inputs_embeds, self.config.image_token_index)
             inputs_embeds = inputs_embeds.masked_scatter(token_mask, image_hidden_states)
-
 
         outputs = self.language_model(
             input_ids=None,
