@@ -13,6 +13,9 @@ jobs:
     outputs:
       PR_NUMBER: ${{ steps.set_pr_number.outputs.PR_NUMBER }}
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
       - name: Get PR number
         shell: bash
         env:

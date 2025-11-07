@@ -13,6 +13,9 @@ jobs:
     name: Notify new model
     runs-on: ubuntu-22.04
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

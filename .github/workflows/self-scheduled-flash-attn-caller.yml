@@ -32,6 +32,10 @@ jobs:
     name: Setup
     runs-on: ubuntu-22.04
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Setup
         run: |
           mkdir "setup_values"

@@ -46,6 +46,10 @@ jobs:
       PR_HEAD_SHA: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
       PR_MERGE_SHA: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Verify `merge_commit` timestamp is older than the issue comment timestamp
         env:
           COMMENT_DATE: ${{ github.event.comment.created_at }}
@@ -67,6 +71,10 @@ jobs:
       models: ${{ steps.models_to_run.outputs.models }}
       quantizations: ${{ steps.models_to_run.outputs.quantizations }}
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: "0"
@@ -109,6 +117,10 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-22.04
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Reply to the comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -131,6 +143,10 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-22.04
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Reply to the comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -152,6 +168,10 @@ jobs:
       statuses: write
     runs-on: ubuntu-22.04
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Create Run
         id: create_run
         env:
@@ -210,6 +230,10 @@ jobs:
     if: ${{ always() && needs.create_run.result == 'success' }}
     runs-on: ubuntu-22.04
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Show reports from jobs
         env:
           MODEL_REPORT: ${{ needs.model-ci.outputs.report }}

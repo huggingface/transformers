@@ -18,6 +18,10 @@ jobs:
         shell: bash -l {0}
 
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
