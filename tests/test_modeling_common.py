@@ -1964,6 +1964,7 @@ class ModelTesterMixin:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             config.tie_word_embeddings = False
             config.get_text_config().tie_word_embeddings = False
+            config.tie_encoder_decoder = False
             model = model_class(config)  # we init the model without tie
             # if this test fails later on, it means init tied the weights
             with tempfile.TemporaryDirectory() as d:
@@ -1977,16 +1978,8 @@ class ModelTesterMixin:
                     reloaded_state = model_reloaded.state_dict()
                     for k, v in model.state_dict().items():
                         with self.subTest(k):
-                            # self.assertIn(
-                            #     k,
-                            #     serialized_keys,
-                            #     f"Key {k} was not serialized, this means it was probably aliased and safetensors removed it",
-                            # )
-                            # torch.testing.assert_close(
-                            #     v, f.get_tensor(k), msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
-                            # )
                             torch.testing.assert_close(
-                                v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
+                                v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}, this means it was probably aliased and safetensors removed it"
                             )
 
                 # Checking there was no complain of missing weights
