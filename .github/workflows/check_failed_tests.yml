@@ -125,7 +125,7 @@ jobs:
             const { data: merge_commit }  = await github.rest.repos.getCommit({
               owner: pr.base.repo.owner.login,
               repo: pr.base.repo.name,
-              ref: pr.merge_commit_sha,
+              ref: '${{ inputs.commit_sha }}',
             });
 
             core.setOutput('merge_commit_base_sha', merge_commit.parents[0].sha);
