@@ -525,10 +525,9 @@ class AutoImageProcessor:
                 )
                 use_fast = False
             if use_fast:
-                for image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.values():
-                    if image_processor_type in image_processors:
-                        break
-                else:
+                # Check if the fast image processor class exists
+                image_processor_class_fast = get_image_processor_class_from_name(image_processor_type)
+                if image_processor_class_fast is None:
                     image_processor_type = image_processor_type[:-4]
                     use_fast = False
                     logger.warning_once(
