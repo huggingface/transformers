@@ -680,7 +680,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "image_end_token_id": model_config.get("image_end_token_id", 151340),
         "video_start_token_id": model_config.get("video_start_token_id", 151341),
         "video_end_token_id": model_config.get("video_end_token_id", 151342),
-        "tie_word_embeddings": False,
         "transformers_version": "4.57.1",
     }
     txt_config = {
@@ -704,6 +703,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "use_cache": text_config.get("use_cache", True),
         "vocab_size": text_config.get("vocab_size", 151552),
         "partial_rotary_factor": 0.5,
+        "tie_word_embeddings": False,
         "rope_parameters": {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [8, 12, 12]},
     }
     hf_config["text_config"] = txt_config
