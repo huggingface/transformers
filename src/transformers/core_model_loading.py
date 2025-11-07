@@ -26,14 +26,16 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
+from types import MethodType
 from typing import Any, Optional, Union
 
 import torch
 
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer
-from .utils import logging, is_torch_greater_or_equal
 from .quantizers import HfQuantizer
+from .utils import is_torch_greater_or_equal, logging
 from .utils.quantization_config import QuantizationMethod
+
 
 _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
@@ -301,71 +303,42 @@ class ConversionEntry:
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
 
-class LoadedParameter(torch.nn.Parameter):
-    r"""
-    Because `transformers` initialized the missing keys we need to make sure
-    we can skip the ones that are actually loaded. Now we could force something, but
-    we want people to have an intuitive API usage, thus they can keep the well know API, and
-    just define their custom `_init_weight`, as long as they don't use `module.xxx.data`.
-
-    We added a check for this in `make fixup` to force people to use it.
-    After the `missing` weights are initialized, LoadedParameters become just nn.Parameters.
+# Factory function to create LoadedParameter subclasses dynamically
+def get_loaded_parameter_class(base_cls):
     """
+    base_cls: an nn.Parameter subclass (or nn.Parameter)
+    Returns a new class that combines the base_cls with LoadedParameterMixin
+    """
+    class LoadedParam(base_cls):
+        _inplace_methods = [
+                'add_', 'mul_', 'clamp_', 'zero_', 'fill_', 'normal_', 'uniform_',
+                'copy_', 'erfinv_', 'log_'
+            ]
+        def __new__(cls, from_existing, **kwargs):
+            inst = super().__new__(cls, from_existing.data, from_existing.requires_grad, **from_existing.__dict__)
+            inst._original_param = from_existing
+            # Explicitly override all in-place methods per instance
+            for method_name in inst._inplace_methods:
+                setattr(inst, method_name, MethodType(inst._skip, inst))
 
-    def __new__(cls, data=None, requires_grad=True):
-        inst = super().__new__(cls, data, requires_grad)
-        inst._is_hf_initialized = False
-        return inst
+            return inst
 
-    def __repr__(self):
-        return f"LoadedParameter(_is_hf_initialized={self._is_hf_initialized}, data={self.data}"
-    # block .data assignment when flagged
-    @property
-    def data(self):
-        return super().data
-
-    @data.setter
-    def data(self, new):
-        if not getattr(self, "_is_hf_initialized", False):
-            super(LoadedParameter, LoadedParameter).data.__set__(self, new)  # delegate to base
-        # else: skip or warn
-
-    # shadow common in-place init methods
-    def _guard(self, fn, *a, **k):
-        if getattr(self, "_is_hf_initialized", False):
+        def _skip(self, *args, **kwargs):
+            """Helper to skip in-place operations."""
             return self
-        return fn(*a, **k)
 
-    def normal_(self, *a, **k):
-        return self._guard(super().normal_, *a, **k)
+        def __repr__(self):
+            return f"LoadedParameter(data={self.data})"
 
-    def uniform_(self, *a, **k):
-        return self._guard(super().uniform_, *a, **k)
+        @property
+        def data(self):
+            return super().data
 
-    def zero_(self):
-        return self._guard(super().zero_)
+        @data.setter
+        def data(self, new):
+            pass
 
-    def fill_(self, *a, **k):
-        return self._guard(super().fill_, *a, **k)
-
-    def copy_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
-
-    def mul_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
-
-    def add_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
-
-    def clamp_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
-
-    def erfinv_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
-
-    def log_(self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
-
+    return LoadedParam
 
 def _materialize_copy(tensor, dtype=None):
     # PyTorch: this runs in C and releases the GIL; good for threads.
@@ -472,14 +445,16 @@ def set_param_for_module(
                 )
             else:
                 pass  # TODO for "local" stuff, it will trigger missmatched no?
-            param_value: LoadedParameter = LoadedParameter(param_value, requires_grad=param_value.is_floating_point())
-        else:
-            param_value: LoadedParameter = LoadedParameter(param_value.data)
+            param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+
+        # to skip any inplace method that modifies the param data
+        param_value = get_loaded_parameter_class(param_value.__class__)(from_existing=param_value)
 
         # skip mismatch for hf_quantizer for now
         if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
         missing_keys.discard(layer_name)
+        # maybe not needed anymore, but let's keep this as there are still code related to that
         param_value._is_hf_initialized = True  # super important otherwise _init_weight re-initi if bias is missing
         setattr(module_obj, param_name, param_value)
 
@@ -561,7 +536,7 @@ def convert_and_load_state_dict_in_model(
                 else:
                     unexpected_keys.add(t)
                     continue
-    
+
             if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, t):
                 converter.quantization_operation = hf_quantizer.get_quantize_ops()
                 # TODO: to clean later. We need to use the empty_param from the checkpoint to decide if we upcast the param to a specific dtype
@@ -651,8 +626,8 @@ def convert_and_load_state_dict_in_model(
                                 converter.distributed_operation,
                                 hf_quantizer
                             )
-                except SkipLayer:
-                    continue
+                except Exception as e :
+                    raise e
             del group
 
             # Update progress bar

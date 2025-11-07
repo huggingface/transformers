@@ -4673,8 +4673,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             self.initialize_weights()
 
-        for p in self.parameters(): # TODO @Cyrilvallez if we are able to do this while we smart apply my be better
-            setattr(p, "__class__", nn.Parameter)
+        for name, p in self.named_parameters():
+            if hasattr(p, "_original_param"):
+                parts = name.split(".")
+                submod = self
+                for part in parts[:-1]:
+                    submod = getattr(submod, part)
+                setattr(submod, parts[-1], p._original_param)
 
     def _adjust_missing_and_unexpected_keys(
         self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool, model

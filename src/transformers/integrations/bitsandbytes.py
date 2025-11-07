@@ -41,7 +41,7 @@ class Bnb4bitQuantize(ConversionOps):
         value = value[0] if isinstance(value, list) else value
         if not self.hf_quantizer.pre_quantized:
             old_value = model.get_parameter_or_buffer(target_key)
-            new_value = bnb.nn.Params4bit(value, **old_value.__dict__).to(value.device)
+            new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
             return {target_key : new_value}
         else:
             full_name = target_key
