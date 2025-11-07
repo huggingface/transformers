@@ -352,7 +352,8 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             video_processor_dict = self.video_processor_dict.copy()
             video_processor_dict["size"] = {"longest_edge": 5 * 32 * 32, "shortest_edge": 32 * 32}
             video_processor_dict["do_sample_frames"] = False
-            video_processor_dict["temporal_patch_size"] = 3
+            temporal_patch_size = 3
+            video_processor_dict["temporal_patch_size"] = temporal_patch_size
             video_processing = video_processing_class(**video_processor_dict)
 
             n, w, h = 5, 32, 32
@@ -360,7 +361,7 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
             video_processed = video_processing(video_inputs, return_tensors="pt")
             encoded_videos = video_processed[self.input_name]
-            self.assertEqual(list(encoded_videos.shape), [8, 2304])
+            self.assertEqual(list(encoded_videos.shape), [8, temporal_patch_size * 3 * 16 * 16])
 
             video_grid_thw = video_processed["video_grid_thw"]
             self.assertEqual(video_grid_thw.tolist(), [[2, 2, 2]])
