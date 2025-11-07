@@ -220,21 +220,22 @@ class PretrainedFSMTModel(PreTrainedModel):
     config: FSMTConfig
     base_model_prefix = "model"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, SinusoidalPositionalEmbedding):
             weight = module.get_embedding(*module.weight.shape, module.padding_idx)
             weight = nn.Parameter(weight, requires_grad=False)
             weight.detach_()
             module.weight = weight
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
     @property
     def dummy_inputs(self):
@@ -848,11 +849,6 @@ class FSMTModel(PretrainedFSMTModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.get_input_embeddings())
-            self._tie_embedding_weights(self.decoder.output_projection, self.get_input_embeddings())
 
     @auto_docstring
     def forward(

@@ -331,6 +331,7 @@ class ParakeetPreTrainedModel(PreTrainedModel):
         "attentions": ParakeetEncoderAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
@@ -342,8 +343,8 @@ class ParakeetPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, ParakeetEncoderAttention):
             # Initialize positional bias parameters
-            module.bias_u.data.normal_(mean=0.0, std=std)
-            module.bias_v.data.normal_(mean=0.0, std=std)
+            module.bias_u.normal_(mean=0.0, std=std)
+            module.bias_v.normal_(mean=0.0, std=std)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = self.config.encoder_config if isinstance(self.config, ParakeetCTCConfig) else self.config

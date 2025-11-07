@@ -437,10 +437,11 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2Moe):
-            module.gate.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.gate.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV2Model(LlamaModel):

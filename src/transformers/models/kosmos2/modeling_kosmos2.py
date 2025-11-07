@@ -1120,6 +1120,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(self, Kosmos2VisionModel):
@@ -1162,15 +1163,15 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.dense.weight, std=std)
             nn.init.normal_(module.latent_query)
         elif isinstance(module, Kosmos2TextTransformer):
-            module.embed_tokens.weight.data.normal_(mean=0.0, std=std)
+            module.embed_tokens.weight.normal_(mean=0.0, std=std)
             if module.embed_tokens.padding_idx is not None:
-                module.embed_tokens.weight.data[module.embed_tokens.padding_idx].zero_()
+                module.embed_tokens.weight[module.embed_tokens.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
 
         if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
 
 
 class Kosmos2VisionModel(Kosmos2PreTrainedModel):

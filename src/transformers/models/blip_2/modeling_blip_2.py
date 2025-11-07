@@ -409,19 +409,20 @@ class Blip2PreTrainedModel(PreTrainedModel):
     ]
     _skip_keys_device_placement = "past_key_values"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_range
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=factor)
+            module.weight.normal_(mean=0.0, std=factor)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor)
+            module.weight.normal_(mean=0.0, std=factor)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, Blip2VisionEmbeddings):
             nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
@@ -435,7 +436,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
                 Blip2ForImageTextRetrieval,
             ),
         ):
-            module.query_tokens.data.zero_()
+            module.query_tokens.zero_()
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->Blip2
@@ -1034,11 +1035,6 @@ class Blip2Model(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn = False  # because self.qformer does not support FA2
-    _tied_weights_keys = {
-        "language_model.decoder.embed_tokens.weight": "language_model.shared.weight",
-        "language_model.encoder.embed_tokens.weight": "language_model.shared.weight",
-        "language_model.lm_head.weight": "language_model.shared.weight",
-    }
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1630,11 +1626,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.language_model.get_decoder()
-
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
 
     def _preprocess_accelerate(self):
         r"""

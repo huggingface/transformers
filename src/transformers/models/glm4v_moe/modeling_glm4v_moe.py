@@ -553,10 +553,11 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
     }
     input_modalities = ["text", "image", "video"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Glm4vMoeTextTopkRouter):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @dataclass
