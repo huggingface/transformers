@@ -262,13 +262,13 @@ conda install conda-forge::transformers
 
 | 章節 | 描述 |
 |-|-|
-| [文件](https://huggingface.co/transformers/) | 完整的 API 文件和教學 |
-| [任務概覽](https://huggingface.co/docs/transformers/task_summary) | 🤗 Transformers 支援的任務 |
-| [預處理教學](https://huggingface.co/docs/transformers/preprocessing) | 使用 `Tokenizer` 來為模型準備資料 |
-| [訓練和微調](https://huggingface.co/docs/transformers/training) | 使用 PyTorch/TensorFlow 的內建的訓練方式或於 `Trainer` API 中使用 🤗 Transformers 提供的模型 |
+| [文件](https://huggingface.co/docs/transformers/zh) | 完整的 API 文件和教學 |
+| [任務概覽](https://huggingface.co/docs/transformers/zh/task_summary) | 🤗 Transformers 支援的任務 |
+| [預處理教學](https://huggingface.co/docs/transformers/zh/preprocessing) | 使用 `Tokenizer` 來為模型準備資料 |
+| [訓練和微調](https://huggingface.co/docs/transformers/zh/training) | 使用 PyTorch/TensorFlow 的內建的訓練方式或於 `Trainer` API 中使用 🤗 Transformers 提供的模型 |
 | [快速上手：微調和範例腳本](https://github.com/huggingface/transformers/tree/main/examples) | 為各種任務提供的範例腳本 |
-| [模型分享和上傳](https://huggingface.co/docs/transformers/model_sharing) | 上傳並與社群分享你微調的模型 |
-| [遷移](https://huggingface.co/docs/transformers/migration) | 從 `pytorch-transformers` 或 `pytorch-pretrained-bert` 遷移到 🤗 Transformers |
+| [模型分享和上傳](https://huggingface.co/docs/transformers/zh/model_sharing) | 上傳並與社群分享你微調的模型 |
+| [遷移](https://huggingface.co/docs/transformers/zh/migration) | 從 `pytorch-transformers` 或 `pytorch-pretrained-bert` 遷移到 🤗 Transformers |
 
 ## 引用
 
