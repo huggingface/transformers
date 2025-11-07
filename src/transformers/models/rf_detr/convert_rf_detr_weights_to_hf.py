@@ -29,7 +29,6 @@ from torchvision import transforms
 from tqdm import tqdm
 
 from transformers import DeformableDetrImageProcessor, RfDetrConfig, RfDetrForObjectDetection
-from transformers.image_utils import load_image
 
 
 # Mapping of model names to their checkpoint files
@@ -409,7 +408,6 @@ def test_models_outputs(model: RfDetrForObjectDetection, image_processor: Deform
 }
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    image_path = "https://media.roboflow.com/notebooks/examples/dog-2.jpeg"
     image = prepare_img()
     # Fake annotation for testing
     annotations = {
