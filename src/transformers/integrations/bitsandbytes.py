@@ -39,16 +39,21 @@ class Bnb4bitQuantize(ConversionOps):
     def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, **kwargs) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
+
+        full_name = target_key
+        # update param name to get the weights instead of the quantized stats
+        target_key = self.hf_quantizer.get_param_name(target_key)
+        module, _ = get_module_from_name(model, target_key)
+
         if not self.hf_quantizer.pre_quantized:
+            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
+            # Since weights are saved in the correct "orientation", we skip transposing when loading.
+            if issubclass(module.source_cls, Conv1D):
+                value = value.T
             old_value = model.get_parameter_or_buffer(target_key)
             new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
             return {target_key : new_value}
         else:
-            full_name = target_key
-            # update param name to get the weights instead of the quantized stats
-            target_key = self.hf_quantizer.get_param_name(target_key)
-            module, _ = get_module_from_name(model, target_key)
-
             module_name = target_key.rsplit(".", 1)[0]
             # Save the states for later quantization when they are all gathered
             if not hasattr(self.hf_quantizer, "param_quant_stats"):
