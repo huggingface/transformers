@@ -2472,6 +2472,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     module.weight.fill_(1.0)
                 if hasattr(module, "bias") and module.bias is not None:
                     module.bias.zero_()
+            elif (hasattr(module, "gate_up_proj")):
+                module.gate_up_proj.normal_(mean=0.0, std=std)
+            elif (hasattr(module, "down_proj")):
+                module.gate_up_proj.normal_(mean=0.0, std=std)
+            elif (hasattr(module, "gate")):
+                module.gate.normal_(mean=0.0, std=std)
         except Exception as e:
             logger.warning(f"Failed to init: {str(e)}")
 
