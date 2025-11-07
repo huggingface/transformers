@@ -3949,6 +3949,58 @@ def test_missing_tied_decoder_weight_preserves_embeddings():
     assert decoder_weight.data_ptr() == word_embeddings.data_ptr()
 
 
+@require_torch
+def test_missing_linear_bias_preserves_weight_custom_model(tmp_path_factory):
+    import torch
+    from torch import nn
+
+    from transformers import PreTrainedConfig, PreTrainedModel
+
+    class _CustomConfig(PreTrainedConfig):
+        model_type = "custom-missing-bias"
+
+        def __init__(self, hidden_size=4, **kwargs):
+            super().__init__(**kwargs)
+            self.hidden_size = hidden_size
+
+    class _CustomModel(PreTrainedModel):
+        config_class = _CustomConfig
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(config.hidden_size, config.hidden_size)
+            self.post_init()
+
+        def forward(self, x):
+            return self.linear(x)
+
+    config = _CustomConfig(hidden_size=4)
+    model = _CustomModel(config)
+    with torch.no_grad():
+        sentinel = torch.arange(model.linear.weight.numel(), dtype=torch.float32).view_as(model.linear.weight)
+        model.linear.weight.copy_(sentinel)
+        model.linear.bias.zero_()
+
+    state_dict = model.state_dict()
+    expected_weight = state_dict["linear.weight"].clone()
+    state_dict.pop("linear.bias")
+
+    reloaded = _CustomModel(config)
+    with torch.no_grad():
+        reloaded.linear.weight.copy_(expected_weight)
+        reloaded.linear.bias.zero_()
+
+    reloaded.linear.weight._is_hf_initialized = True
+    if hasattr(reloaded.linear.bias, "_is_hf_initialized"):
+        delattr(reloaded.linear.bias, "_is_hf_initialized")
+    reloaded.linear._is_hf_initialized = False
+
+    reloaded._initialize_missing_keys(["linear.bias"], is_quantized=False)
+
+    torch.testing.assert_close(reloaded.linear.weight, expected_weight)
+    torch.testing.assert_close(reloaded.linear.bias, torch.zeros_like(reloaded.linear.bias))
+
+
 global_rng = random.Random()
 
 
