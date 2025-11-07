@@ -5113,11 +5113,170 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         be initialized correctly (i.e. weight initialization distribution).
         Also take care of setting the `_is_hf_initialized` flag for keys that are not missing.
         """
+        missing_keys_set = set(missing_keys)
+
         for key in self.state_dict():
             # If it's part of the keys that will be loaded, mark it as already initialized
-            if key not in missing_keys:
+            if key not in missing_keys_set:
                 param_or_buffer = self.get_parameter_or_buffer(key)
                 param_or_buffer._is_hf_initialized = True
+
+        handled_missing_keys: set[str] = set()
+
+        if missing_keys_set and not is_quantized:
+            missing_params_by_module: defaultdict[str, set[str]] = defaultdict(set)
+            missing_buffers_by_module: defaultdict[str, set[str]] = defaultdict(set)
+
+            for key in missing_keys_set:
+                if "." not in key:
+                    continue
+                module_path, name = key.rsplit(".", 1)
+                if module_path == "":
+                    continue
+                try:
+                    module = self.get_submodule(module_path)
+                except AttributeError:
+                    continue
+
+                parameters = getattr(module, "_parameters", {})
+                if name in parameters and parameters[name] is not None:
+                    missing_params_by_module[module_path].add(name)
+                    continue
+
+                buffers = getattr(module, "_buffers", {})
+                non_persistent = getattr(module, "_non_persistent_buffers_set", set())
+                if name in buffers and buffers[name] is not None and name not in non_persistent:
+                    missing_buffers_by_module[module_path].add(name)
+
+            module_paths = sorted(
+                set(missing_params_by_module.keys()) | set(missing_buffers_by_module.keys()),
+                key=lambda name: name.count("."),
+                reverse=True,
+            )
+
+            modules_info: list[tuple[str, nn.Module, set[str], set[str]]] = []
+            for module_path in module_paths:
+                try:
+                    module = self.get_submodule(module_path)
+                except AttributeError:
+                    continue
+                modules_info.append(
+                    (
+                        module_path,
+                        module,
+                        missing_params_by_module.get(module_path, set()),
+                        missing_buffers_by_module.get(module_path, set()),
+                    )
+                )
+
+            if modules_info:
+                def _initialize_modules():
+                    with torch.no_grad():
+                        for module_path, module, module_missing_params, module_missing_buffers in modules_info:
+                            immediate_params = dict(module.named_parameters(recurse=False))
+                            non_persistent = getattr(module, "_non_persistent_buffers_set", set())
+                            persistent_buffers = {
+                                name: buffer
+                                for name, buffer in module.named_buffers(recurse=False)
+                                if name not in non_persistent
+                            }
+
+                            already_initialized_params = {
+                                name
+                                for name in module_missing_params
+                                if name in immediate_params
+                                and getattr(immediate_params[name], "_is_hf_initialized", False)
+                            }
+                            already_initialized_buffers = {
+                                name
+                                for name in module_missing_buffers
+                                if name in persistent_buffers
+                                and getattr(persistent_buffers[name], "_is_hf_initialized", False)
+                            }
+                            if already_initialized_params or already_initialized_buffers:
+                                handled_missing_keys.update(
+                                    {f"{module_path}.{name}" for name in already_initialized_params}
+                                )
+                                handled_missing_keys.update(
+                                    {f"{module_path}.{name}" for name in already_initialized_buffers}
+                                )
+
+                            missing_params = {
+                                name
+                                for name in module_missing_params
+                                if name in immediate_params
+                                and not getattr(immediate_params[name], "_is_hf_initialized", False)
+                            }
+                            missing_buffers = {
+                                name
+                                for name in module_missing_buffers
+                                if name in persistent_buffers
+                                and not getattr(persistent_buffers[name], "_is_hf_initialized", False)
+                            }
+
+                            if not missing_params and not missing_buffers:
+                                continue
+
+                            all_param_names = set(immediate_params.keys())
+                            all_buffer_names = set(persistent_buffers.keys())
+                            fully_missing = (
+                                (not all_param_names or missing_params == all_param_names)
+                                and (not all_buffer_names or missing_buffers == all_buffer_names)
+                            )
+
+                            if fully_missing:
+                                self._init_weights(module)
+                            else:
+                                preserved_parameters = {
+                                    name: param.detach().clone()
+                                    for name, param in immediate_params.items()
+                                    if name not in missing_params
+                                }
+                                preserved_buffers = {
+                                    name: buffer.detach().clone()
+                                    for name, buffer in persistent_buffers.items()
+                                    if name not in missing_buffers and buffer is not None
+                                }
+
+                                self._init_weights(module)
+
+                                for name, tensor in preserved_parameters.items():
+                                    module._parameters[name].data.copy_(tensor)
+                                    module._parameters[name]._is_hf_initialized = True
+
+                                for name, tensor in preserved_buffers.items():
+                                    buffer = module._buffers[name]
+                                    buffer.data.copy_(tensor)
+                                    buffer._is_hf_initialized = True
+
+                            for name in missing_params:
+                                param = module._parameters.get(name)
+                                if param is not None:
+                                    param._is_hf_initialized = True
+                                    handled_missing_keys.add(f"{module_path}.{name}")
+
+                            for name in missing_buffers:
+                                buffer = module._buffers.get(name)
+                                if buffer is not None:
+                                    buffer._is_hf_initialized = True
+                                    handled_missing_keys.add(f"{module_path}.{name}")
+
+                if is_deepspeed_zero3_enabled():
+                    import deepspeed
+
+                    params_to_gather = []
+                    for _, module, _, _ in modules_info:
+                        params_to_gather.extend(list(module.parameters(recurse=False)))
+
+                    if params_to_gather:
+                        with deepspeed.zero.GatheredParameters(params_to_gather, modifier_rank=0):
+                            _initialize_modules()
+                    else:
+                        _initialize_modules()
+                else:
+                    _initialize_modules()
+
+            missing_keys_set -= handled_missing_keys
 
         def set_is_initialized_for_modules(module):
             # A module is already initialized if and only if all its children are also already initialized, and all
@@ -5141,14 +5300,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # each param)
         self.apply(set_is_initialized_for_modules)
 
-        # This will only initialize submodules that are not marked as initialized by the line above.
+        not_initialized_parameters = list(
+            {v for v in self.state_dict(keep_vars=True).values() if not getattr(v, "_is_hf_initialized", False)}
+        )
+
+        if not not_initialized_parameters:
+            return
+
+        # This will only initialize submodules that are not marked as initialized by the logic above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
-            # keep_vars=True as we need the original tensors, so that the "_is_hf_initialized" is present on them
-            not_initialized_parameters = list(
-                {v for v in self.state_dict(keep_vars=True).values() if not getattr(v, "_is_hf_initialized", False)}
-            )
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
                 self.initialize_weights()
         else:

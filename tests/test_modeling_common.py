@@ -102,6 +102,7 @@ from transformers.utils import (
     CONFIG_NAME,
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
+    WEIGHTS_NAME,
     is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
@@ -3896,6 +3897,56 @@ class ModelTesterMixin:
                         self.assertEqual(k1, k2)
                         self.assertEqual(v1.dtype, v2.dtype)
                         self.assertTrue((v1 == v2).all())
+
+
+@require_torch
+def test_missing_linear_bias_does_not_override_weight():
+    from transformers import BertConfig, BertForSequenceClassification
+
+    config = BertConfig(hidden_size=8, intermediate_size=16, num_attention_heads=2, num_hidden_layers=1, num_labels=2)
+    model = BertForSequenceClassification(config)
+    with torch.no_grad():
+        sentinel = torch.arange(model.classifier.weight.numel(), dtype=torch.float32).view_as(model.classifier.weight)
+        model.classifier.weight.copy_(sentinel)
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        model.save_pretrained(tmpdirname, safe_serialization=False)
+        weights_file = os.path.join(tmpdirname, WEIGHTS_NAME)
+
+        state_dict = torch.load(weights_file)
+        expected_weight = state_dict["classifier.weight"].clone()
+        state_dict.pop("classifier.bias")
+        torch.save(state_dict, weights_file)
+
+        reloaded = BertForSequenceClassification.from_pretrained(tmpdirname)
+
+    torch.testing.assert_close(reloaded.classifier.weight, expected_weight)
+    torch.testing.assert_close(reloaded.classifier.bias, torch.zeros_like(reloaded.classifier.bias))
+
+
+@require_torch
+def test_missing_tied_decoder_weight_preserves_embeddings():
+    from transformers import BertConfig, BertForMaskedLM, BertModel
+
+    config = BertConfig(hidden_size=8, intermediate_size=16, num_attention_heads=2, num_hidden_layers=1, num_labels=2)
+    base_model = BertModel(config)
+    with torch.no_grad():
+        sentinel = torch.arange(
+            base_model.embeddings.word_embeddings.weight.numel(), dtype=torch.float32
+        ).view_as(base_model.embeddings.word_embeddings.weight)
+        base_model.embeddings.word_embeddings.weight.copy_(sentinel)
+        expected_embeddings = base_model.embeddings.word_embeddings.weight.detach().clone()
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        base_model.save_pretrained(tmpdirname)
+        mlm_model = BertForMaskedLM.from_pretrained(tmpdirname)
+
+    decoder_weight = mlm_model.cls.predictions.decoder.weight
+    word_embeddings = mlm_model.bert.embeddings.word_embeddings.weight
+
+    torch.testing.assert_close(decoder_weight, expected_embeddings)
+    torch.testing.assert_close(word_embeddings, expected_embeddings)
+    assert decoder_weight.data_ptr() == word_embeddings.data_ptr()
 
 
 global_rng = random.Random()
