@@ -339,11 +339,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Input is of shape [B, N, P]."""
         mu, sigma = self._timesfm_masked_mean_std(inputs, patched_pads)
-        sigma = torch.where(
-            sigma < self.config.tolerance,
-            torch.tensor(1.0, dtype=sigma.dtype, device=sigma.device),
-            sigma,
-        )
+        sigma = torch.clamp(sigma, min=self.config.tolerance)
 
         # Normalize each patch
         outputs = (inputs - mu[:, None, None]) / sigma[:, None, None]
