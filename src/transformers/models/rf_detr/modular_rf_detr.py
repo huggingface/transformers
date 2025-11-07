@@ -3,11 +3,12 @@ from typing import Optional, Unpack
 import torch
 from torch import nn
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import CONFIG_MAPPING
+from ..lw_detr.configuration_lw_detr import LwDetrConfig
 from ..lw_detr.modeling_lw_detr import (
     LwDetrC2FLayer,
     LwDetrConvNormLayer,
@@ -30,7 +31,7 @@ class RfDetrModelOutput(LwDetrModelOutput):
     pass
 
 
-class RfDetrConfig(PretrainedConfig):
+class RfDetrConfig(LwDetrConfig):
     r"""
     This is the configuration class to store the configuration of a [`RfDetrModel`]. It is used to instantiate
     a LW-DETR model according to the specified arguments, defining the model architecture. Instantiating a
@@ -134,11 +135,6 @@ class RfDetrConfig(PretrainedConfig):
     ```"""
 
     model_type = "rf_detr"
-    attribute_map = {
-        "hidden_size": "d_model",
-        "num_attention_heads": "decoder_self_attention_heads",
-        "num_key_value_heads": "decoder_self_attention_heads",
-    }
 
     def __init__(
         self,
@@ -269,19 +265,7 @@ class RfDetrConfig(PretrainedConfig):
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
-        super().__init__(**kwargs)
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.decoder_self_attention_heads
-
-    @property
-    def num_key_value_heads(self) -> int:
-        return self.decoder_self_attention_heads
+        PreTrainedConfig.__init__(self, **kwargs)
 
     @property
     def sub_configs(self):
