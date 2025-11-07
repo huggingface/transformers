@@ -20,9 +20,8 @@ from torch import nn
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
-from ..grounding_dino.configuration_grounding_dino import GroundingDinoConfig
 from ..grounding_dino.modeling_grounding_dino import (
     GroundingDinoContrastiveEmbedding,
     GroundingDinoConvEncoder,
@@ -40,7 +39,7 @@ from ..grounding_dino.modeling_grounding_dino import (
 logger = logging.get_logger(__name__)
 
 
-class MMGroundingDinoConfig(GroundingDinoConfig, PreTrainedConfig):
+class MMGroundingDinoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MMGroundingDinoModel`]. It is used to instantiate a
     MM Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
@@ -158,6 +157,11 @@ class MMGroundingDinoConfig(GroundingDinoConfig, PreTrainedConfig):
     ```"""
 
     model_type = "mm-grounding-dino"
+    sub_configs = {"backbone_config": AutoConfig, "text_config": AutoConfig}
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+    }
 
     def __init__(
         self,
@@ -205,7 +209,6 @@ class MMGroundingDinoConfig(GroundingDinoConfig, PreTrainedConfig):
         layer_norm_eps=1e-5,
         **kwargs,
     ):
-        PreTrainedConfig.__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
             backbone_config = CONFIG_MAPPING["swin"](
@@ -287,6 +290,8 @@ class MMGroundingDinoConfig(GroundingDinoConfig, PreTrainedConfig):
         self.positional_embedding_temperature = positional_embedding_temperature
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps
+
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):

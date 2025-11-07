@@ -14,7 +14,8 @@
 # limitations under the License.
 """XLM-ProphetNet model configuration"""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 from ....configuration_utils import PreTrainedConfig
 from ....utils import logging

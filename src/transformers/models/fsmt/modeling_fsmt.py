@@ -616,10 +616,6 @@ class FSMTDecoder(nn.Module):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        # initialize `past_key_values`
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-
         x += positions
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
 
@@ -738,18 +734,18 @@ class Attention(nn.Module):
                 is_updated = layer_state.is_updated.get(self.layer_idx)
                 if self.encoder_decoder_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = layer_state.cross_attention_cache
+                    curr_past_key_values = layer_state.cross_attention_cache
                 else:
-                    curr_past_key_value = layer_state.self_attention_cache
+                    curr_past_key_values = layer_state.self_attention_cache
             else:
-                curr_past_key_value = layer_state
+                curr_past_key_values = layer_state
 
         # NOTE: FSMT has format (seq_len, BS, model_dim) for inputs
         current_states = key if self.encoder_decoder_attention else query
         if self.encoder_decoder_attention and layer_state is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -759,7 +755,7 @@ class Attention(nn.Module):
             if layer_state is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not self.encoder_decoder_attention else None
-                key_states, value_states = curr_past_key_value.update(
+                key_states, value_states = curr_past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -852,8 +848,8 @@ class FSMTModel(PretrainedFSMTModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.decoder.embed_tokens, self.get_input_embeddings())
-            self._tie_or_clone_weights(self.decoder.output_projection, self.get_input_embeddings())
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.get_input_embeddings())
+            self._tie_embedding_weights(self.decoder.output_projection, self.get_input_embeddings())
 
     @auto_docstring
     def forward(
@@ -911,6 +907,9 @@ class FSMTModel(PretrainedFSMTModel):
 
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             raise ValueError("Make sure that `decoder_input_ids` or `decoder_inputs_embeds` are passed.")
+
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(

@@ -312,11 +312,11 @@ class Speech2Text2DecoderLayer(GradientCheckpointingLayer):
 
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
+        self_attn_past_key_values = past_key_values[:2] if past_key_values is not None else None
         # add present self-attn cache to positions 1,2 of present_key_value tuple
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
-            past_key_values=self_attn_past_key_value,
+            past_key_values=self_attn_past_key_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
@@ -331,12 +331,12 @@ class Speech2Text2DecoderLayer(GradientCheckpointingLayer):
             residual = hidden_states
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
+            cross_attn_past_key_values = past_key_values[-2:] if past_key_values is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                past_key_values=cross_attn_past_key_value,
+                past_key_values=cross_attn_past_key_values,
                 output_attentions=output_attentions,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)

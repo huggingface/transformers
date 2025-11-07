@@ -14,7 +14,8 @@
 # limitations under the License.
 """Modular components for DBRX model."""
 
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any, Optional, Union
 
 import torch
 import torch.utils.checkpoint

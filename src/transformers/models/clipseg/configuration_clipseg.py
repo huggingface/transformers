@@ -265,7 +265,7 @@ class CLIPSegConfig(PreTrainedConfig):
     >>> config_text = CLIPSegTextConfig()
     >>> config_vision = CLIPSegVisionConfig()
 
-    >>> config = CLIPSegConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = CLIPSegConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "clipseg"
@@ -292,8 +292,6 @@ class CLIPSegConfig(PreTrainedConfig):
         # of confusion!).
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
-
-        super().__init__(**kwargs)
 
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
@@ -358,15 +356,19 @@ class CLIPSegConfig(PreTrainedConfig):
             vision_config.update(_vision_config_dict)
 
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `CLIPSegTextConfig` with default values.")
+            text_config = CLIPSegTextConfig()
+            logger.info("`text_config` is `None`. initializing the `CLIPSegTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = CLIPSegTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = CLIPSegVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `CLIPSegVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = CLIPSegVisionConfig(**vision_config)
 
-        self.text_config = CLIPSegTextConfig(**text_config)
-        self.vision_config = CLIPSegVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
@@ -379,6 +381,7 @@ class CLIPSegConfig(PreTrainedConfig):
         self.conditional_layer = conditional_layer
         self.initializer_factor = 1.0
         self.use_complex_transposed_convolution = use_complex_transposed_convolution
+        super().__init__(**kwargs)
 
 
 __all__ = ["CLIPSegConfig", "CLIPSegTextConfig", "CLIPSegVisionConfig"]

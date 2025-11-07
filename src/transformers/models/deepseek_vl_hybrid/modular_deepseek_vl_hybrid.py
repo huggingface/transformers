@@ -125,13 +125,6 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
         image_token_id: int = 100015,
         **kwargs,
     ):
-        super().__init__(
-            text_config=text_config,
-            vision_config=vision_config,
-            image_token_id=image_token_id,
-            **kwargs,
-        )
-
         if high_res_vision_config is None:
             high_res_vision_config = {}
             logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
@@ -141,6 +134,13 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
             high_res_vision_config = CONFIG_MAPPING[high_res_vision_config["model_type"]](**high_res_vision_config)
 
         self.high_res_vision_config = high_res_vision_config
+
+        super().__init__(
+            text_config=text_config,
+            vision_config=vision_config,
+            image_token_id=image_token_id,
+            **kwargs,
+        )
 
 
 class DeepseekVLHybridBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
@@ -429,7 +429,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         return model_inputs
 
 
-class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs):
+class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_size (`int`, *optional*, defaults to 14):
         The minimum allowed size for the resized image. Ensures that neither the height nor width
@@ -450,9 +450,9 @@ class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs):
 
     min_size: int
     high_res_size: dict
-    high_res_resample: "PILImageResampling"
-    high_res_image_mean: list[float]
-    high_res_image_std: list[float]
+    high_res_resample: Union["PILImageResampling", int]
+    high_res_image_mean: Union[float, list[float], tuple[float, ...]]
+    high_res_image_std: Union[float, list[float], tuple[float, ...]]
 
 
 class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):

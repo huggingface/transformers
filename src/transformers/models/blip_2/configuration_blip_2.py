@@ -14,8 +14,6 @@
 # limitations under the License.
 """BLIP-2 model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
@@ -261,7 +259,7 @@ class Blip2Config(PreTrainedConfig):
     >>> qformer_config = Blip2QFormerConfig()
     >>> text_config = OPTConfig()
 
-    >>> config = Blip2Config.from_text_vision_configs(vision_config, qformer_config, text_config)
+    >>> config = Blip2Config(vision_config=vision_config, qformer_config=qformer_config, text_config=text_config)
     ```"""
 
     model_type = "blip-2"
@@ -280,64 +278,39 @@ class Blip2Config(PreTrainedConfig):
         image_token_index=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
-        if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. initializing the Blip2VisionConfig with default values.")
+        if text_config is None:
+            text_config = CONFIG_MAPPING["opt"]()
+            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
+        elif isinstance(text_config, dict):
+            text_model_type = text_config.get("model_type", "opt")
+            text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         if qformer_config is None:
-            qformer_config = {}
+            qformer_config = Blip2QFormerConfig()
             logger.info("qformer_config is None. Initializing the Blip2QFormerConfig with default values.")
+        elif isinstance(qformer_config, dict):
+            qformer_config = Blip2QFormerConfig(**qformer_config)
 
-        if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
+        if vision_config is None:
+            vision_config = Blip2VisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `Blip2VisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = Blip2VisionConfig(**vision_config)
 
-        self.vision_config = Blip2VisionConfig(**vision_config)
-        self.qformer_config = Blip2QFormerConfig(**qformer_config)
-        text_model_type = text_config.get("model_type", "opt")
-        self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
+        self.qformer_config = qformer_config
 
         self.num_query_tokens = num_query_tokens
         self.image_text_hidden_size = image_text_hidden_size
         self.image_token_index = image_token_index
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-        self.is_encoder_decoder = self.text_config.is_encoder_decoder
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
 
-    @classmethod
-    def from_vision_qformer_text_configs(
-        cls,
-        vision_config: Blip2VisionConfig,
-        qformer_config: Blip2QFormerConfig,
-        text_config: Optional[PreTrainedConfig] = None,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`Blip2Config`] (or a derived class) from a BLIP-2 vision model, Q-Former and language model
-        configurations.
-
-        Args:
-            vision_config (`dict`):
-                Dictionary of configuration options used to initialize [`Blip2VisionConfig`].
-            qformer_config (`dict`):
-                Dictionary of configuration options used to initialize [`Blip2QFormerConfig`].
-            text_config (`dict`, *optional*):
-                Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
-
-        Returns:
-            [`Blip2Config`]: An instance of a configuration object
-        """
-
-        return cls(
-            vision_config=vision_config.to_dict(),
-            qformer_config=qformer_config.to_dict(),
-            text_config=text_config.to_dict() if text_config is not None else None,
-            **kwargs,
-        )
+        kwargs["is_encoder_decoder"] = self.text_config.is_encoder_decoder
+        super().__init__(**kwargs)
 
 
 __all__ = ["Blip2Config", "Blip2QFormerConfig", "Blip2VisionConfig"]

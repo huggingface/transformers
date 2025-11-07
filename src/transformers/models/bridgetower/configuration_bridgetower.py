@@ -272,7 +272,6 @@ class BridgeTowerConfig(PreTrainedConfig):
         _ = kwargs.pop("text_config_dict", None)
         _ = kwargs.pop("vision_config_dict", None)
 
-        super().__init__(**kwargs)
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
@@ -286,15 +285,20 @@ class BridgeTowerConfig(PreTrainedConfig):
         self.init_layernorm_from_vision_encoder = init_layernorm_from_vision_encoder
 
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `BridgeTowerTextConfig` with default values.")
+            text_config = BridgeTowerTextConfig()
+            logger.info("`text_config` is `None`. initializing the `BridgeTowerTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = BridgeTowerTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. Initializing the `BridgeTowerVisionConfig` with default values.")
+            vision_config = BridgeTowerVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `BridgeTowerVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = BridgeTowerVisionConfig(**vision_config)
 
-        self.text_config = BridgeTowerTextConfig(**text_config)
-        self.vision_config = BridgeTowerVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
+        super().__init__(**kwargs)
 
 
 __all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]

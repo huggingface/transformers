@@ -494,8 +494,6 @@ class FlavaConfig(PreTrainedConfig):
         multimodal_config_dict = kwargs.pop("multimodal_config_dict", None)
         image_codebook_config_dict = kwargs.pop("image_codebook_config_dict", None)
 
-        super().__init__(**kwargs)
-
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
@@ -619,28 +617,35 @@ class FlavaConfig(PreTrainedConfig):
             # Update all values in `image_codebook_config` with the ones in `_image_codebook_config_dict`.
             image_codebook_config.update(_image_codebook_config_dict)
 
-        if image_config is None:
-            image_config = {}
-            logger.info("`image_config` is `None`. initializing the `FlavaImageConfig` with default values.")
-
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `FlavaTextConfig` with default values.")
+            text_config = FlavaTextConfig()
+            logger.info("`text_config` is `None`. initializing the `FlavaTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = FlavaTextConfig(**text_config)
+
+        if image_config is None:
+            image_config = FlavaImageConfig()
+            logger.info("`image_config` is `None`. initializing the `FlavaImageConfig` with default values.")
+        elif isinstance(image_config, dict):
+            image_config = FlavaImageConfig(**image_config)
 
         if multimodal_config is None:
-            multimodal_config = {}
-            logger.info("`multimodal_config` is `None`. initializing the `FlavaMultimodalConfig` with default values.")
+            multimodal_config = FlavaMultimodalConfig()
+            logger.info("`image_config` is `None`. initializing the `FlavaMultimodalConfig` with default values.")
+        elif isinstance(multimodal_config, dict):
+            multimodal_config = FlavaMultimodalConfig(**multimodal_config)
 
         if image_codebook_config is None:
-            image_codebook_config = {}
-            logger.info(
-                "`image_codebook_config` is `None`. initializing the `FlavaImageCodebookConfig` with default values."
-            )
+            image_codebook_config = FlavaImageCodebookConfig()
+            logger.info("`image_config` is `None`. initializing the `FlavaImageCodebookConfig` with default values.")
+        elif isinstance(image_codebook_config, dict):
+            image_codebook_config = FlavaImageCodebookConfig(**image_codebook_config)
 
-        self.image_config = FlavaImageConfig(**image_config)
-        self.text_config = FlavaTextConfig(**text_config)
-        self.multimodal_config = FlavaMultimodalConfig(**multimodal_config)
-        self.image_codebook_config = FlavaImageCodebookConfig(**image_codebook_config)
+        self.text_config = text_config
+        self.image_config = image_config
+        self.multimodal_config = multimodal_config
+        self.image_codebook_config = image_codebook_config
+
         self.projection_dim = projection_dim
         self.init_codebook = init_codebook
 
@@ -659,31 +664,7 @@ class FlavaConfig(PreTrainedConfig):
         self.global_backprop_contrastive = global_backprop_contrastive
         self.skip_unmasked_multimodal_encoder = skip_unmasked_multimodal_encoder
         self.return_loss = return_loss
-
-    @classmethod
-    def from_configs(
-        cls,
-        image_config: FlavaImageConfig,
-        text_config: FlavaTextConfig,
-        multimodal_config: FlavaMultimodalConfig,
-        image_codebook_config: FlavaImageCodebookConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`FlavaConfig`] (or a derived class) from flava text model configuration, flava image model
-        configuration, flava multimodal model and flava codebook model configuration.
-
-        Returns:
-            [`FlavaConfig`]: An instance of a configuration object
-        """
-
-        return cls(
-            image_config=image_config.to_dict(),
-            text_config=text_config.to_dict(),
-            multimodal_config=multimodal_config.to_dict(),
-            image_codebook_config=image_codebook_config.to_dict(),
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["FlavaConfig", "FlavaImageCodebookConfig", "FlavaImageConfig", "FlavaMultimodalConfig", "FlavaTextConfig"]

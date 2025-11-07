@@ -17,7 +17,7 @@ import inspect
 import os
 import textwrap
 from pathlib import Path
-from typing import Optional, Union, get_args
+from typing import get_args
 
 import regex as re
 
@@ -66,6 +66,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "kosmos2-5": "Kosmos2_5Config",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
+    "parakeet": "ParakeetCTCConfig",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
@@ -235,6 +236,14 @@ class ImageProcessorArgs:
     Whether to disable grouping of images by size to process them individually and not in batches.
     If None, will be set to True if the images are on CPU, and False otherwise. This choice is based on
     empirical observations, as detailed here: https://github.com/huggingface/transformers/pull/38157
+    """,
+        "shape": None,
+    }
+
+    image_seq_length = {
+        "description": """
+    The number of image tokens to be used for each image in the input.
+    Added for backward compatibility but this should be set as a processor attribute in future models.
     """,
         "shape": None,
     }
@@ -1083,7 +1092,7 @@ def parse_docstring(docstring, max_indent_level=0, return_intro=False):
     return params, remainder_docstring
 
 
-def contains_type(type_hint, target_type) -> tuple[bool, Optional[object]]:
+def contains_type(type_hint, target_type) -> tuple[bool, object | None]:
     """
     Check if a "nested" type hint contains a specific target type,
     return the first-level type containing the target_type if found.
@@ -1172,7 +1181,7 @@ def format_args_docstring(docstring, model_name):
     return docstring
 
 
-def get_args_doc_from_source(args_classes: Union[object, list[object]]) -> dict:
+def get_args_doc_from_source(args_classes: object | list[object]) -> dict:
     if isinstance(args_classes, (list, tuple)):
         args_classes_dict = {}
         for args_class in args_classes:

@@ -26,7 +26,6 @@ env:
   TRANSFORMERS_IS_CI: yes
   PT_ENABLE_INT64_SUPPORT: 1
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   HF_HOME: /mnt/cache/.cache/huggingface
 
 jobs:
@@ -39,6 +38,10 @@ jobs:
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
       quantization_matrix: ${{ steps.set-matrix.outputs.quantization_matrix }}
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -123,6 +126,10 @@ jobs:
         --cap-add=sys_nice
         --shm-size=64G
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -192,6 +199,10 @@ jobs:
         --cap-add=sys_nice
         --shm-size=64G
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -264,6 +275,10 @@ jobs:
         --cap-add=sys_nice
         --shm-size=64G
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:

@@ -461,17 +461,17 @@ class ProphetNetAttention(nn.Module):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_values.cross_attention_cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_values.self_attention_cache
+                    curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_values
+                curr_past_key_values = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_states = self.key_proj(current_states)
             value_states = self.value_proj(current_states)
@@ -481,7 +481,7 @@ class ProphetNetAttention(nn.Module):
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
+                key_states, value_states = curr_past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -639,10 +639,10 @@ class ProphetNetNgramSelfAttention(nn.Module):
         # We need to obtain the self attention only for this module, if `EncoderDecoderCache`
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
-                curr_past_key_value = past_key_values.self_attention_cache
+                curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_values
-            main_key_states, main_value_states = curr_past_key_value.update(
+                curr_past_key_values = past_key_values
+            main_key_states, main_value_states = curr_past_key_values.update(
                 main_key_states, main_value_states, self.layer_idx, {"cache_position": cache_position}
             )
 
@@ -1182,7 +1182,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = (
                 EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-                if encoder_hidden_states is not None
+                if encoder_hidden_states is not None or self.config.is_encoder_decoder
                 else DynamicCache(config=self.config)
             )
 
@@ -1429,8 +1429,8 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.word_embeddings, self.word_embeddings)
-            self._tie_or_clone_weights(self.decoder.word_embeddings, self.word_embeddings)
+            self._tie_embedding_weights(self.encoder.word_embeddings, self.word_embeddings)
+            self._tie_embedding_weights(self.decoder.word_embeddings, self.word_embeddings)
 
     def get_encoder(self):
         return self.encoder
@@ -1555,7 +1555,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.prophetnet.word_embeddings, self.lm_head)
+            self._tie_embedding_weights(self.prophetnet.word_embeddings, self.lm_head)
 
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
@@ -1748,7 +1748,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.prophetnet.decoder.word_embeddings, self.lm_head)
+            self._tie_embedding_weights(self.prophetnet.decoder.word_embeddings, self.lm_head)
 
     def set_decoder(self, decoder):
         self.prophetnet.decoder = decoder
@@ -1938,7 +1938,7 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
         self.post_init()
 
     def _tie_weights(self):
-        self._tie_or_clone_weights(self.word_embeddings, self.decoder.get_input_embeddings())
+        self._tie_embedding_weights(self.word_embeddings, self.decoder.get_input_embeddings())
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)

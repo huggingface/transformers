@@ -14,16 +14,7 @@
 # limitations under the License.
 """Chinese-CLIP model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
-
-
-if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -269,7 +260,7 @@ class ChineseCLIPConfig(PreTrainedConfig):
     >>> config_text = ChineseCLIPTextConfig()
     >>> config_vision = ChineseCLIPVisionConfig()
 
-    >>> config = ChineseCLIPConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = ChineseCLIPConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "chinese_clip"
@@ -283,8 +274,6 @@ class ChineseCLIPConfig(PreTrainedConfig):
         # of confusion!).
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
-
-        super().__init__(**kwargs)
 
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
@@ -349,68 +338,25 @@ class ChineseCLIPConfig(PreTrainedConfig):
             vision_config.update(_vision_config_dict)
 
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `ChineseCLIPTextConfig` with default values.")
+            text_config = ChineseCLIPTextConfig()
+            logger.info("`text_config` is `None`. initializing the `ChineseCLIPTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = ChineseCLIPTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = ChineseCLIPVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `ChineseCLIPVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = ChineseCLIPVisionConfig(**vision_config)
 
-        self.text_config = ChineseCLIPTextConfig(**text_config)
-        self.vision_config = ChineseCLIPVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
+        super().__init__(**kwargs)
 
 
-class ChineseCLIPOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("logits_per_image", {0: "batch"}),
-                ("logits_per_text", {0: "batch"}),
-                ("text_embeds", {0: "batch"}),
-                ("image_embeds", {0: "batch"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    def generate_dummy_inputs(
-        self,
-        processor: "ProcessorMixin",
-        batch_size: int = -1,
-        seq_length: int = -1,
-    ) -> Mapping[str, Any]:
-        text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer,
-            batch_size=batch_size,
-            seq_length=seq_length,
-        )
-        image_input_dict = super().generate_dummy_inputs(
-            processor.image_processor,
-            batch_size=batch_size,
-        )
-        return {**text_input_dict, **image_input_dict}
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 14
-
-
-__all__ = ["ChineseCLIPConfig", "ChineseCLIPOnnxConfig", "ChineseCLIPTextConfig", "ChineseCLIPVisionConfig"]
+__all__ = ["ChineseCLIPConfig", "ChineseCLIPTextConfig", "ChineseCLIPVisionConfig"]

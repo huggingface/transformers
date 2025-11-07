@@ -94,9 +94,6 @@ class GPTNeoModelTester:
         self.pad_token_id = vocab_size - 1
         self.attention_types = attention_types
 
-    def get_large_model_config(self):
-        return GPTNeoConfig.from_pretrained("gpt-neo-125M")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -378,7 +375,6 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
     test_missing_keys = False
 
     # special case for DoubleHeads model

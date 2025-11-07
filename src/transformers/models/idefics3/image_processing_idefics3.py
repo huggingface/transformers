@@ -48,7 +48,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class Idefics3ImageProcessorKwargs(ImagesKwargs):
+class Idefics3ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_image_splitting (`bool`, *optional*, defaults to `True`):
         Whether to split the image into sub-images concatenated with the original image. They are split into patches
@@ -59,9 +59,9 @@ class Idefics3ImageProcessorKwargs(ImagesKwargs):
         Whether to return the row and column information of the images.
     """
 
-    do_image_splitting: Optional[bool]
-    max_image_size: Optional[dict[str, int]]
-    return_row_col_info: Optional[bool]
+    do_image_splitting: bool
+    max_image_size: dict[str, int]
+    return_row_col_info: bool
 
 
 def _resize_output_size_rescale_to_max_len(

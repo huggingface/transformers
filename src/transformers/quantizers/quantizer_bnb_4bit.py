@@ -129,6 +129,19 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         module, name = get_module_from_name(model, param_name)
         return isinstance(module, bnb.nn.Linear4bit) and name != "bias"
 
+    def get_param_name(self, param_name: str) -> str:
+        """
+        Get the right param_name in order to get the module associated with the param.
+        This is useful for quantized stats lile absmax or quant_map as we need to update the param_name to get the module as they are stored in ...weight.absmax.
+        """
+        if self.pre_quantized:
+            # We need to get the param name of quantized weights and not its components. Otherwise, we won't be able to get the nn.Module associated.
+            if any(param_name.endswith(x) for x in self.bnb_keys):
+                param_name = (
+                    param_name.rsplit(".", 1)[0] if "quant_state." not in param_name else param_name.rsplit(".", 2)[0]
+                )
+        return param_name
+
     def create_quantized_param(
         self,
         model: "PreTrainedModel",
@@ -139,12 +152,10 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     ):
         import bitsandbytes as bnb
 
-        is_quant_stat = any(param_name.endswith(x) for x in self.bnb_keys)
         full_name = param_name
-        if is_quant_stat:
-            param_name = (
-                param_name.rsplit(".", 1)[0] if "quant_state." not in param_name else param_name.rsplit(".", 2)[0]
-            )
+
+        # update param name to get the weights instead of the quantized stats
+        param_name = self.get_param_name(param_name)
         module, tensor_name = get_module_from_name(model, param_name)
 
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).

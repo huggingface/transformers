@@ -22,7 +22,7 @@ from ....activations import ACT2FN
 from ....cache_utils import Cache
 from ....modeling_outputs import MoECausalLMOutputWithPast, MoEModelOutputWithPastAndCrossAttentions
 from ....modeling_utils import PreTrainedModel
-from ....utils import DUMMY_INPUTS, DUMMY_MASK, auto_docstring, is_torch_fx_proxy
+from ....utils import DUMMY_INPUTS, DUMMY_MASK, auto_docstring
 from .configuration_gptsan_japanese import GPTSanJapaneseConfig
 
 
@@ -407,11 +407,11 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
         """
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
+        self_attn_past_key_values = past_key_values[:2] if past_key_values is not None else None
         # add present self-attn cache to positions 1,2 of present_key_value tuple
         atten_out = self.self_attn(
             hidden_states=hidden_states,
-            past_key_values=self_attn_past_key_value,
+            past_key_values=self_attn_past_key_values,
             attention_mask=(1 - attention_mask) * torch.finfo(hidden_states.dtype).min,
             output_attentions=output_attentions,
         )
@@ -593,15 +593,9 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
                 "See T5 docs for more information."
             )
 
-        # shift inputs to the right
-        if is_torch_fx_proxy(input_ids):
-            # Item assignment is not supported natively for proxies.
-            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
-        else:
-            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-            shifted_input_ids[..., 0] = decoder_start_token_id
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = decoder_start_token_id
 
         if pad_token_id is None:
             raise ValueError("self.model.config.pad_token_id has to be defined.")
@@ -866,8 +860,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         self.model = GPTSanJapaneseModel(config)
         self.register_buffer("final_logits_bias", torch.zeros([1, config.vocab_size]))
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
-        if not self.config.torchscript:
-            self.lm_head.weight = self.model.embed_tokens.weight
+        self.lm_head.weight = self.model.embed_tokens.weight
 
     def forward(
         self,

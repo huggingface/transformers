@@ -51,7 +51,6 @@ class Cohere2VisionConfig(PreTrainedConfig):
         alignment_intermediate_size=36864,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.downsample_factor = downsample_factor
         self.image_token_id = image_token_id
         self.alignment_intermediate_size = alignment_intermediate_size
@@ -77,6 +76,7 @@ class Cohere2VisionConfig(PreTrainedConfig):
             text_config = CONFIG_MAPPING["cohere2"](tie_word_embeddings=True)
 
         self.text_config = text_config
+        super().__init__(**kwargs)
 
 
 __all__ = ["Cohere2VisionConfig"]

@@ -414,6 +414,7 @@ class BlipEncoderLayer(GradientCheckpointingLayer):
 class BlipPreTrainedModel(PreTrainedModel):
     config: BlipConfig
     base_model_prefix = "blip"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["BlipEncoderLayer", "BlipTextEmbeddings"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -482,6 +483,7 @@ class BlipEncoder(nn.Module):
 
 class BlipVisionModel(BlipPreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
     config: BlipVisionConfig
     _can_record_outputs = {
         "hidden_states": BlipEncoderLayer,
@@ -826,6 +828,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         interpolate_pos_encoding: bool = False,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BlipForConditionalGenerationModelOutput]:
         r"""
@@ -862,6 +865,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
             encoder_hidden_states=image_embeds,
             labels=labels,
             reduction="mean",
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 

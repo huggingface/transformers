@@ -14,10 +14,10 @@
 # limitations under the License.
 import math
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch

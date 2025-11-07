@@ -25,6 +25,7 @@ from transformers.models.llava_next.modeling_llava_next import (
     LlavaNextModel,
     LlavaNextModelOutputWithPast,
     LlavaNextMultiModalProjector,
+    LlavaNextPreTrainedModel,
     TransformersKwargs,
     image_size_to_num_patches,
 )
@@ -256,6 +257,10 @@ class LlavaNextVideoPooler(nn.Module):
 
 class LlavaNextVideoMultiModalProjector(LlavaNextMultiModalProjector):
     pass
+
+
+class LlavaNextVideoPreTrainedModel(LlavaNextPreTrainedModel):
+    input_modalities = ["image", "video", "text"]
 
 
 class LlavaNextVideoModel(LlavaNextModel):
@@ -713,5 +718,5 @@ __all__ = [
     "LlavaNextVideoConfig",
     "LlavaNextVideoForConditionalGeneration",
     "LlavaNextVideoModel",
-    "LlavaNextVideoPreTrainedModel",  # noqa: F822
+    "LlavaNextVideoPreTrainedModel",
 ]

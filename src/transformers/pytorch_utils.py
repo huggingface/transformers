@@ -14,8 +14,8 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from functools import lru_cache, wraps
-from typing import Callable
 
 import torch
 from safetensors.torch import storage_ptr, storage_size
@@ -24,7 +24,6 @@ from torch import nn
 from .utils import (
     is_torch_greater_or_equal,
     is_torch_xla_available,
-    is_torch_xpu_available,
     is_torchdynamo_compiling,
     logging,
 )
@@ -283,16 +282,3 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
         return wrapper
 
     return decorator
-
-
-def infer_device():
-    """
-    Infers available device.
-    """
-    torch_device = "cpu"
-    if torch.cuda.is_available():
-        torch_device = "cuda"
-    elif is_torch_xpu_available():
-        torch_device = "xpu"
-
-    return torch_device

@@ -55,7 +55,7 @@ def get_xclip_config(model_name, num_frames):
     if model_name == "xclip-large-patch14-16-frames":
         vision_config.image_size = 336
 
-    config = XCLIPConfig.from_text_vision_configs(text_config, vision_config)
+    config = XCLIPConfig(text_config=text_config, vision_config=vision_config)
 
     if "large" in model_name:
         config.projection_dim = 768

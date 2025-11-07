@@ -20,7 +20,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, SmolLM3Config, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, SmolLM3Config, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     backend_empty_cache,
@@ -66,17 +66,6 @@ class SmolLM3ModelTester(CausalLMModelTester):
 @require_torch
 class SmolLM3ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = SmolLM3ModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": SmolLM3Model,
-            "text-classification": SmolLM3ForSequenceClassification,
-            "token-classification": SmolLM3ForTokenClassification,
-            "text-generation": SmolLM3ForCausalLM,
-            "question-answering": SmolLM3ForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @is_flaky()
@@ -138,7 +127,7 @@ class SmolLM3IntegrationTest(unittest.TestCase):
         model = SmolLM3ForCausalLM.from_pretrained(
             self.model_id,
             device_map="auto",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)

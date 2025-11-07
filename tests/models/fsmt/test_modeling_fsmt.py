@@ -297,10 +297,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="model weights aren't tied in FSMT.")
-    def test_tie_model_weights(self):
-        pass
-
     @unittest.skip(reason="TODO: Decoder embeddings cannot be resized at the moment")
     def test_resize_embeddings_untied(self):
         pass
@@ -418,7 +414,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         if len(prefix) > 0:
             prefix = f"{prefix}: "

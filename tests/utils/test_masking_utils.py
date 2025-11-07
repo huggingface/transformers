@@ -14,7 +14,13 @@
 
 import unittest
 
-from transformers.testing_utils import is_torch_available, require_torch
+from transformers.testing_utils import (
+    cleanup,
+    is_torch_available,
+    require_torch,
+    require_torch_accelerator,
+    torch_device,
+)
 
 
 if is_torch_available():
@@ -23,7 +29,12 @@ if is_torch_available():
 
     from transformers import DynamicCache, LlamaConfig
     from transformers.cache_utils import DynamicSlidingWindowLayer
-    from transformers.masking_utils import create_causal_mask, create_chunked_causal_mask, find_packed_sequence_indices
+    from transformers.masking_utils import (
+        create_bidirectional_mask,
+        create_causal_mask,
+        create_chunked_causal_mask,
+        find_packed_sequence_indices,
+    )
 
 
 # fmt: off
@@ -56,6 +67,12 @@ EXPECTED_PACKED_MASK = torch.tensor([[[
 
 @require_torch
 class MaskTest(unittest.TestCase):
+    def setup(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def test_packed_sequence_mask_sdpa(self):
         config = LlamaConfig()
         config._attn_implementation = "sdpa"
@@ -244,3 +261,72 @@ class MaskTest(unittest.TestCase):
         # fmt: on
 
         self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
+
+    @require_torch_accelerator
+    def test_bidirectional_mask_cudagraphs(self):
+        """
+        Checks whether the bidirectional mask creation is compatible with cuda graphs, i.e. we do not into any error
+        during this test.
+        """
+
+        def run_mask_creation(mask_fn, config, input_embeds, encoder_mask, cross_mask, encoder_hidden_states):
+            _ = mask_fn(
+                config=config,
+                input_embeds=input_embeds,
+                attention_mask=encoder_mask,
+            )
+
+            _ = mask_fn(
+                config=config,
+                input_embeds=input_embeds,
+                attention_mask=cross_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+
+        # We use llama but could be also bert/bart --> we only need the `_attn_implementation` here
+        config = LlamaConfig()
+        config._attn_implementation = "sdpa"
+
+        # Meta data
+        batch_size = 2
+        q_length = 10
+        kv_length = 5
+
+        input_embeds = torch.ones((batch_size, q_length, 1), device=torch_device, dtype=torch.float16)
+        encoder_hidden_states = torch.ones((batch_size, kv_length, 1), device=torch_device, dtype=torch.float16)
+
+        encoder_mask = torch.ones_like(input_embeds)[..., 0]
+        cross_mask = torch.ones_like(encoder_hidden_states)[..., 0]
+
+        mask_creation_function = torch.compile(create_bidirectional_mask, mode="reduce-overhead")
+
+        # Case 1: Full mask
+        run_mask_creation(
+            mask_fn=mask_creation_function,
+            config=config,
+            input_embeds=input_embeds,
+            encoder_mask=encoder_mask,
+            cross_mask=cross_mask,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+        run_mask_creation(
+            mask_fn=mask_creation_function,
+            config=config,
+            input_embeds=input_embeds,
+            encoder_mask=None,
+            cross_mask=None,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+
+        # Case 2: Padding involved
+        cross_mask[:, -1] = 0
+        encoder_mask[:, -1] = 0
+
+        run_mask_creation(
+            mask_fn=mask_creation_function,
+            config=config,
+            input_embeds=input_embeds,
+            encoder_mask=encoder_mask,
+            cross_mask=cross_mask,
+            encoder_hidden_states=encoder_hidden_states,
+        )
