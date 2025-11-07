@@ -344,7 +344,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     fx_compatible = True
-    test_pruning = False
+
     test_missing_keys = False
 
     def test_torch_fx(self):

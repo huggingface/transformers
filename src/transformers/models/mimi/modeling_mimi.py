@@ -30,7 +30,6 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_mimi import MimiConfig
 
 
@@ -69,8 +68,8 @@ class MimiOutput(ModelOutput):
 
     audio_codes: Optional[torch.LongTensor] = None
     audio_values: Optional[torch.FloatTensor] = None
-    encoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
-    decoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
+    encoder_past_key_values: Optional[Cache] = None
+    decoder_past_key_values: Optional[Cache] = None
 
 
 class MimiConv1dPaddingCache:
@@ -177,7 +176,7 @@ class MimiEncoderOutput(ModelOutput):
     """
 
     audio_codes: Optional[torch.LongTensor] = None
-    encoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
+    encoder_past_key_values: Optional[Cache] = None
     padding_cache: Optional[MimiConv1dPaddingCache] = None
 
 
@@ -198,7 +197,7 @@ class MimiDecoderOutput(ModelOutput):
     """
 
     audio_values: Optional[torch.FloatTensor] = None
-    decoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
+    decoder_past_key_values: Optional[Cache] = None
 
 
 class MimiConv1d(nn.Module):
@@ -643,7 +642,6 @@ class MimiAttention(nn.Module):
         self.rotary_emb = MimiRotaryEmbedding(config)
         self.sliding_window = config.sliding_window  # Ignore copy
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -720,7 +718,6 @@ class MimiFlashAttention2(MimiAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -831,7 +828,6 @@ class MimiSdpaAttention(MimiAttention):
     """
 
     # Adapted from MimiAttention.forward
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -932,7 +928,6 @@ class MimiTransformerLayer(GradientCheckpointingLayer):
         self.self_attn_layer_scale = MimiLayerScale(config)
         self.mlp_layer_scale = MimiLayerScale(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1018,7 +1013,7 @@ class MimiTransformerModel(nn.Module):
         hidden_states: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1444,7 +1439,7 @@ class MimiModel(MimiPreTrainedModel):
         input_values: torch.Tensor,
         num_quantizers: int,
         padding_mask: int,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         padding_cache: Optional[MimiConv1dPaddingCache] = None,
         return_dict: Optional[bool] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -1507,7 +1502,7 @@ class MimiModel(MimiPreTrainedModel):
         input_values: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
         num_quantizers: Optional[float] = None,
-        encoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        encoder_past_key_values: Optional[Cache] = None,
         padding_cache: Optional[MimiConv1dPaddingCache] = None,
         use_streaming: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1595,7 +1590,7 @@ class MimiModel(MimiPreTrainedModel):
     def _decode_frame(
         self,
         codes: torch.Tensor,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.Tensor:
         embeddings = self.quantizer.decode(codes)
@@ -1616,7 +1611,7 @@ class MimiModel(MimiPreTrainedModel):
         self,
         audio_codes: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
-        decoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        decoder_past_key_values: Optional[Cache] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], MimiDecoderOutput]:
         """
@@ -1667,8 +1662,8 @@ class MimiModel(MimiPreTrainedModel):
         padding_mask: Optional[torch.Tensor] = None,
         num_quantizers: Optional[int] = None,
         audio_codes: Optional[torch.Tensor] = None,
-        encoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
-        decoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        encoder_past_key_values: Optional[Cache] = None,
+        decoder_past_key_values: Optional[Cache] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], MimiOutput]:
         r"""

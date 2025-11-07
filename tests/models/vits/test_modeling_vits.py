@@ -160,7 +160,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {"feature-extraction": VitsModel, "text-to-audio": VitsModel} if is_torch_available() else {}
     )
     is_encoder_decoder = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torchscript = False
     has_attentions = False

@@ -159,7 +159,7 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
     is_encoder_decoder = True
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -353,7 +353,6 @@ class SpeechT5ForSpeechToTextTester:
 class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, GenerationTesterMixin):
     all_model_classes = (SpeechT5ForSpeechToText,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToTextTester(self)
@@ -853,7 +852,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForTextToSpeech,) if is_torch_available() else ()
     all_generative_model_classes = ()
     is_encoder_decoder = True
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = SpeechT5ForTextToSpeechTester(self)
@@ -1374,7 +1372,7 @@ class SpeechT5ForSpeechToSpeechTester:
 class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -1742,7 +1740,7 @@ class SpeechT5HifiGanTester:
 class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5HifiGan,) if is_torch_available() else ()
     test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_resize_position_embeddings = False
     test_mismatched_shapes = False

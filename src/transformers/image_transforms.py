@@ -797,6 +797,30 @@ def flip_channel_order(
     return image
 
 
+def split_to_tiles(images: "torch.Tensor", num_tiles_height: int, num_tiles_width: int) -> "torch.Tensor":
+    # Split image into number of required tiles (width x height)
+    batch_size, num_channels, height, width = images.size()
+    images = images.view(
+        batch_size,
+        num_channels,
+        num_tiles_height,
+        height // num_tiles_height,
+        num_tiles_width,
+        width // num_tiles_width,
+    )
+    # Permute dimensions to reorder the axes
+    image = images.permute(0, 2, 4, 1, 3, 5).contiguous()
+    # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
+    image = image.view(
+        batch_size,
+        num_tiles_width * num_tiles_height,
+        num_channels,
+        height // num_tiles_height,
+        width // num_tiles_width,
+    )
+    return image
+
+
 def _cast_tensor_to_float(x):
     if x.is_floating_point():
         return x
@@ -807,15 +831,21 @@ def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = Fals
     """Helper function to flatten a single level of nested image and batch structures and group by shape."""
     grouped_images = defaultdict(list)
     grouped_images_index = {}
-    nested_images = [nested_images] if not is_nested else nested_images
-    paired_inputs_lists = []
     paired_grouped_values = [defaultdict(list) for _ in paired_inputs]
+
+    # Normalize inputs to consistent nested structure
+    normalized_images = [nested_images] if not is_nested else nested_images
+    normalized_paired = []
     for paired_input in paired_inputs:
-        paired_inputs_lists.append([paired_input]) if not is_nested else paired_inputs_lists.append(paired_input)
-    for i, (sublist, *paired_sublists) in enumerate(zip(nested_images, *paired_inputs_lists)):
+        normalized_paired.append([paired_input] if not is_nested else paired_input)
+
+    # Process each image and group by shape
+    for i, (sublist, *paired_sublists) in enumerate(zip(normalized_images, *normalized_paired)):
         for j, (image, *paired_values) in enumerate(zip(sublist, *paired_sublists)):
             key = (i, j) if is_nested else j
             shape = image.shape[1:]
+
+            # Add to grouped structures
             grouped_images[shape].append(image)
             for paired_index, paired_value in enumerate(paired_values):
                 paired_grouped_values[paired_index][shape].append(paired_value)
@@ -869,7 +899,7 @@ def _iterate_items(items, is_nested: bool):
 def group_images_by_shape(
     images: Union[list["torch.Tensor"], "torch.Tensor"],
     *paired_inputs,
-    disable_grouping: bool,
+    disable_grouping: Optional[bool],
     is_nested: bool = False,
 ) -> tuple[dict, ...]:
     """

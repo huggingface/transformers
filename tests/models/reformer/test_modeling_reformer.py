@@ -602,7 +602,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         if is_torch_available()
         else ()
     )
-    test_pruning = False
+
     test_torchscript = False
     test_sequence_classification_problem_types = True
 
@@ -725,7 +725,7 @@ class ReformerLSHAttnModelTest(
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     test_torchscript = False
 
     # TODO: Fix the failed tests

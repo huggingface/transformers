@@ -18,7 +18,6 @@ import unittest
 import pytest
 
 from transformers import is_torch_available
-from transformers.cache_utils import Cache
 from transformers.testing_utils import (
     Expectations,
     require_torch,
@@ -38,6 +37,7 @@ if is_torch_available():
         MiniMaxForTokenClassification,
         MiniMaxModel,
     )
+    from transformers.models.minimax.modeling_minimax import MiniMaxCache
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
@@ -142,7 +142,7 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
                     self.assertEqual(layer_attention.shape, expected_shape)
 
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
+        self.assertIsInstance(decoder_past_key_values, MiniMaxCache)
 
         # (batch, head, seq_length, head_features)
         key_value_cache_expected_shape = (
@@ -161,10 +161,27 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
 
         for layer_idx in range(config.num_hidden_layers):
             if config.layer_types[layer_idx] == "full_attention":
-                self.assertEqual(decoder_past_key_values[layer_idx][0].shape, key_value_cache_expected_shape)
-                self.assertEqual(decoder_past_key_values[layer_idx][1].shape, key_value_cache_expected_shape)
+                self.assertEqual(decoder_past_key_values.layers[layer_idx].keys.shape, key_value_cache_expected_shape)
+                self.assertEqual(
+                    decoder_past_key_values.layers[layer_idx].values.shape, key_value_cache_expected_shape
+                )
             else:
-                self.assertEqual(decoder_past_key_values[layer_idx][0].shape, linear_cache_expected_shape)
+                self.assertEqual(decoder_past_key_values.linear_cache[layer_idx].shape, linear_cache_expected_shape)
+
+    def _check_caches_are_equal(self, cache1: MiniMaxCache, cache2: MiniMaxCache):
+        if not isinstance(cache1, MiniMaxCache) or not isinstance(cache2, MiniMaxCache):
+            raise ValueError("The wrong cache is being used!")
+
+        if not len(cache1) == len(cache2):
+            raise ValueError("Both caches do not have the same number of layers.")
+
+        num_layers = len(cache1)
+        for idx in range(num_layers):
+            # We need this as MiniMaxCache uses the max between attention and linear caches for len...
+            if idx < len(cache1.layers):
+                torch.testing.assert_close(cache1.layers[idx].keys, cache1.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache1.layers[idx].values)
+            torch.testing.assert_close(cache1.linear_cache[idx], cache2.linear_cache[idx])
 
     @pytest.mark.generate
     def test_past_key_values_format(self, custom_all_cache_shapes=None):

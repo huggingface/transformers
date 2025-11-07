@@ -37,7 +37,7 @@ from ....modeling_outputs import (
     TokenClassifierOutput,
 )
 from ....modeling_utils import PreTrainedModel
-from ....pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ....pytorch_utils import apply_chunking_to_forward
 from ....utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -46,7 +46,6 @@ from ....utils import (
     logging,
     replace_return_docstrings,
 )
-from ....utils.deprecation import deprecate_kwarg
 from .configuration_nezha import NezhaConfig
 
 
@@ -167,7 +166,6 @@ class NezhaSelfAttention(nn.Module):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -287,27 +285,7 @@ class NezhaAttention(nn.Module):
         super().__init__()
         self.self = NezhaSelfAttention(config)
         self.output = NezhaSelfOutput(config)
-        self.pruned_heads = set()
 
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -374,7 +352,6 @@ class NezhaLayer(GradientCheckpointingLayer):
         self.intermediate = NezhaIntermediate(config)
         self.output = NezhaOutput(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

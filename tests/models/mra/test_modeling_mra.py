@@ -260,7 +260,7 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    test_pruning = False
+
     test_torchscript = False
     has_attentions = False
 

@@ -613,7 +613,7 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     test_torchscript = False
     test_resize_embeddings = True
 

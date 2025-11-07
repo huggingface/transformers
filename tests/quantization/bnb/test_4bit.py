@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
-import importlib.metadata
 import tempfile
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import (
     AutoConfig,
@@ -40,7 +38,6 @@ from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu_if_bnb_not_multi_backend_enabled,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -92,7 +89,6 @@ if is_bitsandbytes_available():
 @require_bitsandbytes
 @require_accelerate
 @require_torch
-@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
 class Base4bitTest(unittest.TestCase):
     # We keep the constants inside the init function and model loading inside setUp function
@@ -298,9 +294,6 @@ class Bnb4BitTest(Base4bitTest):
         model_4bit.to(dtype=torch.float16)
 
     def test_device_assignment(self):
-        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
-            self.skipTest(reason="This test requires bitsandbytes >= 0.43.2")
-
         mem_before = self.model_4bit.get_memory_footprint()
 
         # Move to CPU
@@ -321,20 +314,6 @@ class Bnb4BitTest(Base4bitTest):
         The test ensures that such operations are prohibited on 4-bit models
         to prevent invalid conversions.
         """
-
-        # Moving with `to` or `cuda` is not supported with versions < 0.43.2.
-        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
-            with self.assertRaises(ValueError):
-                # Tries with `str`
-                self.model_4bit.to("cpu")
-
-            with self.assertRaises(ValueError):
-                # Tries with a `device`
-                self.model_4bit.to(torch.device("cuda:0"))
-
-            with self.assertRaises(ValueError):
-                # Tries with `cuda`
-                self.model_4bit.cuda()
 
         with self.assertRaises(ValueError):
             # Tries with a `dtype`
@@ -389,7 +368,6 @@ class Bnb4BitTest(Base4bitTest):
 @require_bitsandbytes
 @require_accelerate
 @require_torch
-@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
 @apply_skip_if_not_implemented
 class Bnb4BitT5Test(unittest.TestCase):
@@ -615,9 +593,6 @@ class Bnb4BitTestTraining(Base4bitTest):
         super().setUp()
 
     def test_training(self):
-        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.37.0"):
-            self.skipTest(reason="This test requires bitsandbytes >= 0.37.0")
-
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True)
 
@@ -672,7 +647,6 @@ class Bnb4BitLlamaTest(Bnb4BitTest):
 @require_bitsandbytes
 @require_accelerate
 @require_torch
-@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
 @apply_skip_if_not_implemented
 class BaseSerializationTest(unittest.TestCase):
@@ -820,7 +794,6 @@ class LlamaSerializationTest(BaseSerializationTest):
 
 @require_bitsandbytes
 @require_accelerate
-@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
 @apply_skip_if_not_implemented
 class Bnb4BitTestBasicConfigTest(unittest.TestCase):
@@ -836,7 +809,6 @@ class Bnb4BitTestBasicConfigTest(unittest.TestCase):
 
 @require_bitsandbytes
 @require_accelerate
-@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
 @apply_skip_if_not_implemented
 class Bnb4bitCompile(unittest.TestCase):

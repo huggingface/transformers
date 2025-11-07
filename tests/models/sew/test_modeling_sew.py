@@ -282,7 +282,6 @@ class SEWModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = SEWModelTester(self)

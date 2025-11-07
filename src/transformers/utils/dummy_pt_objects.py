@@ -589,10 +589,6 @@ def apply_chunking_to_forward(*args, **kwargs):
     requires_backends(apply_chunking_to_forward, ["torch"])
 
 
-def prune_layer(*args, **kwargs):
-    requires_backends(prune_layer, ["torch"])
-
-
 class Trainer(metaclass=DummyObject):
     _backends = ["torch"]
 

@@ -232,8 +232,6 @@ generation_output[:2]
     - batch_select_indices
 
 [[autodoc]] DynamicCache
-    - to_legacy_cache
-    - from_legacy_cache
 
 [[autodoc]] QuantizedCache
 

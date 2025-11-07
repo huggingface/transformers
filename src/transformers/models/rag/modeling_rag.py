@@ -1184,15 +1184,24 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             return result
 
         reordered_past = ()
-        for layer_past in past_key_values:
+        for idx in range(len(past_key_values)):
+            if isinstance(past_key_values, EncoderDecoderCache):
+                layer_past = (
+                    past_key_values.self_attention_cache.layers[idx].keys,
+                    past_key_values.self_attention_cache.layers[idx].values,
+                    past_key_values.cross_attention_cache.layers[idx].keys,
+                    past_key_values.cross_attention_cache.layers[idx].values,
+                )
+            else:
+                layer_past = (past_key_values.layers[idx].keys, past_key_values.layers[idx].values)
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             reordered_past += (
                 tuple(_reorder_stacked(past_state, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
-        if isinstance(past_key_values, EncoderDecoderCache):
-            reordered_past = EncoderDecoderCache.from_legacy_cache(reordered_past)
 
-        return reordered_past
+        # Cast back to the correct cache class
+        reordered_cache = type(past_key_values)(reordered_past)
+        return reordered_cache
 
     def marginalize(self, seq_logits, doc_scores, n_docs=None):
         n_docs = n_docs if n_docs is not None else self.config.n_docs

@@ -41,7 +41,6 @@ from ....utils import (
     logging,
     replace_return_docstrings,
 )
-from ....utils.deprecation import deprecate_kwarg
 from .configuration_mega import MegaConfig
 
 
@@ -1172,7 +1171,6 @@ class MegaBlock(nn.Module):
         else:
             self.cross_attn = None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1783,14 +1781,6 @@ class MegaForCausalLM(MegaPreTrainedModel):
             input_ids = input_ids[:, -1:]
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 @add_start_docstrings("""MEGA Model with a `language modeling` head on top.""", MEGA_START_DOCSTRING)

@@ -785,7 +785,6 @@ src/transformers/trainer_utils.py
 src/transformers/training_args.py
 src/transformers/training_args_seq2seq.py
 src/transformers/utils/backbone_utils.py
-src/transformers/utils/bitsandbytes.py
 src/transformers/utils/constants.py
 src/transformers/utils/doc.py
 src/transformers/utils/dummy_detectron2_objects.py

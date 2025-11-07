@@ -157,7 +157,7 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (Blip2VisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -462,7 +462,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     all_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
     additional_model_inputs = ["input_ids"]
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
@@ -793,7 +793,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
@@ -1073,7 +1073,6 @@ class Blip2TextModelWithProjectionTester:
 class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2TextModelWithProjection,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
@@ -1232,7 +1231,6 @@ class Blip2VisionModelWithProjectionTester:
 class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2VisionModelWithProjection,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
 
     test_resize_embeddings = False
     test_torchscript = False
@@ -1382,7 +1380,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForImageTextRetrieval,) if is_torch_available() else ()
     additional_model_inputs = ["input_ids"]
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False

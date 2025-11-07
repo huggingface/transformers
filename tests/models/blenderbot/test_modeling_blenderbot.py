@@ -225,7 +225,7 @@ class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     )
     is_encoder_decoder = True
     fx_compatible = True
-    test_pruning = False
+
     test_missing_keys = False
 
     def setUp(self):
@@ -518,7 +518,7 @@ class BlenderbotStandaloneDecoderModelTester:
 @require_torch
 class BlenderbotStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotDecoder, BlenderbotForCausalLM) if is_torch_available() else ()
-    test_pruning = False
+
     is_encoder_decoder = False
 
     def setUp(

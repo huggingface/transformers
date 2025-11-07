@@ -37,7 +37,6 @@ from ...utils import (
     auto_docstring,
     is_torch_flex_attn_available,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..bart.modeling_bart import BartAttention
 from ..time_series_transformer.modeling_time_series_transformer import (
     TimeSeriesFeatureEmbedder,
@@ -239,7 +238,6 @@ class InformerProbSparseAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

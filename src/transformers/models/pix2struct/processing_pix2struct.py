@@ -95,7 +95,6 @@ class Pix2StructProcessor(ProcessorMixin):
             output_kwargs["text_kwargs"]["add_special_tokens"] = (
                 add_special_tokens if add_special_tokens is not None else True
             )
-            self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
             return text_encoding
 

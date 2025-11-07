@@ -271,7 +271,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     _is_composite = True

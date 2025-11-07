@@ -152,7 +152,6 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (VitPoseForPoseEstimation,) if is_torch_available() else ()
     fx_compatible = False
 
-    test_pruning = False
     test_resize_embeddings = False
     test_torch_exportable = True
     test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"

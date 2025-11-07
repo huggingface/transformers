@@ -168,7 +168,6 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     )
     fx_compatible = True
 
-    test_pruning = False
     test_resize_embeddings = False
 
     def setUp(self):

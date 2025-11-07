@@ -182,7 +182,6 @@ class Qwen3VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         if is_torch_available()
         else ()
     )
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = Qwen3VLVisionText2TextModelTester(self)

@@ -174,7 +174,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         (MusicgenForCausalLM,) if is_torch_available() else ()
     )  # we don't want to run all the generation tests, only a specific subset
     pipeline_model_mapping = {}
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -572,7 +572,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = {"text-to-audio": MusicgenForConditionalGeneration} if is_torch_available() else {}
     # Addition keys that are required for forward. MusicGen isn't encoder-decoder in config so we have to pass decoder ids as additional
     additional_model_inputs = ["decoder_input_ids"]
-    test_pruning = False  # training is not supported yet for MusicGen
+    # training is not supported yet for MusicGen
     test_resize_embeddings = False
     # not to test torchscript as the model tester doesn't prepare `input_values` and `padding_mask`
     # (and `torchscript` hates `None` values).

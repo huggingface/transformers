@@ -165,7 +165,7 @@ class EvollaProcessor(ProcessorMixin):
         if isinstance(messages_list, (list, tuple)):
             for messages in messages_list:
                 if not isinstance(messages, (list, tuple)):
-                    raise ValueError(f"Each messages in messages_list should be a list instead of {type(messages)}.")
+                    raise TypeError(f"Each messages in messages_list should be a list instead of {type(messages)}.")
                 if not all(isinstance(m, dict) for m in messages):
                     raise ValueError(
                         "Each message in messages_list should be a list of dictionaries, but not all elements are dictionaries."

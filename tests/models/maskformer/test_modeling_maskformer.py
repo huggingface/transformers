@@ -205,7 +205,7 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
 
     is_encoder_decoder = False
-    test_pruning = False
+
     test_missing_keys = False
     zero_init_hidden_state = True
     test_torch_exportable = True

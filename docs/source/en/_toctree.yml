@@ -218,6 +218,11 @@
   title: Quantization
 - isExpanded: false
   sections:
+  - local: kernel_doc/overview
+    title: Kernels in transformers
+  title: Kernels
+- isExpanded: false
+  sections:
   - local: serialization
     title: ONNX
   - local: executorch
@@ -368,6 +373,8 @@
       title: Image Processor
     - local: main_classes/video_processor
       title: Video Processor
+    - local: main_classes/kernels
+      title: Kernels
     title: Main Classes
   - sections:
     - sections:
@@ -555,6 +562,8 @@
         title: LED
       - local: model_doc/lfm2
         title: LFM2
+      - local: model_doc/lfm2_moe
+        title: LFM2Moe
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2

@@ -49,7 +49,6 @@ class VoxtralPreTrainedModel(Qwen2AudioPreTrainedModel):
     _supports_cache_class = True
     _supports_attention_backend = True
     _can_compile_fullgraph = True
-    _supports_attention_backend = True
     _no_split_modules = None
 
 

@@ -143,7 +143,6 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GroupViTVisionModel,) if is_torch_available() else ()
 
-    test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
 
@@ -429,7 +428,6 @@ class GroupViTTextModelTester:
 @require_torch
 class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (GroupViTTextModel,) if is_torch_available() else ()
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = GroupViTTextModelTester(self)
@@ -528,7 +526,7 @@ class GroupViTModelTester:
 class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GroupViTModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": GroupViTModel} if is_torch_available() else {}
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
 

@@ -43,7 +43,7 @@ class MllamaImageProcessingTester:
         batch_size=7,
         num_channels=3,
         image_size=18,
-        num_images=1,
+        num_images=18,
         min_resolution=30,
         max_resolution=400,
         do_resize=True,

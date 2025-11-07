@@ -77,7 +77,6 @@ from .utils import (
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
-    is_bitsandbytes_multi_backend_available,
     is_bs4_available,
     is_compressed_tensors_available,
     is_cv2_available,
@@ -1072,15 +1071,6 @@ def require_torch_large_accelerator(test_case, memory: float = 20):
     )(test_case)
 
 
-def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
-    """
-    Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
-    """
-    if is_bitsandbytes_available() and is_bitsandbytes_multi_backend_available():
-        return test_case
-    return require_torch_gpu(test_case)
-
-
 def require_torch_accelerator(test_case):
     """Decorator marking a test that requires an accessible accelerator and PyTorch."""
     return unittest.skipUnless(torch_device is not None and torch_device != "cpu", "test requires accelerator")(
@@ -1290,15 +1280,7 @@ def require_bitsandbytes(test_case):
     """
     Decorator marking a test that requires the bitsandbytes library. Will be skipped when the library or its hard dependency torch is not installed.
     """
-    if is_bitsandbytes_available() and is_torch_available():
-        try:
-            import pytest
-
-            return pytest.mark.bitsandbytes(test_case)
-        except ImportError:
-            return test_case
-    else:
-        return unittest.skip(reason="test requires bitsandbytes and torch")(test_case)
+    return unittest.skipUnless(is_bitsandbytes_available(), "test requires bitsandbytes")(test_case)
 
 
 def require_optimum(test_case):

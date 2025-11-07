@@ -125,7 +125,6 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     """
 
     all_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)
@@ -279,7 +278,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         else ()
     )
     pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
-    test_pruning = False
+
     test_torchscript = False
     _is_composite = True
 
@@ -433,33 +432,29 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             self.assertEqual(len(past_kv), num_hidden_layers)
             batch_size, seq_length = inputs["input_ids"].shape
             for i in range(num_hidden_layers):
-                self.assertEqual(len(past_kv[0]), 2)  # K V for the decoder = 2
                 if i in self.model_tester.text_config["cross_attention_layers"]:
                     self.assertEqual(
-                        past_kv[i][0].shape,
+                        past_kv.layers[i].keys.shape,
                         (batch_size, num_attention_heads, self.model_tester.image_length, per_head_embed_dim),
                     )
                     self.assertEqual(
-                        past_kv[i][1].shape,
+                        past_kv.layers[i].values.shape,
                         (batch_size, num_attention_heads, self.model_tester.image_length, per_head_embed_dim),
                     )
                 else:
                     self.assertEqual(
-                        past_kv[i][0].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                        past_kv.layers[i].keys.shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
                     )
                     self.assertEqual(
-                        past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                        past_kv.layers[i].values.shape,
+                        (batch_size, num_attention_heads, seq_length, per_head_embed_dim),
                     )
 
     # overridden because mllama has special cache for self and cross attentions
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
         self.assertIsInstance(decoder_past_key_values, Cache)
-        self.assertListEqual(
-            [isinstance(iter_past_key_values, tuple) for iter_past_key_values in decoder_past_key_values],
-            [True] * len(decoder_past_key_values),
-        )
 
-        for layer_idx, layer_past_key_values in enumerate(decoder_past_key_values):
+        for layer_idx in range(len(decoder_past_key_values)):
             if layer_idx in self.model_tester.text_config["cross_attention_layers"]:
                 expected_shape = (
                     batch_size,
@@ -480,8 +475,8 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                     config.hidden_size // config.num_attention_heads,
                 )
             # check shape key, value
-            self.assertListEqual([layer_past_key_values[0].shape], [expected_shape])
-            self.assertListEqual([layer_past_key_values[1].shape], [expected_shape])
+            self.assertListEqual([decoder_past_key_values.layers[layer_idx].keys.shape], [expected_shape])
+            self.assertListEqual([decoder_past_key_values.layers[layer_idx].values.shape], [expected_shape])
 
     def test_generate_text_only_with_cache(self):
         """

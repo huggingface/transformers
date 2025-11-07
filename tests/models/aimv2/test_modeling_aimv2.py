@@ -180,7 +180,7 @@ class Aimv2VisionModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (Aimv2VisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torchscript = False
 
@@ -310,7 +310,7 @@ class Aimv2TextModelTester:
 class Aimv2TextModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Aimv2TextModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torchscript = False
 
@@ -389,7 +389,7 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_torchscript = False
     test_resize_embeddings = False
     test_attention_outputs = False

@@ -532,7 +532,6 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else {}
     )
     fx_compatible = False
-    test_pruning = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(

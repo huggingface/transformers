@@ -233,7 +233,7 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     pipeline_model_mapping = {"feature-extraction": OneFormerModel} if is_torch_available() else {}
 
     is_encoder_decoder = False
-    test_pruning = False
+
     test_missing_keys = False
 
     # TODO: Fix the failed tests when this model gets more usage

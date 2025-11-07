@@ -19,7 +19,7 @@ Speech processor class for Wav2Vec2
 import os
 import warnings
 from collections.abc import Iterable
-from contextlib import contextmanager, nullcontext
+from contextlib import nullcontext
 from dataclasses import dataclass
 from multiprocessing import Pool, get_context, get_start_method
 from typing import TYPE_CHECKING, Optional, Union
@@ -110,8 +110,6 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             )
 
         self.decoder = decoder
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
 
     def save_pretrained(self, save_directory):
         super().save_pretrained(save_directory)
@@ -227,10 +225,6 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.__call__`]. Please refer to the docstring of the above two
         methods for more information.
         """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
-
         if "raw_speech" in kwargs:
             warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
             audio = kwargs.pop("raw_speech")
@@ -266,10 +260,6 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.pad`]. Please refer to the docstring of the above two methods
         for more information.
         """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor.pad(*args, **kwargs)
-
         input_features = kwargs.pop("input_features", None)
         labels = kwargs.pop("labels", None)
         if len(args) > 0:
@@ -637,23 +627,6 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
                 lm_score=lm_scores[:n_best],
                 word_offsets=word_offsets[:n_best] if word_offsets is not None else None,
             )
-
-    @contextmanager
-    def as_target_processor(self):
-        """
-        Temporarily sets the processor for processing the target. Useful for encoding the labels when fine-tuning
-        Wav2Vec2.
-        """
-        warnings.warn(
-            "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
-            "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
-            "your audio inputs, or in a separate call."
-        )
-        self._in_target_context_manager = True
-        self.current_processor = self.tokenizer
-        yield
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
 
 
 __all__ = ["Wav2Vec2ProcessorWithLM"]

@@ -32,9 +32,7 @@ from ....modeling_outputs import (
     TokenClassifierOutput,
 )
 from ....modeling_utils import PreTrainedModel
-from ....pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ....utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from ....utils.deprecation import deprecate_kwarg
 from .configuration_ernie_m import ErnieMConfig
 
 
@@ -119,7 +117,6 @@ class ErnieMSelfAttention(nn.Module):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -222,27 +219,7 @@ class ErnieMAttention(nn.Module):
         super().__init__()
         self.self_attn = ErnieMSelfAttention(config, position_embedding_type=position_embedding_type)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.pruned_heads = set()
 
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self_attn.num_attention_heads, self.self_attn.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self_attn.q_proj = prune_linear_layer(self.self_attn.q_proj, index)
-        self.self_attn.k_proj = prune_linear_layer(self.self_attn.k_proj, index)
-        self.self_attn.v_proj = prune_linear_layer(self.self_attn.v_proj, index)
-        self.out_proj = prune_linear_layer(self.out_proj, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self_attn.num_attention_heads = self.self_attn.num_attention_heads - len(heads)
-        self.self_attn.all_head_size = self.self_attn.attention_head_size * self.self_attn.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -285,7 +262,6 @@ class ErnieMEncoderLayer(nn.Module):
         else:
             self.activation = config.hidden_act
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

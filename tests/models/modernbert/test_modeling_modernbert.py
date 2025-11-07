@@ -263,7 +263,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model

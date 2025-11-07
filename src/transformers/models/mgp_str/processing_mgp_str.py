@@ -14,8 +14,6 @@
 # limitations under the License.
 """Processor class for MGP-STR."""
 
-import warnings
-
 from transformers import AutoTokenizer
 from transformers.utils import is_torch_available
 from transformers.utils.generic import ExplicitEnum
@@ -57,17 +55,6 @@ class MgpstrProcessor(ProcessorMixin):
     char_tokenizer_class = "MgpstrTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        feature_extractor = None
-        if "feature_extractor" in kwargs:
-            warnings.warn(
-                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
-                " instead.",
-                FutureWarning,
-            )
-            feature_extractor = kwargs.pop("feature_extractor")
-
-        image_processor = image_processor if image_processor is not None else feature_extractor
-
         self.char_tokenizer = tokenizer
         self.bpe_tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         self.wp_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")

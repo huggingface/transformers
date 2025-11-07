@@ -213,7 +213,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         else {}
     )
     is_encoder_decoder = True
-    test_pruning = False
+
     test_missing_keys = False
 
     def setUp(self):
@@ -848,7 +848,7 @@ class PegasusXStandaloneDecoderModelTester:
 @require_torch
 class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusXDecoder,) if is_torch_available() else ()
-    test_pruning = False
+
     is_encoder_decoder = False
 
     def setUp(
