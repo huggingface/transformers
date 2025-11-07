@@ -109,8 +109,10 @@ jobs:
       - name: Install torch 2.9.1 RC
         working-directory: /transformers
         run: |
-          python3 -m pip uninstall -y torch torchvision torchaudio
+          python3 -m pip uninstall -y torch torchvision torchaudio torchcodec
+          python3 -m pip install --no-cache-dir torchcodec==0.8.0 --index-url https://download.pytorch.org/whl/cpu
           python3 -m pip install --no-cache-dir torch==2.9.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu126
+
 
       - name: NVIDIA-SMI
         run: |
