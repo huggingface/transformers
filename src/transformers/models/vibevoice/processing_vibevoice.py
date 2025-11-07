@@ -56,30 +56,51 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
 
 class VibeVoiceProcessor(ProcessorMixin):
     r"""
-    Constructs a VibeVoice processor which wraps a VibeVoice tokenizer and audio processor into a single processor.
+    Constructs a VibeVoice processor which wraps [`VibeVoiceFeatureExtractor`] and
+    [`Qwen2TokenizerFast`] into a single processor that inherits both the audio feature extraction and
+    tokenizer functionalities.
 
-    [`VibeVoiceProcessor`] offers all the functionalities of [`VibeVoiceTokenizerFast`] and [`VibeVoiceFeatureExtractor`]. 
-    See the [`~VibeVoiceProcessor.__call__`] and [`~VibeVoiceProcessor.decode`] for more information.
+    See the [`~VibeVoiceProcessor.__call__`] for more information.
 
     Args:
-        tokenizer (`VibeVoiceTokenizerFast`):
-            The tokenizer for text processing.
         feature_extractor (`VibeVoiceFeatureExtractor`):
-            The audio processor for speech processing.
+            The feature extractor for speech processing.
+        tokenizer (`Qwen2TokenizerFast`):
+            The tokenizer for text processing.
+        chat_template (`str`, *optional*):
+            A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
     """
 
     feature_extractor_class = "VibeVoiceFeatureExtractor"
-    tokenizer_class = "VibeVoiceTokenizerFast"
+    tokenizer_class = "Qwen2TokenizerFast"
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, feature_extractor, tokenizer, chat_template=None):
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+
+        # Handle speech tokens like CSM
+        if not hasattr(tokenizer, "speech_start_token"):
+            self.speech_start_token = "<|vision_start|>"
+            self.speech_start_id = tokenizer.convert_tokens_to_ids(self.speech_start_token)
+        else:
+            self.speech_start_token = tokenizer.speech_start_token
+            self.speech_start_id = tokenizer.speech_start_id
+
+        if not hasattr(tokenizer, "speech_end_token"):
+            self.speech_end_token = "<|vision_end|>"
+            self.speech_end_id = tokenizer.convert_tokens_to_ids(self.speech_end_token)
+        else:
+            self.speech_end_token = tokenizer.speech_end_token
+            self.speech_end_id = tokenizer.speech_end_id
+
+        if not hasattr(tokenizer, "speech_diffusion_token"):
+            self.speech_diffusion_token = "<|vision_pad|>"
+            self.speech_diffusion_id = tokenizer.convert_tokens_to_ids(self.speech_diffusion_token)
+        else:
+            self.speech_diffusion_token = tokenizer.speech_diffusion_token
+            self.speech_diffusion_id = tokenizer.speech_diffusion_id
 
         # Fixed text parts used in building text sequences
         self.system_prompt = " Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n"
-        self._voice_input_text = ' Voice input:\n'
-        self._text_input_text = ' Text input:\n'
-        self._speech_output_text = ' Speech output:\n'
-        self._newline_text = '\n'
 
     def __call__(
         self,
@@ -200,26 +221,26 @@ class VibeVoiceProcessor(ProcessorMixin):
             # Add voice section if audio provided
             if processed_audio is not None:
                 script_speakers = speakers_per_script[i]
-                text_parts.append(self._voice_input_text)
+                text_parts.append(' Voice input:\n')
 
                 # Build speaker voice sections with placeholders
                 vae_tok_lens = processed_audio["input_features_mask"][script_speakers].sum(dim=-1).int().tolist()
                 for speaker_id, vae_tok_len in zip(script_speakers, vae_tok_lens):
                     # Use the actual speech tokens from the tokenizer
-                    speech_placeholder = self.tokenizer._speech_diffusion_token * vae_tok_len
-                    speaker_voice_text = f" Speaker {speaker_id}:{self.tokenizer._speech_start_token}{speech_placeholder}{self.tokenizer._speech_end_token}{self._newline_text}"
+                    speech_placeholder = self.speech_diffusion_token * vae_tok_len
+                    speaker_voice_text = f" Speaker {speaker_id}:{self.speech_start_token}{speech_placeholder}{self.speech_end_token}\n"
                     text_parts.append(speaker_voice_text)
 
             # Add text input section
-            text_parts.append(self._text_input_text)
+            text_parts.append(' Text input:\n')
 
             # Add script text
             for speaker_id, speaker_text in _script:
-                speaker_line = f" Speaker {speaker_id}:{speaker_text}{self._newline_text}"
+                speaker_line = f" Speaker {speaker_id}:{speaker_text}\n"
                 text_parts.append(speaker_line)
 
             # Add speech output section
-            speech_output_text = f'{self._speech_output_text}{self.tokenizer._speech_start_token}'
+            speech_output_text = f' Speech output:\n{self.speech_start_token}'
             text_parts.append(speech_output_text)
 
             # Join all text parts
@@ -229,12 +250,16 @@ class VibeVoiceProcessor(ProcessorMixin):
         # Tokenize the complete text sequences
         batch_encoding = self.tokenizer(text_sequences, **text_kwargs)
 
+        # Remove token_type_ids if present (VibeVoice doesn't use them)
+        batch_encoding.pop("token_type_ids", None)
+
         # Add audio data if provided
         if processed_audio:
             batch_encoding.update(processed_audio)
 
         return BatchFeature(data=batch_encoding, tensor_type=return_tensors)
 
+    # TODO (ebezzam) remove after properly using chat template
     def separate_script(self, script: str) -> list[tuple[int, str]]:
         """Separate script into list of (speaker_id, text) tuples."""
         lines = script.strip().split("\n")
@@ -262,6 +287,7 @@ class VibeVoiceProcessor(ProcessorMixin):
 
         return parsed_lines
 
+    # TODO (ebezzam) remove?
     def _merge_inputs(self, text_inputs: BatchEncoding, audio_inputs: dict) -> BatchEncoding:
         """Merge text and audio inputs into a single BatchEncoding."""
         # Start with text inputs
@@ -286,7 +312,7 @@ class VibeVoiceProcessor(ProcessorMixin):
 
     def save_audio(
         self,
-        audio: Union[torch.Tensor, np.ndarray, list[Union[torch.Tensor, np.ndarray]]],
+        audio: AudioInput,
         output_path: str = "output.wav",
         sampling_rate: Optional[int] = None,
     ) -> list[str]:

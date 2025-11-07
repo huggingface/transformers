@@ -29,7 +29,7 @@ from transformers import (
     VibeVoiceProcessor,
     VibeVoiceSemanticTokenizerConfig,
     VibeVoiceSemanticTokenizerModel,
-    VibeVoiceTokenizerFast,
+    Qwen2TokenizerFast,
 )
 
 
@@ -308,13 +308,76 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     if language_model_pretrained_name is None:
         language_model_pretrained_name = "Qwen/Qwen2.5-1.5B"
 
-    tokenizer = VibeVoiceTokenizerFast.from_pretrained(language_model_pretrained_name)
+    
+    # Define a chat template adapted for VibeVoice's speech use case
+    chat_template = """
+{%- for message in messages %}
+    {#-- Validate role is a stringified integer --#}
+    {%- if not message['role'] is string or not message['role'].isdigit() %}
+        {{- raise_exception("The role must be an integer or a stringified integer (e.g. '0') designating the speaker id") }}
+    {%- endif %}
+
+    {#-- Validate content is a list --#}
+    {%- set content = message['content'] %}
+    {%- if content is not iterable or content is string %}
+        {{- raise_exception("The content must be a list") }}
+    {%- endif %}
+
+    {#-- Collect content types --#}
+    {%- set content_types = content | map(attribute='type') | list %}
+    {%- set is_last = loop.last %}
+
+    {#-- Last message validation --#}
+    {%- if is_last %}
+        {%- if 'text' not in content_types %}
+            {{- raise_exception("The last message must include one item of type 'text'") }}
+        {%- elif (content_types | select('equalto', 'text') | list | length > 1) or (content_types | select('equalto', 'audio') | list | length > 1) %}
+            {{- raise_exception("At most two items are allowed in the last message: one 'text' and one 'audio'") }}
+        {%- endif %}
+
+    {#-- All other messages validation --#}
+    {%- else %}
+        {%- if content_types | select('equalto', 'text') | list | length != 1
+              or content_types | select('equalto', 'audio') | list | length != 1 %}
+            {{- raise_exception("Each message (except the last) must contain exactly one 'text' and one 'audio' item") }}
+        {%- elif content_types | reject('in', ['text', 'audio']) | list | length > 0 %}
+            {{- raise_exception("Only 'text' and 'audio' types are allowed in content") }}
+        {%- endif %}
+    {%- endif %}
+{%- endfor %}
+
+{%- for message in messages %}
+    {{- bos_token }}
+    {{- '[' + message['role'] + ']' }}
+    {{- message['content'][0]['text'] }}
+    {{- eos_token }}
+    {%- if message['content']|length > 1 %}
+        {{- '<|vision_start|><|vision_end|>' }}
+    {%- endif %}
+{%- endfor %}
+"""
+        
+    # Explicitly use Qwen2TokenizerFast to ensure proper class name in config
+    tokenizer = Qwen2TokenizerFast.from_pretrained(language_model_pretrained_name)
+    
     processor = VibeVoiceProcessor(
         feature_extractor=VibeVoiceFeatureExtractor(**audio_config),
         tokenizer=tokenizer,
+        chat_template=chat_template,
         # audio_tokenizer=VibeVoiceAcousticTokenizerModel.from_pretrained(push_to_hub + "-AcousticTokenizer"),
     )
     processor.save_pretrained(output_dir)
+    
+    # Manually ensure tokenizer_config.json has the correct tokenizer_class
+    import os
+    tokenizer_config_path = os.path.join(output_dir, "tokenizer_config.json")
+    if os.path.exists(tokenizer_config_path):
+        with open(tokenizer_config_path, "r") as f:
+            tokenizer_config = json.load(f)
+        tokenizer_config["tokenizer_class"] = "Qwen2TokenizerFast"
+        
+        with open(tokenizer_config_path, "w") as f:
+            json.dump(tokenizer_config, f, indent=2)
 
     if push_to_hub is not None:
         print(f"------ Pushing processor to hub as {push_to_hub} ------")
@@ -347,11 +410,16 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         raise ValueError(f"missing keys found: {missing}")
     print("Full model checkpoint loaded successfully.")
 
-    # Set default generation config
+    # Calculate speech token IDs from tokenizer for generation config
+    speech_start_id = tokenizer.convert_tokens_to_ids("<|vision_start|>")
+    speech_end_id = tokenizer.convert_tokens_to_ids("<|vision_end|>")
+    speech_diffusion_id = tokenizer.convert_tokens_to_ids("<|vision_pad|>")
+
+    # Set default generation config  
     vibevoice_model.generation_config._from_model_config = False
-    vibevoice_model.generation_config.speech_start_id = tokenizer.speech_start_id
-    vibevoice_model.generation_config.speech_end_id = tokenizer.speech_end_id
-    vibevoice_model.generation_config.speech_diffusion_id = tokenizer.speech_diffusion_id
+    vibevoice_model.generation_config.speech_start_id = speech_start_id
+    vibevoice_model.generation_config.speech_end_id = speech_end_id
+    vibevoice_model.generation_config.speech_diffusion_id = speech_diffusion_id
     vibevoice_model.generation_config.bos_token_id = tokenizer.bos_token_id
     vibevoice_model.generation_config.eos_token_id = tokenizer.eos_token_id
     vibevoice_model.generation_config.pad_token_id = tokenizer.pad_token_id
