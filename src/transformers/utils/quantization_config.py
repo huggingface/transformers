@@ -2114,7 +2114,7 @@ class SinqConfig(QuantizationConfigMixin):
         use_nf4: bool = False,
         modules_to_not_convert: Optional[list[str]] = None,
         dtype: Optional[str] = "auto",  # "auto" | "bfloat16" | "float16" | "float32",
-        auto_patch_io: bool=True,
+        device: Optional[Union[str, int]] = "cpu",
         **kwargs: Any,
     ):
         #super().__init__(quant_method=QuantizationMethod.SINQ, **kwargs)
@@ -2128,7 +2128,7 @@ class SinqConfig(QuantizationConfigMixin):
         self.use_nf4 = bool(use_nf4)
         self.modules_to_not_convert = modules_to_not_convert or []
         self.dtype = dtype or "auto"
-        self.auto_patch_io = bool(auto_patch_io)
+        self.device = device
         self._extra_kwargs: dict[str, Any] = dict(kwargs)
 
     @property
@@ -2154,7 +2154,7 @@ class SinqConfig(QuantizationConfigMixin):
                 use_nf4=self.use_nf4,
                 modules_to_not_convert=list(self.modules_to_not_convert),
                 dtype=self.dtype,
-                auto_patch_io=self.auto_patch_io
+                device=self.device,
             )
         )
         base.update(self._extra_kwargs)

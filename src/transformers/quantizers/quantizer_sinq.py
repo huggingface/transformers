@@ -2,7 +2,7 @@
 from __future__ import annotations
 import importlib
 import os
-from typing import Dict, List, Set, Tuple, Optional, Any, Callable
+from typing import Dict, List, Set, Tuple, Optional, Union, Any, Callable
 
 import torch
 import torch.nn as nn
@@ -17,34 +17,49 @@ try:
 except Exception:  # pragma: no cover
     logger = None
 
-# ------------------------------------------------------------------------------------
-# HF I/O autopatch (handled by startup hook)
-# ------------------------------------------------------------------------------------
 
-def _maybe_patch_hf_io(auto: Optional[bool], cfg: Optional[SinqConfig]) -> bool:
+# top-level helpers in quantizer_sinq.py
+def _normalize_cuda_device(dev: Optional[Union[str, int]]) -> str:
     """
-    Compatibility shim: the actual HF save/load routing is applied at interpreter
-    startup by the SINQ autopatch (via sitecustomize/.pth). We keep this function
-    so callers elsewhere in this file don't need to change.
-
-    Returns:
-        True (indicating "HF is ready") without doing anything.
+    Returns a canonical CUDA device string like 'cuda' or 'cuda:1'.
+    Accepts: 'auto', None -> 'cuda'
+             'cuda', 'cuda:0', 0, 1 -> canonicalized forms
     """
-    try:
-        # Optional: notice whether the startup marker from _autopatch.py is present.
-        # (_autopatch.py sets: os.environ["SINQ_PTH_LOADED"] = "1")
-        if os.getenv("SINQ_PTH_LOADED"):
-            if logger:
-                logger.debug("[SINQ] Startup autopatch marker detected (SINQ_PTH_LOADED=1).")
-        else:
-            if logger:
-                logger.debug("[SINQ] Startup autopatch marker not detected; continuing anyway.")
-    except Exception:
-        # Never block quantization if the env check/logging fails.
-        pass
-    return True
+    if dev is None or dev == "auto":
+        return "cuda"
+    if isinstance(dev, int):
+        return f"cuda:{dev}"
+    if isinstance(dev, str):
+        if dev.startswith("cuda"):
+            return dev
+    raise ValueError(f"Unsupported device spec: {dev!r}")
 
-
+def _validate_cuda_device_str(device_str: str) -> None:
+    if not torch.cuda.is_available():
+        raise RuntimeError("SinqHfQuantizer requires CUDA, but no CUDA device is available.")
+    if ":" in device_str:
+        try:
+            idx = int(device_str.split(":")[1])
+        except Exception:
+            raise ValueError(f"Invalid CUDA device string: {device_str!r}")
+        if idx < 0 or idx >= torch.cuda.device_count():
+            raise ValueError(
+                f"Requested {device_str!r}, but visible CUDA devices are [0 .. {torch.cuda.device_count()-1}]."
+            )
+        
+def _flatten_device_map(dmap: Optional[dict]) -> set[str]:
+    if not isinstance(dmap, dict):
+        return set()
+    # HF device_map can be nested; collect all device strings
+    out = set()
+    def _walk(v):
+        if isinstance(v, str):
+            out.add(v)
+        elif isinstance(v, dict):
+            for vv in v.values(): _walk(vv)
+    _walk(dmap)
+    return out
+        
 # ------------------------------------------------------------------------------------
 # SINQ dynamic import
 # ------------------------------------------------------------------------------------
@@ -84,7 +99,7 @@ class _SinqLoadTimeLinear(nn.Module):
         *,
         sinq_quant_dict: dict,
         compute_dtype: torch.dtype,
-        device_str: str = "cuda"
+        device_str: str #= "cuda"
     ):
         super().__init__()
         self.in_features = in_features
@@ -117,13 +132,34 @@ class SinqHfQuantizer(HfQuantizer):
         _import_sinq()
 
         cfg: SinqConfig = self.quantization_config
-        # 🚀 Try autopatch here
-        _maybe_patch_hf_io(getattr(cfg, "auto_patch_io", None), cfg)
 
         if getattr(cfg, "dtype", "auto") not in ("auto", "bfloat16", "float16", "float32"):
             raise ValueError(f"Unsupported dtype: {cfg.dtype}")
         if not torch.cuda.is_available():
             raise RuntimeError("SINQ currently expects a CUDA device.")
+        
+        device_str = _normalize_cuda_device(getattr(cfg, "device", "auto"))
+        _validate_cuda_device_str(device_str)
+        # Optionally: store normalized device for later
+        self._normalized_device_str = device_str
+
+        # Not supported: multi-GPU sharding via device_map
+        devs = _flatten_device_map(device_map)
+        if devs:
+            # e.g., {'cuda:0'} is okay; more than one is not
+            if len(devs) > 1:
+                raise RuntimeError(
+                    "SinqHfQuantizer: multi-GPU device_map detected, but SINQ currently supports only a single CUDA device. "
+                    f"Got {sorted(devs)}. Please use device_map=None and set SinqConfig(device='{device_str}')."
+                )
+            # If they provided a single device_map device that doesn't match our config, error out to avoid surprise.
+            only = next(iter(devs))
+            if only != device_str and not (only == "cuda" and device_str == "cuda:0"):
+                raise RuntimeError(
+                    "SinqHfQuantizer: device_map device and SinqConfig.device disagree. "
+                    f"device_map={only!r}, SinqConfig.device={device_str!r}. "
+                    "Please pick one device and keep them consistent."
+                )
 
     def update_dtype(self, dtype):
         cfg: SinqConfig = self.quantization_config
@@ -165,12 +201,12 @@ class SinqHfQuantizer(HfQuantizer):
 
         # 🔁 Second chance autopatch (in case environment ran before patchers were importable)
         cfg: SinqConfig = self.quantization_config
-        _maybe_patch_hf_io(getattr(cfg, "auto_patch_io", None), cfg)
 
         print("[SINQ] pre-load hook running")  # temp trace
         sinq_quant_dict = self._build_sinq_quant_dict(cfg)
         compute_dtype = self.update_dtype(None)
         to_skip = set(cfg.modules_to_not_convert or [])
+        device_str = getattr(self, "_normalized_device_str", _normalize_cuda_device(cfg.device))
 
         def _convert(m: nn.Module, prefix: str = ""):
             for child_name, child in list(m.named_children()):
@@ -181,7 +217,7 @@ class SinqHfQuantizer(HfQuantizer):
                         use_bias=(child.bias is not None),
                         sinq_quant_dict=sinq_quant_dict,
                         compute_dtype=compute_dtype,
-                        device_str="cuda",
+                        device_str=device_str,
                     )
                     setattr(m, child_name, ph)
                 else:
@@ -202,7 +238,7 @@ class SinqHfQuantizer(HfQuantizer):
 
         cfg: SinqConfig = self.quantization_config
         method = str(getattr(cfg, "method", "sinq")).lower()
-        device_str = "cuda"
+        device_str = getattr(self, "_normalized_device_str", _normalize_cuda_device(cfg.device))
         device = torch.device(device_str)
         model = model  # keep original device for now
 
@@ -311,7 +347,8 @@ class SinqHfQuantizer(HfQuantizer):
                         try:
                             return next(self._base.parameters()).device
                         except StopIteration:
-                            return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                            return device
+                            #return torch.device("cuda" if torch.cuda.is_available() else "cpu")
                     def named_modules(self, *args, **kwargs):
                         return self._base.named_modules(*args, **kwargs)
                     def eval(self):
@@ -374,22 +411,26 @@ class SinqHfQuantizer(HfQuantizer):
                 quant_config=quant_dict,
                 del_orig=True,
                 compute_dtype=ph._compute_dtype,
-                device=ph._device_str,
+                device=device_str,
                 use_unpack_kernel=True,
                 layer_activations=acts,
             )
             setattr(parent, full.split(".")[-1], sinq)
 
         final_dtype = self.update_dtype(None)
+
+        if kwargs.get("device_map", None) is not None:
+            raise RuntimeError(
+                "SinqHfQuantizer: device_map was provided, but SINQ currently supports a single CUDA device only. "
+                "Please remove device_map and set SinqConfig(device='cuda:x')."
+            )
+
+        final_dtype = self.update_dtype(None)
         try:
-            if hasattr(model, "device") and (model.device) == torch.device("cpu"):
-                print("I'm resetting the device to cuda")
-                model = model.to(dtype=final_dtype, device=torch.device("cuda"))
-            else:
-                model = model.to(dtype=final_dtype, device=model.device)
+            model = model.to(dtype=final_dtype, device=device)
         except Exception as e:
             if logger:
-                logger.warning(f"Post-quant cast to {final_dtype} failed; continuing. {e}")
+                logger.warning(f"SINQ: final move to {device} ({final_dtype}) failed; continuing. {e}")
 
         if logger and method == "asinq":
             total = len(placeholders)
