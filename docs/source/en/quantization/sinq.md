@@ -45,7 +45,7 @@ pip install sinq
 ### Quantize in a few lines
 
 Quantizing any 🤗 Hugging Face model with SINQ is simple and takes only a few lines of code. 
-First, create a [`SinqConfig`] and specifying the following parameters:
+First, create a [`SinqConfig`] and specify the following parameters:
 
 | Flag | Description | Type | Options | Default |
 |------|-------------|---------|---------|----------|
@@ -53,7 +53,7 @@ First, create a [`SinqConfig`] and specifying the following parameters:
 | `--tiling_mode` | Weight matrix tiling strategy | str | 1D, 2D | 1D |
 | `--group_size` | Weights per quantization group | int | 64, 128 | 64 |
 | `--method` | Quantization method | str | sinq, asinq | sinq |
-| `--dtype` | Data type of the original model | str | auto, float16, float32 | auto (bfloaf16) |
+| `--dtype` | Data type of the original model | str | auto, float16, float32 | auto (bfloat16) |
 | `--modules_to_not_convert` | List of the layers that are NOT quantize | List of str | [lm_head, ...] | [lm_head] |
 | `--device` | Device on which the model is loaded | str | cpu, cuda:0, cuda:1, etc | cuda:0 |
 
@@ -71,7 +71,6 @@ cfg = SinqConfig(
     group_size=64,
     tiling_mode="1D",
     method="sinq",
-    dtype="auto",
     modules_to_not_convert=["lm_head"],
     device=device
 )
@@ -86,6 +85,8 @@ qmodel = AutoModelForCausalLM.from_pretrained(
 ```
 
 ✅ That’s it. Your model is now quantized with **SINQ** and ready for inference or saving.
+
+> Check our official [**SINQ**](https://github.com/huawei-csl/SINQ/tree/main) github repository to be updated on changes and new features.
 
 ---
 
@@ -148,7 +149,9 @@ results = evaluator.simple_evaluate(
 
 ## 2. How to Cite This Work
 
-If you find **SINQ** useful in your research or applications, please cite our <a href="http://arxiv.org/abs/2509.22944" target="_blank"><strong>paper</strong></a>:
+If you find **SINQ** useful in your research or applications
+- Support our project by putting a star in the [**SINQ**](https://github.com/huawei-csl/SINQ/tree/main) github repository
+- Please cite our <a href="http://arxiv.org/abs/2509.22944" target="_blank"><strong>paper</strong></a>:
 
 ```bibtex
 @misc{muller2025sinq,
