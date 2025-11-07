@@ -344,8 +344,8 @@ class PLBartEncoder(PLBartPreTrainedModel):
         embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
         self.embed_tokens = PLBartScaledWordEmbedding(
-                config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
-            )
+            config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = PLBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -593,8 +593,8 @@ class PLBartDecoder(PLBartPreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = PLBartScaledWordEmbedding(
-                config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
-            )
+            config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = PLBartLearnedPositionalEmbedding(
             config.max_position_embeddings,

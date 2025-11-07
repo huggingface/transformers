@@ -487,8 +487,8 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
         self.embed_tokens = BlenderbotScaledWordEmbedding(
-                config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
-            )
+            config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = BlenderbotLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -630,8 +630,8 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = BlenderbotScaledWordEmbedding(
-                config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
-            )
+            config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = BlenderbotLearnedPositionalEmbedding(
             config.max_position_embeddings,

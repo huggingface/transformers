@@ -730,7 +730,6 @@ class XLMRobertaXLLMHead(nn.Module):
 
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        
 
     def forward(self, features, **kwargs):
         x = self.dense(features)
@@ -741,8 +740,6 @@ class XLMRobertaXLLMHead(nn.Module):
         x = self.decoder(x)
 
         return x
-
-
 
 
 class XLMRobertaXLClassificationHead(nn.Module):

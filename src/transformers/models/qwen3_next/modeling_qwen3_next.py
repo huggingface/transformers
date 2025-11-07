@@ -997,7 +997,7 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif isinstance(module, Qwen3NextRMSNorm):
             module.weight.zero_()
-        if isinstance(module,  Qwen3NextExperts):
+        if isinstance(module, Qwen3NextExperts):
             module.gate_up_proj.normal_(mean=0.0, std=self.config.initializer_range)
             module.down_proj.normal_(mean=0.0, std=self.config.initializer_range)
 

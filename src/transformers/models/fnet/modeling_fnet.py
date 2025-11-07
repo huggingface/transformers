@@ -334,7 +334,6 @@ class FNetLMPredictionHead(nn.Module):
         return hidden_states
 
 
-
 class FNetOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()

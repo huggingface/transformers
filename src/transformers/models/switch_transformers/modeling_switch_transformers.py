@@ -660,7 +660,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
 
-
         self.is_decoder = config.is_decoder
 
         sparse_step = config.decoder_sparse_step if self.is_decoder else config.encoder_sparse_step

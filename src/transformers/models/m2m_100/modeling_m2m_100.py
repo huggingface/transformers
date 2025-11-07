@@ -557,8 +557,6 @@ class M2M100Encoder(M2M100PreTrainedModel):
             config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
         )
 
-
-
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
             embed_dim,
@@ -705,8 +703,6 @@ class M2M100Decoder(M2M100PreTrainedModel):
         self.embed_tokens = M2M100ScaledWordEmbedding(
             config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
         )
-
-
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,

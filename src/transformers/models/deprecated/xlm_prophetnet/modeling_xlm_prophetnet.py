@@ -1173,7 +1173,7 @@ class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
     def __init__(self, config: XLMProphetNetConfig):
         super().__init__(config)
 
-        self.word_embeddings =  nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = XLMProphetNetPositionalEmbeddings(config)
         self.embeddings_layer_norm = LayerNorm(config.hidden_size)
 

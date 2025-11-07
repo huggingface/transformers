@@ -510,7 +510,6 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
     config: MarkupLMConfig
     base_model_prefix = "markuplm"
 
-   
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""

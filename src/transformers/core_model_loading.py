@@ -298,6 +298,7 @@ class LoadedParameter(torch.nn.Parameter):
 
     def __repr__(self):
         return f"LoadedParameter(_is_hf_initialized={self._is_hf_initialized}, data={self.data}"
+
     # block .data assignment when flagged
     @property
     def data(self):
@@ -341,6 +342,7 @@ class LoadedParameter(torch.nn.Parameter):
 
     def erfinv_(self, *a, **k):
         return self
+
     def log_(self, *a, **k):
         return self
 
@@ -355,7 +357,6 @@ class LoadedParameter(torch.nn.Parameter):
 
     def __getitem__(self, *a, **k):
         return self
-
 
 
 def _materialize_copy(tensor, dtype):

@@ -704,8 +704,6 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
             config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
         )
 
-
-
         self.embed_positions = NllbMoeSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
             embed_dim,
@@ -786,8 +784,6 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         self.embed_tokens = NllbMoeScaledWordEmbedding(
             config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
         )
-
-
 
         self.embed_positions = NllbMoeSinusoidalPositionalEmbedding(
             config.max_position_embeddings,

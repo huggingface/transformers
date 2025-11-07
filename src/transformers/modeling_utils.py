@@ -2472,11 +2472,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     module.weight.fill_(1.0)
                 if hasattr(module, "bias") and module.bias is not None:
                     module.bias.zero_()
-            if (hasattr(module, "gate_up_proj")):
+            if hasattr(module, "gate_up_proj"):
                 module.gate_up_proj.normal_(mean=0.0, std=std)
-            if (hasattr(module, "down_proj")):
+            if hasattr(module, "down_proj"):
                 module.down_proj.normal_(mean=0.0, std=std)
-            if (hasattr(module, "gate")):
+            if hasattr(module, "gate"):
                 module.gate.normal_(mean=0.0, std=std)
         except Exception as e:
             logger.warning(f"Failed to init: {str(e)}")
@@ -2555,7 +2555,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
             # if neither are here, we still want to the training to have same grads
-            target_is_not_there = missing_keys and re.search(target_name, "\n".join(missing_keys), flags=re.MULTILINE) and not source_is_there
+            target_is_not_there = (
+                missing_keys
+                and re.search(target_name, "\n".join(missing_keys), flags=re.MULTILINE)
+                and not source_is_there
+            )
             if source_is_there or missing_keys is None or target_is_not_there:
                 try:
                     if source_name.endswith(".bias") or source_name.endswith(".weight"):
@@ -4415,8 +4419,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for k in all_pointer:  # finally close all opened file pointers TODO async
             k.__exit__(None, None, None)
 
-
-
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
         # Remove tied weights keys and etc
@@ -4709,7 +4711,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             self.initialize_weights()
 
-        for p in self.parameters(): # TODO @Cyrilvallez if we are able to do this while we smart apply my be better
+        for p in self.parameters():  # TODO @Cyrilvallez if we are able to do this while we smart apply my be better
             setattr(p, "__class__", nn.Parameter)
 
     def _adjust_missing_and_unexpected_keys(

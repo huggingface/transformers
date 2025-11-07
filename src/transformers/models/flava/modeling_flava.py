@@ -1451,7 +1451,6 @@ class FlavaMaskedPredictionHead(nn.Module):
         if weight is not None:
             self.decoder.weight = weight
 
-
     def forward(self, x):
         x = self.transform(x)
         x = self.decoder(x)
@@ -1520,9 +1519,9 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
     # Those are linked to xxx.bias
     _tied_weights_keys = {
         "mmm_text_head.bias": "mmm_text_head.decoder.bias",
-        'mim_head.bias':'mim_head.decoder.bias',
-        'mlm_head.bias': 'mlm_head.decoder.bias',
-        'mmm_image_head.bias': 'mmm_image_head.decoder.bias'
+        "mim_head.bias": "mim_head.decoder.bias",
+        "mlm_head.bias": "mlm_head.decoder.bias",
+        "mmm_image_head.bias": "mmm_image_head.decoder.bias",
     }
 
     def __init__(self, config: FlavaConfig, image_codebook: Optional[nn.Module] = None):

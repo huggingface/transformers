@@ -663,9 +663,7 @@ class MvpDecoder(MvpPreTrainedModel):
         use_prompt (bool): whether to use prompt
     """
 
-    def __init__(
-        self, config: MvpConfig, use_prompt: Optional[bool] = False
-    ):
+    def __init__(self, config: MvpConfig, use_prompt: Optional[bool] = False):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop

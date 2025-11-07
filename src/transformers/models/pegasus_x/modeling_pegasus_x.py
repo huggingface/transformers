@@ -783,8 +783,8 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
         self.embed_tokens = PegasusXScaledWordEmbedding(
-                config.vocab_size, embed_dim, padding_idx, embed_scale=embed_scale
-            )
+            config.vocab_size, embed_dim, padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_global = nn.Embedding(config.num_global_tokens, embed_dim)
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(embed_dim)
@@ -979,8 +979,8 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         padding_idx = config.pad_token_id
 
         self.embed_tokens = PegasusXScaledWordEmbedding(
-                config.vocab_size, config.d_model, padding_idx=padding_idx, embed_scale=embed_scale
-            )
+            config.vocab_size, config.d_model, padding_idx=padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(config.d_model)
         self.layers = nn.ModuleList([PegasusXDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])
