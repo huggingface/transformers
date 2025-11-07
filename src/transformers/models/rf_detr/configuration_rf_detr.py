@@ -9,7 +9,7 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
-from .modeling_rf_detr_dinov2_with_registers import RfDetrDinov2WithRegistersConfig
+from .modeling_rf_detr_dinov2 import RfDetrDinov2Config
 
 
 logger = logging.get_logger(__name__)
@@ -31,7 +31,7 @@ class RfDetrConfig(PretrainedConfig):
 
     Args:
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
-            The configuration of the backbone model. If not provided, will default to `RfDetrDinov2WithRegistersConfig`
+            The configuration of the backbone model. If not provided, will default to `RfDetrDinov2Config`
             with a small ViT architecture optimized for detection tasks.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. Only used when `use_timm_backbone` is `True`.
@@ -173,9 +173,9 @@ class RfDetrConfig(PretrainedConfig):
         # backbone
         if backbone_config is None and backbone is None:
             logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RfDetrDinov2WithRegisters` backbone."
+                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RfDetrDinov2` backbone."
             )
-            backbone_config = RfDetrDinov2WithRegistersConfig(
+            backbone_config = RfDetrDinov2Config(
                 attention_probs_dropout_prob=0.0,
                 drop_path_rate=0.0,
                 hidden_act="gelu",

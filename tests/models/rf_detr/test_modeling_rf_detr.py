@@ -23,7 +23,7 @@ from transformers import (
     CONFIG_NAME,
     DeformableDetrImageProcessor,
     RfDetrConfig,
-    RfDetrDinov2WithRegistersConfig,
+    RfDetrDinov2Config,
     is_torch_available,
     is_vision_available,
 )
@@ -48,13 +48,15 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-CHECKPOINT = "stevenbucaille/rf-detr-base"
+CHECKPOINT = {
+    "base": "stevenbucaille/rf-detr-base",
+    "large": "stevenbucaille/rf-detr-large",
+}
 
 
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
-
 
 class RfDetrModelTester:
     def __init__(
@@ -131,7 +133,7 @@ class RfDetrModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
-        backbone_config = RfDetrDinov2WithRegistersConfig(
+        backbone_config = RfDetrDinov2Config(
             attention_probs_dropout_prob=0.0,
             drop_path_rate=0.0,
             hidden_act="gelu",
@@ -149,7 +151,6 @@ class RfDetrModelTester:
             hidden_size=self.d_model,
             patch_size=16,
             num_windows=2,
-            num_register_tokens=0,
             image_size=self.image_size,
             attn_implementation=self.attn_implementation,
         )
@@ -494,13 +495,20 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class RfDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return DeformableDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        if is_vision_available():
+            return {
+                "base": DeformableDetrImageProcessor.from_pretrained(CHECKPOINT["base"]),
+                "large": DeformableDetrImageProcessor.from_pretrained(CHECKPOINT["large"]),
+            }
 
     @slow
-    def test_inference_object_detection_head(self):
-        model = RfDetrForObjectDetection.from_pretrained(CHECKPOINT, attn_implementation="eager").to(torch_device)
+    def test_inference_object_detection_head_base(self):
+        size = "base"
+        model = RfDetrForObjectDetection.from_pretrained(CHECKPOINT[size], attn_implementation="eager").to(
+            torch_device
+        )
 
-        image_processor = self.default_image_processor
+        image_processor = self.default_image_processor[size]
         image = prepare_img()
         encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
         pixel_values = encoding["pixel_values"].to(torch_device)
@@ -531,4 +539,31 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(outputs.pred_boxes.flatten()[:5], expected_boxes, rtol=2e-4, atol=2e-4)
 
-        # TODO: Add postprocessing tests
+        results = image_processor.post_process_object_detection(
+            outputs, threshold=0.0, target_sizes=[image.size[::-1]]
+        )[0]
+
+        expectations = Expectations(
+            {
+                (None, None): [0.9596, 0.9335, 0.8987, 0.7271],
+            }
+        )
+        expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        expected_labels = [17, 17, 75, 75]
+
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [7.5101, 54.5667, 318.4421, 472.1259],
+                    [343.0202, 23.9165, 639.3325, 372.2062],
+                    [40.7178, 72.6109, 175.9414, 117.5903],
+                    [333.5370, 76.9845, 370.3848, 187.3158],
+                ],
+            }
+        )
+        expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4)
+        self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=2e-4)

@@ -63,7 +63,6 @@ BACKBONE_CONFIGS = {
         "hidden_size": 384,
         "patch_size": 16,
         "num_windows": 2,
-        "num_register_tokens": 0,
         "image_size": 384,
     },
     "small": {
@@ -84,7 +83,6 @@ BACKBONE_CONFIGS = {
         "hidden_size": 384,
         "patch_size": 16,
         "num_windows": 2,
-        "num_register_tokens": 0,
         "image_size": 512,
     },
     "base": {
@@ -105,7 +103,6 @@ BACKBONE_CONFIGS = {
         "hidden_size": 384,
         "patch_size": 14,
         "num_windows": 4,
-        "num_register_tokens": 0,
         "image_size": 518,
     },
     "medium": {
@@ -126,7 +123,6 @@ BACKBONE_CONFIGS = {
         "hidden_size": 384,
         "patch_size": 16,
         "num_windows": 2,
-        "num_register_tokens": 0,
         "image_size": 576,
     },
     "large": {
@@ -147,7 +143,6 @@ BACKBONE_CONFIGS = {
         "hidden_size": 768,
         "patch_size": 14,
         "num_windows": 4,
-        "num_register_tokens": 0,
         "image_size": 518,
     },
 }
@@ -344,7 +339,7 @@ def get_model_config(model_name: str):
         config = MODEL_CONFIGS["base"]
         config["backbone_config"] = BACKBONE_CONFIGS["base"]
         image_processor_config = IMAGE_PROCESSORS["base"]
-    config["backbone_config"]["model_type"] = "rf_detr_dinov2_with_registers"
+    config["backbone_config"]["model_type"] = "rf_detr_dinov2"
 
     if "objects365" in model_name:
         config["num_labels"] = 366
