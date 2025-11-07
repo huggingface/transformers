@@ -524,17 +524,18 @@ class DogePreTrainedModel(PreTrainedModel):
         "attentions": DogeAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, DogeAttention):
             if hasattr(module, "A"):
-                module.A.data.zero_()
+                module.A.zero_()
         elif isinstance(module, DogeDecoderLayer):
             if hasattr(module, "input_residual"):
-                module.input_residual.data.fill_(1.0)
+                module.input_residual.fill_(1.0)
             if hasattr(module, "post_attention_residual"):
-                module.post_attention_residual.data.fill_(1.0)
+                module.post_attention_residual.fill_(1.0)
 
 
 @auto_docstring

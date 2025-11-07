@@ -1964,22 +1964,25 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             config.tie_word_embeddings = False
+            config.get_text_config().tie_word_embeddings = False
+            config.tie_encoder_decoder = False
             model = model_class(config)  # we init the model without tie
+            # if this test fails later on, it means init tied the weights
             with tempfile.TemporaryDirectory() as d:
                 model.save_pretrained(d)
                 with safe_open(f"{d}/model.safetensors", framework="pt") as f:
                     serialized_keys = f.keys()
 
-                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
-                # Checking the state dicts are correct
-                reloaded_state = model_reloaded.state_dict()
-                for k, v in model.state_dict().items():
-                    self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
-                    torch.testing.assert_close(
-                        v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
-                    )
-                    if k not in serialized_keys:
-                        print(f"Key {k} was actually not serialized")
+                    model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+                    # Checking the state dicts are correct
+
+                    reloaded_state = model_reloaded.state_dict()
+                    for k, v in model.state_dict().items():
+                        with self.subTest(k):
+                            torch.testing.assert_close(
+                                v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}, this means it was probably aliased and safetensors removed it"
+                            )
+
                 # Checking there was no complain of missing weights
                 self.assertEqual(infos["missing_keys"], set())
 
@@ -2040,7 +2043,7 @@ class ModelTesterMixin:
                 missing_keys = set(infos["missing_keys"])
 
                 extra_missing = missing_keys - param_names
-                # Remove tied weights from extra missing: they are normally not warned as missing if their tied
+                # IMPORTANT Remove tied weights from extra missing: they are normally not warned as missing if their tied
                 # counterpart is present but here there are no weights at all so we do get the warning.
                 ptrs = collections.defaultdict(list)
                 for name, tensor in model_reloaded.state_dict().items():

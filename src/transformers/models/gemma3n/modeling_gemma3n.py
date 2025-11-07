@@ -1600,14 +1600,15 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     }
     input_modalities = ["image", "text", "audio"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, Gemma3nAudioAttention):
-            module.per_dim_scale.data.zero_()
+            module.per_dim_scale.zero_()
         elif isinstance(module, Gemma3nTextAltUp):
-            module.correct_output_scale.data.zero_()
+            module.correct_output_scale.zero_()
 
 
 class Gemma3nRotaryEmbedding(nn.Module):

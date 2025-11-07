@@ -301,6 +301,72 @@ class ConversionEntry:
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
 
+class LoadedParameter(torch.nn.Parameter):
+    r"""
+    Because `transformers` initialized the missing keys we need to make sure
+    we can skip the ones that are actually loaded. Now we could force something, but
+    we want people to have an intuitive API usage, thus they can keep the well know API, and
+    just define their custom `_init_weight`, as long as they don't use `module.xxx.data`.
+
+    We added a check for this in `make fixup` to force people to use it.
+    After the `missing` weights are initialized, LoadedParameters become just nn.Parameters.
+    """
+
+    def __new__(cls, data=None, requires_grad=True):
+        inst = super().__new__(cls, data, requires_grad)
+        inst._is_hf_initialized = False
+        return inst
+
+    def __repr__(self):
+        return f"LoadedParameter(_is_hf_initialized={self._is_hf_initialized}, data={self.data}"
+    # block .data assignment when flagged
+    @property
+    def data(self):
+        return super().data
+
+    @data.setter
+    def data(self, new):
+        if not getattr(self, "_is_hf_initialized", False):
+            super(LoadedParameter, LoadedParameter).data.__set__(self, new)  # delegate to base
+        # else: skip or warn
+
+    # shadow common in-place init methods
+    def _guard(self, fn, *a, **k):
+        if getattr(self, "_is_hf_initialized", False):
+            return self
+        return fn(*a, **k)
+
+    def normal_(self, *a, **k):
+        return self._guard(super().normal_, *a, **k)
+
+    def uniform_(self, *a, **k):
+        return self._guard(super().uniform_, *a, **k)
+
+    def zero_(self):
+        return self._guard(super().zero_)
+
+    def fill_(self, *a, **k):
+        return self._guard(super().fill_, *a, **k)
+
+    def copy_(self, *a, **k):
+        return self._guard(super().copy_, *a, **k)
+
+    def mul_(self, *a, **k):
+        return self._guard(super().copy_, *a, **k)
+
+    def add_(self, *a, **k):
+        return self._guard(super().copy_, *a, **k)
+
+    def clamp_(self, *a, **k):
+        return self._guard(super().copy_, *a, **k)
+
+    def erfinv_(self, *a, **k):
+        return self._guard(super().copy_, *a, **k)
+
+    def log_(self, *a, **k):
+        return self._guard(super().copy_, *a, **k)
+
+
 def _materialize_copy(tensor, dtype=None):
     # PyTorch: this runs in C and releases the GIL; good for threads.
     tensor = tensor[...]
@@ -406,12 +472,15 @@ def set_param_for_module(
                 )
             else:
                 pass  # TODO for "local" stuff, it will trigger missmatched no?
-            param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+            param_value: LoadedParameter = LoadedParameter(param_value, requires_grad=param_value.is_floating_point())
+        else:
+            param_value: LoadedParameter = LoadedParameter(param_value.data)
 
         # skip mismatch for hf_quantizer for now
         if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
         missing_keys.discard(layer_name)
+        param_value._is_hf_initialized = True  # super important otherwise _init_weight re-initi if bias is missing
         setattr(module_obj, param_name, param_value)
 
 
@@ -476,16 +545,14 @@ def convert_and_load_state_dict_in_model(
             converter_key = entry_key = target_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
-        new_target_key = []
         _dtype = dtype
+        new_target_key = []  # test_load_with_mismatched_shapes for AutoModel.from_pretrained(AutoForCausal, vocab=10)
         for t in target_key.split("|"):
-            # let's correct the prefix if needed
-            if loading_base_model_from_task_state_dict:
+            if t.startswith(prefix) and meta_model_state_dict.get(t.replace(f"{prefix}.", "")) is not None:
                 t = t.replace(f"{prefix}.", "")
-            elif loading_task_model_from_base_state_dict:
+            elif meta_model_state_dict.get(f"{prefix}.{t}") is not None:
                 t = f"{prefix}.{t}"
             new_target_key.append(t)
-
             empty_param = meta_model_state_dict.get(t)
             # If it does not exist, it's unexpected
             if empty_param is None:
@@ -512,6 +579,7 @@ def convert_and_load_state_dict_in_model(
 
         first_target_key = new_target_key[0]
         target_key = "|".join(new_target_key)
+
         future = None
         if device_mesh:
             if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name):

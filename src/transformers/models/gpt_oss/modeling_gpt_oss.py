@@ -440,30 +440,31 @@ class GptOssPreTrainedModel(PreTrainedModel):
     _supports_flash_attention = False
     _supports_flex_attention = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Parameter):
-            module.data.normal_(mean=0.0, std=std)
+            module.normal_(mean=0.0, std=std)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, GptOssRMSNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, GptOssExperts):
-            module.gate_up_proj.data.normal_(mean=0.0, std=std)
-            module.gate_up_proj_bias.data.zero_()
-            module.down_proj.data.normal_(mean=0.0, std=std)
-            module.down_proj_bias.data.zero_()
+            module.gate_up_proj.normal_(mean=0.0, std=std)
+            module.gate_up_proj_bias.zero_()
+            module.down_proj.normal_(mean=0.0, std=std)
+            module.down_proj_bias.zero_()
         elif isinstance(module, GptOssAttention):
-            module.sinks.data.normal_(mean=0.0, std=std)
+            module.sinks.normal_(mean=0.0, std=std)
         elif isinstance(module, GptOssTopKRouter):
-            module.weight.data.normal_(mean=0.0, std=std)
-            module.bias.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
+            module.bias.normal_(mean=0.0, std=std)
 
 
 @auto_docstring

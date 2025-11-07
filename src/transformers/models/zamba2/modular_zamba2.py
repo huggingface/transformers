@@ -903,6 +903,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     # Note: only supports Zamba2HybridDynamicCache
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Zamba2MambaMixer):
@@ -913,11 +914,11 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            module.dt_bias.data.copy_(inv_dt)
+            module.dt_bias.copy_(inv_dt)
 
             A = torch.arange(1, module.num_heads + 1)
-            module.A_log.data.copy_(torch.log(A))
-            module.D.data.fill_(1.0)
+            module.A_log.copy_(torch.log(A))
+            module.D.fill_(1.0)
 
 
 class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):

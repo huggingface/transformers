@@ -1,13 +1,15 @@
-import json
 import argparse
-from collections import defaultdict, Counter
-from pathlib import Path
+import json
 import re
+from collections import Counter
+from pathlib import Path
+
 
 def _base_test_name(nodeid: str) -> str:
     # Strip parameters like [param=..] from the last component
     name = nodeid.split("::")[-1]
     return re.sub(r"\[.*\]$", "", name)
+
 
 def _class_name(nodeid: str) -> str | None:
     parts = nodeid.split("::")
@@ -16,8 +18,10 @@ def _class_name(nodeid: str) -> str | None:
         return parts[-2]
     return None
 
+
 def _file_path(nodeid: str) -> str:
     return nodeid.split("::")[0]
+
 
 def _modeling_key(file_path: str) -> str | None:
     # Extract "xxx" from test_modeling_xxx.py
@@ -25,6 +29,7 @@ def _modeling_key(file_path: str) -> str | None:
     if m:
         return m.group(1)
     return None
+
 
 def summarize(report_path: str):
     p = Path(report_path)
@@ -41,18 +46,18 @@ def summarize(report_path: str):
     failed = [t for t in tests if t.get("outcome") in ("failed", "error")]
 
     # 1) Failures per test file
-    failures_per_file = Counter(_file_path(t.get("nodeid","")) for t in failed)
+    failures_per_file = Counter(_file_path(t.get("nodeid", "")) for t in failed)
 
     # 2) Failures per class (if any; otherwise "NO_CLASS")
-    failures_per_class = Counter(((_class_name(t.get("nodeid","")) or "NO_CLASS")) for t in failed)
+    failures_per_class = Counter((_class_name(t.get("nodeid", "")) or "NO_CLASS") for t in failed)
 
     # 3) Failures per base test name (function), aggregating parametrized cases
-    failures_per_testname = Counter(_base_test_name(t.get("nodeid","")) for t in failed)
+    failures_per_testname = Counter(_base_test_name(t.get("nodeid", "")) for t in failed)
 
     # 4) Failures per test_modeling_xxx (derived from filename)
     failures_per_modeling_key = Counter()
     for t in failed:
-        key = _modeling_key(_file_path(t.get("nodeid","")))
+        key = _modeling_key(_file_path(t.get("nodeid", "")))
         if key:
             failures_per_modeling_key[key] += 1
 
@@ -64,9 +69,12 @@ def summarize(report_path: str):
         "failures_per_modeling_key": failures_per_modeling_key,
     }
 
+
 def main():
     parser = argparse.ArgumentParser(description="Summarize pytest JSON report failures")
-    parser.add_argument("--report", default="report.json", help="Path to pytest JSON report file (default: report.json)")
+    parser.add_argument(
+        "--report", default="report.json", help="Path to pytest JSON report file (default: report.json)"
+    )
     args = parser.parse_args()
 
     try:
@@ -97,6 +105,7 @@ def main():
     _print_counter("Failures per test_modeling_xxx", summary["failures_per_modeling_key"], label="model ")
     _print_counter("Failures per test file", summary["failures_per_file"])
     _print_counter("Failures per test name (base)", summary["failures_per_testname"])
+
 
 if __name__ == "__main__":
     main()

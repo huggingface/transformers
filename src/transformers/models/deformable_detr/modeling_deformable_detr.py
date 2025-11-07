@@ -931,6 +931,7 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
         r"DeformableDetrDecoderLayer",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
 
@@ -938,7 +939,7 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
         elif isinstance(module, DeformableDetrMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            nn.init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
                 2.0 * math.pi / module.n_heads
@@ -953,23 +954,23 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
                 grid_init[:, :, i, :] *= i + 1
             with torch.no_grad():
                 module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight.data)
-            nn.init.constant_(module.value_proj.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight.data)
-            nn.init.constant_(module.output_proj.bias.data, 0.0)
+            nn.init.constant_(module.attention_weights.weight, 0.0)
+            nn.init.constant_(module.attention_weights.bias, 0.0)
+            nn.init.xavier_uniform_(module.value_proj.weight)
+            nn.init.constant_(module.value_proj.bias, 0.0)
+            nn.init.xavier_uniform_(module.output_proj.weight)
+            nn.init.constant_(module.output_proj.bias, 0.0)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         if hasattr(module, "reference_points") and not self.config.two_stage:
-            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
-            nn.init.constant_(module.reference_points.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            nn.init.constant_(module.reference_points.bias, 0.0)
         if hasattr(module, "level_embed"):
             nn.init.normal_(module.level_embed)
 
@@ -1706,10 +1707,10 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
     _tied_weights_keys = {
-        r"bbox_embed.(\d+).layers.1.weight":"bbox_embed.0.layers.1.weight",
-        r"bbox_embed.(\d+).layers.0.weight":"bbox_embed.0.layers.0.weight",
-        r"class_embed.1.weight":"class_embed.0.weight",
-        r"class_embed.1.bias":"class_embed.0.bias",
+        r"bbox_embed.(\d+).layers.1.weight": "bbox_embed.0.layers.1.weight",
+        r"bbox_embed.(\d+).layers.0.weight": "bbox_embed.0.layers.0.weight",
+        r"class_embed.1.weight": "class_embed.0.weight",
+        r"class_embed.1.bias": "class_embed.0.bias",
     }
 
     def __init__(self, config: DeformableDetrConfig):
@@ -1732,16 +1733,14 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
             # hack implementation for iterative bounding box refinement
             self.model.decoder.bbox_embed = self.bbox_embed
-            _tied_weights_keys.update({
-                "model.decoder.bbox_embed":"bbox_embed"
-            })
+            _tied_weights_keys.update({"model.decoder.bbox_embed": "bbox_embed"})
         else:
             self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
             self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
         if config.two_stage:
             # hack implementation for two-stage
             self.model.decoder.class_embed = self.class_embed
-            _tied_weights_keys.update({"model.decoder.class_embed":"class_embed"})
+            _tied_weights_keys.update({"model.decoder.class_embed": "class_embed"})
         # self._tied_weights_keys = _tied_weights_keys
         # Initialize weights and apply final processing
         self.post_init()

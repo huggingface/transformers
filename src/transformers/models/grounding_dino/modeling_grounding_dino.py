@@ -1369,6 +1369,7 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
 
@@ -1376,7 +1377,7 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
         elif isinstance(module, GroundingDinoMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            nn.init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
                 2.0 * math.pi / module.n_heads
@@ -1391,46 +1392,46 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
                 grid_init[:, :, i, :] *= i + 1
             with torch.no_grad():
                 module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight.data)
-            nn.init.constant_(module.value_proj.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight.data)
-            nn.init.constant_(module.output_proj.bias.data, 0.0)
+            nn.init.constant_(module.attention_weights.weight, 0.0)
+            nn.init.constant_(module.attention_weights.bias, 0.0)
+            nn.init.xavier_uniform_(module.value_proj.weight)
+            nn.init.constant_(module.value_proj.bias, 0.0)
+            nn.init.xavier_uniform_(module.output_proj.weight)
+            nn.init.constant_(module.output_proj.bias, 0.0)
         elif isinstance(module, GroundingDinoBiMultiHeadAttention):
             nn.init.xavier_uniform_(module.vision_proj.weight)
-            module.vision_proj.bias.data.fill_(0)
+            module.vision_proj.bias.fill_(0)
             nn.init.xavier_uniform_(module.text_proj.weight)
-            module.text_proj.bias.data.fill_(0)
+            module.text_proj.bias.fill_(0)
             nn.init.xavier_uniform_(module.values_vision_proj.weight)
-            module.values_vision_proj.bias.data.fill_(0)
+            module.values_vision_proj.bias.fill_(0)
             nn.init.xavier_uniform_(module.values_text_proj.weight)
-            module.values_text_proj.bias.data.fill_(0)
+            module.values_text_proj.bias.fill_(0)
             nn.init.xavier_uniform_(module.out_vision_proj.weight)
-            module.out_vision_proj.bias.data.fill_(0)
+            module.out_vision_proj.bias.fill_(0)
             nn.init.xavier_uniform_(module.out_text_proj.weight)
-            module.out_text_proj.bias.data.fill_(0)
+            module.out_text_proj.bias.fill_(0)
         elif isinstance(module, GroundingDinoFusionLayer):
-            module.vision_param.data.fill_(1e-4)
-            module.text_param.data.fill_(1e-4)
+            module.vision_param.fill_(1e-4)
+            module.text_param.fill_(1e-4)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, GroundingDinoMLPPredictionHead):
-            nn.init.constant_(module.layers[-1].weight.data, 0)
-            nn.init.constant_(module.layers[-1].bias.data, 0)
+            nn.init.constant_(module.layers[-1].weight, 0)
+            nn.init.constant_(module.layers[-1].bias, 0)
 
         if hasattr(module, "reference_points") and not self.config.two_stage:
-            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
-            nn.init.constant_(module.reference_points.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            nn.init.constant_(module.reference_points.bias, 0.0)
         if hasattr(module, "level_embed"):
             nn.init.normal_(module.level_embed)
 

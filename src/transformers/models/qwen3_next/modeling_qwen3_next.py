@@ -988,14 +988,18 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
     }
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Qwen3NextGatedDeltaNet):
-            module.dt_bias.data.fill_(1.0)
-            module.A_log.data.uniform_(0, 16).log_()
+            module.dt_bias.fill_(1.0)
+            module.A_log.uniform_(0, 16).log_()
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif isinstance(module, Qwen3NextRMSNorm):
-            module.weight.data.zero_()
+            module.weight.zero_()
+        if isinstance(module,  Qwen3NextExperts):
+            module.gate_up_proj.normal_(mean=0.0, std=self.config.initializer_range)
+            module.down_proj.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 class Qwen3NextModel(Qwen3NextPreTrainedModel):

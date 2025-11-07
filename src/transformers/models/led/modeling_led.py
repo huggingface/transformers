@@ -1067,16 +1067,17 @@ class LEDPreTrainedModel(PreTrainedModel):
     base_model_prefix = "led"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
     @property
     def dummy_inputs(self):
@@ -2111,7 +2112,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
     """
 )
 class LEDForSequenceClassification(LEDPreTrainedModel):
-
     def __init__(self, config: LEDConfig, **kwargs):
         warnings.warn(
             "The `transformers.LEDForSequenceClassification` class is deprecated and will be removed in version 5 of"
@@ -2256,7 +2256,6 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
 
 @auto_docstring
 class LEDForQuestionAnswering(LEDPreTrainedModel):
-    _tied_weights_keys = {"decoder.embed_tokens.weight": "led.encoder.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)
