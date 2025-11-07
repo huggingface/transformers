@@ -802,6 +802,7 @@ def create_causal_mask_mapping(
     token_type_ids: Optional[torch.Tensor] = None,
     pixel_values: Optional[torch.FloatTensor] = None,
     is_training: bool = False,
+    is_prefill: Optional[bool] = None,
     **kwargs,
 ) -> dict:
     """
@@ -824,8 +825,12 @@ def create_causal_mask_mapping(
     # NOTE: this `may_have_image_input` logic is not flawless, it fails when we're using a cache eagerly initialized
     # (e.g. compiled prefill) AND `pixel_values` are not provided (i.e. the image data is provided through other
     # means). Determining prefill in that case requires checking data values, which is not compile-compatible.
-    may_have_image_input = past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
-    if token_type_ids is not None and may_have_image_input:
+    is_prefill = (
+        is_prefill
+        if is_prefill is not None
+        else (past_key_values is None or not past_key_values.is_initialized or pixel_values is not None)
+    )
+    if token_type_ids is not None and is_prefill:
         # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
         # undo the causal masking)
 
@@ -1257,6 +1262,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         past_key_values: Optional[Cache],
         position_ids: Optional[torch.Tensor],
         token_type_ids: Optional[torch.Tensor] = None,
+        is_prefill: Optional[bool] = False,
         **kwargs,
     ) -> dict:
         # Uses the overwritten `create_masks_for_generate` with `token_type_ids` masking
@@ -1268,7 +1274,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             past_key_values,
             position_ids,
             token_type_ids,
-            pixel_values=kwargs.get("pixel_values"),
+            is_prefill,
             **{k: v for k, v in kwargs.items() if k != "pixel_values"},
         )
 
