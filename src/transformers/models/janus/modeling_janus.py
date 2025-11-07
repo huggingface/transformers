@@ -1268,7 +1268,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
         # Otherwise we need pixel values to be passed to model
-        if is_prefill:
+        if (is_prefill and inputs_embeds is not None) or (
+            model_inputs["input_ids"] is not None and self.config.image_token_id in model_inputs["input_ids"]
+        ):
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs
