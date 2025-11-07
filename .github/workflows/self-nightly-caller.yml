@@ -10,11 +10,11 @@ on:
     types: [completed]
   push:
     branches:
-      - run_ci_with_nightly_torch*
+      - trigger_ci_with_torch_2.9.1_rc_commit_8012f80f722044fd0dda45b4034f89fffc2ff344
 
 # Used for `push` to easily modify the target workflow runs to compare against
 env:
-    prev_workflow_run_id: ""
+    prev_workflow_run_id: "19156555083"
     other_workflow_run_id: ""
 
 
@@ -48,7 +48,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_models_gpu
-      slack_report_channel: "#transformers-ci-past-future"
+      slack_report_channel: "#transformers-ci-dummy"
       docker: huggingface/transformers-all-latest-torch-nightly-gpu
       ci_event: Nightly CI
       runner_type: "a10"
