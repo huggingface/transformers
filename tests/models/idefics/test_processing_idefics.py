@@ -46,7 +46,7 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        return tokenizer_class.from_pretrained(("HuggingFaceM4/tiny-random-idefics"))
+        return tokenizer_class.from_pretrained("HuggingFaceM4/tiny-random-idefics")
 
     def prepare_prompts(self):
         """This function prepares a list of PIL images"""

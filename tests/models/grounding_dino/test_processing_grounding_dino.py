@@ -110,7 +110,6 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_box_slice = torch.tensor([0.6908, 0.4354, 1.0737, 1.3947])
         torch.testing.assert_close(post_processed[0]["boxes"][0], expected_box_slice, rtol=1e-4, atol=1e-4)
 
-    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.test_save_load_pretrained_default with CLIP->GroundingDino,GroundingDinoTokenizer->BertTokenizer
     def test_text_preprocessing_equivalence(self):
         processor = self.get_processor()
 

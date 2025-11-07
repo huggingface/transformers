@@ -492,6 +492,14 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
 
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
+    ) -> "torch.Tensor":
+        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
+
     def generate_crop_boxes(
         self,
         image: "torch.Tensor",
@@ -695,14 +703,6 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
 
     def pad_image(self):
         raise NotImplementedError("No pad_image for SAM 2.")
-
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
-    ) -> "torch.Tensor":
-        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
 
     def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
         """
