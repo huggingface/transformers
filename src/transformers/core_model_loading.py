@@ -342,6 +342,9 @@ class LoadedParameter(torch.nn.Parameter):
     def erfinv_(self, *a, **k):
         return self._guard(super().copy_, *a, **k)
 
+    def log_(self, *a, **k):
+        return self._guard(super().copy_, *a, **k)
+
 
 def _materialize_copy(tensor, dtype):
     # PyTorch: this runs in C and releases the GIL; good for threads.

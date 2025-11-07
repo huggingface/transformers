@@ -1002,7 +1002,6 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
             module.down_proj.normal_(mean=0.0, std=self.config.initializer_range)
 
 
-
 class Qwen3NextModel(Qwen3NextPreTrainedModel):
     def __init__(self, config: Qwen3NextConfig):
         super().__init__(config)
