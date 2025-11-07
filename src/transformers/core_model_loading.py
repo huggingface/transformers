@@ -662,7 +662,7 @@ def _infer_parameter_dtype(
     param_name: str,
     empty_param: torch.Tensor,
     hf_quantizer: Optional[HfQuantizer] = None,
-) -> Union[bool, Optional[torch.dtype]]:
+) -> tuple[bool, Optional[torch.dtype]]:
     try:
         old_param = model.get_parameter_or_buffer(param_name)
     except Exception as e:
