@@ -119,7 +119,7 @@ class StableLmConfig(PreTrainedConfig):
         layer_norm_eps: Optional[float] = 1.0e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         use_qkv_bias: Optional[bool] = False,
         qk_layernorm: Optional[bool] = False,
         use_parallel_residual: Optional[bool] = False,

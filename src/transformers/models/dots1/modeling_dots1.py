@@ -323,6 +323,14 @@ class Dots1NaiveMoe(nn.Module):
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states: (batch_size * sequence_length, hidden_dim)
+            top_k_index: (batch_size * sequence_length, top_k)
+            top_k_weights: (batch_size * sequence_length, top_k)
+        Returns:
+            (batch_size * sequence_length, hidden_dim)
+        """
         final_hidden_states = torch.zeros_like(hidden_states)
         num_experts = top_k_weights.shape[1]
         with torch.no_grad():

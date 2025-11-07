@@ -252,7 +252,7 @@ class MoshiConfig(PreTrainedConfig):
         num_key_value_heads: Optional[int] = None,
         audio_vocab_size: Optional[int] = None,
         max_position_embeddings: Optional[int] = 3000,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         hidden_act: Optional[str] = "silu",
         head_dim: Optional[int] = None,
         initializer_range: Optional[float] = 0.02,
