@@ -1122,6 +1122,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         cache_position=None,
         position_ids=None,
         use_cache=True,
+        is_prefill=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1135,12 +1136,13 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
             cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
+            is_prefill=is_prefill,
             **kwargs,
         )
 
-        if cache_position[0] != 0:
-            # If we're in cached decoding stage, pixel values should be `None` because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
+        if not is_prefill:
+            # If we're in cached decoding stage, pixel values should be `None` because input ids do not
+            # contain special image token anymore Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values"] = None
 
         return model_inputs

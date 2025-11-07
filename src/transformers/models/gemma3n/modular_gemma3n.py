@@ -2578,6 +2578,7 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
         use_cache=True,
         logits_to_keep=None,
         labels=None,
+        is_prefill=False,
         **kwargs,
     ):
         # Overwritten -- custom `position_ids` and `pixel_values` handling
@@ -2591,13 +2592,14 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,
             token_type_ids=token_type_ids,
+            is_prefill=is_prefill,
             **kwargs,
         )
 
         # If we're in cached decoding stage, multimodal inputs should be None because input ids do not contain special
         # tokens anymore. Otherwise multimodal inputs should be passed to model.
         # NOTE: use_cache=False always needs pixel_values, input_features, and input_features_mask
-        if cache_position[0] == 0:
+        if is_prefill:
             model_inputs["pixel_values"] = pixel_values
             model_inputs["input_features"] = input_features
             model_inputs["input_features_mask"] = input_features_mask

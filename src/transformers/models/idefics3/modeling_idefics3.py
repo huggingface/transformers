@@ -958,6 +958,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         pixel_attention_mask=None,
         image_hidden_states=None,
         logits_to_keep=None,
+        is_prefill=False,
         **kwargs,
     ):
         # Overwritten -- there are mutually exclusive inputs (if the logic to make `image_hidden_states` take
@@ -973,10 +974,11 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             logits_to_keep=logits_to_keep,
+            is_prefill=is_prefill,
             **kwargs,
         )
 
-        if image_hidden_states is not None or cache_position[0] != 0:
+        if image_hidden_states is not None or not is_prefill:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 

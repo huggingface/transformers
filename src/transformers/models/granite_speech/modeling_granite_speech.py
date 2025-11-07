@@ -471,6 +471,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_prefill=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward audio inputs to the model
@@ -482,13 +483,14 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_prefill=is_prefill,
             **kwargs,
         )
 
         # If we're in cached decoding stage, input_features should be None because
         # input ids do not contain special audio token anymore Otherwise we need
         # input feature values to be passed to the model
-        if cache_position[0] == 0:
+        if is_prefill:
             model_inputs["input_features"] = input_features
         return model_inputs
 

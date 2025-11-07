@@ -872,6 +872,7 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         video_grid_thw: Optional[torch.LongTensor] = None,
         video_merge_sizes: Optional[torch.LongTensor] = None,
         video_compression_mask: Optional[torch.BoolTensor] = None,
+        is_prefill: Optional[bool] = False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -891,10 +892,11 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             video_merge_sizes=video_merge_sizes,
             video_compression_mask=video_compression_mask,
             use_cache=use_cache,
+            is_prefill=is_prefill,
             **kwargs,
         )
 
-        if model_inputs["cache_position"][0] != 0:
+        if not is_prefill:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 

@@ -1739,6 +1739,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         use_cache=False,
         cache_position=None,
         logits_to_keep=None,
+        is_prefill=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1756,12 +1757,13 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             cross_attention_mask=cross_attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_prefill=is_prefill,
             **kwargs,
         )
 
         # If we're in pre-fill or cacheless decoding step, then we need pixel_values and aspect ratios
         # to compute image hidden states, otherwise they are cached within each cross attn layer
-        if cache_position[0] != 0:
+        if not is_prefill:
             model_inputs["pixel_values"] = None
             model_inputs["aspect_ratio_ids"] = None
             model_inputs["aspect_ratio_mask"] = None

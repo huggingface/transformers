@@ -324,6 +324,7 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
         inputs_embeds=None,
         cache_position=None,
         logits_to_keep=None,
+        is_prefill=False,
         **kwargs,
     ):
         # Overwritten -- extra custom processing
@@ -335,12 +336,13 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_prefill=is_prefill,
             **kwargs,
         )
 
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
         # Otherwise we need pixel values to be passed to model
-        if cache_position[0] == 0:
+        if is_prefill:
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs

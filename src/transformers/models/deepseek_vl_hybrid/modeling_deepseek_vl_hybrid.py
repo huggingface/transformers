@@ -472,6 +472,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_prefill=False,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
@@ -481,10 +482,11 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_prefill=is_prefill,
             **kwargs,
         )
 
-        if cache_position[0] == 0:
+        if is_prefill:
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values"] = pixel_values

@@ -1804,6 +1804,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         use_cache=None,
         cache_position=None,
         position_ids=None,
+        is_prefill=False,
         **model_kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1817,10 +1818,11 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             use_cache=use_cache,
             cache_position=cache_position,
             position_ids=position_ids,
+            is_prefill=is_prefill,
             **model_kwargs,
         )
 
-        if cache_position[0] == 0:
+        if is_prefill:
             # If we're in cached decoding stage, `flattened_patches` should be `None` because `input_ids` do not contain special image token anymore
             # Otherwise we need `flattened_patches` to be passed to model
             model_inputs["flattened_patches"] = flattened_patches
