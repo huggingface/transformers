@@ -86,7 +86,7 @@ qmodel = AutoModelForCausalLM.from_pretrained(
 
 ✅ That’s it. Your model is now quantized with **SINQ** and ready for inference or saving.
 
-> Check our official [**SINQ**](https://github.com/huawei-csl/SINQ/tree/main) github repository to be updated on changes and new features.
+> Check our official [**SINQ**](https://github.com/huawei-csl/SINQ/tree/main) github repository to stay updated!
 
 ---
 
@@ -150,7 +150,7 @@ results = evaluator.simple_evaluate(
 ## 2. How to Cite This Work
 
 If you find **SINQ** useful in your research or applications
-- Support our project by putting a star in the [**SINQ**](https://github.com/huawei-csl/SINQ/tree/main) github repository
+- Support our project by putting a star ⭐️ in the [**SINQ**](https://github.com/huawei-csl/SINQ/tree/main) github repository
 - Please cite our <a href="http://arxiv.org/abs/2509.22944" target="_blank"><strong>paper</strong></a>:
 
 ```bibtex
