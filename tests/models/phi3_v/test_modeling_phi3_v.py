@@ -1,4 +1,4 @@
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 import unittest
 
 import requests
-
+import tempfile
 from transformers import (
     AutoProcessor,
     Phi3VConfig,
@@ -37,24 +37,23 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-
+from transformers.generation.utils import GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput
+import copy
 
 if is_torch_available():
-    pass
-
+    import torch
 
 if is_vision_available():
     from PIL import Image
-
 
 class Phi3VModelTester:
     def __init__(
         self,
         parent,
         ignore_index=-100,
-        image_token_index=0,
+        image_token_id=0,
         projector_hidden_act="gelu",
-        seq_length=7,
+        seq_length=25,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
         text_config={
@@ -65,40 +64,31 @@ class Phi3VModelTester:
             "use_token_type_ids": False,
             "use_labels": True,
             "vocab_size": 99,
-            "hidden_size": 32,
+            "hidden_size": 16,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "hidden_act": "gelu",
-            "hidden_dropout_prob": 0.1,
-            "attention_probs_dropout_prob": 0.1,
+            "intermediate_size": 16,
             "max_position_embeddings": 512,
-            "type_vocab_size": 16,
-            "type_sequence_label_size": 2,
-            "initializer_range": 0.02,
             "num_labels": 3,
-            "num_choices": 4,
             "pad_token_id": 1,
         },
         is_training=True,
         vision_config={
-            "image_size": 8,
+            "use_labels":True,
+            "image_size": 4,
             "patch_size": 2,
             "num_channels": 3,
             "is_training": True,
-            "hidden_size": 32,
-            "projection_dim": 32,
+            "hidden_size": 4,
+            "projection_dim": 16,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "dropout": 0.1,
-            "attention_dropout": 0.1,
-            "initializer_range": 0.02,
+            "intermediate_size": 16,
         },
     ):
         self.parent = parent
         self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
@@ -112,68 +102,59 @@ class Phi3VModelTester:
         self.num_attention_heads = text_config["num_attention_heads"]
         self.is_training = is_training
 
-        self.batch_size = 3
+        self.batch_size = 2
         self.num_channels = 3
-        self.image_size = 336
-        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
-        self.seq_length = seq_length + self.num_image_tokens
-        self.encoder_seq_length = self.seq_length
+        self.num_crops = 2
+        self.seq_length = seq_length
+        self.num_image_tokens = 5
 
     def get_config(self):
         return Phi3VConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
             ignore_index=self.ignore_index,
-            image_token_index=self.image_token_index,
-            projector_hidden_act=self.projector_hidden_act,
-            vision_feature_select_strategy=self.vision_feature_select_strategy,
-            vision_feature_layer=self.vision_feature_layer,
-            image_seq_length=self.num_image_tokens,
+            image_token_id=self.image_token_id,
         )
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
             [
                 self.batch_size,
+                self.num_crops+1,
                 self.vision_config["num_channels"],
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
             ]
         )
         config = self.get_config()
-
+        print(config.__class__.__name__,'in test_modeling_phi3_v.py')
         return config, pixel_values
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        input_ids[:, : self.num_image_tokens] = config.image_token_index
+        input_ids[input_ids == config.image_token_id] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = config.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
 
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "labels": input_ids,
+            "image_sizes": self.batch_size*[[self.vision_config["image_size"], self.vision_config["image_size"]]],
         }
         return config, inputs_dict
 
 
 @require_torch
-class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Phi3VForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `LlavaForConditionalGeneration`.
     """
-
-    all_model_classes = (
-        (
-            Phi3VModel,
-            Phi3VForConditionalGeneration,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (Phi3VModel,Phi3VForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (Phi3VForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-to-text": Phi3VForConditionalGeneration, "image-text-to-text": Phi3VForConditionalGeneration}
         if is_torch_available()
@@ -185,98 +166,198 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 
     def setUp(self):
         self.model_tester = Phi3VModelTester(self)
-        common_properties = ["image_token_index", "vision_feature_layer", "image_seq_length"]
         self.config_tester = ConfigTester(
-            self, config_class=Phi3VConfig, has_text_modality=False, common_properties=common_properties
-        )
+            self, config_class=Phi3VConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip("Not possible now as processor creates a custom attention mask.")
+    def test_assisted_decoding_matches_greedy_search_0_random(self):
+        pass
 
-@require_torch
-class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("llava-hf/bakLlava-v1-hf")
+    @unittest.skip("Not possible now as processor creates a custom attention mask.")
+    def test_assisted_decoding_matches_greedy_search_1_same(self):
+        pass
 
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
+    @unittest.skip("Not possible now as processor creates a custom attention mask.")
+    def test_assisted_decoding_sample(self):
+        pass
 
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test(self):
-        # Let's make sure we test the preprocessing to replace what is used
-        model = Phi3VForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+    @unittest.skip("Not possible now as processor creates a custom attention mask.")
+    def test_apply_chat_template_assistant_mask(self):
+        pass
 
-        prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device)
+    @unittest.skip("Does not work when  num_return_sequences > 1")
+    def test_beam_sample_generate(self):
+        pass
 
-        output = model.generate(**inputs, max_new_tokens=20)
-        expected_decoded_texts = Expectations({
-            ("cuda", None): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
-            ("rocm", (9, 5)): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. First, the",
-        })  # fmt: skip
-        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
+    @unittest.skip("Does not work when  num_return_sequences > 1")
+    def test_beam_sample_generate_dict_output(self):
+        pass
 
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
+    @unittest.skip("Does not work when  num_return_sequences > 1")
+    def test_beam_search_generate(self):
+        pass
 
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_llama_batched(self):
-        # Let's make sure we test the preprocessing to replace what is used
-        model_id = "llava-hf/llava-1.5-7b-hf"
+    @unittest.skip("Does not work when  num_return_sequences > 1")
+    def test_beam_search_generate_dict_output(self):
+        pass
 
-        model = Phi3VForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
+    @unittest.skip("Does not work when  num_return_sequences > 1")
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        pass
 
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
-            "USER: <image>\nWhat is this? ASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+    @unittest.skip("Does not work when  num_return_sequences > 1")
+    def test_generate_from_inputs_embeds_1_beam_search(self):
+        pass
 
-        inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(torch_device)
+    def test_sample_generate_dict_output(self):
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config._attn_implementation = "eager"  # can't output attentions otherwise
 
-        output = model.generate(**inputs, max_new_tokens=20)
+            model = model_class(config).to(torch_device).eval()
+            output_generate = self._sample_generate(
+                model=model,
+                inputs_dict=inputs_dict,
+                num_return_sequences=1,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=self.has_attentions,
+                return_dict_in_generate=True,
+                use_cache=False,
+            )
 
-        expected_decoded_texts = Expectations(
-            {
-                ("cuda", None): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
-                    "you",
-                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
-                    "is located on",
-                ],
-                ("rocm", (9, 5)): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me? ASSISTANT: When visiting this serene location, which features a wooden pier overlooking a "
-                    "lake, you should",
-                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
-                    "is located on",
-                ],
-            }
-        )
-        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
+            if model.config.is_encoder_decoder:
+                self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
+                self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
+            else:
+                self.assertTrue(
+                    output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
+                )
+                self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
-        decoded_output = processor.batch_decode(output, skip_special_tokens=True)
-        self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
+            self._check_generate_outputs(output_generate, model.config, num_return_sequences=1)
 
-    @slow
-    @require_bitsandbytes
-    def test_generation_no_images(self):
-        model_id = "llava-hf/llava-1.5-7b-hf"
-        model = Phi3VForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
+    def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
+        """
+        Tests that the model supports batching and that the output is the nearly the same for the same input in
+        different batch sizes.
+        (Why "nearly the same" not "exactly the same"? Batching uses different matmul shapes, which often leads to
+        different results: https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)
+        """
 
-        # Prepare inputs with no images
-        inputs = processor(text="Hello, I am", return_tensors="pt").to(torch_device)
+        def recursive_check(batched_object, single_row_object, model_name, key):
+            if isinstance(batched_object, (list, tuple)):
+                for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
+                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+            elif isinstance(batched_object, dict):
+                for batched_object_value, single_row_object_value in zip(
+                    batched_object.values(), single_row_object.values()
+                ):
+                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+            # do not compare returned loss (0-dim tensor) / codebook ids (int) / caching objects
+            elif batched_object is None or not isinstance(batched_object, torch.Tensor):
+                return
+            elif batched_object.dim() == 0:
+                return
+            # do not compare int or bool outputs as they are mostly computed with max/argmax/topk methods which are
+            # very sensitive to the inputs (e.g. tiny differences may give totally different results)
+            elif not torch.is_floating_point(batched_object):
+                return
+            else:
+                # indexing the first element does not always work
+                # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
+                slice_ids = [slice(0, index) for index in single_row_object.shape]
+                batched_row = batched_object[slice_ids]
+                self.assertFalse(
+                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
+                )
+                try:
+                    torch.testing.assert_close(batched_row, single_row_object, atol=atol, rtol=rtol)
+                except AssertionError as e:
+                    msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
+                    msg += str(e)
+                    raise AssertionError(msg)
 
-        # Make sure that `generate` works
-        _ = model.generate(**inputs, max_new_tokens=20)
+        config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            config.output_hidden_states = True
+
+            model_name = model_class.__name__
+            if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+            batched_input_prepared = self._prepare_for_class(batched_input, model_class)
+            model = model_class(copy.deepcopy(config)).to(torch_device).eval()
+
+            batch_size = self.model_tester.batch_size
+            single_row_input = {}
+            for key, value in batched_input_prepared.items():
+                if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
+                    # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
+                    single_batch_shape = value.shape[0] // batch_size
+                    single_row_input[key] = value[:single_batch_shape]
+                else:
+                    single_row_input[key] = value
+
+            # Note: Update image sizes list for single row input (Only change from common test)
+            single_row_input['image_sizes'] = [single_row_input['image_sizes'][0]]
+
+            with torch.no_grad():
+                model_batched_output = model(**batched_input_prepared)
+                model_row_output = model(**single_row_input)
+
+            if isinstance(model_batched_output, torch.Tensor):
+                model_batched_output = {"model_output": model_batched_output}
+                model_row_output = {"model_output": model_row_output}
+
+            for key in model_batched_output:
+                # DETR starts from zero-init queries to decoder, leading to cos_similarity = `nan`
+                if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
+                    model_batched_output[key] = model_batched_output[key][1:]
+                    model_row_output[key] = model_row_output[key][1:]
+                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+
+    def test_sdpa_can_dispatch_composite_models(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Load the model with SDPA
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                # Load model with eager attention
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    attn_implementation="eager",
+                )
+                model_eager = model_eager.eval().to(torch_device)
+
+            vision_attn = language_attn = "sdpa" if model._supports_sdpa else "eager"
+            if hasattr(model_sdpa, "vision_model") and hasattr(model_sdpa, "language_model"):
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
+                self.assertTrue(model_sdpa.language_model.config._attn_implementation == language_attn)
+                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+
+            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+            self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+
