@@ -1505,13 +1505,10 @@ class DeepseekOcrTextModel(DeepseekOcrTextPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
+    The Deepseek-OCR model which consists of two vision backbones and a language model without language modeling head.
     """
 )
 class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
-    """
-    Deepseek OCR model with dual vision encoders (SAM + CLIP) and a projector.
-    """
 
     _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
@@ -1684,16 +1681,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         pixel_values_local: Optional[torch.FloatTensor] = None,
         num_local_crops: Optional[torch.LongTensor] = None,
     ):
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
-               The tensors corresponding to the input images.
-        Returns:
-            image_features (list[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
-            and are of shape `(num_patches, image_length, embed_dim)`).
-        """
+        """Wrapper for the two image feature stacks used in deepseek OCR."""
         if image_spatial_crops is None and image_sizes is not None:
             image_spatial_crops = image_sizes
 
@@ -1720,7 +1708,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         proj = torch.stack(proj_list_flat, dim=0)
         proj_list = torch.split(proj, image_num_patches, dim=0)
 
-        new_image_features, feature_lens = self.pack_image_features(
+        new_image_features, _ = self.pack_image_features(
             image_features=proj_list,
             image_newline=self.image_newline,
             image_spatial_crops=image_spatial_crops,
@@ -1925,7 +1913,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Deepseek-OCR model which consists of two vision backbones and a deepseek language model.
+    The Deepseek-OCR model which consists of two vision backbones and a deepseek language model with a decoding head.
     """
 )
 class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, GenerationMixin):
@@ -1948,6 +1936,54 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
         self.vocab_size = config.vocab_size
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self) -> nn.Module:
+        return self.lm_head
+
+    def set_decoder(self, decoder):
+        self.model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.model.get_decoder()
+
+    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
+        return self.model.pack_image_features(
+            image_features=image_features,
+            image_sizes=image_sizes,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+            image_newline=image_newline,
+        )
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_sizes: torch.Tensor,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+    ):
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            image_sizes=image_sizes,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+        )
+    # Make modules available through conditional class for BC
+    @property
+    def language_model(self):
+        return self.model.language_model
+
+    @property
+    def vision_tower(self):
+        return self.model.vision_tower
+
+    @property
+    def multi_modal_projector(self):
+        return self.model.multi_modal_projector
 
     @can_return_tuple
     @auto_docstring
