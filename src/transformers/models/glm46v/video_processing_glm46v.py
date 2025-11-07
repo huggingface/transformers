@@ -32,7 +32,7 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, add_start_docstrings
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
-from .image_processing_glm4v import smart_resize
+from ..glm4v.image_processing_glm4v import smart_resize
 
 
 class Glm46vVideoProcessorInitKwargs(VideosKwargs, total=False):
