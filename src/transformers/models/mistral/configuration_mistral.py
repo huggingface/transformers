@@ -154,7 +154,6 @@ class MistralConfig(PreTrainedConfig):
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        llama_4_scaling: Optional[LLama4Scaling] = None,
         sliding_window: Optional[int] = 4096,
         attention_dropout: Optional[float] = 0.0,
         **kwargs,
@@ -178,7 +177,6 @@ class MistralConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
-        self.llama_4_scaling = llama_4_scaling
 
         if "layer_types" in kwargs:
             logger.warning_once(
@@ -192,7 +190,7 @@ class MistralConfig(PreTrainedConfig):
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        rope_config_validation(self, ignore_keys={"llama_4_scaling_beta"})
 
         super().__init__(
             pad_token_id=pad_token_id,

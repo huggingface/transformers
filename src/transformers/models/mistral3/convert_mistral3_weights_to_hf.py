@@ -164,7 +164,8 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
         new_text_config_kwargs["sliding_window"] = int(new_text_config_kwargs["sliding_window"])
 
     if original_config.get("llama_4_scaling"):
-        new_text_config_kwargs["llama_4_scaling"] = original_config["llama_4_scaling"]
+        assert original_config.get("yarn") is not None, "llama_4_scaling is only supported with yarn"
+        new_text_config_kwargs["rope_parameters"]["llama_4_scaling_beta"] = original_config["llama_4_scaling"]["beta"]
 
     new_text_config = MistralConfig(**new_text_config_kwargs)
 
