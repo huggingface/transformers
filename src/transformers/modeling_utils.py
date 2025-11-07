@@ -182,6 +182,7 @@ TORCH_INIT_FUNCTIONS = {
     "xavier_normal": nn.init.xavier_normal,
     "kaiming_uniform": nn.init.kaiming_uniform,
     "kaiming_normal": nn.init.kaiming_normal,
+    "orthogonal_": nn.init.orthogonal_,
 }
 
 # DO NOT MODIFY, KEPT FOR BC ONLY
