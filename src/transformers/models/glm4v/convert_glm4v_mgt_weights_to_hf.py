@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -679,8 +680,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "image_end_token_id": model_config.get("image_end_token_id", 151340),
         "video_start_token_id": model_config.get("video_start_token_id", 151341),
         "video_end_token_id": model_config.get("video_end_token_id", 151342),
-        "image_token_id": model_config.get("image_token_id", 151363),
-        "video_token_id": model_config.get("video_token_id", 151364),
         "tie_word_embeddings": False,
         "transformers_version": "4.57.1",
     }
@@ -690,6 +689,8 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "attention_dropout": 0.0,
         "pad_token_id": model_config.get("pad_token_id", 151329),
         "eos_token_id": model_config.get("eos_token_id", [151329, 151336, 151338]),
+        "image_token_id": model_config.get("image_token_id", 151363),
+        "video_token_id": model_config.get("video_token_id", 151364),
         "hidden_act": text_config.get("hidden_act", "silu"),
         "hidden_size": text_config.get("hidden_size", 4096),
         "initializer_range": 0.02,
@@ -703,7 +704,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "use_cache": text_config.get("use_cache", True),
         "vocab_size": text_config.get("vocab_size", 151552),
         "partial_rotary_factor": 0.5,
-        "rope_scaling": {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [8, 12, 12]},
+        "rope_parameters": {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [8, 12, 12]},
     }
     hf_config["text_config"] = txt_config
 
