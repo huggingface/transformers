@@ -2876,6 +2876,19 @@ class GenerationIntegrationTests(unittest.TestCase):
         torch.testing.assert_close(transition_scores_sum, outputs.sequences_scores, rtol=1e-3, atol=1e-3)
 
     @slow
+    def test_generate_inputs_embeds_one_token(self):
+        "Tests that we can generate legible text from a single token input embedding. See #41863 for details"
+        model = AutoModelForCausalLM.from_pretrained("gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        inputs_embeds = model.get_input_embeddings()(torch.tensor([[tokenizer.bos_token_id]], device=torch_device))
+
+        output = model.generate(
+            inputs_embeds=inputs_embeds, do_sample=False, max_length=15, pad_token_id=tokenizer.eos_token_id
+        )
+        text = tokenizer.batch_decode(output, skip_special_tokens=True)[0]
+        self.assertEqual(text, "\nThe first time I saw the new version of the game, I")
+
+    @slow
     def test_green_red_watermark_generation(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
