@@ -360,8 +360,8 @@ class PhimoeExperts(nn.ModuleList):
         """
         Args:
             hidden_states: (batch_size * sequence_length, hidden_dim)
-            selected_experts: (batch_size * sequence_length, top_k)
-            routing_weights: (batch_size * sequence_length, top_k)
+            top_k_index: (batch_size * sequence_length, top_k)
+            top_k_weights: (batch_size * sequence_length, top_k)
         Returns:
             (batch_size * sequence_length, hidden_dim)
         """
