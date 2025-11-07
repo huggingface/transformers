@@ -1568,8 +1568,8 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
             feature_lens (`list[int]`)
                 token length of each image in image_features
         """
+        newline_token = image_newline if image_newline is not None else self.image_newline
         new_image_features = []
-        feature_lens = []
 
         for image_idx, features in enumerate(image_features):
             crop_shape = None
@@ -1594,13 +1594,11 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
             patch_features = patch_features[:valid_patch_count]
             if len(patch_features) == 0:
-                new_image_features.append(torch.empty(0, self.config.hidden_size, device=self.image_newline.device))
-                feature_lens.append(0)
+                new_image_features.append(torch.empty(0, self.config.hidden_size, device=newline_token.device))
                 continue
 
             global_feature = patch_features[-1]
             local_feature_list = patch_features[:-1] if has_local_crops else []
-
             processed_parts = []
 
             if local_feature_list:
@@ -1623,39 +1621,35 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
                         -1,
                     )
                     newline = (
-                        image_newline.unsqueeze(0)
+                        newline_token.unsqueeze(0)
                         .unsqueeze(0)
                         .to(local_features.device, dtype=local_features.dtype)
                         .expand(local_features.shape[0], 1, -1)
                     )
-                    local_features = torch.cat((local_features, newline), dim=1)
-                    local_features = local_features.view(-1, local_features.shape[-1])
+                    local_features = torch.cat((local_features, newline), dim=1).view(-1, local_features.shape[-1])
                 else:
                     local_features = local_features.view(-1, local_features.shape[-1])
-                    newline = image_newline.unsqueeze(0).to(local_features.device, dtype=local_features.dtype)
+                    newline = newline_token.unsqueeze(0).to(local_features.device, dtype=local_features.dtype)
                     local_features = torch.cat((local_features, newline), dim=0)
 
                 processed_parts.append(local_features)
 
             global_tokens = global_feature.shape[0]
             global_grid = int(math.isqrt(global_tokens))
-
             if global_grid * global_grid == global_tokens:
                 global_features = global_feature.view(global_grid, global_grid, -1)
                 newline = (
-                    image_newline.unsqueeze(0)
+                    newline_token.unsqueeze(0)
                     .unsqueeze(0)
                     .to(global_features.device, dtype=global_features.dtype)
                     .expand(global_grid, 1, -1)
                 )
-                global_features = torch.cat((global_features, newline), dim=1)
-                global_features = global_features.view(-1, global_features.shape[-1])
+                global_features = torch.cat((global_features, newline), dim=1).view(-1, global_features.shape[-1])
             else:
-                global_features = global_feature
                 global_features = torch.cat(
                     (
-                        global_features,
-                        image_newline.unsqueeze(0).to(global_features.device, dtype=global_features.dtype),
+                        global_feature,
+                        newline_token.unsqueeze(0).to(global_feature.device, dtype=global_feature.dtype),
                     ),
                     dim=0,
                 )
@@ -1664,10 +1658,8 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
             combined = torch.cat(processed_parts, dim=0)
             new_image_features.append(combined)
-            feature_lens.append(combined.size(0))
 
-        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0][0].device)
-        return new_image_features, feature_lens
+        return new_image_features
 
     def get_image_features(
         self,
@@ -1682,40 +1674,61 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         if image_spatial_crops is None and image_sizes is not None:
             image_spatial_crops = image_sizes
 
+        image_feature_groups: list[list[torch.Tensor]] = []
+
         if pixel_values_global is not None:
-            return self._get_image_features_multi_resolution(
-                pixel_values_global=pixel_values_global,
-                pixel_values_local=pixel_values_local,
-                num_local_crops=num_local_crops,
-                image_spatial_crops=image_spatial_crops,
-            )
+            batch_size = pixel_values_global.shape[0]
+            device = pixel_values_global.device
+            if num_local_crops is None:
+                if image_spatial_crops is not None:
+                    num_local_crops = (image_spatial_crops[:, 0] * image_spatial_crops[:, 1]).to(dtype=torch.long)
+                else:
+                    num_local_crops = torch.zeros(batch_size, dtype=torch.long, device=device)
 
-        if pixel_values is None:
-            raise ValueError("Pixel values must be provided.")
+            for batch_idx in range(batch_size):
+                patch_features = []
+                local_count = num_local_crops[batch_idx].item()
 
-        if pixel_values.dim() == 5:
-            image_num_patches = [pv.shape[0] for pv in pixel_values]
-            pixel_values = pixel_values.view(-1, *pixel_values.shape[2:])
-        elif pixel_values.dim() == 4:
-            image_num_patches = [pixel_values.shape[0]]
+                if local_count > 0 and pixel_values_local is not None and pixel_values_local.shape[1] >= local_count:
+                    local_pixels = pixel_values_local[batch_idx, :local_count]
+                    patch_features.extend(self._project_image_patches(local_pixels))
+
+                global_pixels = pixel_values_global[batch_idx, 0]
+                patch_features.extend(self._project_image_patches(global_pixels))
+
+                image_feature_groups.append(patch_features)
         else:
-            raise ValueError(f"pixel_values has shape {pixel_values.shape}, expected 4D or 5D")
+            if pixel_values is None:
+                raise ValueError("Pixel values must be provided.")
 
-        proj_list_flat = self._project_image_patches(pixel_values)
-        proj = torch.stack(proj_list_flat, dim=0)
+            if pixel_values.dim() == 5:
+                batch_size = pixel_values.shape[0]
+                image_num_patches = [pixel_values.shape[1]] * batch_size
+                flat_pixels = pixel_values.view(-1, *pixel_values.shape[2:])
+            elif pixel_values.dim() == 4:
+                image_num_patches = [pixel_values.shape[0]]
+                flat_pixels = pixel_values
+            else:
+                raise ValueError(f"pixel_values has shape {pixel_values.shape}, expected 4D or 5D")
 
-        proj_list = torch.split(proj, image_num_patches, dim=0)
+            projected_patches = self._project_image_patches(flat_pixels)
+            offset = 0
+            for patch_count in image_num_patches:
+                image_feature_groups.append(projected_patches[offset : offset + patch_count])
+                offset += patch_count
 
-        new_image_features, _ = self.pack_image_features(
-            image_features=proj_list,
+        packed_features = self.pack_image_features(
+            image_features=image_feature_groups,
             image_newline=self.image_newline,
             image_spatial_crops=image_spatial_crops,
         )
 
-        new_image_features = [
-            torch.cat([pf, self.view_seperator.unsqueeze(0).to(pf.dtype)], dim=0) for pf in new_image_features
-        ]
-        return torch.cat(new_image_features, dim=0)
+        separator = self.view_seperator
+        for i, features in enumerate(packed_features):
+            view_sep = separator.unsqueeze(0).to(features.device, dtype=features.dtype)
+            packed_features[i] = torch.cat([features, view_sep], dim=0)
+
+        return torch.cat(packed_features, dim=0)
 
     def get_placeholder_mask(self, input_ids, inputs_embeds, image_token_id):
         """
@@ -1767,31 +1780,20 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         if image_sizes is None:
             if image_spatial_crop is not None:
                 image_sizes = image_spatial_crop
-            else:
-                inferred_sizes = None
-                if pixel_values_global is not None:
-                    height, width = pixel_values_global.shape[-2:]
-                    inferred_sizes = torch.tensor(
-                        [[height, width]] * pixel_values_global.shape[0],
-                        dtype=torch.long,
-                        device=pixel_values_global.device,
-                    )
-                elif pixel_values is not None:
-                    if pixel_values.dim() == 5:
-                        batch = pixel_values.shape[0]
-                        height, width = pixel_values.shape[-2:]
-                    elif pixel_values.dim() == 4:
-                        batch = pixel_values.shape[0]
-                        height, width = pixel_values.shape[-2:]
-                    else:
-                        batch = 0
-                        height = width = 0
-                    if batch > 0:
-                        inferred_sizes = torch.tensor(
-                            [[height, width]] * batch, dtype=torch.long, device=pixel_values.device
-                        )
-                if inferred_sizes is not None:
-                    image_sizes = inferred_sizes
+            elif pixel_values_global is not None:
+                height, width = pixel_values_global.shape[-2:]
+                image_sizes = torch.tensor(
+                    [[height, width]] * pixel_values_global.shape[0],
+                    dtype=torch.long,
+                    device=pixel_values_global.device,
+                )
+            elif pixel_values is not None and pixel_values.dim() in (4, 5) and pixel_values.shape[0] > 0:
+                height, width = pixel_values.shape[-2:]
+                image_sizes = torch.tensor(
+                    [[height, width]] * pixel_values.shape[0],
+                    dtype=torch.long,
+                    device=pixel_values.device,
+                )
 
         image_hidden_states = None
 
@@ -1861,53 +1863,6 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         fused = torch.cat([clip_seq, sam_seq], dim=-1)
         proj = self.multi_modal_projector(fused)
         return [proj[i] for i in range(proj.shape[0])]
-
-    def _get_image_features_multi_resolution(
-        self,
-        pixel_values_global: torch.FloatTensor,
-        pixel_values_local: Optional[torch.FloatTensor],
-        num_local_crops: Optional[torch.LongTensor],
-        image_spatial_crops: Optional[torch.Tensor],
-    ):
-        batch_size = pixel_values_global.shape[0]
-        device = pixel_values_global.device
-
-        if num_local_crops is None:
-            if image_spatial_crops is not None:
-                num_local_crops = (image_spatial_crops[:, 0] * image_spatial_crops[:, 1]).to(dtype=torch.long)
-            else:
-                num_local_crops = torch.zeros(batch_size, dtype=torch.long, device=device)
-
-        image_features = []
-        for batch_idx in range(batch_size):
-            patch_features = []
-            local_count = num_local_crops[batch_idx].item()
-
-            if local_count > 0 and pixel_values_local is not None and pixel_values_local.shape[1] >= local_count:
-                local_pixels = pixel_values_local[batch_idx, :local_count]
-                local_patch_features = self._project_image_patches(
-                    local_pixels,
-                )
-                patch_features.extend(local_patch_features)
-
-            global_pixels = pixel_values_global[batch_idx, 0]
-            global_patch_features = self._project_image_patches(
-                global_pixels,
-            )
-            patch_features.extend(global_patch_features)
-
-            image_features.append(patch_features)
-
-        packed_features, _ = self.pack_image_features(
-            image_features=image_features,
-            image_newline=self.image_newline,
-            image_spatial_crops=image_spatial_crops,
-        )
-
-        packed_features = [
-            torch.cat([pf, self.view_seperator.unsqueeze(0).to(pf.dtype)], dim=0) for pf in packed_features
-        ]
-        return torch.cat(packed_features, dim=0)
 
 
 @auto_docstring(
