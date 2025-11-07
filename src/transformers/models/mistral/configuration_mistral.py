@@ -14,7 +14,7 @@
 # limitations under the License.
 """Mistral model configuration"""
 
-from typing import Optional, TypedDict
+from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
@@ -22,21 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-
-class LLama4Scaling(TypedDict):
-    r"""
-    The scaling parameters to apply LLama 4 scaling to the rope embeddings.
-
-    Args:
-        original_max_position_embeddings (`int`):
-            The original max position embeddings used during pretraining.
-        scaling_beta (`float`):
-            The scaling beta parameter.
-    """
-
-    original_max_position_embeddings: int
-    scaling_beta: float
 
 
 class MistralConfig(PreTrainedConfig):
@@ -97,8 +82,6 @@ class MistralConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        llama_4_scaling (`LLama4Scaling`, *optional*):
-            Dictionary containing the scaling parameters for LLama 4 scaling.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
