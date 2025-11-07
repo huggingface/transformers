@@ -5115,7 +5115,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         missing_keys_set = set(missing_keys)
 
-        for key in self.state_dict():
+        model_state_dict_keys = set(self.state_dict().keys())
+
+        if missing_keys_set and missing_keys_set >= model_state_dict_keys:
+            if is_deepspeed_zero3_enabled() and not is_quantized:
+                import deepspeed
+
+                params = list(self.state_dict(keep_vars=True).values())
+                with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
+                    self.initialize_weights()
+            else:
+                self.initialize_weights()
+            return
+
+        for key in model_state_dict_keys:
             # If it's part of the keys that will be loaded, mark it as already initialized
             if key not in missing_keys_set:
                 param_or_buffer = self.get_parameter_or_buffer(key)
@@ -5227,7 +5240,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             )
 
                             if fully_missing:
-                                self._init_weights(module)
+                                self._initialize_weights(module)
                             else:
                                 if is_deepspeed_zero3_enabled():
                                     import deepspeed
@@ -5257,7 +5270,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                         if name not in missing_buffers and buffer is not None
                                     }
 
-                                self._init_weights(module)
+                                self._initialize_weights(module)
 
                                 for name, tensor in preserved_parameters.items():
                                     module._parameters[name].data.copy_(tensor)
