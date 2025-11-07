@@ -130,11 +130,6 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
     "video_processor": "BaseVideoProcessor",
 }
 
-SPECIAL_MODULE_TO_MODEL_NAME_MAPPING = {
-    "kosmos2_5": "kosmos-2.5",
-    "kosmos2": "kosmos-2",
-}
-
 if sys.version_info >= (3, 11):
     Unpack = typing.Unpack
 else:
@@ -253,6 +248,9 @@ class ImagesKwargs(TypedDict, total=False):
             - `'np'`: Return NumPy `np.ndarray` objects.
         disable_grouping (`bool`, *optional*):
             Whether to group images by shapes when processing or not, only relevant for fast image processing.
+        image_seq_length (`int`, *optional*):
+            The number of image tokens to be used for each image in the input.
+            Added for backward compatibility but this should be set as a processor attribute in future models.
     """
 
     do_convert_rgb: Optional[bool]
@@ -273,6 +271,7 @@ class ImagesKwargs(TypedDict, total=False):
     device: Annotated[Optional[str], device_validator()]
     return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
     disable_grouping: Optional[bool]
+    image_seq_length: Optional[int]
 
 
 class VideosKwargs(TypedDict, total=False):
@@ -1400,8 +1399,8 @@ class ProcessorMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
-        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
+        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod
@@ -1441,26 +1440,29 @@ class ProcessorMixin(PushToHubMixin):
     @classmethod
     def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         """
-        Identify and instantiate the subcomponents of Processor classes, like image processors and
-        tokenizers. This method uses the Processor attributes like `tokenizer_class` to figure out what class those
-        subcomponents should be. Note that any subcomponents must either be library classes that are accessible in
-        the `transformers` root, or they must be custom code that has been registered with the relevant autoclass,
-        via methods like `AutoTokenizer.register()`. If neither of these conditions are fulfilled, this method
-        will be unable to find the relevant subcomponent class and will raise an error.
+        Identify and instantiate the subcomponents of Processor classes, such as image processors, tokenizers,
+        and feature extractors. This method inspects the processor's `__init__` signature to identify parameters
+        that correspond to known modality types (image_processor, tokenizer, feature_extractor, etc.) or contain
+        "tokenizer" in their name. It then uses the appropriate Auto class (AutoImageProcessor, AutoTokenizer, etc.)
+        from `MODALITY_TO_AUTOPROCESSOR_MAPPING` to load each subcomponent via `.from_pretrained()`. For tokenizer-like
+        parameters not explicitly in the mapping, the method uses AutoTokenizer with a subfolder argument.
         """
         args = []
         # get args from processor init signature
         sub_processors = cls.get_attributes()
         for sub_processor_type in sub_processors:
-            if sub_processor_type not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in sub_processor_type:
+            if sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING:
+                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
+                sub_processor = auto_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                args.append(sub_processor)
+            elif "tokenizer" in sub_processor_type:
+                # Special case: tokenizer-like parameters not in the mapping (e.g., "protein_tokenizer")
+                # Load using AutoTokenizer with subfolder
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
                 sub_processor = auto_processor_class.from_pretrained(
                     pretrained_model_name_or_path, subfolder=sub_processor_type, **kwargs
                 )
-            elif sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING:
-                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
-                sub_processor = auto_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            args.append(sub_processor)
+                args.append(sub_processor)
 
         return args
 

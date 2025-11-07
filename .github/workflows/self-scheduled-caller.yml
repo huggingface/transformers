@@ -32,11 +32,17 @@ jobs:
     name: Setup
     runs-on: ubuntu-22.04
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
       - name: Setup
+        env:
+          prev_workflow_run_id: ${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}
+          other_workflow_run_id: ${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}
         run: |
           mkdir "setup_values"
-          echo "${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}" > "setup_values/prev_workflow_run_id.txt"
-          echo "${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}" > "setup_values/other_workflow_run_id.txt"
+          echo "$prev_workflow_run_id" > "setup_values/prev_workflow_run_id.txt"
+          echo "$other_workflow_run_id" > "setup_values/other_workflow_run_id.txt"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -114,6 +120,18 @@ jobs:
       job: run_quantization_torch_gpu
       slack_report_channel: "#transformers-ci-daily-quantization"
       docker: huggingface/transformers-quantization-latest-gpu
+      ci_event: Daily CI
+      report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
+    secrets: inherit
+
+  kernels-ci:
+    name: Kernels CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_kernels_gpu
+      slack_report_channel: "#transformers-ci-daily-kernels"
+      docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
       report_repo_id: hf-internal-testing/transformers_daily_ci
       commit_sha: ${{ github.sha }}
