@@ -5148,6 +5148,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if name in buffers and buffers[name] is not None and name not in non_persistent:
                     missing_buffers_by_module[module_path].add(name)
 
+            # Sort by depth (deepest first) so child modules are handled before their parents.
             module_paths = sorted(
                 set(missing_params_by_module.keys()) | set(missing_buffers_by_module.keys()),
                 key=lambda name: name.count("."),
@@ -5220,6 +5221,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                             all_param_names = set(immediate_params.keys())
                             all_buffer_names = set(persistent_buffers.keys())
+                            # If every immediate parameter and buffer is absent, recreate the whole module.
                             fully_missing = (not all_param_names or missing_params == all_param_names) and (
                                 not all_buffer_names or missing_buffers == all_buffer_names
                             )
@@ -5227,16 +5229,33 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             if fully_missing:
                                 self._init_weights(module)
                             else:
-                                preserved_parameters = {
-                                    name: param.detach().clone()
-                                    for name, param in immediate_params.items()
-                                    if name not in missing_params
-                                }
-                                preserved_buffers = {
-                                    name: buffer.detach().clone()
-                                    for name, buffer in persistent_buffers.items()
-                                    if name not in missing_buffers and buffer is not None
-                                }
+                                if is_deepspeed_zero3_enabled():
+                                    import deepspeed
+
+                                    preserved_parameters = {}
+                                    for name, param in immediate_params.items():
+                                        if name in missing_params:
+                                            continue
+                                        with deepspeed.zero.GatheredParameters([param], modifier_rank=None):
+                                            preserved_parameters[name] = param.detach().clone()
+
+                                    preserved_buffers = {}
+                                    for name, buffer in persistent_buffers.items():
+                                        if name in missing_buffers or buffer is None:
+                                            continue
+                                        with deepspeed.zero.GatheredParameters([buffer], modifier_rank=None):
+                                            preserved_buffers[name] = buffer.detach().clone()
+                                else:
+                                    preserved_parameters = {
+                                        name: param.detach().clone()
+                                        for name, param in immediate_params.items()
+                                        if name not in missing_params
+                                    }
+                                    preserved_buffers = {
+                                        name: buffer.detach().clone()
+                                        for name, buffer in persistent_buffers.items()
+                                        if name not in missing_buffers and buffer is not None
+                                    }
 
                                 self._init_weights(module)
 
