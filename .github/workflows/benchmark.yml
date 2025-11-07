@@ -36,14 +36,10 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: debug
-        run: ls -lR
-
       - name: Install benchmark script dependencies
         run: python3 -m pip install -r benchmark_v2/requirements.txt kernels
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e ".[torch]"
 
       - name: Run benchmark
