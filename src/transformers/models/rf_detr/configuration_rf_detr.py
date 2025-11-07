@@ -269,13 +269,5 @@ class RfDetrConfig(PreTrainedConfig):
     def num_key_value_heads(self) -> int:
         return self.decoder_self_attention_heads
 
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
-
 
 __all__ = ["RfDetrConfig"]
