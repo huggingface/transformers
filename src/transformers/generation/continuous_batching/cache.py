@@ -340,6 +340,25 @@ class PagedAttentionCache:
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
 
+    def search_prefix_match(self, request_id: str, prompt_ids: list[int]) -> int:
+        current_hash = None
+        allocated_blocks = []
+        for b in range(len(prompt_ids) // self.block_size):
+            tokens = prompt_ids[b * self.block_size : (b + 1) * self.block_size]
+            current_hash = self._block_manager.compute_hash(current_hash, tokens)
+            block_id = self._block_manager._hash_to_id.get(current_hash)
+            if block_id is not None:
+                allocated_blocks.append(block_id)
+                self._block_manager.increase_ref_count(block_id)
+            else:
+                break
+        # If we found a matching prefix, we reference the blocks in the request
+        if allocated_blocks:
+            logger.debug(f"Found prefix match for request {request_id} with {len(allocated_blocks)} blocks")
+            cm = self.group_cache_managers[0]
+            cm.block_table[request_id] = allocated_blocks
+        return len(allocated_blocks) * self.block_size
+
     def mark_blocks_as_completed(self, state: RequestState) -> None:
         """Marks the blocks that have been computed in the forward pass as such. If prefix sharing is off, this is a
         no-op."""

@@ -161,11 +161,12 @@ class BlockManager:
             # Otherwise, we compute the hash
             num_completed_blocks -= 1
             tokens = prompt_ids[i * self.block_size : (i + 1) * self.block_size]
-            block.hash = hash((parent_hash, tuple(tokens)))
+            block.hash = self.compute_hash(parent_hash, tokens)
 
             existing_block_id = self._hash_to_id.get(block.hash)
             # If the block hash is already in the hash to id mapping, we reference the existing block instead
             if existing_block_id is not None:
+                logger.debug(f"Found existing block {existing_block_id} for block {block.id}")
                 allocated_blocks[i] = existing_block_id
                 self._id_to_block[existing_block_id].ref_count += 1
                 new_parent_id = existing_block_id
@@ -177,6 +178,9 @@ class BlockManager:
 
             # Update loop variables
             parent_hash = block.hash
+
+    def compute_hash(self, parent_hash: int | None, tokens: list[int]) -> int:
+        return hash((parent_hash, tuple(tokens)))
 
 class CacheAllocator(ABC):
     """Abstract base class for cache managers. Cache managers keep track of per-request cache allocations, determine

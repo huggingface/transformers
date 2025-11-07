@@ -128,6 +128,16 @@ class Scheduler(ABC):
         self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: set[str]
     ) -> None:
         """Prepares a request for processing in the current batch."""
+        # If prefix sharing is enabled, we look for a prefix match and split the request if found
+        if self.cache.use_prefix_sharing and state.status == RequestStatus.PENDING:
+            prefill_length = self.cache.search_prefix_match(state.request_id, state.prompt_ids)
+            if prefill_length > 0:
+                self.active_requests[state.request_id] = state
+                state.remaining_prompt_ids = state.prompt_ids[prefill_length:]
+                state.prompt_ids = state.prompt_ids[prefill_length:]
+                request_ids_to_remove_from_waiting.add(state.request_id)
+                state.status = RequestStatus.SPLIT_PENDING_REMAINDER
+
         # If the request has a split prefill, the tokens to process are the remaining prompt ids
         if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
             request_tokens = state.remaining_prompt_ids
@@ -157,6 +167,7 @@ class Scheduler(ABC):
             state.prompt_ids = request_tokens[:token_budget]
 
 
+# TODO: further common-ize the two classes
 @attach_tracer()
 class FIFOScheduler(Scheduler):
     """This scheduler processes requests in the order they arrive, meaning decoding requests has priority over
@@ -255,6 +266,7 @@ class PrefillFirstScheduler(Scheduler):
             elif state.status == RequestStatus.DECODING:
                 second_priority_states.append(state)
 
+        # Add waiting requests to second priority
         for req_id in self.waiting_requests_order:
             second_priority_states.append(self.waiting_requests[req_id])
 

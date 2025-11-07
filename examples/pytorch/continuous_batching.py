@@ -16,6 +16,7 @@ import argparse
 import contextlib
 import json
 import os
+import random
 import time
 from typing import Optional
 
@@ -192,6 +193,8 @@ if __name__ == "__main__":
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
 
     parser.add_argument("--samples", type=int, default=500, help="Number of samples to generate")
+    parser.add_argument("--add-prefix", action="store_true", help="Add a prefix to the samples")
+
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
     parser.add_argument("--log-level", type=str, default="INFO")
     parser.add_argument("--output-file", type=str, default=None)
@@ -241,7 +244,18 @@ if __name__ == "__main__":
     dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
     dataset = dataset.select(range(args.samples))
 
-    simple_batch_inputs = [tokenizer(item["question"])["input_ids"] for item in dataset]
+    def random_prefix() -> str:
+        if not args.add_prefix:
+            return ""
+        prefixes = [
+            "Math and reasonning problems are very important to the world. This is a problem, and then you will find the answer.\n",
+            "We all know that reasonning can be taught by answering questions, often illustrated with examples. Here is one and its solution, hopefully you will enjoy it!\n",
+            "Reasonning a very good metric of intelligence, hence it is regularly trained and tested in both children and AI model like LLMs. This test can look like a math or a logical problem, a riddle or pattern detection task. For instance, this is one of those test. You will find it and the solution associated after. Here it goes:\n",
+        ] # fmt: skip
+        return random.choice(prefixes)
+
+    random.seed(0)
+    simple_batch_inputs = [tokenizer(random_prefix() + item["question"])["input_ids"] for item in dataset]
 
     # Prepare generation config
     generation_config = GenerationConfig(
