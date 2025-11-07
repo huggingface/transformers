@@ -658,26 +658,18 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `dict[str, Any]`: Dictionary of all the attributes that make up this processor instance.
         """
-        output = copy.deepcopy(self.__dict__)
+        # shallow copy to avoid deepcopy errors
+        output = self.__dict__.copy()
 
         # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
-        # Only save the attributes that are presented in the kwargs of `__init__`.
-        # or in the attributes
-        attrs_to_save = list(sig.parameters) + self.__class__.attributes
-        # extra attributes to be kept
-        attrs_to_save += ["auto_map"]
+        # Save only the attributes that are either passed as kwargs to `__init__`,
+        # defined in the class's `attributes` list, or included in "auto_map".
+        attrs_to_save = list(sig.parameters) + self.__class__.attributes + ["auto_map"]
 
-        if "tokenizer" in output:
-            del output["tokenizer"]
-        if "qformer_tokenizer" in output:
-            del output["qformer_tokenizer"]
-        if "protein_tokenizer" in output:
-            del output["protein_tokenizer"]
-        if "char_tokenizer" in output:
-            del output["char_tokenizer"]
-        if "chat_template" in output:
-            del output["chat_template"]
+        # Special attributes to handle: tokenizers and chat_template
+        for key in ["tokenizer", "qformer_tokenizer", "protein_tokenizer", "char_tokenizer", "chat_template"]:
+            output.pop(key, None)
 
         def save_public_processor_class(dictionary):
             # make sure private name "_processor_class" is correctly
@@ -752,7 +744,7 @@ class ProcessorMixin(PushToHubMixin):
         attributes_repr = "\n".join(attributes_repr)
         return f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
 
-    def save_pretrained(self, save_directory, push_to_hub: bool = False, **kwargs):
+    def save_pretrained(self, save_directory, save_jinja_files=False, push_to_hub: bool = False, **kwargs):
         """
         Saves the attributes of this processor (feature extractor, tokenizer...) in the specified directory so that it
         can be reloaded using the [`~ProcessorMixin.from_pretrained`] method.
@@ -796,9 +788,12 @@ class ProcessorMixin(PushToHubMixin):
             if hasattr(attribute, "_set_processor_class"):
                 attribute._set_processor_class(self.__class__.__name__)
 
-            # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
-            if attribute_name == "tokenizer":
-                attribute.save_pretrained(save_directory)
+            # if attribute is tokenizer, then save it in its own file for avoid overwriting
+            if hasattr(attribute, "save_pretrained"):
+                # use the attribute_name as prefix to create a unique file
+                attribute_save_dir = os.path.join(save_directory, attribute_name)
+                os.makedirs(attribute_save_dir, exist_ok=True)
+                attribute.save_pretrained(attribute_save_dir, save_jinja_files=save_jinja_files)
             elif attribute._auto_class is not None:
                 custom_object_save(attribute, save_directory, config=attribute)
 
@@ -1429,7 +1424,14 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 attribute_class = cls.get_possibly_dynamic_module(class_name)
 
-            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+            # updated loading path for handling multiple tokenizers
+            attribute_path = os.path.join(pretrained_model_name_or_path, attribute_name)
+            if os.path.isdir(attribute_path):
+                # load from its attribute's-specific folder
+                args.append(attribute_class.from_pretrained(attribute_path, **kwargs))
+            else:
+                # now fallback to original path
+                args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
 
         return args
 
