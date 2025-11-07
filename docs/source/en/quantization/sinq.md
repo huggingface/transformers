@@ -9,11 +9,9 @@
 
 ### 🔍 What You’ll Find Here
 
-- [1. How does SINQ work?](#1-how-does-sinq-work)
-- [2. Why should I use SINQ?](#2-why-should-i-use-sinq)
-- <u>[3. Quantize (and save) any LLM with SINQ](#3-quantize-any-llm-with-sinq)</u>
-- [4. How to Cite This Work](#4-how-to-cite-this-work)
-- [5. Current Limitations](#5-current-limitations)
+- <u>[1. Quantize (and save) any LLM with SINQ](#1-quantize-any-llm-with-sinq)</u>
+- [2. How to Cite This Work](#2-how-to-cite-this-work)
+- [3. Current Limitations](#3-current-limitations)
 
 #### 📊 Feature Comparison: SINQ vs HQQ _(calibration-free)_ and A-SINQ vs AWQ _(calibrated)_
 
@@ -26,48 +24,13 @@
 | 📈 Model Quality | **Higher** | Lower | **Higher** | Lower |
 
 
-📄 **Want to know more?** Read our paper on [**arXiv**](http://arxiv.org/abs/2509.22944)!
+📄 **Want to know more?** 
+- Read our paper on [**arXiv**](http://arxiv.org/abs/2509.22944)
+- Check the official [**SINQ**](https://github.com/huawei-csl/SINQ/tree/main) github repository
 
 --- 
 
-## 1. How does SINQ work?
-
-<details>
-<summary>Click to expand a quick explanation of SINQ’s core idea</summary>
-
-#### 1️⃣ Dual-Scaling for Better Quantization
-
-Conventional quantization uses **one scale per weight dimension**, which makes models vulnerable to **outliers**: large weights that distort scaling and cause significant errors.
-
-**SINQ** solves this by introducing **dual scaling**: separate scale factors for **rows and columns**. This flexibility redistributes outlier influence and keeps quantization errors smaller and more balanced.
-
----
-
-
-#### 2️⃣ More Even Error Distribution
-
-With standard single-scale quantization, errors tend to **cluster around outliers**.  
-With **SINQ**, they become **spread out and less severe**, preserving model accuracy even at **3 bit precision**. This improvement is driven by SINQ’s **Sinkhorn-normalized optimization**, which iteratively rescales rows and columns to balance their variance - a process inspired by Sinkhorn matrix normalization. By reducing the overall **_matrix imbalance_** (refer to the paper for more info), weights become inherently easier to quantize, leading to more stable behavior across layers and consistently higher accuracy even at very low bit-widths.
-
-
-</details>
-
----
-## 2. Why should I use SINQ?
-<details>
-<summary>Click to expand a quick explanation on why you should use SINQ to quantize your LLM</summary>
-
-
-#### **SINQ (calibration-free)**  
-- **Higher LLM quality** and **~2× faster** quantization than **HQQ** 
-- **>31× faster** quantization process and comparable or better LLM quality compared to **AWQ / GPTQ**
-- **Model-agnostic**: works without knowing the specific LLM architecture, unlike **QuaRot**  
-- **Training-free**: it does not require end-to-end training, unlike **SpinQuant** or **KurTail** 
-- **Additionally, A-SINQ (calibrated)** further **beats AWQ, GPTQ, and Hadamard+GPTQ** on quality while achieving **>4× faster** quantization time.
-
-</details>
-
-## 3. Quantize any LLM with SINQ
+## 1. Quantize any LLM with SINQ
 
 ### Setup & Quick Start
 
@@ -84,15 +47,15 @@ pip install sinq
 Quantizing any 🤗 Hugging Face model with SINQ is simple and takes only a few lines of code. 
 First, create a [`SinqConfig`] and specifying the following parameters:
 
-| Flag | Description | Options | Default |
-|------|-------------|---------|----------|
-| `--nbits` | Bit-width for weight quantization | 2, 3, 4, 5, 6, 8 | 4 |
-| `--tiling_mode` | Weight matrix tiling strategy | 1D, 2D | 1D |
-| `--group_size` | Weights per quantization group | 64, 128 | 64 |
-| `--method` | Quantization method | sinq, asinq | sinq |
-| `--dtype` | Data type of the original model | auto, float16, float32, etc | auto (bfloaf16) |
-| `--modules_to_not_convert` | List of the layers that are NOT quantize | [lm_head, ...] | [lm_head] |
-| `--auto_patch_io` | Flag to use custom save and reload functions | True, False | True |
+| Flag | Description | Type | Options | Default |
+|------|-------------|---------|---------|----------|
+| `--nbits` | Bit-width for weight quantization | int | 2, 3, 4, 5, 6, 8 | 4 |
+| `--tiling_mode` | Weight matrix tiling strategy | str | 1D, 2D | 1D |
+| `--group_size` | Weights per quantization group | int | 64, 128 | 64 |
+| `--method` | Quantization method | str | sinq, asinq | sinq |
+| `--dtype` | Data type of the original model | str | auto, float16, float32, etc | auto (bfloaf16) |
+| `--modules_to_not_convert` | List of the layers that are NOT quantize | List of str | [lm_head, ...] | [lm_head] |
+| `--device` | Device on which the model is loaded | str | cpu, cuda:0, cuda:1, etc | cuda:0 |
 
 Then specify the model you want to quantize and pass the SinqConfig as quantization configuration option
 
@@ -110,7 +73,7 @@ cfg = SinqConfig(
     method="sinq",
     dtype="auto",
     modules_to_not_convert=["lm_head"],
-    auto_patch_io=True
+    device=device
 )
 
 tok = AutoTokenizer.from_pretrained(model_name)
@@ -149,11 +112,11 @@ save_dir = "/path/to/save/qwen3-1.7B-sinq-4bit"
 hf_hub_model = "HF_Hub_username/qwen3-1.7B-sinq-4bit"
 
 # From local directory
-tokenizer = AutoTokenizer.from_pretrained(save_dir)
+tok = AutoTokenizer.from_pretrained(save_dir)
 qmodel = AutoModelForCausalLM.from_pretrained(save_dir)
 
 # From HF Hub
-tokenizer = AutoTokenizer.from_pretrained(hf_hub_model)
+tok = AutoTokenizer.from_pretrained(hf_hub_model)
 qmodel = AutoModelForCausalLM.from_pretrained(hf_hub_model)
 
 ```
@@ -173,17 +136,17 @@ from lm_eval import evaluator
 from lm_eval.models.huggingface import HFLM
 
 # Wrap the already quantized model and tokenizer with HFLM
-lm = HFLM(pretrained=qmodel, tokenizer=tokenizer, device=device)
+lm = HFLM(pretrained=qmodel, tokenizer=tok, device=device)
 
 # Evaluate (many tasks available on lm-eval such as MMLU and HellaSwag)
 results = evaluator.simple_evaluate(
     model=lm,
-    tasks=["lambada_openai"],  # small and fast benchmark
+    tasks=["wikitext"],  # small and fast benchmark
     device=device
 )
 ```
 
-## 4. How to Cite This Work
+## 2. How to Cite This Work
 
 If you find **SINQ** useful in your research or applications, please cite our <a href="http://arxiv.org/abs/2509.22944" target="_blank"><strong>paper</strong></a>:
 
@@ -199,6 +162,6 @@ If you find **SINQ** useful in your research or applications, please cite our <a
 }
 ```
 
-## 5. Current Limitations
+## 3. Current Limitations
 
 SINQ quantization strategy and SINQ quantized models do not support Multi-GPU option, so if your system counts multiple GPUs please specify which one should be used.
