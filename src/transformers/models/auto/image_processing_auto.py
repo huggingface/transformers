@@ -171,6 +171,7 @@ else:
             ("qwen3_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("regnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("resnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
+            ("rf_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
             ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
             ("sam", ("SamImageProcessor", "SamImageProcessorFast")),
             ("sam2", (None, "Sam2ImageProcessorFast")),
