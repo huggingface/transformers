@@ -34,9 +34,6 @@ from ..janus.modeling_janus import (
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 
 
-# from ..llava.modeling_llava import
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -83,7 +80,7 @@ class Phi3VConfig(PretrainedConfig):
 
     sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
 
-    def __init__(self, vision_config=None, text_config=None, **kwargs):
+    def __init__(self, vision_config=None, text_config=None, image_token_id=32044, **kwargs):
         super().__init__(**kwargs)
 
         if text_config is None:
@@ -113,6 +110,8 @@ class Phi3VConfig(PretrainedConfig):
                 f"Invalid type for `vision_config`. Must be either `dict` or `CLIPVisionConfig`."
                 f" Type found: {type(vision_config)}"
             )
+
+        self.image_token_id = image_token_id
 
 
 class Phi3VBaseModelOutputWithPast(JanusBaseModelOutputWithPast):
@@ -199,8 +198,8 @@ class Phi3VModel(Phi3VPreTrainedModel):
         # (patch arrangement is different for each image)
         for i, img_size in enumerate(image_sizes):
             h, w = img_size
-            h_crop = h // 336
-            w_crop = w // 336
+            h_crop = h // self.config.vision_config.image_size
+            w_crop = w // self.config.vision_config.image_size
             num_crops = h_crop * w_crop
 
             # NOTE: real num_crops is padded (num_crops, 24*24, 1024)

@@ -17,8 +17,6 @@
 import re
 from typing import Optional, Union
 
-import torch
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -168,11 +166,8 @@ class Phi3VProcessor(ProcessorMixin):
             padded_input_ids.append(prompt_tokens)
             attention_masks.append(attention_mask)
 
-        input_ids = torch.tensor(padded_input_ids, dtype=torch.long)
-        attention_mask = torch.tensor(attention_masks, dtype=torch.long)
-
         data = {
-            "input_ids": input_ids,
+            "input_ids": padded_input_ids,
             "attention_mask": attention_mask,
             "pixel_values": image_inputs["pixel_values"],
             "image_sizes": image_inputs["image_shapes"],

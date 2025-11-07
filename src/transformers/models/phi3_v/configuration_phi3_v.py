@@ -73,7 +73,7 @@ class Phi3VConfig(PretrainedConfig):
 
     sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
 
-    def __init__(self, vision_config=None, text_config=None, **kwargs):
+    def __init__(self, vision_config=None, text_config=None, image_token_id=32044, **kwargs):
         super().__init__(**kwargs)
 
         if text_config is None:
@@ -103,6 +103,8 @@ class Phi3VConfig(PretrainedConfig):
                 f"Invalid type for `vision_config`. Must be either `dict` or `CLIPVisionConfig`."
                 f" Type found: {type(vision_config)}"
             )
+
+        self.image_token_id = image_token_id
 
 
 __all__ = ["Phi3VConfig"]
