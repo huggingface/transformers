@@ -296,6 +296,8 @@ class LoadedParameter(torch.nn.Parameter):
         inst._is_hf_initialized = False
         return inst
 
+    def __repr__(self):
+        return f"LoadedParameter(_is_hf_initialized={self._is_hf_initialized}, data={self.data}"
     # block .data assignment when flagged
     @property
     def data(self):
@@ -326,6 +328,21 @@ class LoadedParameter(torch.nn.Parameter):
         return self._guard(super().fill_, *a, **k)
 
     def copy_(self, *a, **k):
+        return self._guard(super().copy_, *a, **k)
+
+    def mul_(self, *a, **k):
+        return self._guard(super().copy_, *a, **k)
+
+    def add_(self, *a, **k):
+        return self._guard(super().copy_, *a, **k)
+
+    def (self, *a, **k):
+        return self._guard(super().copy_, *a, **k)
+
+    def clamp_(self, *a, **k):
+        return self._guard(super().copy_, *a, **k)
+
+    def erfinv_(self, *a, **k):
         return self._guard(super().copy_, *a, **k)
 
 

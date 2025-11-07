@@ -2485,8 +2485,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         module._is_hf_initialized = True
         for p in module.parameters(recurse=False):
             setattr(p, "_is_hf_initialized", True)
-            setattr(p, "__class__", nn.Parameter)
-
 
     @torch.no_grad()
     @guard_nn_init_functions()
@@ -4699,6 +4697,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self.initialize_weights()
         else:
             self.initialize_weights()
+
+        for p in self.parameters(): # TODO @Cyrilvallez if we are able to do this while we smart apply my be better
+            setattr(p, "__class__", nn.Parameter)
 
     def _adjust_missing_and_unexpected_keys(
         self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool, model

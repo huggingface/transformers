@@ -1971,20 +1971,23 @@ class ModelTesterMixin:
                 with safe_open(f"{d}/model.safetensors", framework="pt") as f:
                     serialized_keys = f.keys()
 
-                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
-                # Checking the state dicts are correct
+                    model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+                    # Checking the state dicts are correct
 
-                reloaded_state = model_reloaded.state_dict()
-                for k, v in model.state_dict().items():
-                    with self.subTest(k):
-                        self.assertIn(
-                            k,
-                            serialized_keys,
-                            f"Key {k} was not serialized, this means it was probably aliased and safetensors removed it",
-                        )
-                        torch.testing.assert_close(
-                            v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
-                        )
+                    reloaded_state = model_reloaded.state_dict()
+                    for k, v in model.state_dict().items():
+                        with self.subTest(k):
+                            self.assertIn(
+                                k,
+                                serialized_keys,
+                                f"Key {k} was not serialized, this means it was probably aliased and safetensors removed it",
+                            )
+                            torch.testing.assert_close(
+                                v, f.get_tensor(k), msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
+                            )
+                            torch.testing.assert_close(
+                                v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
+                            )
 
                 # Checking there was no complain of missing weights
                 self.assertEqual(infos["missing_keys"], set())
