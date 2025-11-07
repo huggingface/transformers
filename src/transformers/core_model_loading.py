@@ -336,9 +336,6 @@ class LoadedParameter(torch.nn.Parameter):
     def add_(self, *a, **k):
         return self._guard(super().copy_, *a, **k)
 
-    def (self, *a, **k):
-        return self._guard(super().copy_, *a, **k)
-
     def clamp_(self, *a, **k):
         return self._guard(super().copy_, *a, **k)
 
