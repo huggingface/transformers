@@ -21,9 +21,9 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_rf_detr import *
-    from .configuration_rf_detr_dinov2_with_registers import *
+    from .configuration_rf_detr_dinov2 import *
     from .modeling_rf_detr import *
-    from .modeling_rf_detr_dinov2_with_registers import *
+    from .modeling_rf_detr_dinov2 import *
 else:
     import sys
 
