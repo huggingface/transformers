@@ -17,6 +17,7 @@ Processor class for TVP.
 """
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils.auto_docstring import auto_docstring
 
 
 class TvpProcessorKwargs(ProcessingKwargs, total=False):
@@ -30,20 +31,8 @@ class TvpProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class TvpProcessor(ProcessorMixin):
-    r"""
-    Constructs an TVP processor which wraps a TVP image processor and a Bert tokenizer into a single processor.
-
-    [`TvpProcessor`] offers all the functionalities of [`TvpImageProcessor`] and [`BertTokenizerFast`]. See the
-    [`~TvpProcessor.__call__`] and [`~TvpProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`TvpImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`BertTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
         self.video_processor = image_processor

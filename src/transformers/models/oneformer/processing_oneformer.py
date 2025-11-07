@@ -18,32 +18,24 @@ Image/Text processor class for OneFormer
 
 from ...processing_utils import ProcessorMixin
 from ...utils import is_torch_available
+from ...utils.auto_docstring import auto_docstring
 
 
 if is_torch_available():
     import torch
 
 
+@auto_docstring
 class OneFormerProcessor(ProcessorMixin):
-    r"""
-    Constructs an OneFormer processor which wraps [`OneFormerImageProcessor`] and
-    [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into a single processor that inherits both the image processor and
-    tokenizer functionalities.
-
-    Args:
-        image_processor ([`OneFormerImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
-            The tokenizer is a required input.
+    def __init__(
+        self, image_processor=None, tokenizer=None, max_seq_length: int = 77, task_seq_length: int = 77, **kwargs
+    ):
+        """
         max_seq_len (`int`, *optional*, defaults to 77)):
             Sequence length for input text list.
         task_seq_len (`int`, *optional*, defaults to 77):
             Sequence length for input task token.
-    """
-
-    def __init__(
-        self, image_processor=None, tokenizer=None, max_seq_length: int = 77, task_seq_length: int = 77, **kwargs
-    ):
+        """
         self.max_seq_length = max_seq_length
         self.task_seq_length = task_seq_length
 
@@ -65,32 +57,20 @@ class OneFormerProcessor(ProcessorMixin):
         token_inputs = torch.cat(token_inputs, dim=0)
         return token_inputs
 
+    @auto_docstring
     def __call__(self, images=None, task_inputs=None, segmentation_maps=None, **kwargs):
         """
-        Main method to prepare for the model one or several task input(s) and image(s). This method forwards the
-        `task_inputs` and `kwargs` arguments to CLIPTokenizer's [`~CLIPTokenizer.__call__`] if `task_inputs` is not
-        `None` to encode. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        OneFormerImageProcessor's [`~OneFormerImageProcessor.__call__`] if `images` is not `None`. Please refer to the
-        docstring of the above two methods for more information.
+        segmentation_maps (`ImageInput`, *optional*):
+            The corresponding semantic segmentation maps with the pixel-wise annotations.
 
-        Args:
-            task_inputs (`str`, `list[str]`):
-                The sequence or batch of task_inputs sequences to be encoded. Each sequence can be a string or a list
-                of strings of the template "the task is {task}".
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`,
-            `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            segmentation_maps (`ImageInput`, *optional*):
-                The corresponding semantic segmentation maps with the pixel-wise annotations.
+            (`bool`, *optional*, defaults to `True`):
+            Whether or not to pad images up to the largest image in a batch and create a pixel mask.
 
-             (`bool`, *optional*, defaults to `True`):
-                Whether or not to pad images up to the largest image in a batch and create a pixel mask.
+            If left to the default, will return a pixel mask that is:
 
-                If left to the default, will return a pixel mask that is:
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
 
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **task_inputs** -- List of token ids to be fed to a model. Returned when `text` is not `None`.

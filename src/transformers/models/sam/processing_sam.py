@@ -25,6 +25,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_torch_available
+from ...utils.auto_docstring import auto_docstring
 
 
 if is_torch_available():
@@ -52,33 +53,19 @@ class SamProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class SamProcessor(ProcessorMixin):
-    r"""
-    Constructs a SAM processor which wraps a SAM image processor and an 2D points & Bounding boxes processor into a
-    single processor.
-
-    [`SamProcessor`] offers all the functionalities of [`SamImageProcessor`]. See the docstring of
-    [`~SamImageProcessor.__call__`] for more information.
-
-    Args:
-        image_processor (`SamImageProcessor`):
-            An instance of [`SamImageProcessor`]. The image processor is a required input.
-    """
-
     def __init__(self, image_processor):
         super().__init__(image_processor)
         self.target_size = self.image_processor.size["longest_edge"]
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         **kwargs,
     ) -> BatchEncoding:
-        """
-        This method uses [`SamImageProcessor.__call__`] method to prepare image(s) for the model. It also prepares 2D
-        points and bounding boxes for the model if they are provided.
-        """
         output_kwargs = self._merge_kwargs(
             SamProcessorKwargs,
             tokenizer_init_kwargs={},

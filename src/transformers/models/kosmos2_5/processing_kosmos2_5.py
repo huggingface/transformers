@@ -23,6 +23,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import is_torch_available
+from ...utils.auto_docstring import auto_docstring
 
 
 if is_torch_available():
@@ -44,22 +45,13 @@ class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Kosmos2_5Processor(ProcessorMixin):
-    r"""
-    Constructs a Kosmos2_5 processor which wraps a PreTrainedTokenizerFast and Kosmos2_5 image processor into a single
-    processor.
-
-    [`Kosmos2_5Processor`] offers all the functionalities of [`Kosmos2_5ImageProcessor`] and [`PreTrainedTokenizerFast`]. See
-    the docstring of [`~Kosmos2_5Processor.__call__`] and [`~Kosmos2_5Processor.decode`] for more information.
-
-    Args:
-        image_processor (`Kosmos2_5ImageProcessor`):
-            An instance of [`Kosmos2_5ImageProcessor`]. The image processor is a required input.
-        tokenizer (Union[`T5TokenizerFast`, `T5Tokenizer`]):
-            An instance of ['T5TokenizerFast`] or ['T5Tokenizer`]. The tokenizer is a required input.
+    def __init__(self, image_processor, tokenizer, num_image_tokens: int = 2048):
+        """
         num_image_tokens (`int`, *optional*, defaults to 2048):
             Number of image tokens used as a placeholder.
-    """
+        """
 
     def __init__(self, image_processor, tokenizer, num_image_tokens: int = 2048):
         self.image_start_token = tokenizer.boi_token  # "<image>" : fixed token for the start of image
@@ -68,20 +60,13 @@ class Kosmos2_5Processor(ProcessorMixin):
         self.num_image_tokens = num_image_tokens
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, list[TextInput]] = None,
         **kwargs: Unpack[Kosmos2_5ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        This method uses [`Kosmos2_5ImageProcessor.preprocess`] method to prepare image(s) for the model, and
-        [`PreTrainedTokenizerFast.__call__`] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-
-        The rest of this documentation shows the arguments specific to `Kosmos2_5Processor`.
-        """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 

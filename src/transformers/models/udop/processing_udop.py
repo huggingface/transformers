@@ -24,6 +24,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils.auto_docstring import auto_docstring
 
 
 logger = logging.get_logger(__name__)
@@ -51,6 +52,7 @@ class UdopProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class UdopProcessor(ProcessorMixin):
     r"""
     Constructs a UDOP processor which combines a LayoutLMv3 image processor and a UDOP tokenizer into a single processor.
@@ -65,17 +67,12 @@ class UdopProcessor(ProcessorMixin):
 
     Additionally, it also supports passing `text_target` and `text_pair_target` to the tokenizer, which can be used to
     prepare labels for language modeling tasks.
-
-    Args:
-        image_processor (`LayoutLMv3ImageProcessor`):
-            An instance of [`LayoutLMv3ImageProcessor`]. The image processor is a required input.
-        tokenizer (`UdopTokenizer` or `UdopTokenizerFast`):
-            An instance of [`UdopTokenizer`] or [`UdopTokenizerFast`]. The tokenizer is a required input.
     """
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
