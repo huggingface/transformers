@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Optional, Union
 # Build the list of all video processors
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...utils import CONFIG_NAME, VIDEO_PROCESSOR_NAME, cached_file, is_torchvision_available, logging
+from ...utils import CONFIG_NAME, PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, cached_file, is_torchvision_available, logging
 from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
@@ -167,24 +167,37 @@ def get_video_processor_config(
     video_processor.save_pretrained("video-processor-test")
     video_processor = get_video_processor_config("video-processor-test")
     ```"""
-    resolved_config_file = cached_file(
-        pretrained_model_name_or_path,
-        VIDEO_PROCESSOR_NAME,
-        cache_dir=cache_dir,
-        force_download=force_download,
-        proxies=proxies,
-        token=token,
-        revision=revision,
-        local_files_only=local_files_only,
-    )
-    if resolved_config_file is None:
+    resolved_config_files = [
+        resolved_file
+        for filename in [VIDEO_PROCESSOR_NAME, PROCESSOR_NAME]
+        if (
+            resolved_file := cached_file(
+                pretrained_model_name_or_path,
+                filename=filename,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                token=token,
+                revision=revision,
+                local_files_only=local_files_only,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
+        )
+        is not None
+    ]
+    if resolved_config_files is None:
         logger.info(
             "Could not locate the video processor configuration file, will try to use the model config instead."
         )
         return {}
 
+    resolved_config_file = resolved_config_files[0]
     with open(resolved_config_file, encoding="utf-8") as reader:
-        return json.load(reader)
+        video_processor_dict = json.load(reader)
+    video_processor_dict = video_processor_dict.get("video_processor", video_processor_dict)
+    return video_processor_dict
 
 
 @requires(backends=("vision", "torchvision"))

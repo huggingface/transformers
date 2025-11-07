@@ -24,7 +24,7 @@ from typing import Optional, Union
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, cached_file, logging
+from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -167,27 +167,40 @@ def get_feature_extractor_config(
     feature_extractor.save_pretrained("feature-extractor-test")
     feature_extractor_config = get_feature_extractor_config("feature-extractor-test")
     ```"""
-    resolved_config_file = cached_file(
-        pretrained_model_name_or_path,
-        FEATURE_EXTRACTOR_NAME,
-        cache_dir=cache_dir,
-        force_download=force_download,
-        proxies=proxies,
-        token=token,
-        revision=revision,
-        local_files_only=local_files_only,
-        _raise_exceptions_for_gated_repo=False,
-        _raise_exceptions_for_missing_entries=False,
-        _raise_exceptions_for_connection_errors=False,
-    )
-    if resolved_config_file is None:
+    resolved_config_files = [
+        resolved_file
+        for filename in [FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME]
+        if (
+            resolved_file := cached_file(
+                pretrained_model_name_or_path,
+                filename=filename,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                token=token,
+                revision=revision,
+                local_files_only=local_files_only,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
+        )
+        is not None
+    ]
+    if resolved_config_files is None:
         logger.info(
             "Could not locate the feature extractor configuration file, will try to use the model config instead."
         )
         return {}
 
+    resolved_config_file = resolved_config_files[0]
     with open(resolved_config_file, encoding="utf-8") as reader:
-        return json.load(reader)
+        feature_extractor_dict = json.load(reader)
+    if "audio_processor" in feature_extractor_dict:
+        feature_extractor_dict = feature_extractor_dict["audio_processor"]
+    else:
+        feature_extractor_dict = feature_extractor_dict.get("feature_extractor", feature_extractor_dict)
+    return feature_extractor_dict
 
 
 class AutoFeatureExtractor:

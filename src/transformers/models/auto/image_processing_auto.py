@@ -29,6 +29,7 @@ from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
+    PROCESSOR_NAME,
     cached_file,
     is_timm_config_dict,
     is_timm_local_checkpoint,
@@ -305,27 +306,38 @@ def get_image_processor_config(
     image_processor.save_pretrained("image-processor-test")
     image_processor_config = get_image_processor_config("image-processor-test")
     ```"""
-    resolved_config_file = cached_file(
-        pretrained_model_name_or_path,
-        IMAGE_PROCESSOR_NAME,
-        cache_dir=cache_dir,
-        force_download=force_download,
-        proxies=proxies,
-        token=token,
-        revision=revision,
-        local_files_only=local_files_only,
-        _raise_exceptions_for_gated_repo=False,
-        _raise_exceptions_for_missing_entries=False,
-        _raise_exceptions_for_connection_errors=False,
-    )
-    if resolved_config_file is None:
+    resolved_config_files = [
+        resolved_file
+        for filename in [IMAGE_PROCESSOR_NAME, PROCESSOR_NAME]
+        if (
+            resolved_file := cached_file(
+                pretrained_model_name_or_path,
+                filename=filename,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                token=token,
+                revision=revision,
+                local_files_only=local_files_only,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
+        )
+        is not None
+    ]
+    # An empty list if none of the possible files is found in the repo
+    if not resolved_config_files:
         logger.info(
             "Could not locate the image processor configuration file, will try to use the model config instead."
         )
         return {}
 
+    resolved_config_file = resolved_config_files[0]
     with open(resolved_config_file, encoding="utf-8") as reader:
-        return json.load(reader)
+        image_processor_dict = json.load(reader)
+    image_processor_dict = image_processor_dict.get("image_processor", image_processor_dict)
+    return image_processor_dict
 
 
 def _warning_fast_image_processor_available(fast_class):
