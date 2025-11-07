@@ -41,6 +41,9 @@ class Block:
         self.hash: int | None = None
         self.ref_count: int = 1
 
+    def __repr__(self) -> str:
+        return f"Block(id={self.id}, parent_id={self.parent_id}, hash={self.hash}, ref_count={self.ref_count})"
+
     @property
     def is_complete(self) -> bool:
         return self.hash is not None
@@ -53,7 +56,8 @@ class BlockManager:
         """Initializes the block manager with a given number of blocks (num_blocks)"""
         self.num_blocks = num_blocks
         self.block_size = block_size
-        self._free_blocks = deque(range(num_blocks))
+        self._uninit_block_ids = deque(range(num_blocks))
+        self._init_block_ids: dict[int, None] = {}  # effectively act as an ordered set
         self._use_prefix_sharing = use_prefix_sharing
         # TODO: handle de-allocation for those strutures
         self._hash_to_id: dict[int, int] = {}
@@ -64,13 +68,29 @@ class BlockManager:
     @property
     def num_free_blocks(self) -> int:
         """Returns the number of free blocks left."""
-        return len(self._free_blocks)
+        return len(self._uninit_block_ids) + len(self._init_block_ids)
+
+    def is_enough_free_blocks(self, n_blocks: int) -> bool:
+        # Exit early if there are enough uninitialized blocks
+        if len(self._uninit_block_ids) >= n_blocks:
+            return True
+        # Exit early if even after uninitializing all initialized blocks, there are not enough free blocks
+        block_to_unintialize = n_blocks - len(self._uninit_block_ids)
+        if len(self._init_block_ids) < block_to_unintialize:
+            return False
+        # Uninitialize the required amount of blocks
+        for _ in range(block_to_unintialize):
+            id_to_unintialize = self._init_block_ids.popitem()[0]
+            block = self._id_to_block[id_to_unintialize]
+            self._hash_to_id.pop(block.hash)
+            self._uninit_block_ids.append(id_to_unintialize)
+        return True
 
     def get_free_blocks(self, n_blocks: int, last_block_id: int | None) -> list[int] | None:
         """Returns a free block and mark it as used by removing it from the free blocks queue."""
-        if self.num_free_blocks < n_blocks:
+        if not self.is_enough_free_blocks(n_blocks):
             return None
-        allocated_block_ids = [self._free_blocks.popleft() for _ in range(n_blocks)]
+        allocated_block_ids = [self._uninit_block_ids.popleft() for _ in range(n_blocks)]
         # If we use prefix caching, we keep track of the allocated blocks as partial blocks
         if self._use_prefix_sharing:
             for block_id in allocated_block_ids:
@@ -80,9 +100,33 @@ class BlockManager:
         # In both cases, we return the allocated block ids
         return allocated_block_ids
 
+    def increase_ref_count(self, block_id: int) -> None:
+        """Increases the reference count of a block."""
+        block = self._id_to_block[block_id]
+        block.ref_count += 1
+        if block.ref_count == 1:
+            self._init_block_ids.pop(block_id)
+
+    def decrease_ref_count(self, block_id: int) -> None:
+        """Decreases the reference count of a block."""
+        block = self._id_to_block[block_id]
+        block.ref_count -= 1
+        if block.ref_count == 0:
+            if block.is_complete:
+                self._init_block_ids[block_id] = None
+            else:
+                self._id_to_block.pop(block_id)
+                self._uninit_block_ids.append(block_id)
+
     def free_blocks(self, blocks: list[int]) -> None:
-        """Frees a list of blocks by adding them back to the free blocks queue."""
-        self._free_blocks.extend(blocks)
+        """Marks a list of blocks as free. If there is no prefix sharing, we simply add them to the uninitialized blocks
+        queue. Otherwise, we mark them as initalized but they can be freed in no uninitialized blocks are lefts."""
+        if self._use_prefix_sharing:
+            for block_id in blocks:
+                self.decrease_ref_count(block_id)
+        else:
+            self._uninit_block_ids.extend(blocks)
+
 
     def mark_blocks_as_computed(
         self,
@@ -102,7 +146,9 @@ class BlockManager:
 
         # Now go through the incomplete blocks and updated them
         new_parent_id = None
-        for i, block in incomplete_blocks:
+        while incomplete_blocks:
+            i, block = incomplete_blocks.pop()
+
             # If the parent id has been updated, we apply the change
             if new_parent_id is not None:
                 block.parent_id = new_parent_id
@@ -123,10 +169,7 @@ class BlockManager:
                 allocated_blocks[i] = existing_block_id
                 self._id_to_block[existing_block_id].ref_count += 1
                 new_parent_id = existing_block_id
-
-                self._id_to_block[block_id].ref_count -= 1
-                if self._id_to_block[block_id].ref_count == 0:
-                    self._id_to_block.pop(block_id)
+                self.free_blocks([block.id])
 
             # Otherwise, we add the completed block to the hash table
             else:
