@@ -55,6 +55,29 @@ class RfDetrDinov2PatchEmbeddings(nn.Module):
         return embeddings
 
 
+def window_partition(
+    embeddings: torch.Tensor, num_windows: int, patch_size: int, height: int, width: int
+) -> torch.Tensor:
+    batch_size = embeddings.shape[0]
+    num_h_patches = height // patch_size
+    num_w_patches = width // patch_size
+    cls_token_with_pos_embed = embeddings[:, :1]
+    pixel_tokens_with_pos_embed = embeddings[:, 1:]
+    pixel_tokens_with_pos_embed = pixel_tokens_with_pos_embed.view(batch_size, num_h_patches, num_w_patches, -1)
+    num_w_patches_per_window = num_w_patches // num_windows
+    num_h_patches_per_window = num_h_patches // num_windows
+    windowed_pixel_tokens = pixel_tokens_with_pos_embed.view(
+        batch_size, num_windows, num_h_patches_per_window, num_windows, num_h_patches_per_window, -1
+    )
+    windowed_pixel_tokens = windowed_pixel_tokens.permute(0, 1, 3, 2, 4, 5)
+    windowed_pixel_tokens = windowed_pixel_tokens.reshape(
+        batch_size * num_windows**2, num_h_patches_per_window * num_w_patches_per_window, -1
+    )
+    windowed_cls_token_with_pos_embed = cls_token_with_pos_embed.repeat(num_windows**2, 1, 1)
+    embeddings = torch.cat((windowed_cls_token_with_pos_embed, windowed_pixel_tokens), dim=1)
+    return embeddings
+
+
 class RfDetrDinov2Embeddings(nn.Module):
     """
     Construct the CLS token, mask token, position and patch embeddings.
@@ -134,26 +157,7 @@ class RfDetrDinov2Embeddings(nn.Module):
 
         if self.config.num_windows > 1:
             # reshape for windows
-            num_h_patches = height // self.config.patch_size
-            num_w_patches = width // self.config.patch_size
-            cls_token_with_pos_embed = embeddings[:, :1]
-            pixel_tokens_with_pos_embed = embeddings[:, 1:]
-            pixel_tokens_with_pos_embed = pixel_tokens_with_pos_embed.view(
-                batch_size, num_h_patches, num_w_patches, -1
-            )
-            num_w_patches_per_window = num_w_patches // self.config.num_windows
-            num_h_patches_per_window = num_h_patches // self.config.num_windows
-            num_windows = self.config.num_windows
-            windowed_pixel_tokens = pixel_tokens_with_pos_embed.view(
-                batch_size, num_windows, num_h_patches_per_window, num_windows, num_h_patches_per_window, -1
-            )
-            windowed_pixel_tokens = windowed_pixel_tokens.permute(0, 1, 3, 2, 4, 5)
-            windowed_pixel_tokens = windowed_pixel_tokens.reshape(
-                batch_size * num_windows**2, num_h_patches_per_window * num_w_patches_per_window, -1
-            )
-            windowed_cls_token_with_pos_embed = cls_token_with_pos_embed.repeat(num_windows**2, 1, 1)
-            embeddings = torch.cat((windowed_cls_token_with_pos_embed, windowed_pixel_tokens), dim=1)
-
+            embeddings = window_partition(embeddings, self.config.num_windows, self.config.patch_size, height, width)
         embeddings = self.dropout(embeddings)
 
         return embeddings
@@ -341,10 +345,28 @@ class RfDetrDinov2SwiGLUFFN(nn.Module):
         return self.weights_out(hidden)
 
 
+def window_unpartition_before_attention(hidden_states: torch.Tensor, num_windows: int) -> torch.Tensor:
+    batch_size, seq_len, channels = hidden_states.shape
+    num_windows_squared = num_windows**2
+    hidden_states = hidden_states.view(batch_size // num_windows_squared, num_windows_squared * seq_len, channels)
+    return hidden_states
+
+
+def window_partition_after_attention(
+    hidden_states: torch.Tensor, self_attention_output: torch.Tensor, num_windows: int
+) -> torch.Tensor:
+    batch_size, seq_len, channels = hidden_states.shape
+    num_windows_squared = num_windows**2
+    self_attention_output = self_attention_output.view(
+        batch_size * num_windows_squared, seq_len // num_windows_squared, channels
+    )
+    return self_attention_output
+
+
 class RfDetrDinov2Layer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
-    def __init__(self, config: RfDetrDinov2Config) -> None:
+    def __init__(self, config: RfDetrDinov2Config, layer_idx: int) -> None:
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -368,20 +390,14 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         shortcut = hidden_states
         if remove_windows:
-            batch_size, image_size, channels = hidden_states.shape
-            num_windows_squared = self.num_windows**2
-            hidden_states = hidden_states.view(
-                batch_size // num_windows_squared, num_windows_squared * image_size, channels
-            )
+            hidden_states = window_unpartition_before_attention(hidden_states, self.num_windows)
 
         hidden_states_norm = self.norm1(hidden_states)
         self_attention_output = self.attention(hidden_states_norm)
 
         if remove_windows:
-            batch_size, image_size, channels = hidden_states.shape
-            num_windows_squared = self.num_windows**2
-            self_attention_output = self_attention_output.view(
-                batch_size * num_windows_squared, image_size // num_windows_squared, channels
+            self_attention_output = window_partition_after_attention(
+                hidden_states, self_attention_output, self.num_windows
             )
 
         self_attention_output = self.layer_scale1(self_attention_output)
@@ -472,6 +488,31 @@ class RfDetrDinov2PreTrainedModel(PreTrainedModel):
             module.lambda1.data.fill_(self.config.layerscale_value)
 
 
+def window_unpartition(
+    hidden_state: torch.Tensor,
+    num_windows: int,
+    num_h_patches: int,
+    num_w_patches: int,
+) -> torch.Tensor:
+    hidden_batch_size, seq_len, channels = hidden_state.shape
+    num_windows_squared = num_windows**2
+    num_h_patches_per_window = num_h_patches // num_windows
+    num_w_patches_per_window = num_w_patches // num_windows
+    hidden_state = hidden_state.reshape(
+        hidden_batch_size // num_windows_squared, num_windows_squared * seq_len, channels
+    )
+    hidden_state = hidden_state.view(
+        hidden_batch_size // num_windows_squared,
+        num_windows,
+        num_windows,
+        num_h_patches_per_window,
+        num_w_patches_per_window,
+        channels,
+    )
+    hidden_state = hidden_state.permute(0, 1, 3, 2, 4, 5)
+    return hidden_state
+
+
 @auto_docstring(
     custom_intro="""
     RfDetrDinov2 backbone, to be used with frameworks like DETR and MaskFormer.
@@ -557,22 +598,9 @@ class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
                     hidden_batch_size, seq_len, channels = hidden_state.shape
 
                     if self.config.num_windows > 1:
-                        # undo windowing
-                        num_windows_squared = self.config.num_windows**2
-                        num_h_patches_per_window = num_h_patches // self.config.num_windows
-                        num_w_patches_per_window = num_w_patches // self.config.num_windows
-                        hidden_state = hidden_state.reshape(
-                            hidden_batch_size // num_windows_squared, num_windows_squared * seq_len, channels
+                        hidden_state = window_unpartition(
+                            hidden_state, self.config.num_windows, num_h_patches, num_w_patches
                         )
-                        hidden_state = hidden_state.view(
-                            hidden_batch_size // num_windows_squared,
-                            self.config.num_windows,
-                            self.config.num_windows,
-                            num_h_patches_per_window,
-                            num_w_patches_per_window,
-                            channels,
-                        )
-                        hidden_state = hidden_state.permute(0, 1, 3, 2, 4, 5)
 
                     hidden_state = hidden_state.reshape(batch_size, num_h_patches, num_w_patches, -1)
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
