@@ -20,6 +20,7 @@ from typing import Any, Optional, Union
 import numpy as np
 
 from ...utils import is_soundfile_available, is_torch_available
+from ...utils.auto_docstring import auto_docstring
 
 
 if is_torch_available():
@@ -59,42 +60,8 @@ class CsmProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class CsmProcessor(ProcessorMixin):
-    r"""
-    Constructs a Csm processor which wraps [`EncodecFeatureExtractor`] and
-    [`PretrainedTokenizerFast`] into a single processor that inherits both the audio feature extraction and
-    tokenizer functionalities. See the [`~CsmProcessor.__call__`] for more
-    information.
-    The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
-        ```python
-        from transformers import CsmProcessor
-        from datasets import load_dataset
-
-        ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
-        audio = ds[0]["audio"]["array"]
-
-        processor = CsmProcessor.from_pretrained("sesame/csm-1b")
-
-        processor(
-            text=["<|begin_of_text|>[0]What are you working on?<|end_of_text|><|AUDIO|><|audio_eos|><|begin_of_text|>[1]I'm figuring out my budget.<|end_of_text|>"],
-            audio=audio,
-            text_kwargs = {"padding": False},
-            audio_kwargs = {"sampling_rate": 16000},
-            common_kwargs = {"return_tensors": "pt"},
-        )
-        # this should error out because EncodecFeatureExtractor expects a 24kHz audio :)
-        ```
-
-    Args:
-        feature_extractor ([`EncodecFeatureExtractor`]):
-            The feature extractor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-
-    """
-
     def __init__(
         self,
         feature_extractor,
@@ -189,6 +156,7 @@ class CsmProcessor(ProcessorMixin):
                 audio_value = audio_value.cpu().float().numpy()
             sf.write(p, audio_value, sampling_rate)
 
+    @auto_docstring
     def __call__(
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
@@ -197,21 +165,7 @@ class CsmProcessor(ProcessorMixin):
         depth_decoder_labels_ratio: Optional[float] = 1.0,
         **kwargs: Unpack[CsmProcessorKwargs],
     ):
-        r"""
-        Main method to prepare text(s) and audio to be fed as input to the model. This method forwards the `text`
-        arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode
-        the text. To prepare the audio, this method forwards the `audio` arguments to
-        EncodecFeatureExtractor's [`~EncodecFeatureExtractor.__call__`]. Please refer
-        to the docstring of the above two methods for more information.
-
-        Args:
-            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The audio or batch of audio to be prepared. Each audio can be a NumPy array or PyTorch
-                tensor.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+        """
             output_labels (bool, *optional*, default=False):
                 Whether to return labels for training. Indices will be in `[config.audio_token_id, -100, -101]`.
                 - `config.audio_token_id` indicates an audio frame (considering sequence length elements as frames)
@@ -219,10 +173,7 @@ class CsmProcessor(ProcessorMixin):
                 - `-101` indicates the audio frame will be used only for the backbone model (using the first codebook token as labels)
             depth_decoder_labels_ratio (float, *optional*, default=1.0):
                 The ratio of audio frames to keep for the depth decoder labels.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                    - `'np'`: Return NumPy `np.ndarray` objects.
+
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

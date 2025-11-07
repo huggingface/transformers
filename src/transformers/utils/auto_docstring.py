@@ -313,6 +313,14 @@ class ProcessorArgs:
     """,
     }
 
+    audios = {
+        "description": """
+    The audio or batch of audios to be prepared. Each audio can be a NumPy array or PyTorch tensor.
+    In case of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
+    and T is the sample length of the audio.
+    """,
+    }
+
 
 class ModelArgs:
     labels = {

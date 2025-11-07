@@ -20,6 +20,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging
+from ...utils.auto_docstring import auto_docstring
 from ...utils.import_utils import requires_backends
 
 
@@ -29,6 +30,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class GraniteSpeechProcessor(ProcessorMixin):
     def __init__(
         self,
@@ -37,9 +39,14 @@ class GraniteSpeechProcessor(ProcessorMixin):
         audio_token="<|audio|>",
         chat_template=None,
     ):
+        """
+        audio_toke (str, *optional*, defaults to "<|audio|>"):
+            The audio token to use for the processor.
+        """
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         super().__init__(audio_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],

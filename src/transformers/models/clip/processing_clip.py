@@ -16,32 +16,14 @@
 Image/Text processor class for CLIP
 """
 
-from typing import Optional, Union
-
-from ...audio_utils import AudioInput
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring
-from ...video_utils import VideoInput
 
 
 @auto_docstring
 class CLIPProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
-
-    @auto_docstring
-    def __call__(
-        self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        videos: Optional[VideoInput] = None,
-        audio: Optional[AudioInput] = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ) -> BatchFeature:
-        return super().__call__(images, text, videos, audio, **kwargs)
 
 
 __all__ = ["CLIPProcessor"]

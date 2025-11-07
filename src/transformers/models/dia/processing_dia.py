@@ -22,6 +22,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import is_soundfile_available, is_torch_available
+from ...utils.auto_docstring import auto_docstring
 
 
 if is_torch_available():
@@ -61,27 +62,18 @@ class DiaProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class DiaProcessor(ProcessorMixin):
-    r"""
-    Constructs a Dia processor which wraps a [`DiaFeatureExtractor`], [`DiaTokenizer`], and a [`DacModel`] into
-    a single processor. It inherits, the audio feature extraction, tokenizer, and audio encode/decode functio-
-    nalities. See [`~DiaProcessor.__call__`], [`~DiaProcessor.encode`], and [`~DiaProcessor.decode`] for more
-    information.
-
-    Args:
-        feature_extractor (`DiaFeatureExtractor`):
-            An instance of [`DiaFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`DiaTokenizer`):
-            An instance of [`DiaTokenizer`]. The tokenizer is a required input.
-        audio_tokenizer (`DacModel`):
-            An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is is a required input.
-    """
-
     audio_tokenizer_class = "DacModel"
 
     def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
+        """
+        audio_tokenizer (`DacModel`):
+            An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is is a required input.
+        """
         super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         text: Union[str, list[str]],
@@ -89,12 +81,6 @@ class DiaProcessor(ProcessorMixin):
         output_labels: Optional[bool] = False,
         **kwargs: Unpack[DiaProcessorKwargs],
     ):
-        """
-        Main method to prepare text(s) and audio to be fed as input to the model. The `audio` argument is
-        forwarded to the DiaFeatureExtractor's [`~DiaFeatureExtractor.__call__`] and subsequently to the
-        DacModel's [`~DacModel.encode`]. The `text` argument to [`~DiaTokenizer.__call__`]. Please refer
-        to the docstring of the above methods for more information.
-        """
         if not is_torch_available():
             raise ValueError(
                 "The `DiaProcessor` relies on the `audio_tokenizer` which requires `torch` but we couldn't "
