@@ -1703,7 +1703,7 @@ class Gemma3nTextAttention(Gemma3Attention):
         super().__init__(config, layer_idx)
         self.is_causal = True
         del self.attn_logit_softcapping
-        del self.scaling
+        self.scaling = 1.0
         self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
         first_kv_shared_layer_idx = self.config.num_hidden_layers - self.config.num_kv_shared_layers
@@ -1782,7 +1782,7 @@ class Gemma3nTextAttention(Gemma3Attention):
             value_states,
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
-            scaling=1.0,
+            scaling=self.scaling,
             sliding_window=self.sliding_window,
             **kwargs,
         )
