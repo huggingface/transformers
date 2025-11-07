@@ -4,6 +4,7 @@ import torch
 from torch import nn
 
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
+from ...utils import torch_int
 from ..dinov2.configuration_dinov2 import Dinov2Config
 from ..dinov2.modeling_dinov2 import (
     Dinov2Backbone,
@@ -104,6 +105,47 @@ class RfDetrDinov2Config(Dinov2Config):
 
 
 class RfDetrDinov2Embeddings(Dinov2Embeddings):
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and interpolation at torch.float32 precision.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        num_positions = self.position_embeddings.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embeddings
+
+        class_pos_embed = self.position_embeddings[:, :1]
+        patch_pos_embed = self.position_embeddings[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        target_dtype = patch_pos_embed.dtype
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed.to(torch.float32),
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+            antialias=True,
+        ).to(dtype=target_dtype)
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
@@ -160,20 +202,21 @@ class RfDetrDinov2Layer(Dinov2Layer):
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         shortcut = hidden_states
         if remove_windows:
-            # reshape x to remove windows
-            B, HW, C = hidden_states.shape
+            batch_size, image_size, channels = hidden_states.shape
             num_windows_squared = self.num_windows**2
-            hidden_states = hidden_states.view(B // num_windows_squared, num_windows_squared * HW, C)
+            hidden_states = hidden_states.view(
+                batch_size // num_windows_squared, num_windows_squared * image_size, channels
+            )
 
         hidden_states_norm = self.norm1(hidden_states)
         self_attention_output = self.attention(hidden_states_norm)
 
         if remove_windows:
-            # reshape x to add windows back
-            B, HW, C = hidden_states.shape
+            batch_size, image_size, channels = hidden_states.shape
             num_windows_squared = self.num_windows**2
-            # hidden_states = hidden_states.view(B * num_windows_squared, HW // num_windows_squared, C)
-            self_attention_output = self_attention_output.view(B * num_windows_squared, HW // num_windows_squared, C)
+            self_attention_output = self_attention_output.view(
+                batch_size * num_windows_squared, image_size // num_windows_squared, channels
+            )
 
         self_attention_output = self.layer_scale1(self_attention_output)
 
@@ -301,21 +344,23 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
 
                     num_h_patches = height // patch_size
                     num_w_patches = width // patch_size
+                    hidden_batch_size, seq_len, channels = hidden_state.shape
 
                     if self.config.num_windows > 1:
                         # undo windowing
                         num_windows_squared = self.config.num_windows**2
-                        B, HW, C = hidden_state.shape
                         num_h_patches_per_window = num_h_patches // self.config.num_windows
                         num_w_patches_per_window = num_w_patches // self.config.num_windows
-                        hidden_state = hidden_state.reshape(B // num_windows_squared, num_windows_squared * HW, C)
+                        hidden_state = hidden_state.reshape(
+                            hidden_batch_size // num_windows_squared, num_windows_squared * seq_len, channels
+                        )
                         hidden_state = hidden_state.view(
-                            B // num_windows_squared,
+                            hidden_batch_size // num_windows_squared,
                             self.config.num_windows,
                             self.config.num_windows,
                             num_h_patches_per_window,
                             num_w_patches_per_window,
-                            C,
+                            channels,
                         )
                         hidden_state = hidden_state.permute(0, 1, 3, 2, 4, 5)
 

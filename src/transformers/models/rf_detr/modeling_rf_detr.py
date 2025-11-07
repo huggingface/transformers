@@ -1212,8 +1212,11 @@ class RfDetrModel(RfDetrPreTrainedModel):
         enc_outputs_class = object_query_undetach
         enc_outputs_coord_logits = topk_coords_logits
 
-        reference_points = refine_bboxes(topk_coords_logits_undetach, reference_points)
-
+        two_stage_len = topk_coords_logits.shape[-2]
+        reference_points_two_stage_subset = reference_points[..., :two_stage_len, :]
+        reference_points_subset = reference_points[..., two_stage_len:, :]
+        reference_points_two_stage_subset = refine_bboxes(topk_coords_logits, reference_points_two_stage_subset)
+        reference_points = torch.cat([reference_points_two_stage_subset, reference_points_subset], dim=-2)
         init_reference_points = reference_points
         decoder_outputs = self.decoder(
             inputs_embeds=target,
