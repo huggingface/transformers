@@ -896,12 +896,12 @@ class DeepseekOcrTextModel(DeepseekV2Model):
             if isinstance(module.mlp, DeepseekOcrTextMoe):
                 module.mlp.gate.weight.data.normal_(mean=0.0, std=config.initializer_range)
 
-
+@auto_docstring(
+    custom_intro="""
+    The Deepseek-OCR model which consists of two vision backbones and a language model without language modeling head.
+    """
+)
 class DeepseekOcrModel(LlavaNextModel):
-    """
-    Deepseek OCR model with dual vision encoders (SAM + CLIP) and a projector.
-    """
-
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
@@ -1102,8 +1102,6 @@ class DeepseekOcrModel(LlavaNextModel):
         clip_out = self.clip_model(
             pixel_values=pixel_values,
             patch_embeds=sam_features,
-            output_hidden_states=True,
-            return_dict=True,
             interpolate_pos_encoding=True,
         )
 
@@ -1330,7 +1328,7 @@ class DeepseekOcrModel(LlavaNextModel):
                 num_local_crops=num_local_crops,
             )
 
-            if image_attention_mask is not None:
+            if False:  # image_attention_mask is not None:
                 token_mask = image_attention_mask.to(inputs_embeds.device)
             else:
                 token_mask = self.get_placeholder_mask(input_ids, inputs_embeds, self.config.image_token_index).any(
@@ -1394,7 +1392,7 @@ class DeepseekOcrModel(LlavaNextModel):
 
 @auto_docstring(
     custom_intro="""
-    The Deepseek-OCR model which consists of two vision backbones and a deepseek language model.
+    The Deepseek-OCR model which consists of two vision backbones and a deepseek language model with a decoding head.
     """
 )
 class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
