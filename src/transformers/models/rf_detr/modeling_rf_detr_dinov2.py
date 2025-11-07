@@ -368,7 +368,6 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         shortcut = hidden_states
         if remove_windows:
-            # reshape x to remove windows
             batch_size, image_size, channels = hidden_states.shape
             num_windows_squared = self.num_windows**2
             hidden_states = hidden_states.view(
@@ -379,10 +378,8 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
         self_attention_output = self.attention(hidden_states_norm)
 
         if remove_windows:
-            # reshape x to add windows back
             batch_size, image_size, channels = hidden_states.shape
             num_windows_squared = self.num_windows**2
-            # hidden_states = hidden_states.view(batch_size * num_windows_squared, image_size // num_windows_squared, channels)
             self_attention_output = self_attention_output.view(
                 batch_size * num_windows_squared, image_size // num_windows_squared, channels
             )
