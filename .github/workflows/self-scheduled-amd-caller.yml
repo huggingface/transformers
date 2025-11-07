@@ -10,5 +10,9 @@ jobs:
     runs-on: ubuntu-22.04
     if: ${{ always() }}
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
+
       - name: Trigger scheduled AMD CI via workflow_run
         run: echo "Trigger scheduled AMD CI via workflow_run"
