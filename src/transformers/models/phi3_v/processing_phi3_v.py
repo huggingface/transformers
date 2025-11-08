@@ -165,14 +165,14 @@ class Phi3VProcessor(ProcessorMixin):
             # Left Pad sequence to max_length
             if padding:
                 prompt_tokens = [pad_token_id] * (max_length - len(prompt_tokens)) + prompt_tokens
-            attention_mask = [1 if token != pad_token_id else 0 for token in prompt_tokens]
+            attn_mask = [1 if token != pad_token_id else 0 for token in prompt_tokens]
 
             padded_input_ids.append(prompt_tokens)
-            attention_masks.append(attention_mask)
+            attention_masks.append(attn_mask)
 
         data = {
             "input_ids": torch.tensor(padded_input_ids, dtype=torch.long),
-            "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
+            "attention_mask": torch.tensor(attention_masks, dtype=torch.long),
             "pixel_values": image_inputs["pixel_values"],
             "image_sizes": image_inputs["image_sizes"],
         }
