@@ -87,7 +87,7 @@ class Sam3GeometryEncoderOutput(ModelOutput):
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_prompts, hidden_size)`):
             Encoded geometry prompt features (points, boxes, masks combined).
         attention_mask (`torch.BoolTensor` of shape `(batch_size, num_prompts)`, *optional*):
-            Attention mask for geometry prompts where True indicates padded positions.
+            Attention mask for geometry prompts where True indicates valid positions and False indicates padding.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -112,7 +112,8 @@ class Sam3DETREncoderOutput(ModelOutput):
         spatial_shapes (`torch.LongTensor` of shape `(num_levels, 2)`, *optional*):
             Spatial shapes (height, width) for each feature pyramid level.
         valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_levels, 2)`, *optional*):
-            Valid ratios for each feature level.
+            Ratio of valid (non-padded) content to total size for each feature level, used to
+            scale spatial coordinates to actual image regions when images are padded.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -217,16 +218,20 @@ def concat_padded_sequences(seq1, mask1, seq2, mask2, return_index: bool = False
     Concatenates two right-padded sequences, such that the resulting sequence
     is contiguous and also right-padded.
 
-    Tensors are batch-first, masks are batch-first with True for padded values.
+    Tensors are batch-first, masks are batch-first with True=valid, False=padding.
 
-    :param seq1: A tensor of shape (batch_size, seq1_length, hidden_size).
-    :param mask1: A tensor of shape (batch_size, seq1_length) with True=padding.
-    :param seq2: A tensor of shape (batch_size, seq2_length, hidden_size).
-    :param mask2: A tensor of shape (batch_size, seq2_length) with True=padding.
-    :param return_index: If True, also returns the index of the ids of the element of seq2
-        in the concatenated sequence. This can be used to retrieve the elements of seq2
-    :return: A tuple (concatenated_sequence, concatenated_mask) if return_index is False,
+    Args:
+        seq1: A tensor of shape (batch_size, seq1_length, hidden_size).
+        mask1: A tensor of shape (batch_size, seq1_length) with True=valid, False=padding.
+        seq2: A tensor of shape (batch_size, seq2_length, hidden_size).
+        mask2: A tensor of shape (batch_size, seq2_length) with True=valid, False=padding.
+        return_index: If True, also returns the index of the ids of the element of seq2
+            in the concatenated sequence. This can be used to retrieve the elements of seq2.
+
+    Returns:
+        A tuple (concatenated_sequence, concatenated_mask) if return_index is False,
         otherwise (concatenated_sequence, concatenated_mask, index).
+        The concatenated_mask uses True=valid, False=padding convention.
     """
     batch_size, seq1_length, hidden_size = seq1.shape
     batch_size2, seq2_length, hidden_size2 = seq2.shape
@@ -236,14 +241,14 @@ def concat_padded_sequences(seq1, mask1, seq2, mask2, return_index: bool = False
     assert seq1_length == mask1.size(1)
     assert seq2_length == mask2.size(1)
 
-    actual_seq1_lengths = (~mask1).sum(dim=-1)
-    actual_seq2_lengths = (~mask2).sum(dim=-1)
+    actual_seq1_lengths = mask1.sum(dim=-1)
+    actual_seq2_lengths = mask2.sum(dim=-1)
 
     final_lengths = actual_seq1_lengths + actual_seq2_lengths
     max_length = seq1_length + seq2_length
 
     concatenated_mask = (
-        torch.arange(max_length, device=seq2.device)[None].repeat(batch_size, 1) >= final_lengths[:, None]
+        torch.arange(max_length, device=seq2.device)[None].repeat(batch_size, 1) < final_lengths[:, None]
     )
 
     concatenated_sequence = torch.zeros((batch_size, max_length, hidden_size), device=seq2.device, dtype=seq2.dtype)
@@ -263,6 +268,19 @@ def concat_padded_sequences(seq1, mask1, seq2, mask2, return_index: bool = False
 
 
 def get_valid_ratio(mask):
+    """
+    Compute the ratio of valid (non-padded) pixels to total pixels for height and width.
+
+    When images are padded to standard sizes, valid_ratios indicates what fraction of each
+    dimension contains actual image content vs padding. This is used to properly scale
+    spatial coordinates and attention queries to the actual image regions.
+
+    Args:
+        mask: Padding mask [batch_size, height, width] where True indicates padding
+
+    Returns:
+        valid_ratio: [batch_size, 2] containing [valid_ratio_w, valid_ratio_h]
+    """
     _, H, W = mask.shape
     valid_H = torch.sum(~mask[:, :, 0], 1)
     valid_W = torch.sum(~mask[:, 0, :], 1)
@@ -318,17 +336,8 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        # Slice mask to match key length (last dimension)
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
-
-        # Validate mask dimensions match attention weights
-        # attn_weights shape: [batch, num_heads, query_len, key_len]
-        if attention_mask.shape[2] != attn_weights.shape[2] or attention_mask.shape[3] != attn_weights.shape[3]:
-            # Mask dimensions don't match, skip masking
-            # This shouldn't happen if mask normalization works correctly, but adding as safety
-            pass
-        else:
-            attn_weights = attn_weights + attention_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -1350,7 +1359,7 @@ class Sam3GeometryEncoder(nn.Module):
         return pos
 
     def _encode_points(self, points, points_mask, points_labels, vision_features):
-        """Encode point prompts using direct projection, pooling, and position encoding (batch-first)."""
+        """Encode point prompts using direct projection, pooling, and position encoding."""
         batch_size, num_points = points.shape[:2]
 
         # Direct projection from coordinates
@@ -1380,7 +1389,7 @@ class Sam3GeometryEncoder(nn.Module):
         return label_embed + points_embed, points_mask
 
     def _encode_boxes(self, boxes, boxes_mask, boxes_labels, vision_features):
-        """Encode box prompts using direct projection, ROI pooling, and position encoding (batch-first)."""
+        """Encode box prompts. Mask convention: True=valid, False=padding."""
         batch_size, num_boxes = boxes.shape[:2]
         height, width = vision_features.shape[-2:]
         # Direct projection from coordinates
@@ -1417,7 +1426,7 @@ class Sam3GeometryEncoder(nn.Module):
         return label_embed + boxes_embed, boxes_mask
 
     def _encode_masks(self, masks: torch.Tensor, masks_mask: torch.Tensor, vision_features: torch.Tensor):
-        """Encode mask prompts using the fused mask encoder (batch-first)."""
+        """Encode mask prompts using the fused mask encoder"""
         batch_size, num_masks = masks.shape[:2]
 
         # Process masks through mask encoder
@@ -1454,7 +1463,7 @@ class Sam3GeometryEncoder(nn.Module):
         img_pos_embeds: Optional[tuple[torch.Tensor, ...]] = None,
     ):
         """
-        Forward pass for encoding geometric prompts (all tensors are batch-first).
+        Forward pass for encoding geometric prompts.
 
         Args:
             point_embeddings: Point coordinates [batch_size, num_points, 2]
@@ -1496,6 +1505,7 @@ class Sam3GeometryEncoder(nn.Module):
         if mask_embeddings is not None:
             masks_embed, masks_mask = self._encode_masks(mask_embeddings, mask_mask, normalized_img_feats)
             if point_embeddings.size(1) == 0 and box_embeddings.size(1) == 0:
+                # masks_mask already has True=valid convention
                 return Sam3GeometryEncoderOutput(
                     last_hidden_state=masks_embed,
                     attention_mask=masks_mask,
@@ -1510,22 +1520,22 @@ class Sam3GeometryEncoder(nn.Module):
         boxes_embeds, boxes_mask = self._encode_boxes(box_embeddings, box_mask, box_labels, normalized_img_feats)
         prompt_embeds, prompt_mask = concat_padded_sequences(prompt_embeds, prompt_mask, boxes_embeds, boxes_mask)
 
-        # Add CLS token
+        # Add CLS token (CLS token is always valid, so mask=True)
         cls_embed = self.cls_embed.weight.view(1, self.hidden_size).unsqueeze(0).expand(batch_size, -1, -1)
-        cls_mask = torch.zeros(batch_size, 1, dtype=prompt_mask.dtype, device=prompt_mask.device)
+        cls_mask = torch.ones(batch_size, 1, dtype=prompt_mask.dtype, device=prompt_mask.device)
         prompt_embeds, prompt_mask = concat_padded_sequences(prompt_embeds, prompt_mask, cls_embed, cls_mask)
 
         # Project and normalize prompt embeddings
         prompt_embeds = self.prompt_layer_norm(self.final_proj(prompt_embeds))
 
         # Create bidirectional attention mask once for all layers
-        # prompt_mask: [batch_size, seq_len] where True=padding, False=valid
+        # prompt_mask: [batch_size, seq_len] where True=valid, False=padding
         prompt_attention_mask = None
         if prompt_mask is not None:
             prompt_attention_mask = create_bidirectional_mask(
                 config=self.config,
                 input_embeds=prompt_embeds,
-                attention_mask=~prompt_mask,  # Invert: prompt_mask has True=padding, need True=valid
+                attention_mask=prompt_mask,
             )
 
         # Apply transformer layers with cross-attention to vision features
@@ -1738,10 +1748,12 @@ class Sam3DetrEncoder(nn.Module):
         spatial_shapes = torch.tensor(spatial_shapes, dtype=torch.long, device=features_flattened.device)
         if has_masks:
             # Filter out None masks for valid ratio computation
+            # valid_ratios: [batch_size, num_levels, 2] - fraction of non-padded content per level
+            # Used to scale reference coordinates to actual image regions (excluding padding)
             valid_masks = [m for m in vision_masks if m is not None]
             valid_ratios = torch.stack([get_valid_ratio(m) for m in valid_masks], dim=1)
         else:
-            # No masks, so all positions are valid
+            # No masks, so all positions are valid (ratio = 1.0 for all dimensions)
             num_levels = len(vision_features)
             valid_ratios = torch.ones(
                 (features_flattened.shape[0], num_levels, 2),
@@ -1787,7 +1799,7 @@ class Sam3DetrEncoder(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ):
         """
-        Forward pass for the DETR encoder (all tensors are batch-first).
+        Forward pass for the DETR encoder.
 
         Args:
             vision_features: List of vision features at different levels
@@ -1888,7 +1900,7 @@ class Sam3DetrDecoderLayer(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
-        Forward pass for decoder layer (all tensors are batch-first).
+        Forward pass for decoder layer.
 
         Args:
             hidden_states: Query features [batch_size, num_queries, hidden_size]
@@ -2142,7 +2154,7 @@ class Sam3DetrDecoder(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
-        Forward pass for the DETR decoder (all tensors are batch-first).
+        Forward pass for the DETR decoder.
 
         Args:
             vision_features: Vision features [batch_size, height*width, hidden_size]
@@ -2151,7 +2163,8 @@ class Sam3DetrDecoder(nn.Module):
             text_mask: Text padding mask [batch_size, seq_len] where True=valid, False=padding
             vision_key_padding_mask: Vision key padding mask [batch_size, height*width] where True=padded
             spatial_shapes: Spatial shapes [num_levels, 2]
-            valid_ratios: Valid ratios [batch_size, num_levels, 2]
+            valid_ratios: Ratio of non-padded to total size per level [batch_size, num_levels, 2].
+                Used to scale reference box coordinates to actual image regions.
             is_instance_prompt: Whether this is an instance prompt
 
         Returns:
@@ -2179,9 +2192,10 @@ class Sam3DetrDecoder(nn.Module):
 
         # Process through decoder layers
         for layer in self.layers:
-            # Compute reference points scaled by valid ratios
-            # reference_boxes: [batch_size, num_queries, 4]
-            # valid_ratios: [batch_size, num_levels, 2]
+            # Scale reference boxes by valid ratios to account for image padding
+            # reference_boxes: [batch_size, num_queries, 4] in normalized [0,1] space
+            # valid_ratios: [batch_size, num_levels, 2] containing [width_ratio, height_ratio]
+            # This ensures queries attend to actual image content, not padded regions
             reference_points_input = reference_boxes.unsqueeze(2) * torch.cat(
                 [valid_ratios, valid_ratios], -1
             ).unsqueeze(1)
@@ -2285,7 +2299,7 @@ class Sam3DotProductScoring(nn.Module):
 
         Args:
             text_features: [batch_size, seq_len, hidden_size]
-            text_mask: [batch_size, seq_len] where True indicates padding
+            text_mask: [batch_size, seq_len] where True indicates valid tokens, False indicates padding
 
         Returns:
             pooled_text: [batch_size, hidden_size]
@@ -2294,9 +2308,7 @@ class Sam3DotProductScoring(nn.Module):
             # No padding, simple mean
             return text_features.mean(dim=1)
 
-        # Create validity mask (True for valid tokens, False for padding)
-        is_valid = ~text_mask  # [batch_size, seq_len]
-        is_valid = is_valid.to(text_features.dtype).unsqueeze(-1)  # [batch_size, seq_len, 1]
+        is_valid = text_mask.to(text_features.dtype).unsqueeze(-1)  # [batch_size, seq_len, 1]
 
         # Count valid tokens per batch
         num_valid = is_valid.sum(dim=1).clamp(min=1.0)  # [batch_size, 1]
@@ -2318,7 +2330,7 @@ class Sam3DotProductScoring(nn.Module):
         Args:
             decoder_hidden_states: [num_layers, batch_size, num_queries, hidden_size]
             text_features: [batch_size, seq_len, hidden_size]
-            text_mask: [batch_size, seq_len] where True=padding
+            text_mask: [batch_size, seq_len] where True=valid, False=padding
 
         Returns:
             scores: [num_layers, batch_size, num_queries, 1]
@@ -2671,7 +2683,7 @@ class Sam3Model(Sam3PreTrainedModel):
 
         text_features = self.text_encoder(input_ids=input_ids, **kwargs).last_hidden_state
         text_features = self.text_projection(text_features)
-        text_padding_mask = attention_mask.bool() if attention_mask is not None else None
+        text_mask = attention_mask.bool() if attention_mask is not None else None
         has_geometry_prompts = (
             (input_points is not None and input_points.numel() > 0)
             or (input_boxes is not None and input_boxes.numel() > 0)
@@ -2679,7 +2691,7 @@ class Sam3Model(Sam3PreTrainedModel):
         )
 
         geometry_prompt_features = None
-        geometry_prompt_padding_mask = None
+        geometry_prompt_mask = None
 
         if has_geometry_prompts:
             if input_points is not None and input_points.numel() > 0:
@@ -2690,9 +2702,9 @@ class Sam3Model(Sam3PreTrainedModel):
                     else torch.ones_like(point_embeddings[..., 0], dtype=torch.long)
                 )
                 point_mask = (
-                    (input_points_labels == -10)
+                    (input_points_labels != -10)
                     if input_points_labels is not None
-                    else torch.zeros(batch_size, input_points.shape[1], dtype=torch.bool, device=device)
+                    else torch.ones(batch_size, input_points.shape[1], dtype=torch.bool, device=device)
                 )
                 point_labels = torch.where(point_labels == -10, 0, point_labels)
             else:
@@ -2708,9 +2720,9 @@ class Sam3Model(Sam3PreTrainedModel):
                     else torch.ones_like(box_embeddings[..., 0], dtype=torch.long)
                 )
                 box_mask = (
-                    (input_boxes_labels == -10)
+                    (input_boxes_labels != -10)
                     if input_boxes_labels is not None
-                    else torch.zeros(batch_size, input_boxes.shape[1], dtype=torch.bool, device=device)
+                    else torch.ones(batch_size, input_boxes.shape[1], dtype=torch.bool, device=device)
                 )
                 box_labels = torch.where(box_labels == -10, 0, box_labels)
             else:
@@ -2720,7 +2732,7 @@ class Sam3Model(Sam3PreTrainedModel):
 
             if input_masks is not None and input_masks.numel() > 0:
                 mask_embeddings = input_masks  # [batch_size, num_masks, H, W]
-                mask_mask = torch.zeros(batch_size, mask_embeddings.shape[1], dtype=torch.bool, device=device)
+                mask_mask = torch.ones(batch_size, mask_embeddings.shape[1], dtype=torch.bool, device=device)
             else:
                 mask_embeddings = None
                 mask_mask = None
@@ -2742,38 +2754,31 @@ class Sam3Model(Sam3PreTrainedModel):
             )
 
             geometry_prompt_features = geometry_outputs.last_hidden_state
-            # Invert mask: geometry_outputs has True=padding, but we need True=valid
-            geometry_prompt_padding_mask = (
-                ~geometry_outputs.attention_mask if geometry_outputs.attention_mask is not None else None
-            )
+            geometry_prompt_mask = geometry_outputs.attention_mask
 
         if geometry_prompt_features is not None:
             # Repeat text_features for all geometry prompts
             if text_features.shape[0] == 1 and geometry_prompt_features.shape[0] > 1:
                 text_features = text_features.repeat(geometry_prompt_features.shape[0], 1, 1)
             combined_prompt_features = torch.cat([text_features, geometry_prompt_features], dim=1)
-            if (
-                text_padding_mask is not None
-                and text_padding_mask.shape[0] == 1
-                and geometry_prompt_padding_mask.shape[0] > 1
-            ):
-                text_padding_mask = text_padding_mask.repeat(geometry_prompt_padding_mask.shape[0], 1)
+            if text_mask is not None and text_mask.shape[0] == 1 and geometry_prompt_mask.shape[0] > 1:
+                text_mask = text_mask.repeat(geometry_prompt_mask.shape[0], 1)
 
-            if text_padding_mask is not None and geometry_prompt_padding_mask is not None:
-                combined_prompt_padding_mask = torch.cat([text_padding_mask, geometry_prompt_padding_mask], dim=1)
-            elif text_padding_mask is not None:
+            if text_mask is not None and geometry_prompt_mask is not None:
+                combined_prompt_mask = torch.cat([text_mask, geometry_prompt_mask], dim=1)
+            elif text_mask is not None:
                 geo_valid_mask = torch.ones(
                     batch_size, geometry_prompt_features.shape[1], dtype=torch.bool, device=device
                 )
-                combined_prompt_padding_mask = torch.cat([text_padding_mask, geo_valid_mask], dim=1)
-            elif geometry_prompt_padding_mask is not None:
+                combined_prompt_mask = torch.cat([text_mask, geo_valid_mask], dim=1)
+            elif geometry_prompt_mask is not None:
                 text_valid_mask = torch.ones(batch_size, text_features.shape[1], dtype=torch.bool, device=device)
-                combined_prompt_padding_mask = torch.cat([text_valid_mask, geometry_prompt_padding_mask], dim=1)
+                combined_prompt_mask = torch.cat([text_valid_mask, geometry_prompt_mask], dim=1)
             else:
-                combined_prompt_padding_mask = None
+                combined_prompt_mask = None
         else:
             combined_prompt_features = text_features
-            combined_prompt_padding_mask = text_padding_mask
+            combined_prompt_mask = text_mask
 
         # Use only finest FPN level (single-level encoder)
         encoder_outputs = self.detr_encoder(
@@ -2781,7 +2786,7 @@ class Sam3Model(Sam3PreTrainedModel):
             text_features=combined_prompt_features,
             vision_masks=None,
             vision_pos_embeds=[fpn_position_encoding[-1]],
-            text_mask=combined_prompt_padding_mask,
+            text_mask=combined_prompt_mask,
             **kwargs,
         )
 
@@ -2789,7 +2794,7 @@ class Sam3Model(Sam3PreTrainedModel):
             vision_features=encoder_outputs.last_hidden_state,
             text_features=encoder_outputs.text_features,
             vision_pos_encoding=encoder_outputs.pos_embeds_flattened,
-            text_mask=combined_prompt_padding_mask,
+            text_mask=combined_prompt_mask,
             vision_key_padding_mask=encoder_outputs.masks_flattened,
             spatial_shapes=encoder_outputs.spatial_shapes,
             valid_ratios=encoder_outputs.valid_ratios,
@@ -2803,15 +2808,10 @@ class Sam3Model(Sam3PreTrainedModel):
         all_pred_boxes_cxcywh = (reference_boxes_inv_sig + all_box_offsets).sigmoid()
         all_pred_boxes = box_cxcywh_to_xyxy(all_pred_boxes_cxcywh)
 
-        # Compute classification scores (invert mask: scoring expects True=padding)
-        combined_prompt_mask_inverted = None
-        if combined_prompt_padding_mask is not None:
-            combined_prompt_mask_inverted = ~combined_prompt_padding_mask
-
         all_pred_logits = self.dot_product_scoring(
             decoder_hidden_states=decoder_outputs.intermediate_hidden_states,
             text_features=encoder_outputs.text_features,
-            text_mask=combined_prompt_mask_inverted,
+            text_mask=combined_prompt_mask,
         ).squeeze(-1)
 
         pred_logits = all_pred_logits[-1]
@@ -2823,7 +2823,7 @@ class Sam3Model(Sam3PreTrainedModel):
             backbone_features=list(fpn_hidden_states),
             encoder_hidden_states=encoder_outputs.last_hidden_state,
             prompt_features=combined_prompt_features,
-            prompt_mask=combined_prompt_padding_mask,
+            prompt_mask=combined_prompt_mask,
             **kwargs,
         )
         return Sam3ImageSegmentationOutput(
