@@ -1069,7 +1069,9 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
             2. Attending to all inputs
         """
         linear_attn_mask = attention_mask
-        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
+        if not torch.compiler.is_exporting() and (
+            cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1))
+        ):
             linear_attn_mask = None
         return linear_attn_mask
 
