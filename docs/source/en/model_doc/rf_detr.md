@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-03-20 and added to Hugging Face Transformers on 2025-10-21.* 
+*This model was released on 2025-03-20 and added to Hugging Face Transformers on 2025-11-08.* 
 
 # RF-DETR
 
@@ -91,9 +91,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] RfDetrConfig
 
-## RfDetrDinov2WithRegistersConfig
+## RfDetrDinov2Config
 
-[[autodoc]] RfDetrDinov2WithRegistersConfig
+[[autodoc]] RfDetrDinov2Config
 
 ## RfDetrModel
 
@@ -105,7 +105,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] RfDetrForObjectDetection
     - forward
 
-## RfDetrDinov2WithRegistersBackbone
+## RfDetrDinov2Backbone
 
-[[autodoc]] RfDetrDinov2WithRegistersBackbone
+[[autodoc]] RfDetrDinov2Backbone
     - forward
