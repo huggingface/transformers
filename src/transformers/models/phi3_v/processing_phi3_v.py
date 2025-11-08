@@ -45,13 +45,13 @@ class Phi3VProcessor(ProcessorMixin):
     [`~Phi3VProcessor.__call__`] and [`~Phi3VProcessor.decode`] for more information.
 
     Args:
-            image_processor ([`Phi3VImageProcessor`], *optional*):
-                The image processor is a required input.
-            tokenizer ([`LlamaTokenizerFast`], *optional*):
-                The tokenizer is a required input.
-            chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-                in a chat into a tokenizable string.
-            image_token (`<fill_type>`, *optional*, defaults to `"<|image|>"`): <fill_docstring>
+        image_processor ([`Phi3VImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`LlamaTokenizerFast`], *optional*):
+            The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+        image_token (`int`, *optional*, defaults to `"<|image|>"`): Image token to be used in the text input.
     """
 
     attributes = ["image_processor", "tokenizer"]
