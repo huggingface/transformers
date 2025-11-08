@@ -178,37 +178,13 @@ class Sam3Processor(ProcessorMixin):
         else:
             raise ValueError("Either images or original_sizes must be provided")
 
-        # pop arguments that are not used in the forward but used nevertheless
         original_sizes = encoding_image_processor["original_sizes"]
         # Check original_sizes is of length 1 or len(images)
         if images is not None and len(original_sizes) != 1 and len(original_sizes) != len(images):
             raise ValueError(
                 "original_sizes must be of length 1 or len(images). If you are passing a single image, you must pass a single original_size."
             )
-        if text is None:
-            if input_points:
-                text = "geometric"
-            elif input_boxes:
-                text = "visual"
-        elif isinstance(text, (list, tuple)):
-            # check that the number of text prompts is the same as the number of input boxes
-            if input_boxes:
-                if len(text) != len(input_boxes):
-                    raise ValueError(
-                        "The number of text prompts must be the same as the number of input boxes. Got {len(text)} text prompts and {len(input_boxes)} input boxes."
-                    )
-            if input_points:
-                if len(text) != len(input_points):
-                    raise ValueError(
-                        "The number of text prompts must be the same as the number of input points. Got {len(text)} text prompts and {len(input_points)} input points."
-                    )
-            for i, text_prompt in enumerate(text):
-                if text_prompt is None:
-                    if input_points and input_points[i] is not None:
-                        text_prompt = "geometric"
-                    elif input_boxes and input_boxes[i] is not None:
-                        text_prompt = "visual"
-                text[i] = text_prompt
+        text = self._resolve_text_prompts(text, input_points, input_boxes)
 
         encoding_image_processor.update(
             self.tokenizer(text, return_tensors=return_tensors, padding="max_length", max_length=32)
@@ -252,7 +228,7 @@ class Sam3Processor(ProcessorMixin):
             if processed_boxes is not None:
                 boxes_max_dims = self._get_nested_dimensions(processed_boxes)[:2]
             if processed_boxes_labels is not None:
-                boxes_max_dims = self._get_nested_dimensions(processed_boxes_labels)[:2]
+                boxes_labels_max_dims = self._get_nested_dimensions(processed_boxes_labels)[:2]
 
             # Ensure points and labels have consistent dimensions
             if processed_points is not None and processed_points_labels is not None:
@@ -261,16 +237,9 @@ class Sam3Processor(ProcessorMixin):
                         "Input points and labels have inconsistent dimensions. Please ensure they have the same dimensions."
                     )
 
-            # Check that boxes don't need padding (model limitation)
-            if processed_boxes is not None and len(processed_boxes) >= 2:
-                if any(len(img_boxes) < boxes_max_dims[1] for img_boxes in processed_boxes):
-                    raise ValueError(
-                        "Input boxes have inconsistent dimensions that would require padding, "
-                        "but boxes cannot be padded due to model limitations. "
-                        "Please ensure all images have the same number of boxes."
-                    )
+            # Ensure boxes and labels have consistent dimensions
             if processed_boxes is not None and processed_boxes_labels is not None:
-                if boxes_max_dims != boxes_max_dims:
+                if boxes_max_dims != boxes_labels_max_dims:
                     raise ValueError(
                         "Input boxes and labels have inconsistent dimensions. Please ensure they have the same dimensions."
                     )
@@ -288,14 +257,18 @@ class Sam3Processor(ProcessorMixin):
                 encoding_image_processor.update({"input_points_labels": final_labels})
 
             if processed_boxes is not None:
-                final_boxes = torch.tensor(processed_boxes, dtype=torch.float32)
-                self._normalize_tensor_coordinates(final_boxes, original_sizes, is_bounding_box=True)
+                padded_boxes = self._pad_nested_list(processed_boxes, boxes_max_dims + [4])
+                final_boxes = torch.tensor(padded_boxes, dtype=torch.float32)
+                self._normalize_tensor_coordinates(
+                    final_boxes, original_sizes, is_bounding_box=True, preserve_padding=True
+                )
                 # TODO: Uncomment this when we fix the input boxes format
                 # final_boxes = box_xyxy_to_cxcywh(final_boxes)
                 encoding_image_processor.update({"input_boxes": final_boxes})
 
             if processed_boxes_labels is not None:
-                final_boxes_labels = torch.tensor(processed_boxes_labels, dtype=torch.int64)
+                padded_boxes_labels = self._pad_nested_list(processed_boxes_labels, boxes_labels_max_dims)
+                final_boxes_labels = torch.tensor(padded_boxes_labels, dtype=torch.int64)
                 encoding_image_processor.update({"input_boxes_labels": final_boxes_labels})
 
         return encoding_image_processor
@@ -330,14 +303,15 @@ class Sam3Processor(ProcessorMixin):
     def _convert_to_nested_list(self, data, expected_depth, current_depth=0):
         """
         Recursively convert various input formats (tensors, numpy arrays, lists) to nested lists.
+        Preserves None values within lists.
 
         Args:
-            data: Input data in any format
+            data: Input data in any format (may be None or contain None values)
             expected_depth: Expected nesting depth
             current_depth: Current depth in recursion
 
         Returns:
-            Nested list representation of the data
+            Nested list representation of the data (or None)
         """
         if data is None:
             return None
@@ -358,20 +332,58 @@ class Sam3Processor(ProcessorMixin):
                 # We've reached the expected depth, return as is
                 return data
             else:
-                # Continue recursion
-                return [self._convert_to_nested_list(item, expected_depth, current_depth + 1) for item in data]
+                # Continue recursion, preserving None values
+                return [
+                    self._convert_to_nested_list(item, expected_depth, current_depth + 1) if item is not None else None
+                    for item in data
+                ]
         elif isinstance(data, (int, float)):
             return data
         else:
             raise ValueError(f"Unsupported data type: {type(data)}")
 
+    def _resolve_text_prompts(self, text, input_points, input_boxes):
+        """
+        Resolve text prompts by setting defaults based on prompt types.
+        """
+        # If no text provided, infer default based on prompt type
+        if text is None:
+            return "geometric" if input_points else "visual" if input_boxes else None
+
+        if not isinstance(text, (list, tuple)):
+            return text
+
+        # Validate list/tuple length matches both prompt types if provided
+        text = list(text)  # Convert to list to allow modification
+
+        if input_boxes and len(text) != len(input_boxes):
+            raise ValueError(
+                f"The number of text prompts must match the number of input boxes. "
+                f"Got {len(text)} text prompts and {len(input_boxes)} input boxes."
+            )
+        if input_points and len(text) != len(input_points):
+            raise ValueError(
+                f"The number of text prompts must match the number of input points. "
+                f"Got {len(text)} text prompts and {len(input_points)} input points."
+            )
+
+        # Fill in None values with defaults based on corresponding prompt
+        for i in range(len(text)):
+            if text[i] is None:
+                if input_points and input_points[i] is not None:
+                    text[i] = "geometric"
+                elif input_boxes and input_boxes[i] is not None:
+                    text[i] = "visual"
+
+        return text
+
     def _get_nested_dimensions(self, nested_list, max_dims=None):
         """
-        Get the maximum dimensions at each level of nesting.
+        Get the maximum dimensions at each level of nesting, skipping None values.
 
         Args:
             nested_list (`list`):
-                Nested list structure.
+                Nested list structure (may contain None values).
             max_dims (`list`, *optional*):
                 Current maximum dimensions (for recursion).
 
@@ -391,6 +403,9 @@ class Sam3Processor(ProcessorMixin):
 
         if len(nested_list) > 0:
             for item in nested_list:
+                # Skip None values
+                if item is None:
+                    continue
                 if isinstance(item, list):
                     sub_dims = self._get_nested_dimensions(item)
                     # Merge sub_dims into max_dims
@@ -404,11 +419,11 @@ class Sam3Processor(ProcessorMixin):
 
     def _pad_nested_list(self, nested_list, target_dims, current_level=0, pad_value=None):
         """
-        Recursively pad a nested list to match target dimensions.
+        Recursively pad a nested list to match target dimensions. Replaces None values with padded structures.
 
         Args:
             nested_list (`list`):
-                Nested list to pad.
+                Nested list to pad (may contain None values).
             target_dims (`list`):
                 Target dimensions for each level.
             current_level (`int`, *optional*, defaults to 0):
@@ -456,10 +471,14 @@ class Sam3Processor(ProcessorMixin):
                 template = self._create_empty_nested_structure(template_dims, pad_value)
                 nested_list.extend([deepcopy(template) for _ in range(target_size)])
 
-        # Recursively pad sublists
+        # Recursively pad sublists, replacing None with padded structures
         if current_level < len(target_dims) - 1:
             for i in range(len(nested_list)):
-                if isinstance(nested_list[i], list):
+                if nested_list[i] is None:
+                    # Replace None with fully padded structure
+                    template_dims = target_dims[current_level + 1 :]
+                    nested_list[i] = self._create_empty_nested_structure(template_dims, pad_value)
+                elif isinstance(nested_list[i], list):
                     nested_list[i] = self._pad_nested_list(nested_list[i], target_dims, current_level + 1, pad_value)
 
         return nested_list
@@ -481,7 +500,7 @@ class Sam3Processor(ProcessorMixin):
 
     def _get_nesting_level(self, input_list):
         """
-        Get the nesting level of a list structure.
+        Get the nesting level of a list structure, skipping None values.
 
         Args:
             input_list (`list`):
@@ -490,7 +509,12 @@ class Sam3Processor(ProcessorMixin):
         if isinstance(input_list, list):
             if len(input_list) == 0:
                 return 1
-            return 1 + self._get_nesting_level(input_list[0])
+            # Find first non-None element to determine nesting level
+            for item in input_list:
+                if item is not None:
+                    return 1 + self._get_nesting_level(item)
+            # All elements are None, treat as single level
+            return 1
         elif isinstance(input_list, (np.ndarray, torch.Tensor)):
             # For arrays/tensors, the nesting level is the number of dimensions
             return len(input_list.shape)
