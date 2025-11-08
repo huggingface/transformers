@@ -310,7 +310,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
 
     
     # Define a chat template adapted for VibeVoice's speech use case
-    chat_template = """{%- set system_prompt = system_prompt | default(" Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.") -%}
+    chat_template = """{%- set system_prompt = system_prompt | default(" Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n") -%}
 {{ system_prompt -}}
 {%- set speech_start_token = speech_start_token | default("<|vision_start|>") %}
 {%- set speech_end_token = speech_end_token | default("<|vision_end|>") %}
@@ -326,7 +326,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
 {%- endfor %}
 
 {%- if ns.speakers_with_audio %}
-{{ "\n Voice input:\n" }}
+{{ " Voice input:\n" }}
 {%- for speaker in ns.speakers_with_audio.rstrip(',').split(',') %}
 {%- if speaker %}
  Speaker {{ speaker }}:{{ speech_start_token }}{{ speech_diffusion_token }}{{ speech_end_token }}{{ "\n" }}
