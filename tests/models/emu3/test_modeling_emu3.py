@@ -285,6 +285,7 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         else ()
     )
     pipeline_model_mapping = {}
+    test_torch_exportable = False  # Emu3VQVAE.encode is highly data-dependent
 
     def setUp(self):
         self.model_tester = Emu3Vision2TextModelTester(self)
