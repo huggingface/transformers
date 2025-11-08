@@ -8,7 +8,7 @@ import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional, Unpack
+from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F  # noqa: F401
@@ -18,6 +18,7 @@ from ...activations import ACT2CLS, ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import meshgrid
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_timm_available, requires_backends
 from ...utils.backbone_utils import load_backbone
