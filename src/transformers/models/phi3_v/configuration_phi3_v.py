@@ -38,12 +38,12 @@ class Phi3VConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Phi3Config`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 100581):
-            Token index of a placeholder image token.
+            vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
+                The config object or dictionary of the vision backbone.
+            text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Phi3Config`):
+                The config object or dictionary of the text backbone.
+            image_token_id (`int`, *optional*, defaults to 32044):
+                Token index of a placeholder image token.
 
     Example:
 
