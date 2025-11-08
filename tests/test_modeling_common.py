@@ -567,7 +567,7 @@ class ModelTesterMixin:
     test_resize_position_embeddings = False
     test_mismatched_shapes = True
     test_missing_keys = True
-    test_torch_exportable = True
+
     # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
     test_all_params_have_gradient = True
     is_encoder_decoder = False
@@ -3455,8 +3455,6 @@ class ModelTesterMixin:
             tolerance (float):
                 `atol` for torch.allclose(), defined in signature for test overriding
         """
-        if not self.test_torch_exportable:
-            self.skipTest(reason="test_torch_exportable=False for this model.")
 
         def recursively_check(eager_outputs, exported_outputs):
             is_tested = False
@@ -3502,21 +3500,8 @@ class ModelTesterMixin:
 
                 try:
                     exported_program = exporter.export(model)
-                except torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode:
-                    # TODO: investigate on a per-importance basis, I already fixed most MoEs and some VLMs
-                    # The error is usually informative and sometimes even suggests the check to be added
-                    self.skipTest(
-                        "Skipping test but these usually mean modeling should be changed or some guards are to to be added."
-                    )
-                except (
-                    torch._subclasses.fake_tensor.UnsupportedOperatorException,
-                    torch._dynamo.exc.BackendCompilerFailed,  # Happens with modernbert (uses torch.compile decorator)
-                ):
-                    self.skipTest(
-                        "Skipping test due to UnsupportedOperatorException/BackendCompilerFailed during export (cuda issue)"
-                    )
-                except AssertionError:
-                    self.skipTest("Skipping test due to AssertionError during export (torch issue)")
+                except NotImplementedError:
+                    continue
                 except Exception as e:
                     raise e
 
