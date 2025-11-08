@@ -26,6 +26,7 @@ from .base import HfExporter
 from .utils import (
     get_auto_dynamic_shapes,
     patch_model_for_export,
+    raise_on_unsupported_model,
     register_dynamic_cache_for_export,
     register_encoder_decoder_cache_for_export,
 )
@@ -56,6 +57,8 @@ class DynamoExporter(HfExporter):
             raise ImportError(f"{self.__class__.__name__} requires torch>=2.6.0 for stable Dynamo based export.")
 
     def export(self, model: "PreTrainedModel"):
+        raise_on_unsupported_model(model)
+
         if self.export_config.sample_inputs is None:
             raise NotImplementedError(
                 f"{self.__class__.__name__} can't automatically generate export inptus. Please provide sample_inputs in the exporter_config as a dictionary. "

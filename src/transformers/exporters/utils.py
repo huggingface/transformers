@@ -403,3 +403,78 @@ def patch_model_for_export(model: "PreTrainedModel"):
             if module_class_name in TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD:
                 # restore original forward method
                 module.forward = original_forwards[module_class_name]
+
+
+UNSUPPORTED_MODEL_TYPES: set[str] = {
+    "clvp",  # if isin_mps_friendly(each_input_id, pad_token_id).sum():
+    "colqwen2",  # input_tokens = input_ids.tolist()
+    "emu3",
+    "encodec",
+    "esm",
+    "eomt",
+    "falcon_mamba",  # Uses FalconMambaCache which is a custom cache type that's not yet registered as a pytree node
+    "fastspeech2_conformer",
+    "fastspeech2_conformer_with_hifigan",
+    "flava",
+    "funnel",
+    "glm4v",
+    "glm4v_moe",
+    "grounding-dino",
+    "hiera",
+    "ibert",
+    "jamba",
+    "led",
+    "lfm2",
+    "lfm2_moe",
+    "lfm2_vl",
+    "lightglue",
+    "llava_next",
+    "llava_next_video",
+    "llava_onevision",
+    "longformer",
+    "mamba",  # Uses MambaCache which is a custom cache type that's not yet registered as a pytree node
+    "mamba2",
+    "mimi",
+    "minimax",  # Uses MiniMaxCache which is a custom cache type that's not yet registered as a pytree node
+    "mistral3",
+    "mm-grounding-dino",
+    "modernbert",
+    "nllb-moe",
+    "omdet-turbo",
+    "oneformer",
+    "perception_lm",
+    "phi4_multimodal",
+    "pixtral",
+    "qwen2_5_omni",
+    "qwen2_5_omni_thinker",
+    "qwen2_5_vl",
+    "qwen2_vl",
+    "qwen3_next",  # Uses Qwen3NextDynamicCache which is a custom cache type that's not yet registered as a pytree node
+    "qwen3_omni_moe",
+    "qwen3_omni_moe_thinker",
+    "qwen3_vl",
+    "qwen3_vl_moe",
+    "reformer",
+    "siglip2",
+    "siglip2_vision_model",
+    "splinter",
+    "superglue",
+    "superpoint",
+    "switch_transformers",
+    "tapas",
+    "video_llama_3",
+    "video_llama_3_vision",
+    "video_llava",
+    "videomae",
+    "vilt",
+    "xlstm",  # Uses xLSTMCache which is a custom cache type that's not yet registered as a pytree node
+    "xmod",
+    "zamba2",
+}
+
+
+def raise_on_unsupported_model(model: "PreTrainedModel"):
+    if model.config.model_type in UNSUPPORTED_MODEL_TYPES:
+        raise NotImplementedError(
+            f"Dynamo export is not supported for model class '{model.__class__.__name__}' with model_type '{model.config.model_type}'."
+        )
