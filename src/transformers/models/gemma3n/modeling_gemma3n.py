@@ -2164,7 +2164,9 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+        if not torch.compiler.is_exporting() and (
+            image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel()
+        ):
             raise ValueError(
                 f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0] * image_features.shape[1]}"
             )
