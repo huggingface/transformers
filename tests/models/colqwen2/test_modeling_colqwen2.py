@@ -202,6 +202,7 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ColQwen2ForRetrieval,) if is_torch_available() else ()
 
     test_resize_embeddings = True
+    test_torch_exportable = False  # the qwen2_vl model's get_rope_index method is highly data-dependent
 
     def setUp(self):
         self.model_tester = ColQwen2ForRetrievalModelTester(self)
