@@ -3518,12 +3518,6 @@ class ModelTesterMixin:
                 except AssertionError:
                     self.skipTest("Skipping test due to AssertionError during export (torch issue)")
                 except Exception as e:
-                    if "Expected cond to be True, but got False." in str(e):
-                        # TODO: investigate, there's around 15 models (encoder-decoder parts) failing with this error during export
-                        # The error is not very actionable as it doesn't explain where the problem is exactly
-                        self.skipTest(
-                            "Skipping test due to torch's ambiguous error 'Expected cond to be True, but got False.'"
-                        )
                     raise e
 
                 with torch.no_grad():

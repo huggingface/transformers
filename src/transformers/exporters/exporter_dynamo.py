@@ -25,8 +25,7 @@ from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 from .base import HfExporter
 from .utils import (
     get_auto_dynamic_shapes,
-    patch_masks_for_export,
-    patch_moe_experts_for_export,
+    patch_model_for_export,
     register_dynamic_cache_for_export,
     register_encoder_decoder_cache_for_export,
 )
@@ -87,7 +86,7 @@ class DynamoExporter(HfExporter):
             # assigns AUTO to all axes to let torch.onnx decide
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
-        with patch_masks_for_export() and patch_moe_experts_for_export(model):
+        with patch_model_for_export(model):
             exported_program: ExportedProgram = torch.export.export(
                 model,
                 args=(),
@@ -120,5 +119,5 @@ class DynamoExporter(HfExporter):
                 logger.warning(
                     "The model seems to be returning an EncoderDecoderCache as past_key_values. "
                     "DynamoExporter does not yet support cache in inputs for encoder-decoder models. "
-                    "Please provide past_key_values in sample_inputs manually if needed."
+                    "The model will be exported as a monolithic graph with no cache inputs."
                 )

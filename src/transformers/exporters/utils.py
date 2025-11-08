@@ -187,21 +187,6 @@ def eager_mask_without_vmap(*args, **kwargs) -> torch.Tensor:
     return mask
 
 
-@contextmanager
-def patch_masks_for_export():
-    """
-    Patch masking functions to use the non-vmap versions during export.
-    """
-    ALL_MASK_ATTENTION_FUNCTIONS["sdpa"] = sdpa_mask_without_vmap
-    ALL_MASK_ATTENTION_FUNCTIONS["eager"] = eager_mask_without_vmap
-
-    try:
-        yield
-    finally:
-        ALL_MASK_ATTENTION_FUNCTIONS["sdpa"] = sdpa_mask
-        ALL_MASK_ATTENTION_FUNCTIONS["eager"] = eager_mask
-
-
 def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str, dict[int, torch.export.Dim]]:
     """
     Utility function to automatically generate dynamic shapes for a dictionary of model inputs.
@@ -293,10 +278,7 @@ def batched_experts_forward_with_split_expert_weights(
 
 
 def batched_experts_forward_with_grouped_expert_weights(
-    self,
-    hidden_states: torch.Tensor,
-    top_k_index: torch.Tensor,
-    top_k_weights: torch.Tensor,
+    self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
 ) -> torch.Tensor:
     batch_size = hidden_states.size(0)
     hidden_states = hidden_states.reshape(-1, self.ffn_hidden_size)
@@ -340,11 +322,7 @@ def batched_experts_forward_with_grouped_expert_weights(
     return next_states
 
 
-def batched_experts_gemm(
-    self,
-    input: torch.Tensor,
-    tokens_per_expert: torch.Tensor,
-) -> torch.Tensor:
+def batched_experts_gemm(self, input: torch.Tensor, tokens_per_expert: torch.Tensor) -> torch.Tensor:
     # Create expert assignment indices [num_tokens]
     expert_indices = torch.repeat_interleave(
         torch.arange(self.groups, device=input.device, dtype=torch.long), tokens_per_expert.to(torch.long)
@@ -360,7 +338,7 @@ def batched_experts_gemm(
     return output
 
 
-MOE_EXPERTS_MODULES_TO_EXPORTABLE_FORWARD = {
+TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD: dict[str, Callable] = {
     "AriaGroupedExpertsGemm": batched_experts_gemm,
     "DbrxExperts": batched_experts_forward_with_grouped_expert_weights,
     "DeepseekV2Experts": batched_experts_forward_with_split_expert_weights,
@@ -386,17 +364,28 @@ MOE_EXPERTS_MODULES_TO_EXPORTABLE_FORWARD = {
 
 
 @contextmanager
-def patch_moe_experts_for_export(model: "PreTrainedModel"):
+def patch_model_for_export(model: "PreTrainedModel"):
+    # patch masking functions to use the non-vmap versions
+    ALL_MASK_ATTENTION_FUNCTIONS["sdpa"] = sdpa_mask_without_vmap
+    ALL_MASK_ATTENTION_FUNCTIONS["eager"] = eager_mask_without_vmap
+
+    original_forwards = {}
     for module in model.modules():
         module_class_name = module.__class__.__name__
-        if module_class_name in MOE_EXPERTS_MODULES_TO_EXPORTABLE_FORWARD:
-            original_forward = module.forward
-            module.forward = MOE_EXPERTS_MODULES_TO_EXPORTABLE_FORWARD[module_class_name].__get__(module)
+        if module_class_name in TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD:
+            original_forwards[module_class_name] = module.forward
+            # patch forward method with an exportable version (non data-dependent)
+            module.forward = TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD[module_class_name].__get__(module)
 
     try:
         yield
     finally:
+        # restore original masking functions and module forwards
+        ALL_MASK_ATTENTION_FUNCTIONS["sdpa"] = sdpa_mask
+        ALL_MASK_ATTENTION_FUNCTIONS["eager"] = eager_mask
+
         for module in model.modules():
             module_class_name = module.__class__.__name__
-            if module_class_name in MOE_EXPERTS_MODULES_TO_EXPORTABLE_FORWARD:
-                module.forward = original_forward
+            if module_class_name in TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD:
+                # restore original forward method
+                module.forward = original_forwards[module_class_name]
