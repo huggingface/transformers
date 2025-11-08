@@ -386,8 +386,9 @@ class HrmAttention(nn.Module):
         if cos_sin is not None:
             cos, sin = cos_sin
             # Slice RoPE embeddings to match actual sequence length
-            cos = cos[:seq_len, :].unsqueeze(0)  # Add batch dimension: [1, seq_len, head_dim]
-            sin = sin[:seq_len, :].unsqueeze(0)  # Add batch dimension: [1, seq_len, head_dim]
+            # cos/sin already have batch dimension from rotary_embedding: [1, max_seq_len, head_dim]
+            cos = cos[:, :seq_len, :]  # [1, seq_len, head_dim]
+            sin = sin[:, :seq_len, :]  # [1, seq_len, head_dim]
             # HRM uses (batch, seq_len, heads, head_dim) so unsqueeze_dim=2
             query, key = apply_rotary_pos_emb(query, key, cos, sin, unsqueeze_dim=2)
 
@@ -539,18 +540,17 @@ class HrmInner(nn.Module):
         # Positional encodings - always initialize appropriate type based on config
         self.positional_encoding_type = config.pos_encodings
         if self.positional_encoding_type == "rope":
-            # Create a temporary config for LlamaRotaryEmbedding with adjusted max_position_embeddings
-            rope_config = type(
-                "obj",
-                (object,),
-                {
-                    "hidden_size": config.hidden_size,
-                    "num_attention_heads": config.num_attention_heads,
-                    "max_position_embeddings": config.max_position_embeddings + self.puzzle_embedding_length,
-                    "rope_theta": config.rope_theta,
-                    "rope_scaling": None,
-                },
-            )()
+            # Create a temporary config for HrmRotaryEmbedding with adjusted max_position_embeddings
+            # Compute head_dim same way as HrmAttention does
+            head_dim = config.hidden_size // config.num_attention_heads
+            rope_config_dict = {
+                "hidden_size": config.hidden_size,
+                "num_attention_heads": config.num_attention_heads,
+                "max_position_embeddings": config.max_position_embeddings + self.puzzle_embedding_length,
+                "rope_parameters": config.rope_parameters,
+                "head_dim": head_dim,
+            }
+            rope_config = type("obj", (object,), rope_config_dict)()
             self.rotary_embedding = HrmRotaryEmbedding(rope_config)
         elif self.positional_encoding_type == "learned":
             self.position_embeddings = HrmEmbedding(

@@ -37,7 +37,12 @@ from torch import nn
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import (
+    ROPE_INIT_FUNCTIONS,
+    dynamic_rope_update,
+    rope_config_validation,
+    standardize_rope_params,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, logging
 from ..falcon_mamba.modeling_falcon_mamba import rms_forward
@@ -107,6 +112,9 @@ class HrmConfig(PretrainedConfig):
                 Type of positional encoding to use. Options are "rope" (Rotary Position Embeddings) or "learned".
             rope_theta (`float`, *optional*, defaults to 10000.0):
                 The base period of the RoPE embeddings. Only used when `pos_encodings="rope"`.
+            rope_parameters (`RopeParameters`, *optional*):
+                Configuration for rotary position embeddings (RoPE). If not provided, default RoPE parameters
+                will be created using `rope_theta`.
             rms_norm_eps (`float`, *optional*, defaults to 1e-05):
                 The epsilon used by the RMS normalization layers for numerical stability.
             puzzle_embedding_dim (`int`, *optional*, defaults to 0):
@@ -167,6 +175,7 @@ class HrmConfig(PretrainedConfig):
         low_cycles=2,
         pos_encodings="rope",
         rope_theta=10000.0,
+        rope_parameters=None,
         rms_norm_eps=1e-5,
         puzzle_embedding_dim=0,
         num_puzzle_identifiers=1,
@@ -189,7 +198,6 @@ class HrmConfig(PretrainedConfig):
         self.high_cycles = high_cycles
         self.low_cycles = low_cycles
         self.pos_encodings = pos_encodings
-        self.rope_theta = rope_theta
         self.rms_norm_eps = rms_norm_eps
         self.puzzle_embedding_dim = puzzle_embedding_dim
         self.num_puzzle_identifiers = num_puzzle_identifiers
@@ -197,6 +205,14 @@ class HrmConfig(PretrainedConfig):
         self.halt_exploration_prob = halt_exploration_prob
         self.initializer_range = initializer_range
         self.use_cache = use_cache
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate and standardize the correctness of rotary position embeddings parameters
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         super().__init__(dtype=dtype, **kwargs)
 
@@ -478,8 +494,9 @@ class HrmAttention(nn.Module):
         if cos_sin is not None:
             cos, sin = cos_sin
             # Slice RoPE embeddings to match actual sequence length
-            cos = cos[:seq_len, :].unsqueeze(0)  # Add batch dimension: [1, seq_len, head_dim]
-            sin = sin[:seq_len, :].unsqueeze(0)  # Add batch dimension: [1, seq_len, head_dim]
+            # cos/sin already have batch dimension from rotary_embedding: [1, max_seq_len, head_dim]
+            cos = cos[:, :seq_len, :]  # [1, seq_len, head_dim]
+            sin = sin[:, :seq_len, :]  # [1, seq_len, head_dim]
             # HRM uses (batch, seq_len, heads, head_dim) so unsqueeze_dim=2
             query, key = apply_rotary_pos_emb(query, key, cos, sin, unsqueeze_dim=2)
 
@@ -612,18 +629,17 @@ class HrmInner(nn.Module):
         # Positional encodings - always initialize appropriate type based on config
         self.positional_encoding_type = config.pos_encodings
         if self.positional_encoding_type == "rope":
-            # Create a temporary config for LlamaRotaryEmbedding with adjusted max_position_embeddings
-            rope_config = type(
-                "obj",
-                (object,),
-                {
-                    "hidden_size": config.hidden_size,
-                    "num_attention_heads": config.num_attention_heads,
-                    "max_position_embeddings": config.max_position_embeddings + self.puzzle_embedding_length,
-                    "rope_theta": config.rope_theta,
-                    "rope_scaling": None,
-                },
-            )()
+            # Create a temporary config for HrmRotaryEmbedding with adjusted max_position_embeddings
+            # Compute head_dim same way as HrmAttention does
+            head_dim = config.hidden_size // config.num_attention_heads
+            rope_config_dict = {
+                "hidden_size": config.hidden_size,
+                "num_attention_heads": config.num_attention_heads,
+                "max_position_embeddings": config.max_position_embeddings + self.puzzle_embedding_length,
+                "rope_parameters": config.rope_parameters,
+                "head_dim": head_dim,
+            }
+            rope_config = type("obj", (object,), rope_config_dict)()
             self.rotary_embedding = HrmRotaryEmbedding(rope_config)
         elif self.positional_encoding_type == "learned":
             self.position_embeddings = HrmEmbedding(

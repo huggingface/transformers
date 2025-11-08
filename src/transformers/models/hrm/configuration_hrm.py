@@ -20,6 +20,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
 
 
 class HrmConfig(PretrainedConfig):
@@ -82,6 +83,9 @@ class HrmConfig(PretrainedConfig):
                 Type of positional encoding to use. Options are "rope" (Rotary Position Embeddings) or "learned".
             rope_theta (`float`, *optional*, defaults to 10000.0):
                 The base period of the RoPE embeddings. Only used when `pos_encodings="rope"`.
+            rope_parameters (`RopeParameters`, *optional*):
+                Configuration for rotary position embeddings (RoPE). If not provided, default RoPE parameters
+                will be created using `rope_theta`.
             rms_norm_eps (`float`, *optional*, defaults to 1e-05):
                 The epsilon used by the RMS normalization layers for numerical stability.
             puzzle_embedding_dim (`int`, *optional*, defaults to 0):
@@ -142,6 +146,7 @@ class HrmConfig(PretrainedConfig):
         low_cycles=2,
         pos_encodings="rope",
         rope_theta=10000.0,
+        rope_parameters=None,
         rms_norm_eps=1e-5,
         puzzle_embedding_dim=0,
         num_puzzle_identifiers=1,
@@ -164,7 +169,6 @@ class HrmConfig(PretrainedConfig):
         self.high_cycles = high_cycles
         self.low_cycles = low_cycles
         self.pos_encodings = pos_encodings
-        self.rope_theta = rope_theta
         self.rms_norm_eps = rms_norm_eps
         self.puzzle_embedding_dim = puzzle_embedding_dim
         self.num_puzzle_identifiers = num_puzzle_identifiers
@@ -172,6 +176,14 @@ class HrmConfig(PretrainedConfig):
         self.halt_exploration_prob = halt_exploration_prob
         self.initializer_range = initializer_range
         self.use_cache = use_cache
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate and standardize the correctness of rotary position embeddings parameters
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         super().__init__(dtype=dtype, **kwargs)
 
