@@ -240,6 +240,14 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    image_seq_length = {
+        "description": """
+    The number of image tokens to be used for each image in the input.
+    Added for backward compatibility but this should be set as a processor attribute in future models.
+    """,
+        "shape": None,
+    }
+
 
 class ModelArgs:
     labels = {
