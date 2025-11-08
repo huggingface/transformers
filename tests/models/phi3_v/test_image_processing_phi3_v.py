@@ -14,8 +14,6 @@
 
 import unittest
 
-import numpy as np
-
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -126,70 +124,6 @@ class Phi3VImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
             self.assertEqual(image_processor.image_mean, [1.0, 2.0, 1.0])
 
-    # def test_call_pil(self):
-    #     for image_processing_class in self.image_processor_list:
-    #         image_processing = image_processing_class(**self.image_processor_dict)
-    #         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
-    #         for image in image_inputs:
-    #             self.assertIsInstance(image, Image.Image)
-
-    #         # Test Non batched input
-    #         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-    #         expected_output_image_shape = (1, 3, 384, 384)
-    #         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-
-    #         # Test batched
-    #         encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-    #         expected_output_image_shape = (7, 3, 384, 384)
-    #         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-
-    def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
-            for image in image_inputs:
-                self.assertIsInstance(image, np.ndarray)
-
-            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = (1, 3, 3, 336, 336)
-            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-
-            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = (7, 3, 3, 384, 384)
-            print(encoded_images.shape)
-            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-
-    # def test_call_pytorch(self):
-    #     for image_processing_class in self.image_processor_list:
-    #         image_processing = image_processing_class(**self.image_processor_dict)
-    #         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
-
-    #         for image in image_inputs:
-    #             self.assertIsInstance(image, torch.Tensor)
-
-    #         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-    #         expected_output_image_shape = (1, 3, 384, 384)
-    #         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-
-    #         encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-    #         expected_output_image_shape = (7, 3, 384, 384)
-    #         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-
-    # def test_nested_input(self):
-    #     for image_processing_class in self.image_processor_list:
-    #         image_processing = image_processing_class(**self.image_processor_dict)
-    #         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
-
-    #         # Test batched as a list of images.
-    #         encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-    #         expected_output_image_shape = (7, 3, 384, 384)
-    #         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-
-    #         # Test batched as a nested list of images, where each sublist is one batch.
-    #         image_inputs_nested = [image_inputs[:3], image_inputs[3:]]
-    #         encoded_images_nested = image_processing(image_inputs_nested, return_tensors="pt").pixel_values
-    #         expected_output_image_shape = (7, 3, 384, 384)
-    #         self.assertEqual(tuple(encoded_images_nested.shape), expected_output_image_shape)
-
-    #         # Image processor should return same pixel values, independently of input format.
-    #         self.assertTrue((encoded_images_nested == encoded_images).all())
+    @unittest.skip(reason="Not supported; Model only supports RGB images")
+    def test_call_numpy_4_channels(self):
+        pass

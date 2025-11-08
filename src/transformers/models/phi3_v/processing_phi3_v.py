@@ -21,8 +21,11 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import is_torch_available, logging
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -42,12 +45,13 @@ class Phi3VProcessor(ProcessorMixin):
     [`~Phi3VProcessor.__call__`] and [`~Phi3VProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`Phi3VImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
+            image_processor ([`Phi3VImageProcessor`], *optional*):
+                The image processor is a required input.
+            tokenizer ([`LlamaTokenizerFast`], *optional*):
+                The tokenizer is a required input.
+            chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+                in a chat into a tokenizable string.
+            image_token (`<fill_type>`, *optional*, defaults to `"<|image|>"`): <fill_docstring>
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -114,7 +118,7 @@ class Phi3VProcessor(ProcessorMixin):
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
         else:
-            image_inputs = {"pixel_values": None, "image_shapes": None, "num_img_tokens": []}
+            image_inputs = {"pixel_values": None, "image_sizes": None, "num_img_tokens": []}
 
         num_image_tokens = image_inputs["num_img_tokens"]
         max_length = output_kwargs["text_kwargs"]["max_length"]
@@ -167,10 +171,10 @@ class Phi3VProcessor(ProcessorMixin):
             attention_masks.append(attention_mask)
 
         data = {
-            "input_ids": padded_input_ids,
-            "attention_mask": attention_mask,
+            "input_ids": torch.tensor(padded_input_ids, dtype=torch.long),
+            "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
             "pixel_values": image_inputs["pixel_values"],
-            "image_sizes": image_inputs["image_shapes"],
+            "image_sizes": image_inputs["image_sizes"],
         }
 
         return BatchFeature(data=data)

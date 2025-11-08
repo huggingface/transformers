@@ -51,7 +51,8 @@ if is_vision_available():
 
 class Phi3VFastImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
-    num_crops (`int`, *optional*, defaults to 3):
+    num_crops (`int`, *optional*, defaults to 4):
+        The max number of crops to generate from each image.
     """
 
     num_crops: int = 4
@@ -59,12 +60,10 @@ class Phi3VFastImageProcessorKwargs(ImagesKwargs, total=False):
 
 def pad_to_max_num_crops(images, max_crops):
     """Pad each image to max crops."""
-    print(images.shape, "before pad to max crops")
-    B, num_crops, _, H, W = images.shape
+    num_crops, _, H, W = images.shape
     if num_crops < max_crops:
-        pad = torch.zeros(B, max_crops - num_crops, 3, H, W, dtype=images.dtype, device=images.device)
-        print(images.shape, pad.shape, "before pad")
-        images = torch.cat([images, pad], dim=1)
+        pad = torch.zeros(max_crops - num_crops, 3, H, W, dtype=images.dtype, device=images.device)
+        images = torch.cat([images, pad], dim=0)
     return images
 
 
@@ -133,9 +132,7 @@ class Phi3VImageProcessorFast(BaseImageProcessorFast):
         )
         image = self._pad(image=image, size=size["height"])
 
-        print(image.shape, "after pad")
         if is_transposed:
-            # Chec whether correct transpose or not when compared to pil
             image = image.transpose(2, 3)
         return image
 
@@ -164,7 +161,6 @@ class Phi3VImageProcessorFast(BaseImageProcessorFast):
 
         size = size if size is not None else self.size
         images = self.fetch_images(images)
-        print(images[0].shape)
 
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -174,14 +170,12 @@ class Phi3VImageProcessorFast(BaseImageProcessorFast):
                 stacked_images = self._resize(image=stacked_images, size=size, interpolation=resample)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-        print(resized_images[0].shape, "after resize")
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
-            print(stacked_images.shape, "before rescale and normalize")
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
@@ -190,35 +184,26 @@ class Phi3VImageProcessorFast(BaseImageProcessorFast):
 
         images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        global_images = [
-            torch.nn.functional.interpolate(
-                image.unsqueeze(0).float(),
+        # Create global images from images by resizing.
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            stacked_images = torch.nn.functional.interpolate(
+                stacked_images.float(),
                 size=(size["height"], size["width"]),
                 mode="bicubic",
-            ).to(image.dtype)
-            for image in images
-        ]
+            )
+            processed_images_grouped[shape] = stacked_images
+        global_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        # Create global images from images by resizing.
-        # grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        # processed_images_grouped = {}
-        # for shape, stacked_images in grouped_images.items():
-        #     stacked_images = torch.nn.functional.interpolate(
-        #         stacked_images.float(),
-        #         size=(size["height"], size["width"]),
-        #         mode="bicubic",
-        #     )
-        #     processed_images_grouped[shape] = stacked_images
-        # global_images = reorder_images(processed_images_grouped, grouped_images_index)
-
-        image_shapes = [[image.shape[1], image.shape[2]] for image in images]  # expecting h,w
+        image_sizes = [[image.shape[1], image.shape[2]] for image in images]  # expecting h,w
         num_img_tokens = [
             int(((h // size["height"]) * (w // size["width"]) + 1) * 144 + 1 + (h // size["height"] + 1) * 12)
-            for h, w in image_shapes
+            for h, w in image_sizes
         ]
 
         final_reshaped_images = []
-        for image, (h, w) in zip(images, image_shapes):
+        for image, (h, w) in zip(images, image_sizes):
             reshaped = image.reshape(1, 3, h // size["height"], size["width"], w // size["width"], size["width"])
             permuted = reshaped.permute(0, 2, 4, 1, 3, 5)
             reshaped_final = permuted.reshape(-1, 3, size["height"], size["width"]).contiguous()
@@ -226,27 +211,16 @@ class Phi3VImageProcessorFast(BaseImageProcessorFast):
 
         # Combine global and local feature images.
         images_combined = [
-            torch.cat([_global_image] + [_image], axis=0)
+            torch.cat([_global_image.unsqueeze(0)] + [_image], axis=0)
             for _global_image, _image in zip(global_images, final_reshaped_images)
         ]
 
         # Pad all the images to max_crops.
-        grouped_images, grouped_images_index = group_images_by_shape(
-            images_combined,
-            disable_grouping=disable_grouping,
-            is_nested=True,
-        )
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            stacked_images = pad_to_max_num_crops(stacked_images, self.num_crops + 1)
-            processed_images_grouped[shape] = stacked_images
-        image_transformed = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
-
-        # image_transformed = [pad_to_max_num_crops(image, self.num_crops + 1) for image in images_combined]
-        processed_images = torch.stack(image_transformed, dim=0) if return_tensors else image_transformed
+        processed_images = [pad_to_max_num_crops(image, self.num_crops + 1) for image in images_combined]
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         encoded_outputs = BatchFeature(
-            data={"pixel_values": processed_images, "image_shapes": image_shapes, "num_img_tokens": num_img_tokens},
+            data={"pixel_values": processed_images, "image_sizes": image_sizes, "num_img_tokens": num_img_tokens},
             tensor_type=return_tensors,
         )
 
