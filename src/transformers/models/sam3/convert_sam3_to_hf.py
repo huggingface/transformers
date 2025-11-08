@@ -35,6 +35,7 @@ logger = logging.get_logger(__name__)
 
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    r"^sam3_model\.": r"",
     # ============================================================================
     # Vision Encoder - ViT Backbone
     # ============================================================================
@@ -347,26 +348,9 @@ def convert_sam3_checkpoint(
 
     # Create new state dict with converted keys
     state_dict_new = {}
-    unconverted_keys = []
-
-    # Keys that should be excluded from unconverted warning
-    keys_to_skip = [
-        "epoch",
-        "global_step",
-        "pytorch-lightning_version",
-        "state_dict",
-        "optimizer_states",
-        "lr_schedulers",
-    ]
 
     for old_key in all_keys:
         new_key = key_mapping.get(old_key, old_key)
-
-        # Track keys that weren't converted
-        should_skip = old_key in keys_to_skip
-        if new_key == old_key and not should_skip:
-            unconverted_keys.append(old_key)
-
         # Special handling: Strip cls token from vision backbone position embeddings
         if new_key == "vision_encoder.backbone.embeddings.position_embeddings":
             # Original has [1, 577, 1024] with cls token, but refactored expects [1, 576, 1024] without cls token
@@ -374,13 +358,6 @@ def convert_sam3_checkpoint(
             state_dict_new[new_key] = state_dict_old[old_key][:, 1:, :]
         else:
             state_dict_new[new_key] = state_dict_old[old_key]
-
-    if unconverted_keys:
-        logger.warning(f"Found {len(unconverted_keys)} unconverted keys:")
-        for key in unconverted_keys[:10]:  # Show first 10
-            logger.warning(f"  - {key}")
-        if len(unconverted_keys) > 10:
-            logger.warning(f"  ... and {len(unconverted_keys) - 10} more")
 
     del state_dict_old
     gc.collect()
