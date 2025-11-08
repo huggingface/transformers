@@ -806,8 +806,13 @@ class HrmPreTrainedModel(PreTrainedModel):
                 if module.bias is not None:
                     module.bias.data.fill_(-5.0)
             else:
-                # Standard HrmLinear initialization uses 1.0 / sqrt(in_features) for proper scaling
-                truncated_normal_init_(module.weight, std=1.0 / (module.weight.shape[1] ** 0.5))
+                # Standard HrmLinear initialization
+                # When initializer_range is 0 (for zero-init config), use 0
+                # Otherwise use truncated normal with config's initializer_range
+                if std == 0:
+                    module.weight.data.zero_()
+                else:
+                    truncated_normal_init_(module.weight, std=std)
                 if module.bias is not None:
                     module.bias.data.zero_()
         elif isinstance(module, HrmEmbedding):
@@ -833,10 +838,10 @@ class HrmModel(HrmPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.inner.embed_tokens
+        return self.inner.token_embeddings
 
     def set_input_embeddings(self, value):
-        self.inner.embed_tokens = value
+        self.inner.token_embeddings = value
 
     def initial_state(self, batch: dict) -> HrmState:
         """Initialize state for a new batch."""
