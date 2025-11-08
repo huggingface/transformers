@@ -22,7 +22,7 @@ import numpy as np
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_soundfile_available, is_torch_available, logging
 
 
@@ -49,6 +49,7 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,
             "return_attention_mask": True,
             "speech_tok_compress_ratio": 3200,  # acoustic_tokenizer.hop_length
+            "pad_to_multiple_of": 3200,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
@@ -99,43 +100,32 @@ class VibeVoiceProcessor(ProcessorMixin):
             self.speech_diffusion_token = tokenizer.speech_diffusion_token
             self.speech_diffusion_id = tokenizer.speech_diffusion_id
 
-        # Fixed text parts used in building text sequences
-        self.system_prompt = " Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n"
-
     def __call__(
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
-        voice_samples: Optional[AudioInput] = None,
+        audio: Optional[AudioInput] = None,
         **kwargs: Unpack[VibeVoiceProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to process one or more podcast scripts with optional voice samples.
+        Main method to process text inputs with optional voice samples.
 
-        This method processes text scripts with speaker annotations and optional voice samples for voice cloning.
-        It builds complete text sequences with embedded speech tokens and creates speech input masks to identify
-        where speech tokens are located in the sequence.
+        This method processes text inputs (typically prepared by apply_chat_template) and optional voice samples 
+        for voice cloning. It expands speech diffusion tokens based on the actual audio length, similar to CSM.
 
         Args:
             text (`str`, `List[str]`):
-                The input text(s) to process. Each text should be a script with speaker annotations in the format:
-                "Speaker 1: Hello world\nSpeaker 2: How are you?"
-                Can be:
-                - A single script string
-                - A list of script strings for batch processing
-            voice_samples (`List[Union[str, np.ndarray]]`, `List[List[Union[str, np.ndarray]]]`, *optional*):
-                Voice samples for speaker voice cloning. Order should match speaker IDs appearance in script. Can be:
-                - A list of audio samples for a single script
-                - A list of lists of audio samples for batch processing
+                The input text(s) to process, typically prepared by apply_chat_template with speech token placeholders.
+            audio (`List[Union[str, np.ndarray]]`, *optional*):
+                Audio samples for speaker voice cloning. Should match the number of speech token placeholders in text.
             **kwargs:
                 Additional keyword arguments passed to the tokenizer and feature extractor.
 
         Returns:
             `BatchFeature`: A BatchFeature with the following fields:
                 - **input_ids** -- Token ID sequences ready for the model
-                - **attention_mask** -- Attention masks for the sequences
-                - **input_features** -- Processed audio tensors (if voice_samples provided)
-                - **input_features_mask** -- Masks for valid speech tokens (if voice_samples provided)
-                - **audio_select_mask** -- Mask indicating which audio samples are used by each script (if voice_samples provided)
+                - **attention_mask** -- Attention masks for the sequences  
+                - **input_features** -- Processed audio tensors (if audio provided)
+                - **input_features_mask** -- Masks for valid speech tokens (if audio provided)
         """
         # Merge defaults with user kwargs
         output_kwargs = self._merge_kwargs(
@@ -150,156 +140,62 @@ class VibeVoiceProcessor(ProcessorMixin):
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
         speech_tok_compress_ratio = int(audio_kwargs.pop("speech_tok_compress_ratio"))
 
-        # Handle text input validation
+        # Normalize text input to list
         if isinstance(text, str):
-            texts = [text]
-        elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-        else:
-            texts = text
-        scripts = []
-        for _text in texts:
-            scripts.append(self.separate_script(_text))
-        # -- Extract all speaker IDs from the script, and preserve order
-        speakers_per_script = [list(dict.fromkeys(tup[0] for tup in _script)) for _script in scripts]
-        # -- Get min value of all speaker IDs
-        min_speaker_id = min([min(speakers) for speakers in speakers_per_script])
-        if min_speaker_id < 0:
-            raise ValueError(f"Speaker IDs must be non-negative integers, got min ID {min_speaker_id}.")
-        if min_speaker_id > 0:
-            # Normalize to start from 0
-            speakers_per_script = [[spk - min_speaker_id for spk in speakers] for speakers in speakers_per_script]
-            scripts = [[(spk - min_speaker_id, text) for spk, text in _script] for _script in scripts]
+            text = [text]
+        elif not isinstance(text, (list, tuple)):
+            raise ValueError("text input must be a string or list of strings")
 
-        # Handle voice samples
-        processed_audio = {}
-        if voice_samples is not None:
-            voice_samples_list = [make_list_of_audio(_voices) for _voices in voice_samples]
-            if len(texts) != len(voice_samples_list):
-                raise ValueError(f"Got {len(texts)} texts but {len(voice_samples)} audio lists; they must match 1:1.")
+        # Count speech token placeholders in each text sample
+        n_speech_in_text = [sample.count(self.speech_diffusion_token) for sample in text]
+        n_speech = len(audio) if audio is not None else 0
 
-            # check correct number of samples per script, and extract audio for unique speakers
-            speaker_to_audio = {}
-            for speakers, audios in zip(speakers_per_script, voice_samples_list):
-                if len(speakers) != len(audios):
-                    raise ValueError(f"Got {len(speakers)} speakers but {len(audios)} audio samples; they must match 1:1.")
-                for _speaker, _audio in zip(speakers, audios):
-                    if _speaker not in speaker_to_audio:
-                        speaker_to_audio[_speaker] = _audio
+        # Validate speech token count matches audio samples
+        if sum(n_speech_in_text) > 0 and n_speech != sum(n_speech_in_text):
+            if audio is None:
+                raise ValueError("No audio samples were provided, but there are speech tokens in the text")
+            else:
+                raise ValueError(
+                    f"The number of speech tokens in each text ({n_speech_in_text}) should match the "
+                    f"number of provided audio samples ({n_speech})."
+                )
 
-            # Process audio samples
-            voices = [voice for _voices in voice_samples_list for voice in _voices]
-            processed_audio = self.feature_extractor(voices, **audio_kwargs)
-            processed_audio["input_features"] = processed_audio.pop("audio")
+        data = {}
+        if audio is not None:
+            audio = make_list_of_audio(audio)
+            data = self.feature_extractor(audio, **audio_kwargs)
+            data["input_features"] = data["input_features"].unsqueeze(1)
 
             # Create speech masks for audio tokenizer based on its compression ratio
-            padding_masks = processed_audio["padding_mask"]
-            vae_tok_seqlens = torch.ceil(padding_masks.sum(dim=-1) / speech_tok_compress_ratio).int().tolist()
-            input_features_mask = torch.zeros((len(padding_masks), max(vae_tok_seqlens)), dtype=torch.bool)
-            for i, seq_len in enumerate(vae_tok_seqlens):
+            padding_masks = data["input_features_mask"]
+            num_audio_tokens_list = torch.ceil(padding_masks.sum(dim=-1) / speech_tok_compress_ratio).int().tolist()
+            input_features_mask = torch.zeros((len(padding_masks), max(num_audio_tokens_list)), dtype=torch.bool)
+            for i, seq_len in enumerate(num_audio_tokens_list):
                 input_features_mask[i, :seq_len] = True
-            processed_audio["input_features_mask"] = input_features_mask
-            del processed_audio["padding_mask"]
+            data["input_features_mask"] = input_features_mask
 
-            # # TODO (ebezzam) not used by model, but could be used to process less audio by `get_audio_features`
-            # # Create mask to know which audio is used by a particular script
-            # audio_select_mask = np.zeros((len(scripts), len(speaker_to_audio)), dtype=np.bool_)
-            # for i, speakers in enumerate(speakers_per_script):
-            #     for spk in speakers:
-            #         audio_select_mask[i, spk] = True
-            # processed_audio["audio_select_mask"] = audio_select_mask
-            processed_audio = BatchFeature(data=processed_audio, tensor_type=return_tensors)
-            # Unsqueeze needed by tokenizer: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L146
-            processed_audio["input_features"] = processed_audio["input_features"].unsqueeze(1)
+            # Expand the text to repeat the speech token for the corresponding number of frames
+            num_audio_tokens_list_copy = num_audio_tokens_list.copy()
+            expanded_text = []
+            for sample in text:
+                replace_str = []
+                while self.speech_diffusion_token in sample:
+                    num_speech_tokens = num_audio_tokens_list_copy.pop(0)
+                    expanded_speech_token = self.speech_diffusion_token * num_speech_tokens
 
-        # Build text sequences with placeholders for speech tokens
-        text_sequences = []
-        for i, _script in enumerate(scripts):
-            # Start with system prompt
-            text_parts = [self.system_prompt]
+                    replace_str.append(expanded_speech_token)
+                    sample = sample.replace(self.speech_diffusion_token, "<placeholder>", 1)
 
-            # Add voice section if audio provided
-            if processed_audio is not None:
-                script_speakers = speakers_per_script[i]
-                text_parts.append(' Voice input:\n')
+                while "<placeholder>" in sample:
+                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
+                expanded_text.append(sample)
 
-                # Build speaker voice sections with placeholders
-                vae_tok_lens = processed_audio["input_features_mask"][script_speakers].sum(dim=-1).int().tolist()
-                for speaker_id, vae_tok_len in zip(script_speakers, vae_tok_lens):
-                    # Use the actual speech tokens from the tokenizer
-                    speech_placeholder = self.speech_diffusion_token * vae_tok_len
-                    speaker_voice_text = f" Speaker {speaker_id}:{self.speech_start_token}{speech_placeholder}{self.speech_end_token}\n"
-                    text_parts.append(speaker_voice_text)
+            text = expanded_text
 
-            # Add text input section
-            text_parts.append(' Text input:\n')
+        encoding = self.tokenizer(text, **text_kwargs)
+        data.update(encoding)
 
-            # Add script text
-            for speaker_id, speaker_text in _script:
-                speaker_line = f" Speaker {speaker_id}:{speaker_text}\n"
-                text_parts.append(speaker_line)
-
-            # Add speech output section
-            speech_output_text = f' Speech output:\n{self.speech_start_token}'
-            text_parts.append(speech_output_text)
-
-            # Join all text parts
-            full_text = ''.join(text_parts)
-            text_sequences.append(full_text)
-
-        # Tokenize the complete text sequences
-        batch_encoding = self.tokenizer(text_sequences, **text_kwargs)
-
-        # Remove token_type_ids if present (VibeVoice doesn't use them)
-        batch_encoding.pop("token_type_ids", None)
-
-        # Add audio data if provided
-        if processed_audio:
-            batch_encoding.update(processed_audio)
-
-        return BatchFeature(data=batch_encoding, tensor_type=return_tensors)
-
-    # TODO (ebezzam) remove after properly using chat template
-    def separate_script(self, script: str) -> list[tuple[int, str]]:
-        """Separate script into list of (speaker_id, text) tuples."""
-        lines = script.strip().split("\n")
-        parsed_lines = []
-        speaker_ids = []
-
-        # Parse all lines and collect speaker IDs
-        for line in lines:
-            if not line.strip():
-                continue
-
-            # Use regex to handle edge cases like multiple colons
-            match = re.match(r'^Speaker\s+(\d+)\s*:\s*(.*)$', line.strip(), re.IGNORECASE)
-
-            if match:
-                speaker_id = int(match.group(1))
-                text = ' ' + match.group(2).strip()
-                parsed_lines.append((speaker_id, text))
-                speaker_ids.append(speaker_id)
-            else:
-                logger.warning(f"Could not parse line: '{line}'")
-
-        if not parsed_lines:
-            raise ValueError("No valid speaker lines found in script")
-
-        return parsed_lines
-
-    # TODO (ebezzam) remove?
-    def _merge_inputs(self, text_inputs: BatchEncoding, audio_inputs: dict) -> BatchEncoding:
-        """Merge text and audio inputs into a single BatchEncoding."""
-        # Start with text inputs
-        merged = BatchEncoding(text_inputs)
-
-        # Add audio-specific fields
-        if "audio" in audio_inputs:
-            merged["speech_inputs"] = audio_inputs["audio"]
-        if "streaming" in audio_inputs:
-            merged["streaming"] = audio_inputs["streaming"]
-
-        return merged
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     @property
     def model_input_names(self):

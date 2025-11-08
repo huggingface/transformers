@@ -310,52 +310,39 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
 
     
     # Define a chat template adapted for VibeVoice's speech use case
-    chat_template = """
+    chat_template = """{%- set system_prompt = system_prompt | default(" Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.") -%}
+{{ system_prompt -}}
+{%- set speech_start_token = speech_start_token | default("<|vision_start|>") %}
+{%- set speech_end_token = speech_end_token | default("<|vision_end|>") %}
+{%- set speech_diffusion_token = speech_diffusion_token | default("<|vision_pad|>") %}
+{%- set ns = namespace(speakers_with_audio="") %}
 {%- for message in messages %}
-    {#-- Validate role is a stringified integer --#}
-    {%- if not message['role'] is string or not message['role'].isdigit() %}
-        {{- raise_exception("The role must be an integer or a stringified integer (e.g. '0') designating the speaker id") }}
-    {%- endif %}
-
-    {#-- Validate content is a list --#}
+    {%- set role = message['role'] %}
     {%- set content = message['content'] %}
-    {%- if content is not iterable or content is string %}
-        {{- raise_exception("The content must be a list") }}
-    {%- endif %}
-
-    {#-- Collect content types --#}
-    {%- set content_types = content | map(attribute='type') | list %}
-    {%- set is_last = loop.last %}
-
-    {#-- Last message validation --#}
-    {%- if is_last %}
-        {%- if 'text' not in content_types %}
-            {{- raise_exception("The last message must include one item of type 'text'") }}
-        {%- elif (content_types | select('equalto', 'text') | list | length > 1) or (content_types | select('equalto', 'audio') | list | length > 1) %}
-            {{- raise_exception("At most two items are allowed in the last message: one 'text' and one 'audio'") }}
-        {%- endif %}
-
-    {#-- All other messages validation --#}
-    {%- else %}
-        {%- if content_types | select('equalto', 'text') | list | length != 1
-              or content_types | select('equalto', 'audio') | list | length != 1 %}
-            {{- raise_exception("Each message (except the last) must contain exactly one 'text' and one 'audio' item") }}
-        {%- elif content_types | reject('in', ['text', 'audio']) | list | length > 0 %}
-            {{- raise_exception("Only 'text' and 'audio' types are allowed in content") }}
-        {%- endif %}
+    {%- set has_audio = content | selectattr('type', 'equalto', 'audio') | list | length > 0 %}
+    {%- if has_audio and role not in ns.speakers_with_audio %}
+        {%- set ns.speakers_with_audio = ns.speakers_with_audio + role + "," %}
     {%- endif %}
 {%- endfor %}
+
+{%- if ns.speakers_with_audio %}
+{{ "\n Voice input:\n" }}
+{%- for speaker in ns.speakers_with_audio.rstrip(',').split(',') %}
+{%- if speaker %}
+ Speaker {{ speaker }}:{{ speech_start_token }}{{ speech_diffusion_token }}{{ speech_end_token }}{{ "\n" }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+ Text input:{{ "\n" }}
 
 {%- for message in messages %}
-    {{- bos_token }}
-    {{- '[' + message['role'] + ']' }}
-    {{- message['content'][0]['text'] }}
-    {{- eos_token }}
-    {%- if message['content']|length > 1 %}
-        {{- '<|vision_start|><|vision_end|>' }}
-    {%- endif %}
+    {%- set role = message['role'] %}
+    {%- set text_items = message['content'] | selectattr('type', 'equalto', 'text') | list %}
+    {%- for item in text_items %}
+ Speaker {{ role }}: {{ item['text'] }}{{ "\n" }}
+    {%- endfor %}
 {%- endfor %}
-"""
+ Speech output:{{ "\n" }}{{ speech_start_token }}"""
         
     # Explicitly use Qwen2TokenizerFast to ensure proper class name in config
     tokenizer = Qwen2TokenizerFast.from_pretrained(language_model_pretrained_name)

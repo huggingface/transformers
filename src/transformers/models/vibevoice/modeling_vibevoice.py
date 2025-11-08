@@ -319,13 +319,9 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         with torch.no_grad():
             # combined encoding and sampling: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L146
             acoustic_latents = self.acoustic_tokenizer.encode(input_features, sample=True).latents
-
-        # Apply scaling and bias
         acoustic_features = (
             acoustic_latents + self.speech_bias_factor.to(acoustic_latents.device)
         ) * self.speech_scaling_factor.to(acoustic_latents.device)
-
-        # Connect to language model space and remove padded parts
         return self.acoustic_connector(acoustic_features)[input_features_mask]
 
     @can_return_tuple
@@ -383,14 +379,12 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
-        # Language model loss
         loss = None
         if labels is not None:
             # TODO (ebezzam) loss according to original implementation
             # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L400
             raise ValueError("Language modeling loss computation not implemented yet.")
 
-        # Diffusion loss
         diffusion_loss = None
         # TODO (ebezzam) original has an implementation which should be verified (would need noise scheduler from `diffusers`):
         # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L407

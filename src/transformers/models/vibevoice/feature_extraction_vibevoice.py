@@ -41,7 +41,7 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
         target_dB_FS (float, optional): Target dB FS for normalization. Defaults to -25.
         eps (float, optional): Small value for numerical stability. Defaults to 1e-6.
     """
-    model_input_names = ["audio"]
+    model_input_names = ["input_features"]
 
     def __init__(
         self,
@@ -64,6 +64,7 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
         audio: AudioInput,
         sampling_rate: Optional[int] = None,
         padding: Optional[Union[bool, str, PaddingStrategy]] = True,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = True,
     ) -> BatchFeature:
@@ -101,12 +102,10 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
 
         # Ensure numpy arrays and mono
         for idx, example in enumerate(audio):
-            # Convert to numpy array if needed
             if not isinstance(example, np.ndarray):
                 example = np.asarray(example, dtype=np.float32)
             elif example.dtype != np.float32:
                 example = example.astype(np.float32)
-
             if example.ndim == 1:
                 audio[idx] = example  # Already mono
             elif example.ndim == 2:
@@ -115,30 +114,26 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
             else:
                 raise ValueError(f"Audio should be 1D or 2D, got shape: {example.shape}")
 
-        # Normalize
         if self.normalize_audio:
             for idx, example in enumerate(audio):
-                # Adjust to target dB FS
                 rms = np.sqrt(np.mean(example**2))
                 scalar = 10 ** (self.target_dB_FS / 20) / (rms + self.eps)
                 example = example * scalar
-
-                # Avoid clipping
                 max_val = np.max(np.abs(example))
                 if max_val > 1.0:
                     example = example / (max_val + self.eps)
 
                 audio[idx] = example
 
-        # Pad into batch
-        output_values = BatchFeature({"audio": audio})
+        output_values = BatchFeature({"input_features": audio})
         if padding:
             output_values = self.pad(
                 output_values,
                 return_tensors=return_tensors,
+                pad_to_multiple_of=pad_to_multiple_of,
                 return_attention_mask=return_attention_mask
             )
-            output_values["padding_mask"] = output_values.pop("attention_mask")
+            output_values["input_features_mask"] = output_values.pop("attention_mask")
 
         return output_values
 
