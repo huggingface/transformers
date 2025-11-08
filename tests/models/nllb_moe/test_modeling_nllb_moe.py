@@ -244,7 +244,6 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     is_encoder_decoder = True
 
     test_missing_keys = True
-    test_torch_exportable = False  # MoE can be parallelized at some point
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(

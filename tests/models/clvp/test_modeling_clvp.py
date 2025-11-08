@@ -408,7 +408,6 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torch_exportable = False  # _pad_extra_bos_eos_tokens is highly data-dependent
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)

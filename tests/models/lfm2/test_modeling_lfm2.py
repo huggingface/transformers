@@ -52,7 +52,6 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Lfm2ModelTester
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2ForCausalLM if is_torch_available() else None
-    test_torch_exportable = False  # Uses a custom Cache class (can be added at some point)
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         self.assertIsInstance(past_key_values, Lfm2HybridConvCache)

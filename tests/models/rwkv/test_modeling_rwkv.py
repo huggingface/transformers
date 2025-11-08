@@ -216,7 +216,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         {"feature-extraction": RwkvModel, "text-generation": RwkvForCausalLM} if is_torch_available() else {}
     )
     test_missing_keys = False
-    test_torch_exportable = not torch.cuda.is_available()  # export fails on cuda for this model
 
     def setUp(self):
         self.model_tester = RwkvModelTester(self)

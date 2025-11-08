@@ -179,7 +179,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         else ()
     )
     pipeline_model_mapping = {"image-text-to-text": Qwen2VLForConditionalGeneration}
-    test_torch_exportable = False  # the qwen2_vl model's get_rope_index method is highly data-dependent
 
     _is_composite = True
 

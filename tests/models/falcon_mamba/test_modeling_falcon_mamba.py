@@ -264,7 +264,6 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     all_model_classes = (FalconMambaModel, FalconMambaForCausalLM) if is_torch_available() else ()
     has_attentions = False  # FalconMamba does not support attentions
     test_missing_keys = False
-    test_torch_exportable = False  # Uses a custom Cache class (can be added at some point)
 
     pipeline_model_mapping = (
         {"feature-extraction": FalconMambaModel, "text-generation": FalconMambaForCausalLM}
