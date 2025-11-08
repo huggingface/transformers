@@ -338,7 +338,19 @@ def batched_experts_gemm(self, input: torch.Tensor, tokens_per_expert: torch.Ten
     return output
 
 
+def embedding_without_dynamic_slicing_with_tensor(self, x: torch.Tensor, seq_len: torch.Tensor):
+    seq_len = seq_len.item()
+    torch._check(seq_len > 0)
+    torch._check(seq_len <= max(self.cos_cached.shape[0], self.sin_cached.shape[0]))
+
+    return (
+        self.cos_cached[:seq_len].to(device=x.device, dtype=x.dtype),
+        self.sin_cached[:seq_len].to(device=x.device, dtype=x.dtype),
+    )
+
+
 TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD: dict[str, Callable] = {
+    # Expert MLPs with different weight storage schemes
     "AriaGroupedExpertsGemm": batched_experts_gemm,
     "DbrxExperts": batched_experts_forward_with_grouped_expert_weights,
     "DeepseekV2Experts": batched_experts_forward_with_split_expert_weights,
@@ -360,6 +372,8 @@ TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD: dict[str, Callable] = {
     "Qwen3MoeExperts": batched_experts_forward_with_split_expert_weights,
     "Qwen3NextExperts": batched_experts_forward_with_split_expert_weights,
     "Qwen3OmniMoeThinkerTextExperts": batched_experts_forward_with_split_expert_weights,
+    # Embedding modules with dynamic slicing
+    "IdeficsEmbedding": embedding_without_dynamic_slicing_with_tensor,
 }
 
 
