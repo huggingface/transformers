@@ -16,6 +16,9 @@
 # limitations under the License.
 
 
+import decimal
+
+import numpy as np
 import torch
 from torch import nn
 from torch.autograd import Function
@@ -716,16 +719,23 @@ def batch_frexp(inputs, max_bit=31):
 
     # trans the input to be a 1-d tensor
     inputs = inputs.view(-1)
-    output_m, output_e = torch.frexp(inputs)
+
+    output_m, output_e = np.frexp(inputs.cpu().numpy())
 
     tmp_m = []
     for m in output_m:
-        # doing this in a single vectorized pass results in nans
-        tmp_m.append(int(torch.round(torch.tensor(m * (2**max_bit))).item()))
-    output_m = torch.tensor(tmp_m, device=inputs.device)
+        int_m_shifted = int(
+            decimal.Decimal(m * (2**max_bit)).quantize(decimal.Decimal(1), rounding=decimal.ROUND_HALF_UP)
+        )
+        tmp_m.append(int_m_shifted)
+    output_m = np.array(tmp_m)
+
     output_e = float(max_bit) - output_e
 
-    return output_m.view(shape_of_input), output_e.view(shape_of_input)
+    return (
+        torch.from_numpy(output_m).to(inputs.device).view(shape_of_input),
+        torch.from_numpy(output_e).to(inputs.device).view(shape_of_input),
+    )
 
 
 class FixedPointMul(Function):
