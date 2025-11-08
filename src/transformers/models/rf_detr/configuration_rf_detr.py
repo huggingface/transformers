@@ -9,7 +9,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING, AutoConfig
-from .modeling_rf_detr_dinov2 import RfDetrDinov2Config
+from .configuration_rf_detr_dinov2 import RfDetrDinov2Config
 
 
 logger = logging.get_logger(__name__)
