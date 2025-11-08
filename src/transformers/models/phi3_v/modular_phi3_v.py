@@ -80,9 +80,7 @@ class Phi3VConfig(PretrainedConfig):
 
     sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
 
-    def __init__(self, vision_config=None, text_config=None, image_token_id=32044, **kwargs):
-        super().__init__(**kwargs)
-
+    def __init__(self, text_config=None, vision_config=None, image_token_id=32044, **kwargs):
         if text_config is None:
             logger.info("`text_config` is None. Initializing with default values")
             self.text_config = CONFIG_MAPPING["phi3"]()
@@ -112,6 +110,7 @@ class Phi3VConfig(PretrainedConfig):
             )
 
         self.image_token_id = image_token_id
+        super().__init__(**kwargs)
 
 
 class Phi3VBaseModelOutputWithPast(JanusBaseModelOutputWithPast):
