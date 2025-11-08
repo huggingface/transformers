@@ -40,12 +40,13 @@ logger = logging.get_logger(__name__)
 class Phi3VConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Phi3VModel`]. It is used to instantiate an
-    Phi3 Vision model according to the specified arguments, defining the model architecture.
+    Phi3 Vision model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Phi-3.5 vision model.
 
     e.g. [microsoft/Phi-3.5-vision-instruct](https://huggingface.co/microsoft/Phi-3.5-vision-instruct)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
@@ -80,7 +81,7 @@ class Phi3VConfig(PretrainedConfig):
 
     sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
 
-    def __init__(self, text_config=None, vision_config=None, image_token_id=32044, **kwargs):
+    def __init__(self, vision_config=None, text_config=None, image_token_id=32044, **kwargs):
         if text_config is None:
             logger.info("`text_config` is None. Initializing with default values")
             self.text_config = CONFIG_MAPPING["phi3"]()
