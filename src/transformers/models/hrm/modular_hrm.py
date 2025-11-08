@@ -39,7 +39,7 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, logging
 from ..falcon_mamba.modeling_falcon_mamba import rms_forward
-from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
+from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -289,23 +289,13 @@ def truncated_normal_init_(
     return tensor
 
 
-class HrmLinear(nn.Module):
+class HrmLinear(nn.Linear):
     """
     Linear layer with automatic type casting for mixed-precision training.
 
-    Note: Cannot inherit from nn.Linear due to custom truncated normal initialization
-    that is critical to HRM's training dynamics. This custom initialization differs from
-    standard PyTorch initialization and is applied during __init__.
+    Inherits from nn.Linear. Custom truncated normal initialization is handled
+    by the model's _init_weights method.
     """
-
-    def __init__(self, in_features: int, out_features: int, bias: bool = False):
-        super().__init__()
-        self.weight = nn.Parameter(
-            truncated_normal_init_(torch.empty((out_features, in_features)), std=1.0 / (in_features**0.5))
-        )
-        self.bias = None
-        if bias:
-            self.bias = nn.Parameter(torch.zeros((out_features,)))
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         return F.linear(
@@ -335,7 +325,7 @@ class HrmEmbedding(nn.Embedding):
         return F.embedding(input, self.weight.to(self.cast_to))
 
 
-def eager_attention_forward(
+def hrm_eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -345,28 +335,39 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    """Pure PyTorch attention implementation for HRM."""
+    """
+    HRM-specific wrapper for eager attention that handles tensor shape transformation.
+
+    Transposes inputs from (batch, seq_len, num_heads, head_dim) to
+    (batch, num_heads, seq_len, head_dim) and builds causal mask if needed.
+    """
     batch, seq_len, num_heads, head_dim = query.shape
-    # Transpose to (batch, num_heads, seq_len, head_dim)
+
+    # Transpose to (batch, num_heads, seq_len, head_dim) for standard attention
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
 
-    # Compute attention scores
-    scores = torch.matmul(query, key.transpose(-2, -1)) * scaling
+    # Build causal mask if needed
+    if module.causal and attention_mask is None:
+        # Create causal mask: upper triangular matrix of -inf
+        causal_mask = torch.triu(
+            torch.full((seq_len, seq_len), float("-inf"), device=query.device, dtype=query.dtype), diagonal=1
+        )
+        # Expand to (batch, num_heads, seq_len, seq_len)
+        attention_mask = causal_mask.unsqueeze(0).unsqueeze(0)
 
-    # Apply causal mask if needed
-    if module.causal:
-        mask = torch.triu(torch.ones(seq_len, seq_len, device=query.device, dtype=torch.bool), diagonal=1)
-        scores = scores.masked_fill(mask, float("-inf"))
-
-    # Softmax and apply to values
-    attn_weights = torch.softmax(scores, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = F.dropout(attn_weights, p=dropout, training=module.training)
-    output = torch.matmul(attn_weights, value)
-
-    # Transpose back to (batch, seq_len, num_heads, head_dim)
-    return output.transpose(1, 2).contiguous(), attn_weights
+    # Use imported eager_attention_forward from Llama
+    return eager_attention_forward(
+        module=module,
+        query=query,
+        key=key,
+        value=value,
+        attention_mask=attention_mask,
+        scaling=scaling,
+        dropout=dropout,
+        **kwargs,
+    )
 
 
 class HrmAttention(nn.Module):
@@ -385,6 +386,7 @@ class HrmAttention(nn.Module):
         self.output_size = self.head_dim * config.num_attention_heads
         self.num_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_attention_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.causal = causal
         self.scaling = self.head_dim**-0.5
 
@@ -414,7 +416,7 @@ class HrmAttention(nn.Module):
             query, key = apply_rotary_pos_emb(query, key, cos, sin, unsqueeze_dim=2)
 
         # Select attention implementation
-        attention_interface = eager_attention_forward
+        attention_interface = hrm_eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -720,8 +722,8 @@ class HrmPreTrainedModel(PreTrainedModel):
                 if module.bias is not None:
                     module.bias.data.fill_(-5.0)
             else:
-                # Standard HrmLinear initialization
-                truncated_normal_init_(module.weight, std=std / (module.weight.shape[1] ** 0.5))
+                # Standard HrmLinear initialization uses 1.0 / sqrt(in_features) for proper scaling
+                truncated_normal_init_(module.weight, std=1.0 / (module.weight.shape[1] ** 0.5))
                 if module.bias is not None:
                     module.bias.data.zero_()
         elif isinstance(module, HrmEmbedding):
@@ -731,7 +733,7 @@ class HrmPreTrainedModel(PreTrainedModel):
             # For puzzle embeddings
             module.weight.data.normal_(mean=0.0, std=std)
         elif isinstance(module, nn.Linear):
-            # For any standard linear layers
+            # For any standard linear layers (shouldn't be used in HRM, but included for completeness)
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()

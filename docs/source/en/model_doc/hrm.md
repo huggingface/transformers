@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-06-26 and added to Hugging Face Transformers on 2025-11-08.*
 
 # HRM
 
@@ -20,7 +21,7 @@ rendered properly in your Markdown viewer.
 
 The Hierarchical Reasoning Model (HRM) is a novel recurrent neural network architecture designed for sequential reasoning tasks. Unlike traditional large language models that rely on Chain-of-Thought (CoT) techniques, HRM employs a hierarchical and multi-timescale processing approach inspired by the human brain.
 
-The model was proposed in [Hierarchical Reasoning Model](https://arxiv.org/abs/2506.21734) by Guan Wang, Jin Li, Yuhao Sun, Xing Chen, Changling Liu, Yue Wu, Meng Lu, Sen Song, and Yasin Abbasi Yadkori.
+The model was proposed in [Hierarchical Reasoning Model](https://huggingface.co/papers/2506.21734) by Guan Wang, Jin Li, Yuhao Sun, Xing Chen, Changling Liu, Yue Wu, Meng Lu, Sen Song, and Yasin Abbasi Yadkori.
 
 The abstract from the paper is the following:
 
@@ -296,7 +297,7 @@ Available checkpoints on the Hugging Face Hub:
       eprint={2506.21734},
       archivePrefix={arXiv},
       primaryClass={cs.AI},
-      url={https://arxiv.org/abs/2506.21734},
+      url={https://huggingface.co/papers/2506.21734},
 }
 ```
 
