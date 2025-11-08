@@ -307,6 +307,10 @@ def get_patch_output_size(image, target_resolution, input_data_format):
     original_height, original_width = get_image_size(image, channel_dim=input_data_format)
     target_height, target_width = target_resolution
 
+    if original_width == 0:
+        raise ValueError("original_width can not be 0")
+    if original_height == 0:
+        raise ValueError("original_height can not be 0")
     scale_w = target_width / original_width
     scale_h = target_height / original_height
 
