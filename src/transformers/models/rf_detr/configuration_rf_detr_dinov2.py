@@ -41,7 +41,7 @@ class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
+        patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
@@ -69,6 +69,8 @@ class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
             Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
             case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
             seq_len, hidden_size)`.
+        use_mask_token (`bool`, *optional*, defaults to `True`):
+            Whether to use mask_token in embeddings.
         num_windows (`int`, *optional*, defaults to 4):
             Number of windows to use for windowed attention. If 1, no windowed attention is used.
     Example:

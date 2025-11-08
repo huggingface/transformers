@@ -538,14 +538,8 @@ class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
-        Returns:
-
-        Examples:
-
 
         ```python
         >>> from transformers import AutoImageProcessor, AutoBackbone
