@@ -18,7 +18,6 @@ import warnings
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import redirect_stdout
 from dataclasses import dataclass, fields
-from functools import partial
 from io import BytesIO
 from typing import NewType, Optional, Union
 from urllib.parse import urlparse
@@ -374,7 +373,7 @@ def read_video_opencv(
         height=int(video.get(cv2.CAP_PROP_FRAME_HEIGHT)),
         width=int(video.get(cv2.CAP_PROP_FRAME_WIDTH)),
     )
-    
+
     indices = sample_indices_fn(metadata=metadata, **kwargs)
     sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     index = 0
@@ -610,7 +609,6 @@ def read_video_torchcodec(
     metadata = VideoMetadata(
         total_num_frames=total_num_frames,
         fps=video_fps,
-        sampled_fps=float(sampled_fps),
         duration=decoder.metadata.duration_seconds,
         video_backend="torchcodec",
         height=decoder.metadata.height,
