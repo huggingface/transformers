@@ -1,9 +1,10 @@
-from typing import Optional, Unpack
+from typing import Optional
 
 import torch
 from torch import nn
 
 from ...configuration_utils import PreTrainedConfig
+from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ...utils.generic import TransformersKwargs, check_model_inputs
@@ -21,7 +22,7 @@ from ..lw_detr.modeling_lw_detr import (
     LwDetrScaleProjector,
     refine_bboxes,
 )
-from .modeling_rf_detr_dinov2 import RfDetrDinov2Config
+from .configuration_rf_detr_dinov2 import RfDetrDinov2Config
 
 
 logger = logging.get_logger(__name__)
