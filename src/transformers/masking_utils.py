@@ -83,7 +83,7 @@ def bidirectional_mask_function(batch_idx: int, head_idx: int, q_idx: int, kv_id
     """
     This creates a full bidirectional mask.
     """
-    return q_idx.new_ones((), dtype=torch.bool)
+    return q_idx >= 0
 
 
 def sliding_window_overlay(sliding_window: int) -> Callable:
