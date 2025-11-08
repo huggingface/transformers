@@ -484,7 +484,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
 
     @staticmethod
     def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
-        if prob < 1:
+        if torch.compiler.is_exporting() or prob < 1:
             # Generate random queries to disable based on the probs
             random_queries = torch.rand(attn_mask.shape[0], num_query_tokens, device=device) > prob
 
