@@ -14,9 +14,6 @@ jobs:
     outputs:
       run_number: ${{ steps.get_number.outputs.run_number }}
     steps:
-      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
-        with:
-          config: ${{ vars.PERMISSIONS_CONFIG }}
       - name: Get number
         id: get_number
         run: |

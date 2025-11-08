@@ -35,9 +35,6 @@ jobs:
       PR_MERGE_COMMIT_DATE: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_DATE }}
       PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
     steps:
-      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
-        with:
-          config: ${{ vars.PERMISSIONS_CONFIG }}
       - run: |
           COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
           echo "COMMENT_DATE: $COMMENT_DATE"
@@ -57,9 +54,6 @@ jobs:
       statuses: write
     runs-on: ubuntu-22.04
     steps:
-      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
-        with:
-          config: ${{ vars.PERMISSIONS_CONFIG }}
       - name: Create Run
         id: create_run
         env:
@@ -83,9 +77,6 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-22.04
     steps:
-      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
-        with:
-          config: ${{ vars.PERMISSIONS_CONFIG }}
       - name: Reply to the comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -121,9 +112,6 @@ jobs:
       GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
       STATUS_OK: ${{ contains(fromJSON('["skipped", "success"]'), needs.create_run.result) }}
     steps:
-      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
-        with:
-          config: ${{ vars.PERMISSIONS_CONFIG }}
       - name: Get `build-doc` job status
         run: |
           echo "${{ needs.build-doc.result }}"
