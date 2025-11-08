@@ -16,6 +16,8 @@
 import copy
 import unittest
 
+import pytest
+
 from transformers import (
     AutoProcessor,
     Qwen3VLMoeConfig,
@@ -513,6 +515,7 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
     @slow
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
             "Qwen/Qwen3-VL-30B-A3B-Instruct",
@@ -545,6 +548,7 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
     @slow
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
             "Qwen/Qwen3-VL-30B-A3B-Instruct",
