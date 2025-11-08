@@ -259,6 +259,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
 
     _is_composite = True
     model_split_percents = [0.5, 0.9]
+    test_torch_exportable = False  # lots of data dependent control flow in the audio encoder
 
     def setUp(self):
         self.model_tester = Qwen2_5OmniThinkerForConditionalGenerationTester(self)
