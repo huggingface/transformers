@@ -1865,7 +1865,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
                 if is_documented:
                     # Check if type is missing
                     if param_type == "":
-                        print(f"[ERROR] {param_name} for {cls.__qualname__} in file {cls.__code__.co_filename} has no type")
+                        print(
+                            f"[ERROR] {param_name} for {cls.__qualname__} in file {cls.__code__.co_filename} has no type"
+                        )
                     param_type = param_type if "`" in param_type else f"`{param_type}`"
                     # Format the parameter docstring
                     if additional_info:
