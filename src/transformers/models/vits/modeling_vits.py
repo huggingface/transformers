@@ -211,7 +211,7 @@ def _rational_quadratic_spline(
     upper_bound = tail_bound
     lower_bound = -tail_bound
 
-    if torch.min(inputs) < lower_bound or torch.max(inputs) > upper_bound:
+    if not torch.compiler.is_exporting() and (torch.min(inputs) < lower_bound or torch.max(inputs) > upper_bound):
         raise ValueError("Input to a transform is not within its domain")
 
     num_bins = unnormalized_widths.shape[-1]
@@ -283,7 +283,7 @@ def _rational_quadratic_spline(
         c = -input_delta * intermediate2
 
         discriminant = b.pow(2) - 4 * a * c
-        if not (discriminant >= 0).all():
+        if not torch.compiler.is_exporting() and not (discriminant >= 0).all():
             raise RuntimeError(f"invalid discriminant {discriminant}")
 
         root = (2 * c) / (-b - torch.sqrt(discriminant))
