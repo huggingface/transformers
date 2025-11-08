@@ -23,10 +23,6 @@ jobs:
     outputs:
       jobs: ${{ steps.get_jobs.outputs.jobs_to_run }}
     steps:
-      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
-        with:
-          config: ${{ vars.PERMISSIONS_CONFIG }}
-      
       # This checkout to the main branch
       - uses: actions/checkout@v4
         with:
@@ -93,10 +89,6 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-22.04
     steps:
-      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
-        with:
-          config: ${{ vars.PERMISSIONS_CONFIG }}
-
       - name: Check and update comment if needed
         uses: actions/github-script@v7
         env:
