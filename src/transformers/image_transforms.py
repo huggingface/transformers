@@ -837,7 +837,7 @@ def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = Fals
     for i, (sublist, *paired_sublists) in enumerate(zip(normalized_images, *normalized_paired)):
         for j, (image, *paired_values) in enumerate(zip(sublist, *paired_sublists)):
             key = (i, j) if is_nested else j
-            shape = image.shape
+            shape = image.shape[1:]
 
             # Add to grouped structures
             grouped_images[shape].append(image)
@@ -984,14 +984,3 @@ def reorder_images(
         ]
 
     return _reconstruct_nested_structure(grouped_images_index, processed_images)
-
-
-class NumpyToTensor:
-    """
-    Convert a numpy array to a PyTorch tensor.
-    """
-
-    def __call__(self, image: np.ndarray):
-        # Same as in PyTorch, we assume incoming numpy images are in HWC format
-        # c.f. https://github.com/pytorch/vision/blob/61d97f41bc209e1407dcfbd685d2ee2da9c1cdad/torchvision/transforms/functional.py#L154
-        return torch.from_numpy(image.transpose(2, 0, 1)).contiguous()
