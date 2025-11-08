@@ -1118,8 +1118,9 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
                 hidden_states = torch.cat((query, hidden_states), dim=1)
 
             if idx >= self.num_hidden_layers - self.config.num_blocks and (
-                torch.compiler.is_exporting()
-                or (self.training or self.attn_mask_probs[idx - self.num_hidden_layers + self.config.num_blocks] > 0)
+                self.training
+                or torch.compiler.is_exporting()
+                or self.attn_mask_probs[idx - self.num_hidden_layers + self.config.num_blocks] > 0
             ):
                 norm_hidden_states = self.layernorm(hidden_states)
                 masks_queries_logits, class_queries_logits = self.predict(norm_hidden_states)

@@ -811,9 +811,10 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         if window_size is not None:
             mean_outputs = mean_outputs[0::2, ...] + mean_outputs[1::2, ...]
             full_outputs = full_outputs[0::2, ...] + full_outputs[1::2, ...]
-        if inp_min >= 0 and truncate_negative:
-            mean_outputs = torch.maximum(mean_outputs, 0.0)
-            full_outputs = torch.maximum(full_outputs, 0.0)
+        if torch.compiler.is_exporting() or (inp_min >= 0 and truncate_negative):
+            zero_tensor = torch.tensor(0.0, device=mean_outputs.device)
+            mean_outputs = torch.maximum(mean_outputs, zero_tensor)
+            full_outputs = torch.maximum(full_outputs, zero_tensor)
 
         loss = None
         if future_values is not None:

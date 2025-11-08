@@ -411,7 +411,6 @@ UNSUPPORTED_MODEL_TYPES: set[str] = {
     "emu3",
     "encodec",
     "esm",
-    "eomt",
     "falcon_mamba",  # Uses FalconMambaCache which is a custom cache type that's not yet registered as a pytree node
     "fastspeech2_conformer",
     "fastspeech2_conformer_with_hifigan",
