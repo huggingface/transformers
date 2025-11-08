@@ -366,17 +366,17 @@ def read_video_opencv(
     total_num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
     video_fps = video.get(cv2.CAP_PROP_FPS)
     duration = total_num_frames / video_fps if video_fps else 0
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
-    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     metadata = VideoMetadata(
         total_num_frames=int(total_num_frames),
         fps=float(video_fps),
-        sampled_fps=float(sampled_fps),
         duration=float(duration),
         video_backend="opencv",
         height=int(video.get(cv2.CAP_PROP_FRAME_HEIGHT)),
         width=int(video.get(cv2.CAP_PROP_FRAME_WIDTH)),
     )
+    
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
+    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     index = 0
     frames = []
     while video.isOpened():
@@ -394,6 +394,7 @@ def read_video_opencv(
 
     video.release()
     metadata.frames_indices = indices
+    metadata.sampled_fps = float(sampled_fps)
     return np.stack(frames), metadata
 
 
@@ -429,21 +430,21 @@ def read_video_decord(
     video_fps = vr.get_avg_fps()
     total_num_frames = len(vr)
     duration = total_num_frames / video_fps if video_fps else 0
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
-    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     metadata = VideoMetadata(
         total_num_frames=int(total_num_frames),
         fps=float(video_fps),
-        sampled_fps=float(sampled_fps),
         duration=float(duration),
         video_backend="decord",
     )
 
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
+    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     video = vr.get_batch(indices).asnumpy()
 
     metadata.update(
         {
             "frames_indices": indices,
+            "sampled_fps": sampled_fps,
             "height": video.shape[1],
             "width": video.shape[2],
         }
@@ -483,19 +484,17 @@ def read_video_pyav(
     total_num_frames = container.streams.video[0].frames
     video_fps = container.streams.video[0].average_rate  # should we better use `av_guess_frame_rate`?
     duration = total_num_frames / video_fps if video_fps else 0
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
-    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     metadata = VideoMetadata(
         total_num_frames=int(total_num_frames),
         fps=float(video_fps),
-        sampled_fps=float(sampled_fps),
         duration=float(duration),
         video_backend="pyav",
         height=container.streams.video[0].height,
         width=container.streams.video[0].width,
     )
 
-
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
+    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     frames = []
     container.seek(0)
     end_index = indices[-1]
@@ -507,6 +506,7 @@ def read_video_pyav(
 
     video = np.stack([x.to_ndarray(format="rgb24") for x in frames])
     metadata.frames_indices = indices
+    metadata.sampled_fps = sampled_fps
     return video, metadata
 
 
@@ -548,21 +548,20 @@ def read_video_torchvision(
     video_fps = info["video_fps"]
     total_num_frames = video.size(0)
     duration = total_num_frames / video_fps if video_fps else 0
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
-    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     metadata = VideoMetadata(
         total_num_frames=int(total_num_frames),
         fps=float(video_fps),
-        sampled_fps=float(sampled_fps),
         duration=float(duration),
         video_backend="torchvision",
     )
 
-
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
+    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     video = video[indices].contiguous()
     metadata.update(
         {
             "frames_indices": indices,
+            "sampled_fps": sampled_fps,
             "height": video.shape[2],
             "width": video.shape[3],
         }
@@ -608,8 +607,6 @@ def read_video_torchcodec(
     )
     total_num_frames = decoder.metadata.num_frames
     video_fps = decoder.metadata.average_fps
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
-    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     metadata = VideoMetadata(
         total_num_frames=total_num_frames,
         fps=video_fps,
@@ -620,8 +617,11 @@ def read_video_torchcodec(
         width=decoder.metadata.width,
     )
 
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
+    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     video = decoder.get_frames_at(indices=indices).data.contiguous()
     metadata.frames_indices = indices
+    metadata.sampled_fps = sampled_fps
     return video, metadata
 
 
