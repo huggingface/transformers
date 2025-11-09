@@ -434,7 +434,6 @@ class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
         self.gradient_checkpointing = False
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -458,9 +457,6 @@ class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
             hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings)
             stage_hidden_states.append(hidden_states)
 
-        sequence_output = self.norm(hidden_states)
-        stage_hidden_states[-1] = sequence_output
-
         batch_size, _, image_height, image_width = pixel_values.shape
         patch_size = self.config.patch_size
         num_patches_height = image_height // patch_size
@@ -469,11 +465,16 @@ class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
         num_prefix = 1 + getattr(self.config, "num_register_tokens", 0)
 
         feature_maps = []
-        for stage_name, hidden_state in zip(self.stage_names, stage_hidden_states):
-            if stage_name in self.out_features:
-                if self.config.apply_layernorm:
-                    hidden_state = self.layernorm(hidden_state)
+        sequence_output = None
+        last_stage_idx = len(self.stage_names) - 1
+        for idx, (stage_name, hidden_state) in enumerate(zip(self.stage_names, stage_hidden_states)):
+            if idx == last_stage_idx:
+                hidden_state = self.norm(hidden_state)
+                sequence_output = hidden_state
+            elif self.config.apply_layernorm:
+                hidden_state = self.norm(hidden_state)
 
+            if stage_name in self.out_features:
                 patch_tokens = hidden_state[:, num_prefix:, :]
                 if self.config.reshape_hidden_states:
                     fmap = (
