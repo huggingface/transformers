@@ -22,6 +22,7 @@ import torch.nn as nn
 
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -29,7 +30,6 @@ from ..deepseek_vl.modeling_deepseek_vl import DeepseekVLForConditionalGeneratio
 from ..janus.modeling_janus import (
     JanusBaseModelOutputWithPast,
     JanusCausalLMOutputWithPast,
-    JanusPreTrainedModel,
 )
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 
@@ -122,8 +122,31 @@ class Phi3VCausalLMOutputWithPast(JanusCausalLMOutputWithPast):
     pass
 
 
-class Phi3VPreTrainedModel(JanusPreTrainedModel):
-    pass
+@auto_docstring
+class Phi3VPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models. The model is only intended for inference and doesn't support finetuning.
+    """
+
+    config: Phi3VConfig
+    base_model_prefix = "model"
+    input_modalities = ["image", "text"]
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LlamaDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+
+    _can_compile_fullgraph = True
+    _supports_param_buffer_assignment = False
+
+    def _init_weights(self, module):
+        std = self.config.get_text_config().initializer_range
+        super()._init_weights(module)
+        if hasattr(module, "logit_scale"):
+            if isinstance(module.logit_scale, nn.Parameter):
+                module.data.normal_(mean=0.0, std=std)
 
 
 class Phi3VImageProjection(Llama4VisionMLP, nn.Module):
