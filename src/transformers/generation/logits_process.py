@@ -243,74 +243,75 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             Token id that closes the thinking segment (for example a `</think>` special token).
     """
 
-    def __init__(self, max_thinking_tokens: int, begin_thinking_token_id: int, end_thinking_token_id: int):
+    def __init__(
+        self,
+        max_thinking_tokens: int,
+        begin_thinking_token_id: int,
+        end_thinking_token_id: int,
+    ):
         self.max_thinking_tokens = max_thinking_tokens
         self.begin_thinking_token_id = begin_thinking_token_id
         self.end_thinking_token_id = end_thinking_token_id
-        self._prompt_lengths: Optional[torch.LongTensor] = None
+        self._prompt_length: Optional[int] = None
+
+    def _first_open_thinking_position(self, sequence: torch.LongTensor) -> Optional[int]:
+        """Returns the index of the first unmatched `begin_thinking_token_id`, if any."""
+        open_depth = 0
+        first_open_position: Optional[int] = None
+        for position in range(sequence.shape[-1]):
+            token_id = int(sequence[position])
+            if token_id == self.begin_thinking_token_id:
+                if open_depth == 0:
+                    first_open_position = position
+                open_depth += 1
+            elif token_id == self.end_thinking_token_id and open_depth > 0:
+                open_depth -= 1
+                if open_depth == 0:
+                    first_open_position = None
+        return first_open_position
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        scores_processed = None
-        batch_size = input_ids.size(0)
+        batch_size, sequence_length = input_ids.shape
 
-        if self._prompt_lengths is None:
-            self._prompt_lengths = torch.full(
-                (batch_size,),
-                input_ids.size(1),
-                dtype=torch.long,
-            )
-        elif self._prompt_lengths.size(0) != batch_size:
-            old_size = self._prompt_lengths.size(0)
-            new_size = batch_size
-            if old_size == 0:
-                self._prompt_lengths = torch.full((new_size,), input_ids.size(1), dtype=torch.long)
-            elif new_size % old_size == 0:
-                repeat_factor = new_size // old_size
-                self._prompt_lengths = self._prompt_lengths.repeat_interleave(repeat_factor)
-            elif old_size % new_size == 0:
-                self._prompt_lengths = self._prompt_lengths[:new_size]
-            else:
-                new_prompt_lengths = torch.full((new_size,), input_ids.size(1), dtype=torch.long)
-                copy_size = min(old_size, new_size)
-                new_prompt_lengths[:copy_size] = self._prompt_lengths[:copy_size]
-                self._prompt_lengths = new_prompt_lengths
+        if batch_size == 0:
+            return scores
 
-        for batch_idx in range(batch_size):
-            sequence = input_ids[batch_idx]
-            begin_positions = (sequence == self.begin_thinking_token_id).nonzero(as_tuple=False)
-            if begin_positions.numel() == 0:
+        if self._prompt_length is None:
+            self._prompt_length = sequence_length
+        else:
+            self._prompt_length = min(self._prompt_length, sequence_length)
+
+        force_end_indices: list[int] = []
+
+        for batch_index in range(batch_size):
+            first_open_position = self._first_open_thinking_position(input_ids[batch_index])
+
+            if first_open_position is None:
                 continue
 
-            begin_positions = begin_positions.squeeze(-1)
-            end_positions = (sequence == self.end_thinking_token_id).nonzero(as_tuple=False).squeeze(-1)
-            last_end_idx = end_positions[-1].item() if end_positions.numel() > 0 else -1
-            unmatched_begins = begin_positions[begin_positions > last_end_idx]
-            if unmatched_begins.numel() == 0:
+            count_start = max(first_open_position + 1, self._prompt_length)
+            if count_start >= sequence_length:
                 continue
 
-            begin_idx = unmatched_begins[0].item()
-            prompt_boundary = int(self._prompt_lengths[batch_idx].item()) if self._prompt_lengths is not None else 0
-            prompt_boundary = min(prompt_boundary, sequence.size(0))
-            count_start = max(begin_idx + 1, prompt_boundary)
+            tokens_inside_block = sequence_length - count_start
+            if tokens_inside_block >= self.max_thinking_tokens:
+                force_end_indices.append(batch_index)
 
-            if count_start >= sequence.size(0):
-                continue
+        if not force_end_indices:
+            return scores
 
-            after_begin = sequence[count_start:]
-            if after_begin.numel() < self.max_thinking_tokens:
-                continue
+        scores_processed = scores.clone()
+        scores_processed[force_end_indices] = -math.inf
+        end_token_logits = scores[force_end_indices, self.end_thinking_token_id]
+        safe_end_token_logits = torch.where(
+            torch.isfinite(end_token_logits),
+            end_token_logits,
+            torch.zeros_like(end_token_logits),
+        )
+        scores_processed[force_end_indices, self.end_thinking_token_id] = safe_end_token_logits
 
-            if scores_processed is None:
-                scores_processed = scores.clone()
-
-            scores_processed[batch_idx, :] = -float("inf")
-            end_token_logit = scores[batch_idx, self.end_thinking_token_id]
-            if not torch.isfinite(end_token_logit):
-                end_token_logit = torch.zeros((), dtype=scores.dtype, device=scores.device)
-            scores_processed[batch_idx, self.end_thinking_token_id] = end_token_logit
-
-        return scores if scores_processed is None else scores_processed
+        return scores_processed
 
 
 class TemperatureLogitsWarper(LogitsProcessor):
