@@ -562,9 +562,7 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
         if self.max_thinking_tokens is not None:
             if self.max_thinking_tokens <= 0:
-                raise ValueError(
-                    f"`max_thinking_tokens` must be greater than 0, but is {self.max_thinking_tokens}."
-                )
+                raise ValueError(f"`max_thinking_tokens` must be greater than 0, but is {self.max_thinking_tokens}.")
             if self.begin_thinking_token_id is None or self.end_thinking_token_id is None:
                 raise ValueError(
                     "Using `max_thinking_tokens` requires both `begin_thinking_token_id` and "

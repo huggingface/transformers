@@ -152,7 +152,9 @@ class LogitsProcessorTest(unittest.TestCase):
     def test_max_thinking_tokens_processor_noop_before_budget(self):
         begin_id, end_id = 10, 11
         vocab_size = 32
-        processor = MaxThinkingTokensLogitsProcessor(max_thinking_tokens=3, begin_thinking_token_id=begin_id, end_thinking_token_id=end_id)
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=3, begin_thinking_token_id=begin_id, end_thinking_token_id=end_id
+        )
 
         input_ids = torch.tensor([[1, 2, begin_id, 5]], device=torch_device, dtype=torch.long)
         scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
@@ -162,7 +164,9 @@ class LogitsProcessorTest(unittest.TestCase):
     def test_max_thinking_tokens_processor_forces_end_token(self):
         begin_id, end_id = 10, 11
         vocab_size = 32
-        processor = MaxThinkingTokensLogitsProcessor(max_thinking_tokens=2, begin_thinking_token_id=begin_id, end_thinking_token_id=end_id)
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=2, begin_thinking_token_id=begin_id, end_thinking_token_id=end_id
+        )
 
         # thinking budget reached -> only end token should remain available
         input_ids = torch.tensor([[1, begin_id, 5, 6]], device=torch_device, dtype=torch.long)
