@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Llava model."""
+"""Testing suite for the PyTorch Phi-3 model."""
 
 import tempfile
 import unittest
@@ -146,7 +146,7 @@ class Phi3VModelTester:
 @require_torch
 class Phi3VForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
-    Model tester for `LlavaForConditionalGeneration`.
+    Model tester for `Phi3VForConditionalGeneration`.
     """
 
     all_model_classes = (
