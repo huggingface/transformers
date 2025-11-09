@@ -228,6 +228,57 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
+class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] that enforces a thinking budget by forcing the model to emit `end_thinking_token_id` once
+    `max_thinking_tokens` tokens have been generated inside the most recent thinking block.
+
+    Args:
+        max_thinking_tokens (`int`):
+            Maximum number of tokens the model may emit after `begin_thinking_token_id` and before
+            `end_thinking_token_id`.
+        begin_thinking_token_id (`int`):
+            Token id that marks the start of the thinking segment (for example a `<think>` special token).
+        end_thinking_token_id (`int`):
+            Token id that closes the thinking segment (for example a `</think>` special token).
+    """
+
+    def __init__(self, max_thinking_tokens: int, begin_thinking_token_id: int, end_thinking_token_id: int):
+        self.max_thinking_tokens = max_thinking_tokens
+        self.begin_thinking_token_id = begin_thinking_token_id
+        self.end_thinking_token_id = end_thinking_token_id
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        scores_processed = None
+        batch_size = input_ids.size(0)
+
+        for batch_idx in range(batch_size):
+            sequence = input_ids[batch_idx]
+            begin_positions = (sequence == self.begin_thinking_token_id).nonzero(as_tuple=False)
+            if begin_positions.numel() == 0:
+                continue
+
+            begin_idx = begin_positions[-1, 0].item()
+            after_begin = sequence[begin_idx + 1 :]
+            if after_begin.numel() == 0:
+                continue
+
+            if (after_begin == self.end_thinking_token_id).any():
+                continue
+
+            if after_begin.numel() < self.max_thinking_tokens:
+                continue
+
+            if scores_processed is None:
+                scores_processed = scores.clone()
+
+            scores_processed[batch_idx, :] = -float("inf")
+            scores_processed[batch_idx, self.end_thinking_token_id] = scores[batch_idx, self.end_thinking_token_id]
+
+        return scores if scores_processed is None else scores_processed
+
+
 class TemperatureLogitsWarper(LogitsProcessor):
     r"""
     [`LogitsProcessor`] for temperature (exponential scaling output probability distribution), which effectively means

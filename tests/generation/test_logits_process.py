@@ -38,6 +38,7 @@ if is_torch_available():
         InfNanRemoveLogitsProcessor,
         LogitNormalization,
         LogitsProcessorList,
+        MaxThinkingTokensLogitsProcessor,
         MinLengthLogitsProcessor,
         MinNewTokensLengthLogitsProcessor,
         MinPLogitsWarper,
@@ -147,6 +148,36 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores_before_min_length = new_min_dist_processor(input_ids, scores)
         self.assertFalse(torch.isinf(scores_before_min_length).any())
+
+    def test_max_thinking_tokens_processor_noop_before_budget(self):
+        begin_id, end_id = 10, 11
+        vocab_size = 32
+        processor = MaxThinkingTokensLogitsProcessor(max_thinking_tokens=3, begin_thinking_token_id=begin_id, end_thinking_token_id=end_id)
+
+        input_ids = torch.tensor([[1, 2, begin_id, 5]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        processed = processor(input_ids, scores)
+        self.assertTrue(torch.equal(processed, scores))
+
+    def test_max_thinking_tokens_processor_forces_end_token(self):
+        begin_id, end_id = 10, 11
+        vocab_size = 32
+        processor = MaxThinkingTokensLogitsProcessor(max_thinking_tokens=2, begin_thinking_token_id=begin_id, end_thinking_token_id=end_id)
+
+        # thinking budget reached -> only end token should remain available
+        input_ids = torch.tensor([[1, begin_id, 5, 6]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        processed = processor(input_ids, scores)
+        self.assertFalse(torch.equal(processed, scores))
+        end_mask = torch.isinf(processed[0]) & (processed[0] < 0)
+        self.assertEqual(end_mask.sum().item(), vocab_size - 1)
+        self.assertFalse(end_mask[end_id])
+
+        # once the closing token is present the processor becomes a no-op
+        closed_ids = torch.tensor([[1, begin_id, 5, end_id, 9]], device=torch_device, dtype=torch.long)
+        scores_again = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        processed_closed = processor(closed_ids, scores_again)
+        self.assertTrue(torch.equal(processed_closed, scores_again))
 
     def test_temperature_dist_warper(self):
         input_ids = None

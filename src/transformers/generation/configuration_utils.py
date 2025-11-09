@@ -109,6 +109,10 @@ class GenerationConfig(PushToHubMixin):
             `max_new_tokens`. Its effect is overridden by `max_new_tokens`, if also set.
         max_new_tokens (`int`, *optional*):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
+        max_thinking_tokens (`int`, *optional*):
+            Maximum number of tokens the model may dedicate to the "thinking" segment of a chat template before it must
+            emit `end_thinking_token_id`. Requires `begin_thinking_token_id` and `end_thinking_token_id` to be set and
+            is ignored for models that do not expose such a segment.
         min_length (`int`, *optional*, defaults to 0):
             The minimum length of the sequence to be generated. Corresponds to the length of the input prompt +
             `min_new_tokens`. Its effect is overridden by `min_new_tokens`, if also set.
@@ -216,6 +220,11 @@ class GenerationConfig(PushToHubMixin):
         forced_eos_token_id (`int` or list[int]`, *optional*, defaults to `model.config.forced_eos_token_id`):
             The id of the token to force as the last generated token when `max_length` is reached. Optionally, use a
             list to set multiple *end-of-sequence* tokens.
+        begin_thinking_token_id (`int`, *optional*):
+            Token id that opens the reasoning/thinking segment in chat templates that support it. Required when using
+            `max_thinking_tokens`.
+        end_thinking_token_id (`int`, *optional*):
+            Token id that closes the reasoning/thinking segment. Required when using `max_thinking_tokens`.
         remove_invalid_values (`bool`, *optional*, defaults to `model.config.remove_invalid_values`):
             Whether to remove possible *nan* and *inf* outputs of the model to prevent the generation method to crash.
             Note that using `remove_invalid_values` can slow down generation.
@@ -338,6 +347,7 @@ class GenerationConfig(PushToHubMixin):
         # Parameters that control the length of the output
         self.max_length = kwargs.pop("max_length", 20)
         self.max_new_tokens = kwargs.pop("max_new_tokens", None)
+        self.max_thinking_tokens = kwargs.pop("max_thinking_tokens", None)
         self.min_length = kwargs.pop("min_length", 0)
         self.min_new_tokens = kwargs.pop("min_new_tokens", None)
         self.early_stopping = kwargs.pop("early_stopping", False)
@@ -372,6 +382,8 @@ class GenerationConfig(PushToHubMixin):
         self.renormalize_logits = kwargs.pop("renormalize_logits", False)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
+        self.begin_thinking_token_id = kwargs.pop("begin_thinking_token_id", None)
+        self.end_thinking_token_id = kwargs.pop("end_thinking_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
         self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
@@ -548,6 +560,26 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+        if self.max_thinking_tokens is not None:
+            if self.max_thinking_tokens <= 0:
+                raise ValueError(
+                    f"`max_thinking_tokens` must be greater than 0, but is {self.max_thinking_tokens}."
+                )
+            if self.begin_thinking_token_id is None or self.end_thinking_token_id is None:
+                raise ValueError(
+                    "Using `max_thinking_tokens` requires both `begin_thinking_token_id` and "
+                    "`end_thinking_token_id` to be defined."
+                )
+            if self.max_new_tokens is None:
+                raise ValueError(
+                    "Using `max_thinking_tokens` requires `max_new_tokens` to be set so there is room for the final "
+                    "response."
+                )
+            if self.max_thinking_tokens >= self.max_new_tokens:
+                raise ValueError(
+                    "`max_thinking_tokens` must be strictly smaller than `max_new_tokens` "
+                    f"(got {self.max_thinking_tokens} vs {self.max_new_tokens})."
+                )
         if self.pad_token_id is not None and self.pad_token_id < 0:
             minor_issues["pad_token_id"] = (
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "
