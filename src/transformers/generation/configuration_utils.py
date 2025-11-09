@@ -111,10 +111,10 @@ class GenerationConfig(PushToHubMixin):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
         max_thinking_tokens (`int`, *optional*):
             Maximum number of tokens the model may dedicate to the "thinking" segment of a chat template before it must
-            emit `end_thinking_token_id`. Requires `begin_thinking_token_id` and `end_thinking_token_id` to be set and
-            is ignored for models that do not expose such a segment. Because emitting `end_thinking_token_id` also
-            consumes one generation step, at most `max_new_tokens - max_thinking_tokens - 1` tokens remain for the final
-            response.
+            emit `end_thinking_token_id`. Requires `begin_thinking_token_id`, `end_thinking_token_id`, and
+            `max_new_tokens` to be set and is ignored for models that do not expose such a segment. Because emitting
+            `end_thinking_token_id` also consumes one generation step, at most `max_new_tokens - max_thinking_tokens - 1`
+            tokens remain for the final response.
         min_length (`int`, *optional*, defaults to 0):
             The minimum length of the sequence to be generated. Corresponds to the length of the input prompt +
             `min_new_tokens`. Its effect is overridden by `min_new_tokens`, if also set.
@@ -570,18 +570,21 @@ class GenerationConfig(PushToHubMixin):
                     "Using `max_thinking_tokens` requires both `begin_thinking_token_id` and "
                     "`end_thinking_token_id` to be defined."
                 )
-            if self.max_new_tokens is not None:
-                if self.max_new_tokens <= 1:
-                    raise ValueError(
-                        "Using `max_thinking_tokens` requires `max_new_tokens` to be at least 2 so there is room for "
-                        "the closing token and final response."
-                    )
-                if self.max_thinking_tokens > self.max_new_tokens - 2:
-                    raise ValueError(
-                        "`max_thinking_tokens` must be at most `max_new_tokens - 2` so there is room for the closing "
-                        f"token and at least one response token (got {self.max_thinking_tokens} vs "
-                        f"{self.max_new_tokens})."
-                    )
+            if self.max_new_tokens is None:
+                raise ValueError(
+                    "Using `max_thinking_tokens` requires `max_new_tokens` to be defined so there is budget for the "
+                    "closing token and the final response."
+                )
+            if self.max_new_tokens <= 1:
+                raise ValueError(
+                    "Using `max_thinking_tokens` requires `max_new_tokens` to be at least 2 so there is room for the "
+                    "closing token and final response."
+                )
+            if self.max_thinking_tokens > self.max_new_tokens - 2:
+                raise ValueError(
+                    "`max_thinking_tokens` must be at most `max_new_tokens - 2` so there is room for the closing token "
+                    f"and at least one response token (got {self.max_thinking_tokens} vs {self.max_new_tokens})."
+                )
         if self.pad_token_id is not None and self.pad_token_id < 0:
             minor_issues["pad_token_id"] = (
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "
