@@ -136,7 +136,7 @@ class Gemma2Config(PreTrainedConfig):
         hidden_activation: Optional[str] = "gelu_pytorch_tanh",
         max_position_embeddings: Optional[int] = 8192,
         initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
+        rms_norm_eps: Optional[float] = 1e-6,
         use_cache: Optional[bool] = True,
         pad_token_id: Optional[int] = 0,
         eos_token_id: Optional[int] = 1,

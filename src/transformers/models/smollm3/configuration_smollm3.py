@@ -135,7 +135,7 @@ class SmolLM3Config(PreTrainedConfig):
         hidden_act: Optional[str] = "silu",
         max_position_embeddings: Optional[int] = 32768,
         initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
+        rms_norm_eps: Optional[float] = 1e-6,
         use_cache: Optional[bool] = True,
         pad_token_id: Optional[int] = 128004,
         bos_token_id: Optional[int] = 128000,
