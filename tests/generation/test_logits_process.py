@@ -183,6 +183,20 @@ class LogitsProcessorTest(unittest.TestCase):
         processed_closed = processor(closed_ids, scores_again)
         self.assertTrue(torch.equal(processed_closed, scores_again))
 
+    def test_max_thinking_tokens_processor_does_not_reset_on_nested_begin(self):
+        begin_id, end_id = 10, 11
+        vocab_size = 32
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=2, begin_thinking_token_id=begin_id, end_thinking_token_id=end_id
+        )
+
+        input_ids = torch.tensor([[1, begin_id, 5, begin_id, 6]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        processed = processor(input_ids, scores)
+        end_mask = torch.isinf(processed[0]) & (processed[0] < 0)
+        self.assertEqual(end_mask.sum().item(), vocab_size - 1)
+        self.assertFalse(end_mask[end_id])
+
     def test_max_thinking_tokens_processor_restores_end_logit(self):
         begin_id, end_id = 10, 11
         vocab_size = 32

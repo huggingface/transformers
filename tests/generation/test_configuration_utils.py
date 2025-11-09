@@ -243,6 +243,22 @@ class GenerationConfigTest(unittest.TestCase):
         config = GenerationConfig(max_thinking_tokens=4, **kwargs)
         self.assertEqual(config.max_thinking_tokens, 4)
 
+    def test_max_thinking_tokens_without_max_new_tokens_can_be_saved(self):
+        kwargs = {
+            "begin_thinking_token_id": 5,
+            "end_thinking_token_id": 6,
+        }
+
+        config = GenerationConfig(max_thinking_tokens=4, **kwargs)
+        self.assertIsNone(config.max_new_tokens)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            loaded = GenerationConfig.from_pretrained(tmp_dir)
+
+        self.assertEqual(loaded.max_thinking_tokens, 4)
+        self.assertIsNone(loaded.max_new_tokens)
+
     def test_refuse_to_save(self):
         """Tests that we refuse to save a generation config that fails validation."""
 

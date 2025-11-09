@@ -259,12 +259,16 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             if begin_positions.numel() == 0:
                 continue
 
-            begin_idx = begin_positions[-1, 0].item()
-            after_begin = sequence[begin_idx + 1 :]
-            if after_begin.numel() == 0:
+            begin_positions = begin_positions.squeeze(-1)
+            end_positions = (sequence == self.end_thinking_token_id).nonzero(as_tuple=False).squeeze(-1)
+            last_end_idx = end_positions[-1].item() if end_positions.numel() > 0 else -1
+            unmatched_begins = begin_positions[begin_positions > last_end_idx]
+            if unmatched_begins.numel() == 0:
                 continue
 
-            if (after_begin == self.end_thinking_token_id).any():
+            begin_idx = unmatched_begins[0].item()
+            after_begin = sequence[begin_idx + 1 :]
+            if after_begin.numel() == 0:
                 continue
 
             if after_begin.numel() < self.max_thinking_tokens:
