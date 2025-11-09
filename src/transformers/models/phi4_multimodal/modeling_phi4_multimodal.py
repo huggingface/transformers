@@ -1470,7 +1470,9 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
 
         image_embeds = None
         audio_embeds = None
-        if image_pixel_values is not None and (input_ids == self.image_token_id).any():
+        if image_pixel_values is not None and (
+            torch.compiler.is_exporting() or (input_ids == self.image_token_id).any()
+        ):
             image_embeds = self.image_embed(
                 input_ids,
                 inputs_embeds,

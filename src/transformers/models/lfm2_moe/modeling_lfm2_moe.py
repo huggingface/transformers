@@ -534,7 +534,7 @@ class Lfm2MoeShortConv(nn.Module):
         Bx = B * x
 
         conv_weights = self.conv.weight.view(self.conv.weight.size(0), self.conv.weight.size(2))
-        if past_key_values is not None and cache_position[0] > 0:
+        if past_key_values is not None and (torch.compiler.is_exporting() or cache_position[0] > 0):
             conv_out = causal_conv1d_update(
                 Bx.squeeze(-1),
                 past_key_values.conv_cache[self.layer_idx],
@@ -569,7 +569,7 @@ class Lfm2MoeShortConv(nn.Module):
 
         Bx = B * x
 
-        if past_key_values is not None and cache_position[0] > 0:
+        if past_key_values is not None and (torch.compiler.is_exporting() or cache_position[0] > 0):
             conv_state = past_key_values.conv_cache[self.layer_idx]
             cache_position = cache_position.clamp(0, self.L_cache - 1)
             conv_state = conv_state.roll(shifts=-1, dims=-1)
