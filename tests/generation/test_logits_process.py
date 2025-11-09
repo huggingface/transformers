@@ -199,6 +199,7 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertFalse(torch.isinf(processed[0, end_id]))
         unavailable = torch.isinf(processed[0])
         self.assertEqual(unavailable.sum().item(), vocab_size - 1)
+
     def test_temperature_dist_warper(self):
         input_ids = None
         length = 20
