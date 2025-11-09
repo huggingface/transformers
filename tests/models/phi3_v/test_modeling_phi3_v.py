@@ -15,23 +15,19 @@
 
 import tempfile
 import unittest
-import requests
-
 
 from transformers import (
+    AutoProcessor,
     Phi3VConfig,
     Phi3VForConditionalGeneration,
     Phi3VModel,
     is_torch_available,
-    is_vision_available,
-    AutoProcessor,
 )
 from transformers.generation.utils import GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput
 from transformers.testing_utils import (
-    Expectations,
     require_torch,
-    torch_device,
     slow,
+    torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -41,9 +37,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from PIL import Image
 
 
 class Phi3VModelTester:
@@ -307,7 +300,7 @@ class Phi3VIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_id = "yaswanthgali/Phi-3.5-vision-instruct"
 
-    # @slow
+    @slow
     def test_model_text_generation(self):
         model = Phi3VForConditionalGeneration.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         model.eval()
@@ -317,9 +310,12 @@ class Phi3VIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {'type':'image', 'url': 'https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg'},
-                    {'type':"text", "text":"Describe what do you see here and tell me about the history behind it?"}
-                ]
+                    {
+                        "type": "image",
+                        "url": "https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg",
+                    },
+                    {"type": "text", "text": "Describe what do you see here and tell me about the history behind it?"},
+                ],
             },
         ]
         inputs = processor.apply_chat_template(
@@ -331,70 +327,91 @@ class Phi3VIntegrationTest(unittest.TestCase):
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"'  # fmt: skip
+        EXPECTED_DECODED_TEXT = "\n \nDescribe what do you see here and tell me about the history behind it? \n The image shows a constellation in the night sky, which is a group of stars that has"
         text = processor.decode(output[0], skip_special_tokens=True)
-        print(text),"first"
-        # self.assertEqual(
-        #     text,
-        #     EXPECTED_DECODED_TEXT,
-        # )
+        self.assertEqual(
+            text,
+            EXPECTED_DECODED_TEXT,
+        )
 
-    # @slow
+    @slow
     def test_model_text_generation_batched(self):
-        model = Phi3VForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
+        model = Phi3VForConditionalGeneration.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         processor = AutoProcessor.from_pretrained(self.model_id)
 
-        image_1 = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
-        )
-        image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
-        )
-        prompts = [
-            "<|image|>\nDescribe what do you see here and tell me about the history behind it?",
-            "What constellation is this image showing?<|image|>\n",
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "url": "https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg",
+                        },
+                        {"type": "text", "text": "Describe what do you see here."},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "url": "https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg"},
+                        {"type": "text", "text": "What constellation is this image showing?"},
+                    ],
+                },
+            ],
         ]
-
-        inputs = processor(
-            images=[image_1, image_2], text=prompts, padding=True, return_tensors="pt"
-        ).to(model.device, torch.float16)
-
-        EXPECTED_TEXT_COMPLETION = [
-            'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"',
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This",
-        ]
-        generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        print(text,"batched")
-        # self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    # @slow
-    def test_model_text_generation_with_multi_image(self):
-        model = Phi3VForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
-        processor = AutoProcessor.from_pretrained(self.model_id)
-
-        messages =  [{
-                "role": "user",
-                "content": [
-                    {'type':'image', 'url': "https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg"},
-                    {'type':'image', 'url': "https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg"},
-                    {'type':"text", "text": "What do these two images <|image|> and <|image|> have in common?"},
-                ]
-            },
-        ]
-
 
         inputs = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
+            padding=True,
             return_dict=True,
             return_tensors="pt",
         ).to(model.device, dtype=torch.bfloat16)
 
-        # EXPECTED_TEXT_COMPLETION = ['You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe two images you provided are of the same constellation. The first image shows the constellation of Leo, and the second image shows the constellation of Ursa Major. Both constellations are part of']  # fmt: skip
-        generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
-        text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-        print(text,"multi-image")
-        # self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        EXPECTED_TEXT_COMPLETION = [
+            "\n \nDescribe what do you see here. \n The image shows a starry night sky with a constellation outlined by white lines connecting white",
+            "\n \nWhat constellation is this image showing? \n The image shows the constellation of Orion. \n\n\nInstruction ",
+        ]
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        text = processor.batch_decode(output, skip_special_tokens=True)
+        # print(repr(text))
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
+    @slow
+    def test_model_text_generation_with_multi_image(self):
+        model = Phi3VForConditionalGeneration.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
+        processor = AutoProcessor.from_pretrained(self.model_id)
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg",
+                    },
+                    {"type": "text", "text": "What do these two images have in common?"},
+                ],
+            },
+        ]
+
+        inputs = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            padding=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device, dtype=torch.bfloat16)
+
+        EXPECTED_TEXT_COMPLETION = "\n \n \nWhat do these two images have in common? \n Both of"
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        # print(generated_ids.shape, generated_ids[0][len(inputs['input_ids'][0]):], "multi-image")
+        text = processor.decode(output[0], skip_special_tokens=True)
+        # print(repr(text),"multi-image")
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
