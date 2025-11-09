@@ -458,7 +458,11 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
 
-        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
+        if (
+            not torch.compiler.is_exporting()
+            and not is_torchdynamo_compiling()
+            and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length
+        ):
             raise ValueError(
                 "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
             )
