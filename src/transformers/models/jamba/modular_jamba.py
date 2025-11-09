@@ -501,16 +501,16 @@ class JambaSparseMoeBlock(nn.Module):
         self.router = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
         self.experts = JambaExperts(config)
 
-    def route_tokens_to_experts(self, hidden_states, router_logits):
+    def route_tokens_to_experts(self, router_logits):
         routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
         top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        return top_k_index, top_k_weights.to(hidden_states.dtype)
+        return top_k_index, top_k_weights.to(router_logits.dtype)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         router_logits = self.router(hidden_states)
-        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
+        top_k_index, top_k_weights = self.route_tokens_to_experts(router_logits)
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
