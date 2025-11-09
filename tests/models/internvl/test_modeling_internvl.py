@@ -206,6 +206,71 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_flash_model_forward_pass(self):
+        config = self.model_tester.get_config()
+
+        config.is_flash_model = True
+        config.flash_relative_threshold = 0.5
+        config.flash_absolute_threshold = 0.1
+
+        image_size = 128
+        patch_size_int = self.model_tester.vision_config["patch_size"]
+        config.vision_config.image_size = (image_size, image_size)
+        config.vision_config.patch_size = (patch_size_int, patch_size_int)
+
+        text_seq_len = 15
+        image_block_size = 256
+        num_image_blocks = 1
+        image_seq_len = image_block_size * num_image_blocks
+        total_seq_len = text_seq_len + image_seq_len
+
+        model = InternVLForConditionalGeneration(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        batch_size = 1
+        vocab_size = config.text_config.vocab_size
+        image_token_id = config.image_token_id
+
+        pixel_values = floats_tensor(
+            [
+                batch_size * num_image_blocks,
+                self.model_tester.num_channels,
+                image_size,
+                image_size,
+            ]
+        ).to(torch_device)
+
+        image_ids = torch.full(
+            size=(batch_size, image_seq_len),
+            fill_value=image_token_id,
+            dtype=torch.long,
+            device=torch_device,
+        )
+        text_ids = torch.randint(
+            low=image_token_id + 1,
+            high=vocab_size,
+            size=(batch_size, text_seq_len),
+            dtype=torch.long,
+            device=torch_device,
+        )
+        input_ids = torch.cat([image_ids, text_ids], dim=1)
+        attention_mask = torch.ones_like(input_ids)
+
+        with torch.no_grad():
+            outputs = model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+            )
+
+        self.assertIsNotNone(outputs.logits)
+        self.assertEqual(outputs.logits.shape[0], batch_size)
+        self.assertEqual(outputs.logits.shape[2], vocab_size)
+
+        self.assertGreater(outputs.logits.shape[1], 0)
+        self.assertLessEqual(outputs.logits.shape[1], total_seq_len)
+
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
