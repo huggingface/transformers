@@ -260,20 +260,34 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         self._prompt_length_override: Optional[int] = prompt_length
         self._tracked_prompt_length: Optional[int] = prompt_length
 
-    def _first_open_thinking_position(self, sequence: torch.LongTensor) -> Optional[int]:
-        """Returns the index of the first unmatched `begin_thinking_token_id`, if any."""
-        open_depth = 0
+    def _first_open_thinking_position(self, sequence: torch.LongTensor, prompt_length: int) -> Optional[int]:
+        """Returns the first unmatched `begin_thinking_token_id` that starts at or after the prompt boundary."""
+        sequence_length = sequence.shape[-1]
+        if sequence_length == 0 or prompt_length >= sequence_length:
+            return None
+
+        prompt_open_depth = 0
+        open_stack: list[int] = []
         first_open_position: Optional[int] = None
-        for position in range(sequence.shape[-1]):
+
+        for position in range(sequence_length):
             token_id = int(sequence[position])
+
             if token_id == self.begin_thinking_token_id:
-                if open_depth == 0:
-                    first_open_position = position
-                open_depth += 1
-            elif token_id == self.end_thinking_token_id and open_depth > 0:
-                open_depth -= 1
-                if open_depth == 0:
-                    first_open_position = None
+                if position >= prompt_length:
+                    if not open_stack:
+                        first_open_position = position
+                    open_stack.append(position)
+                else:
+                    prompt_open_depth += 1
+            elif token_id == self.end_thinking_token_id:
+                if open_stack:
+                    open_stack.pop()
+                    if not open_stack:
+                        first_open_position = None
+                elif prompt_open_depth > 0:
+                    prompt_open_depth -= 1
+
         return first_open_position
 
     def set_prompt_length(self, prompt_length: Optional[int]) -> None:
@@ -311,7 +325,7 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         disallow_repeated_close_indices: list[int] = []
 
         for batch_index in range(batch_size):
-            first_open_position = self._first_open_thinking_position(input_ids[batch_index])
+            first_open_position = self._first_open_thinking_position(input_ids[batch_index], prompt_length)
 
             if first_open_position is None:
                 if (
