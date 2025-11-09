@@ -247,11 +247,34 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         self.max_thinking_tokens = max_thinking_tokens
         self.begin_thinking_token_id = begin_thinking_token_id
         self.end_thinking_token_id = end_thinking_token_id
+        self._prompt_lengths: Optional[torch.LongTensor] = None
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         scores_processed = None
         batch_size = input_ids.size(0)
+
+        if self._prompt_lengths is None:
+            self._prompt_lengths = torch.full(
+                (batch_size,),
+                input_ids.size(1),
+                dtype=torch.long,
+            )
+        elif self._prompt_lengths.size(0) != batch_size:
+            old_size = self._prompt_lengths.size(0)
+            new_size = batch_size
+            if old_size == 0:
+                self._prompt_lengths = torch.full((new_size,), input_ids.size(1), dtype=torch.long)
+            elif new_size % old_size == 0:
+                repeat_factor = new_size // old_size
+                self._prompt_lengths = self._prompt_lengths.repeat_interleave(repeat_factor)
+            elif old_size % new_size == 0:
+                self._prompt_lengths = self._prompt_lengths[:new_size]
+            else:
+                new_prompt_lengths = torch.full((new_size,), input_ids.size(1), dtype=torch.long)
+                copy_size = min(old_size, new_size)
+                new_prompt_lengths[:copy_size] = self._prompt_lengths[:copy_size]
+                self._prompt_lengths = new_prompt_lengths
 
         for batch_idx in range(batch_size):
             sequence = input_ids[batch_idx]
@@ -267,10 +290,14 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
                 continue
 
             begin_idx = unmatched_begins[0].item()
-            after_begin = sequence[begin_idx + 1 :]
-            if after_begin.numel() == 0:
+            prompt_boundary = int(self._prompt_lengths[batch_idx].item()) if self._prompt_lengths is not None else 0
+            prompt_boundary = min(prompt_boundary, sequence.size(0))
+            count_start = max(begin_idx + 1, prompt_boundary)
+
+            if count_start >= sequence.size(0):
                 continue
 
+            after_begin = sequence[count_start:]
             if after_begin.numel() < self.max_thinking_tokens:
                 continue
 

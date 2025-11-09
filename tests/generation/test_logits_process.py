@@ -214,6 +214,25 @@ class LogitsProcessorTest(unittest.TestCase):
         unavailable = torch.isinf(processed[0])
         self.assertEqual(unavailable.sum().item(), vocab_size - 1)
 
+    def test_max_thinking_tokens_processor_ignores_prompt_budget(self):
+        begin_id, end_id = 10, 11
+        vocab_size = 32
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=2, begin_thinking_token_id=begin_id, end_thinking_token_id=end_id
+        )
+
+        prompt_only = torch.tensor([[begin_id, 5, 6]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        processed_prompt = processor(prompt_only, scores)
+        self.assertTrue(torch.equal(processed_prompt, scores))
+
+        continued = torch.tensor([[begin_id, 5, 6, 20, 21, 22]], device=torch_device, dtype=torch.long)
+        scores_later = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        processed_continued = processor(continued, scores_later)
+        end_mask = torch.isinf(processed_continued[0]) & (processed_continued[0] < 0)
+        self.assertEqual(end_mask.sum().item(), vocab_size - 1)
+        self.assertFalse(end_mask[end_id])
+
     def test_temperature_dist_warper(self):
         input_ids = None
         length = 20
