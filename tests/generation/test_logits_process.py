@@ -143,6 +143,86 @@ class LogitsProcessorTest(unittest.TestCase):
         scores_before_min_length = new_min_dist_processor(input_ids, scores)
         self.assertFalse(torch.isinf(scores_before_min_length).any())
 
+    def test_max_thinking_tokens_processor_enforces_budget(self):
+        begin_token_id = 30
+        end_token_id = 31
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=2,
+            begin_thinking_token_id=begin_token_id,
+            end_thinking_token_id=end_token_id,
+        )
+
+        prompt_input_ids = torch.tensor(
+            [
+                [7, 8, begin_token_id, 9, 10],
+                [begin_token_id, 11, end_token_id, 12, 13],
+                [14, begin_token_id, 15, begin_token_id, 16],
+                [17, 18, 19, 20, 21],
+            ],
+            device=torch_device,
+            dtype=torch.long,
+        )
+        generated_suffix = torch.tensor(
+            [
+                [101, 102, 103, 104],
+                [begin_token_id, 201, end_token_id, 202],
+                [301, begin_token_id, 302, 303],
+                [401, 402, 403, 404],
+            ],
+            device=torch_device,
+            dtype=torch.long,
+        )
+
+        vocab_size = 64
+        warmup_scores = self._get_uniform_logits(batch_size=prompt_input_ids.shape[0], length=vocab_size)
+        processor(prompt_input_ids, warmup_scores)
+
+        input_ids = torch.cat([prompt_input_ids, generated_suffix], dim=1)
+        scores = self._get_uniform_logits(batch_size=input_ids.shape[0], length=vocab_size)
+        processed_scores = processor(input_ids, scores)
+
+        vocab_positions = torch.arange(vocab_size, device=torch_device)
+        not_end_mask = vocab_positions != end_token_id
+
+        for batch_idx in (0, 2):
+            row = processed_scores[batch_idx]
+            self.assertTrue(torch.all(torch.isinf(row[not_end_mask])))
+            self.assertTrue(torch.all(row[not_end_mask] < 0))
+            self.assertEqual(row[end_token_id].item(), 0)
+
+        for batch_idx in (1, 3):
+            torch.testing.assert_close(processed_scores[batch_idx], scores[batch_idx])
+
+    def test_max_thinking_tokens_processor_ignores_closed_blocks(self):
+        begin_token_id = 40
+        end_token_id = 41
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=1,
+            begin_thinking_token_id=begin_token_id,
+            end_thinking_token_id=end_token_id,
+        )
+
+        prompt_input_ids = torch.tensor(
+            [[begin_token_id, 5, 6, 7]],
+            device=torch_device,
+            dtype=torch.long,
+        )
+        generated_suffix = torch.tensor(
+            [[8, end_token_id, 9, begin_token_id, 10, end_token_id]],
+            device=torch_device,
+            dtype=torch.long,
+        )
+
+        vocab_size = 50
+        warmup_scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        processor(prompt_input_ids, warmup_scores)
+
+        input_ids = torch.cat([prompt_input_ids, generated_suffix], dim=1)
+        scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+
+        processed_scores = processor(input_ids, scores)
+        torch.testing.assert_close(processed_scores, scores)
+
         # check that min new length is not applied anymore at length 15
         input_ids = ids_tensor((batch_size, 15), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
