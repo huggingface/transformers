@@ -224,6 +224,36 @@ class LogitsProcessorTest(unittest.TestCase):
         # All thinking blocks are closed, so logits should not be altered.
         torch.testing.assert_close(processed_scores, scores)
 
+    def test_max_thinking_tokens_processor_prompt_length_reset(self):
+        begin_token_id = 45
+        end_token_id = 46
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=1,
+            begin_thinking_token_id=begin_token_id,
+            end_thinking_token_id=end_token_id,
+        )
+
+        vocab_size = 32
+        warmup_scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        short_prompt = torch.tensor([[begin_token_id, 1, 2, 3]], device=torch_device, dtype=torch.long)
+        processor(short_prompt, warmup_scores)
+
+        longer_prompt = torch.tensor(
+            [[begin_token_id, 1, 2, 3, 4, 5, 6]],
+            device=torch_device,
+            dtype=torch.long,
+        )
+        scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        processed_without_reset = processor(longer_prompt, scores)
+
+        vocab_positions = torch.arange(vocab_size, device=torch_device)
+        not_end_mask = vocab_positions != end_token_id
+        self.assertTrue(torch.all(torch.isinf(processed_without_reset[:, not_end_mask])))
+
+        processor.set_prompt_length(longer_prompt.shape[-1])
+        processed_with_reset = processor(longer_prompt, scores)
+        torch.testing.assert_close(processed_with_reset, scores)
+
     def test_temperature_dist_warper(self):
         input_ids = None
         length = 20

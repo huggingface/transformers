@@ -571,20 +571,22 @@ class GenerationConfig(PushToHubMixin):
                     "`end_thinking_token_id` to be defined."
                 )
             if self.max_new_tokens is None:
-                raise ValueError(
-                    "Using `max_thinking_tokens` requires `max_new_tokens` to be defined so there is budget for the "
-                    "closing token and the final response."
+                minor_issues["max_thinking_tokens"] = (
+                    "Using `max_thinking_tokens` requires `max_new_tokens` to be defined (either on the config itself "
+                    "or when calling `generate`) so there is budget for the closing token and the final response."
                 )
-            if self.max_new_tokens <= 1:
-                raise ValueError(
-                    "Using `max_thinking_tokens` requires `max_new_tokens` to be at least 2 so there is room for the "
-                    "closing token and final response."
-                )
-            if self.max_thinking_tokens > self.max_new_tokens - 2:
-                raise ValueError(
-                    "`max_thinking_tokens` must be at most `max_new_tokens - 2` so there is room for the closing token "
-                    f"and at least one response token (got {self.max_thinking_tokens} vs {self.max_new_tokens})."
-                )
+            else:
+                if self.max_new_tokens <= 1:
+                    raise ValueError(
+                        "Using `max_thinking_tokens` requires `max_new_tokens` to be at least 2 so there is room for "
+                        "the closing token and final response."
+                    )
+                if self.max_thinking_tokens > self.max_new_tokens - 2:
+                    raise ValueError(
+                        "`max_thinking_tokens` must be at most `max_new_tokens - 2` so there is room for the closing "
+                        f"token and at least one response token (got {self.max_thinking_tokens} vs "
+                        f"{self.max_new_tokens})."
+                    )
         if self.pad_token_id is not None and self.pad_token_id < 0:
             minor_issues["pad_token_id"] = (
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "

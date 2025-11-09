@@ -1244,6 +1244,7 @@ class GenerationMixin(ContinuousMixin):
                     generation_config.max_thinking_tokens,
                     generation_config.begin_thinking_token_id,
                     generation_config.end_thinking_token_id,
+                    prompt_length=input_ids_seq_length,
                 )
             )
         if prefix_allowed_tokens_fn is not None:
@@ -1298,6 +1299,16 @@ class GenerationMixin(ContinuousMixin):
                     device=device,
                 )
             )
+
+        def _propagate_prompt_length(processor_list: Optional[list]):
+            if input_ids_seq_length is None or processor_list is None:
+                return
+            for processor in processor_list:
+                if isinstance(processor, MaxThinkingTokensLogitsProcessor):
+                    processor.set_prompt_length(input_ids_seq_length)
+
+        _propagate_prompt_length(processors)
+        _propagate_prompt_length(logits_processor)
 
         # TODO (joao): find a strategy to specify the order of the processors
         processors = self._merge_criteria_processor_list(processors, logits_processor)

@@ -166,6 +166,15 @@ class GenerationConfigTest(unittest.TestCase):
 
         logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
+            GenerationConfig(
+                max_thinking_tokens=2,
+                begin_thinking_token_id=3,
+                end_thinking_token_id=4,
+            )
+        self.assertNotEqual(len(captured_logs.out), 0)
+
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
             generation_config_bad_temperature = GenerationConfig(do_sample=False, temperature=0.5)  # store for later
         self.assertNotEqual(len(captured_logs.out), 0)
 
@@ -229,6 +238,14 @@ class GenerationConfigTest(unittest.TestCase):
         generation_config.do_sample = False
         with self.assertRaises(ValueError):
             generation_config.validate(strict=True)
+
+        config_missing_length = GenerationConfig(
+            max_thinking_tokens=2,
+            begin_thinking_token_id=3,
+            end_thinking_token_id=4,
+        )
+        with self.assertRaises(ValueError):
+            config_missing_length.validate(strict=True)
 
     def test_refuse_to_save(self):
         """Tests that we refuse to save a generation config that fails validation."""
