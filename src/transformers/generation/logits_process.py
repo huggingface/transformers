@@ -308,11 +308,17 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             self._tracked_prompt_length = prompt_length
 
         force_end_indices: list[int] = []
+        disallow_repeated_close_indices: list[int] = []
 
         for batch_index in range(batch_size):
             first_open_position = self._first_open_thinking_position(input_ids[batch_index])
 
             if first_open_position is None:
+                if (
+                    sequence_length > 0
+                    and int(input_ids[batch_index, sequence_length - 1]) == self.end_thinking_token_id
+                ):
+                    disallow_repeated_close_indices.append(batch_index)
                 continue
 
             count_start = max(first_open_position + 1, prompt_length)
@@ -323,18 +329,22 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             if tokens_inside_block >= self.max_thinking_tokens:
                 force_end_indices.append(batch_index)
 
-        if not force_end_indices:
+        if not force_end_indices and not disallow_repeated_close_indices:
             return scores
 
         scores_processed = scores.clone()
-        scores_processed[force_end_indices] = -math.inf
-        end_token_logits = scores[force_end_indices, self.end_thinking_token_id]
-        safe_end_token_logits = torch.where(
-            torch.isfinite(end_token_logits),
-            end_token_logits,
-            torch.zeros_like(end_token_logits),
-        )
-        scores_processed[force_end_indices, self.end_thinking_token_id] = safe_end_token_logits
+        if disallow_repeated_close_indices:
+            scores_processed[disallow_repeated_close_indices, self.end_thinking_token_id] = -math.inf
+
+        if force_end_indices:
+            scores_processed[force_end_indices] = -math.inf
+            end_token_logits = scores[force_end_indices, self.end_thinking_token_id]
+            safe_end_token_logits = torch.where(
+                torch.isfinite(end_token_logits),
+                end_token_logits,
+                torch.zeros_like(end_token_logits),
+            )
+            scores_processed[force_end_indices, self.end_thinking_token_id] = safe_end_token_logits
 
         return scores_processed
 
