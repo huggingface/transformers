@@ -1058,7 +1058,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 nodes, xpaths = self.get_nodes_and_xpaths()
                 encoded_sequence = tokenizer.encode_plus(nodes, xpaths=xpaths, return_tensors="pt")
                 batch_encoded_sequence = tokenizer.batch_encode_plus(
-                    [nodes, nodes], [xpaths, xpaths], return_tensors="pt"
+                    batch_text_or_text_pairs=[nodes, nodes], xpaths=[xpaths, xpaths], return_tensors="pt"
                 )
                 # This should not fail
 
