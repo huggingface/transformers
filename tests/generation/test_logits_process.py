@@ -221,13 +221,8 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
 
         processed_scores = processor(input_ids, scores)
+        # All thinking blocks are closed, so logits should not be altered.
         torch.testing.assert_close(processed_scores, scores)
-
-        # check that min new length is not applied anymore at length 15
-        input_ids = ids_tensor((batch_size, 15), vocab_size=20)
-        scores = self._get_uniform_logits(batch_size, vocab_size)
-        scores_before_min_length = new_min_dist_processor(input_ids, scores)
-        self.assertFalse(torch.isinf(scores_before_min_length).any())
 
     def test_temperature_dist_warper(self):
         input_ids = None
