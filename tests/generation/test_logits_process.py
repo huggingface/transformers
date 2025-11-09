@@ -183,6 +183,22 @@ class LogitsProcessorTest(unittest.TestCase):
         processed_closed = processor(closed_ids, scores_again)
         self.assertTrue(torch.equal(processed_closed, scores_again))
 
+    def test_max_thinking_tokens_processor_restores_end_logit(self):
+        begin_id, end_id = 10, 11
+        vocab_size = 32
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=1, begin_thinking_token_id=begin_id, end_thinking_token_id=end_id
+        )
+
+        input_ids = torch.tensor([[begin_id, 5]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        scores[0, end_id] = -float("inf")
+
+        processed = processor(input_ids, scores)
+
+        self.assertFalse(torch.isinf(processed[0, end_id]))
+        unavailable = torch.isinf(processed[0])
+        self.assertEqual(unavailable.sum().item(), vocab_size - 1)
     def test_temperature_dist_warper(self):
         input_ids = None
         length = 20

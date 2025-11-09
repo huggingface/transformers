@@ -127,8 +127,8 @@ print(tokenizer.decode(output[0]))
 > The model generation with reasoning mode can be affected sensitively by sampling parameters, so please refer to the [Usage Guideline](https://github.com/LG-AI-EXAONE/EXAONE-4.0#usage-guideline) on official GitHub page for better quality.
 
 To keep latency predictable you can cap how many tokens the model spends inside the `<think>...</think>` block by
-passing `max_thinking_tokens` to `generate`. Make sure `max_new_tokens` is strictly larger so there is room for the
-final response:
+passing `max_thinking_tokens` to `generate`. Make sure `max_new_tokens` exceeds `max_thinking_tokens` by at least 2 so
+there is room for the closing `</think>` token and the final response:
 
 ```python
 output = model.generate(

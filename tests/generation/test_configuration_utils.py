@@ -230,6 +230,19 @@ class GenerationConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             generation_config.validate(strict=True)
 
+    def test_max_thinking_tokens_requires_room_for_answer(self):
+        kwargs = {
+            "max_new_tokens": 6,
+            "begin_thinking_token_id": 5,
+            "end_thinking_token_id": 6,
+        }
+
+        with self.assertRaises(ValueError):
+            GenerationConfig(max_thinking_tokens=5, **kwargs)
+
+        config = GenerationConfig(max_thinking_tokens=4, **kwargs)
+        self.assertEqual(config.max_thinking_tokens, 4)
+
     def test_refuse_to_save(self):
         """Tests that we refuse to save a generation config that fails validation."""
 

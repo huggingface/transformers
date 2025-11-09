@@ -274,7 +274,10 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
                 scores_processed = scores.clone()
 
             scores_processed[batch_idx, :] = -float("inf")
-            scores_processed[batch_idx, self.end_thinking_token_id] = scores[batch_idx, self.end_thinking_token_id]
+            end_token_logit = scores[batch_idx, self.end_thinking_token_id]
+            if not torch.isfinite(end_token_logit):
+                end_token_logit = torch.zeros((), dtype=scores.dtype, device=scores.device)
+            scores_processed[batch_idx, self.end_thinking_token_id] = end_token_logit
 
         return scores if scores_processed is None else scores_processed
 
