@@ -216,6 +216,82 @@ def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str
     return dynamic_shapes
 
 
+def generate_masks_with_special_tokens_and_transfer_map(
+    input_ids: torch.LongTensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Build a pair of tensors used for text handling in GroundingDINO:
+
+    Returns:
+    - attention_mask (`torch.BoolTensor`, shape `(B, N, N)`):
+        For each batch, a boolean matrix where True indicates tokens that should attend to
+        each other. We always keep the diagonal (a token attends to itself). Additionally,
+        non-special tokens that belong to the same segment (i.e. share the same closing
+        special token) will attend to each other.
+    - position_ids (`torch.LongTensor`, shape `(B, N)`):
+        For tokens that belong to a valid segment (bounded by special tokens), this contains
+        the position of the token inside its segment (0-based). Tokens not belonging to any
+        valid segment get 0.
+
+    Algorithm overview (per batch):
+    1. Find positions that are special tokens.
+    2. For each position p, compute next_delim_idx[p]: index of the first special token
+       at or after p (or N if none).
+    3. Tokens that share the same next_delim_idx (and where that next_delim is not a sentinel)
+       belong to the same block/segment and are allowed to cross-attend.
+    4. Exclude blocks whose closing delimiter is at position 0 or N-1 (these should only keep diagonal).
+    5. Compute position_ids as distance from the previous delimiter (+1), only for valid blocks.
+    """
+    from transformers.models.grounding_dino.modeling_grounding_dino import SPECIAL_TOKENS
+
+    batch_size, seq_len = input_ids.shape
+    device = input_ids.device
+
+    # 1) Identify special token positions
+    # boolean mask of special-token positions (B, N)
+    special_mask = torch.isin(input_ids, torch.tensor(SPECIAL_TOKENS, device=device))
+
+    # 2) For each position, find index of next special token (or seq_len if none)
+    # indexes [0,1,2,...,N-1] broadcasted to (B, N)
+    indexes = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
+    # at special token positions keep their index, else sentinel seq_len
+    candidates = torch.where(special_mask, indexes, torch.tensor(seq_len, device=device))  # (B, N)
+    # compute prefix minimum from the right to get first special >= p
+    next_delim_idx = torch.flip(torch.cummin(torch.flip(candidates, dims=[1]), dim=1)[0], dims=[1])  # (B, N)
+
+    # 3) Build group mask based on next_delim_idx
+    # tokens sharing same next_delim_idx (and where that delim is real) belong to same block
+    nd_i = next_delim_idx.unsqueeze(2)  # (B, N, 1)
+    nd_j = next_delim_idx.unsqueeze(1)  # (B, 1, N)
+    has_real_delim = next_delim_idx != seq_len
+    group_mask = (nd_i == nd_j) & has_real_delim.unsqueeze(1)  # (B, N, N)
+
+    # 4) Exclude blocks whose closing delimiter is at position 0 or N-1 (these should only keep diagonal)
+    valid_block = (next_delim_idx != 0) & (next_delim_idx != (seq_len - 1)) & (next_delim_idx != seq_len)
+    group_mask &= valid_block.unsqueeze(1)
+
+    # Always allow self-attention (diagonal)
+    identity = torch.eye(seq_len, device=device, dtype=torch.bool).unsqueeze(0).expand(batch_size, -1, -1)
+    attention_mask = identity | group_mask  # (B, N, N)
+
+    # 5) Compute position_ids as distance from previous delimiter (+1), only for valid blocks
+    # previous delimiter index at each column: shift prefix-max of special indices right by 1
+    neg_one = torch.full((batch_size, 1), -1, device=device, dtype=torch.long)
+    prev_candidates = torch.where(special_mask, indexes, torch.tensor(-1, device=device))
+    prefix_max = torch.cummax(prev_candidates, dim=1)[0]  # (B, N)
+    prev_delim_per_col = torch.cat((neg_one, prefix_max[:, :-1]), dim=1)  # (B, N)
+    prev_delim_per_col = torch.clamp(prev_delim_per_col, min=0)  # (B, N)
+    # gather previous delimiter corresponding to each token's closing delimiter
+    gather_idx = torch.clamp(next_delim_idx, max=seq_len - 1)  # (B, N)
+    prev_delim_for_token = torch.gather(prev_delim_per_col, 1, gather_idx)  # (B, N)
+    position_ids = indexes - prev_delim_for_token - 1  # distance from previous delimiter (0-based)
+    # only keep position ids for tokens in valid blocks; others set to 0
+    position_ids = torch.where(valid_block, position_ids, torch.zeros_like(position_ids))
+    position_ids = torch.clamp(position_ids, min=0).to(torch.long)
+
+    return attention_mask, position_ids
+
+
 def batched_experts_forward_with_split_expert_weights(
     self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
 ) -> torch.Tensor:
@@ -338,17 +414,6 @@ def batched_experts_gemm(self, input: torch.Tensor, tokens_per_expert: torch.Ten
     return output
 
 
-def embedding_without_dynamic_slicing_with_tensor(self, x: torch.Tensor, seq_len: torch.Tensor):
-    seq_len = seq_len.item()
-    torch._check(seq_len > 0)
-    torch._check(seq_len <= max(self.cos_cached.shape[0], self.sin_cached.shape[0]))
-
-    return (
-        self.cos_cached[:seq_len].to(device=x.device, dtype=x.dtype),
-        self.sin_cached[:seq_len].to(device=x.device, dtype=x.dtype),
-    )
-
-
 TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD: dict[str, Callable] = {
     # Expert MLPs with different weight storage schemes
     "AriaGroupedExpertsGemm": batched_experts_gemm,
@@ -372,8 +437,6 @@ TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD: dict[str, Callable] = {
     "Qwen3MoeExperts": batched_experts_forward_with_split_expert_weights,
     "Qwen3NextExperts": batched_experts_forward_with_split_expert_weights,
     "Qwen3OmniMoeThinkerTextExperts": batched_experts_forward_with_split_expert_weights,
-    # Embedding modules with dynamic slicing
-    "IdeficsEmbedding": embedding_without_dynamic_slicing_with_tensor,
 }
 
 
@@ -391,6 +454,27 @@ def patch_model_for_export(model: "PreTrainedModel"):
             # patch forward method with an exportable version (non data-dependent)
             module.forward = TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD[module_class_name].__get__(module)
 
+    # TODO: automate the helper methods patching process as well
+    original_functions = {}
+    if model.config.model_type == "grounding-dino":
+        import transformers.models.grounding_dino.modeling_grounding_dino as grounding_dino_module
+
+        original_functions["generate_masks_with_special_tokens_and_transfer_map"] = (
+            grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map
+        )
+        grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map = (
+            generate_masks_with_special_tokens_and_transfer_map
+        )
+    elif model.config.model_type == "mm-grounding-dino":
+        import transformers.models.mm_grounding_dino.modeling_mm_grounding_dino as mm_grounding_dino_module
+
+        original_functions["generate_masks_with_special_tokens_and_transfer_map"] = (
+            mm_grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map
+        )
+        mm_grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map = (
+            generate_masks_with_special_tokens_and_transfer_map
+        )
+
     try:
         yield
     finally:
@@ -404,71 +488,74 @@ def patch_model_for_export(model: "PreTrainedModel"):
                 # restore original forward method
                 module.forward = original_forwards[module_class_name]
 
+        if model.config.model_type == "grounding-dino":
+            import transformers.models.grounding_dino.modeling_grounding_dino as grounding_dino_module
+
+            grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map = original_functions[
+                "generate_masks_with_special_tokens_and_transfer_map"
+            ]
+        elif model.config.model_type == "mm-grounding-dino":
+            import transformers.models.mm_grounding_dino.modeling_mm_grounding_dino as mm_grounding_dino_module
+
+            mm_grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map = original_functions[
+                "generate_masks_with_special_tokens_and_transfer_map"
+            ]
+
 
 UNSUPPORTED_MODEL_TYPES: set[str] = {
-    "clvp",  # if isin_mps_friendly(each_input_id, pad_token_id).sum():
-    "colqwen2",  # input_tokens = input_ids.tolist()
-    "emu3",
-    "encodec",
-    "esm",
+    "clvp",  # many data-dependent branches that add bos/eos tokens
+    "colqwen2",  # Uses Qwen2VLModel which uses get_rope_index that is data-dependent
+    "emu3",  # Emu3VQVAE.encode is data-dependent
+    "encodec",  # torch.export struggles with torch.nn.functional.pad with "reflect" mode
+    "esm",  # uses compute_tm function which data-dependent
     "falcon_mamba",  # Uses FalconMambaCache which is a custom cache type that's not yet registered as a pytree node
-    "fastspeech2_conformer",
-    "fastspeech2_conformer_with_hifigan",
-    "flava",
-    "funnel",
-    "glm4v",
-    "glm4v_moe",
-    "grounding-dino",
-    "hiera",
-    "ibert",
-    "jamba",
-    "led",
-    "lfm2",
-    "lfm2_moe",
-    "lfm2_vl",
-    "lightglue",
-    "llava_next",
-    "llava_next_video",
-    "llava_onevision",
-    "longformer",
+    "fastspeech2_conformer",  # Even after making parts of it exportable, dynamo still struggle with the convolutions in FastSpeech2ConformerMultiLayeredConv1d
+    "fastspeech2_conformer_with_hifigan",  # Even after making parts of it exportable, dynamo still struggle with the convolutions in FastSpeech2ConformerMultiLayeredConv1d
+    "funnel",  # torch.export struggles with torch.einsum in FunnelRelMultiheadAttention
+    # "glm4v",
+    # "glm4v_moe",
+    "hiera",  # torch.export struggles with a reshape operation in HieraEncoder.reroll
+    # "ibert",
+    "jamba",  # Uses HybridMambaAttentionDynamicCache which is a custom cache type that's not yet registered as a pytree node
+    # "led",
+    "lfm2",  # Uses Lfm2HybridConvCach which is a custom cache type that's not yet registered as a pytree node
+    "lfm2_moe",  # Uses Lfm2MoeHybridConvCach which is a custom cache type that's not yet registered as a pytree node
+    "lfm2_vl",  # Uses siglip2 which is not exportable
+    # "lightglue",
+    # "llava_next",
+    # "llava_next_video",
+    # "llava_onevision",
+    # "longformer",
     "mamba",  # Uses MambaCache which is a custom cache type that's not yet registered as a pytree node
-    "mamba2",
-    "mimi",
+    "mamba2",  # Uses Mamba2Cache which is a custom cache type that's not yet registered as a pytree node
     "minimax",  # Uses MiniMaxCache which is a custom cache type that's not yet registered as a pytree node
-    "mistral3",
-    "mm-grounding-dino",
-    "modernbert",
-    "nllb-moe",
-    "omdet-turbo",
-    "oneformer",
-    "perception_lm",
-    "phi4_multimodal",
-    "pixtral",
-    "qwen2_5_omni",
-    "qwen2_5_omni_thinker",
-    "qwen2_5_vl",
-    "qwen2_vl",
+    # "mistral3",
+    # "modernbert",
+    # "nllb-moe",
+    # "omdet-turbo",
+    "oneformer",  # torch.export is failing on multiple torch methods like torch.linspace and torch.meshgrid
+    "pixtral",  # PixtralModel.forward does some data-dependent truncation
+    "qwen2_5_omni_thinker",  # already made many parts exportable but still has some non-exportable ops
+    "qwen2_5_vl",  # Qwen2_5_VisionTransformerPretrainedModel.get_window_index is data-dependent
+    "qwen2_vl",  # Qwen2VLModel.get_rope_index is data-dependent
     "qwen3_next",  # Uses Qwen3NextDynamicCache which is a custom cache type that's not yet registered as a pytree node
-    "qwen3_omni_moe",
-    "qwen3_omni_moe_thinker",
-    "qwen3_vl",
-    "qwen3_vl_moe",
-    "reformer",
-    "siglip2",
-    "siglip2_vision_model",
-    "splinter",
-    "superglue",
-    "superpoint",
-    "switch_transformers",
-    "tapas",
-    "video_llama_3",
-    "video_llama_3_vision",
-    "video_llava",
-    "videomae",
-    "vilt",
+    "qwen3_omni_moe_thinker",  # Qwen3OmniMoeAudioEncoder.forward does data-dependent chunking
+    "qwen3_vl",  # fast_pos_embed_interpolate is data-dependent
+    # "qwen3_vl_moe",
+    # "reformer",
+    "siglip2",  # torch.export is failing on torch.nn.functional.interpolate
+    "siglip2_vision_model",  # torch.export is failing on torch.nn.functional.interpolate
+    "superpoint",  # torch.export is failing on torch.nn.functional.grid_sample
+    # "switch_transformers",
+    # "tapas",
+    # "video_llama_3",
+    # "video_llama_3_vision",
+    # "video_llava",
+    # "videomae",
+    "vilt",  # torch.export is failing on torch.nn.functional.interpolate
     "xlstm",  # Uses xLSTMCache which is a custom cache type that's not yet registered as a pytree node
-    "xmod",
-    "zamba2",
+    "xmod",  # XmodOutput.lang_adapter is data-dependent
+    "zamba2",  # Uses Zamba2HybridDynamicCache which is a custom cache type that's not yet registered as a pytree node
 }
 
 

@@ -392,6 +392,10 @@ class IdeficsEmbedding(torch.nn.Module):
         if seq_len > self.max_seq_len_cached:
             self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
+        if torch.compiler.is_exporting():
+            torch._check(seq_len > 0)
+            torch._check(seq_len <= max(self.cos_cached.shape[0], self.sin_cached.shape[0]))
+
         return (
             self.cos_cached[:seq_len].to(dtype=x.dtype),
             self.sin_cached[:seq_len].to(dtype=x.dtype),

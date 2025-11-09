@@ -996,13 +996,13 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         self.post_init()
 
     @staticmethod
-    def get_reference_points(spatial_shapes, valid_ratios, device):
+    def get_reference_points(spatial_shapes_list, valid_ratios, device):
         """
-        Get reference points for each feature map. Used in decoder.
+        Get reference points for each feature map.
 
         Args:
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
+            spatial_shapes_list (list[tuple[int, int]]):
+                Spatial shapes of each feature map as a Python list of (height, width).
             valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
                 Valid ratios of each feature map.
             device (`torch.device`):
@@ -1011,7 +1011,7 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
             `torch.FloatTensor` of shape `(batch_size, num_queries, num_feature_levels, 2)`
         """
         reference_points_list = []
-        for level, (height, width) in enumerate(spatial_shapes):
+        for level, (height, width) in enumerate(spatial_shapes_list):
             ref_y, ref_x = meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
@@ -1022,7 +1022,7 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, level, 0] * width)
             ref = torch.stack((ref_x, ref_y), -1)
             reference_points_list.append(ref)
-        reference_points = torch.cat(reference_points_list, 1)
+        reference_points = torch.cat(reference_points_list, dim=1)
         reference_points = reference_points[:, :, None] * valid_ratios[:, None]
         return reference_points
 
@@ -1074,8 +1074,7 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         hidden_states = inputs_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        spatial_shapes_tuple = tuple(spatial_shapes_list)
-        reference_points = self.get_reference_points(spatial_shapes_tuple, valid_ratios, device=inputs_embeds.device)
+        reference_points = self.get_reference_points(spatial_shapes_list, valid_ratios, device=inputs_embeds.device)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None

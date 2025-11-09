@@ -1133,13 +1133,13 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
         self.post_init()
 
     @staticmethod
-    def get_reference_points(spatial_shapes, valid_ratios, device):
+    def get_reference_points(spatial_shapes_list, valid_ratios, device):
         """
         Get reference points for each feature map.
 
         Args:
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
+            spatial_shapes_list (list[tuple[int, int]]):
+                Spatial shapes of each feature map as a Python list of (height, width).
             valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
                 Valid ratios of each feature map.
             device (`torch.device`):
@@ -1148,10 +1148,10 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
             `torch.FloatTensor` of shape `(batch_size, num_queries, num_feature_levels, 2)`
         """
         reference_points_list = []
-        for level, (height, width) in enumerate(spatial_shapes):
+        for level, (height, width) in enumerate(spatial_shapes_list):
             ref_y, ref_x = meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
+                torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
                 indexing="ij",
             )
             # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
@@ -1159,7 +1159,7 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, level, 0] * width)
             ref = torch.stack((ref_x, ref_y), -1)
             reference_points_list.append(ref)
-        reference_points = torch.cat(reference_points_list, 1)
+        reference_points = torch.cat(reference_points_list, dim=1)
         reference_points = reference_points[:, :, None] * valid_ratios[:, None]
         return reference_points
 
@@ -1230,7 +1230,7 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=vision_features.device)
+        reference_points = self.get_reference_points(spatial_shapes_list, valid_ratios, device=vision_features.device)
 
         encoder_vision_states = () if output_hidden_states else None
         encoder_text_states = () if output_hidden_states else None
@@ -1888,14 +1888,13 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
-    def generate_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
+    def generate_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes_list):
         """Generate the encoder output proposals from encoded enc_output.
 
         Args:
             enc_output (`torch.Tensor[batch_size, sequence_length, hidden_size]`): Output of the encoder.
             padding_mask (`torch.Tensor[batch_size, sequence_length]`): Padding mask for `enc_output`.
-            spatial_shapes (`torch.Tensor[num_feature_levels, 2]`): Spatial shapes of the feature maps.
-
+            spatial_shapes_list (list[tuple[int, int]]): Spatial shapes of the feature maps as a Python list.
         Returns:
             `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
                 - object_query (Tensor[batch_size, sequence_length, hidden_size]): Object query features. Later used to
@@ -1906,7 +1905,7 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         batch_size = enc_output.shape[0]
         proposals = []
         current_position = 0
-        for level, (height, width) in enumerate(spatial_shapes):
+        for level, (height, width) in enumerate(spatial_shapes_list):
             mask_flatten_ = padding_mask[:, current_position : (current_position + height * width)]
             mask_flatten_ = mask_flatten_.view(batch_size, height, width, 1)
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
@@ -2120,7 +2119,7 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         encoder_pred_boxes = None
         if self.config.two_stage:
             object_query_embedding, output_proposals = self.generate_encoder_output_proposals(
-                encoder_outputs[0], ~mask_flatten, spatial_shapes
+                encoder_outputs[0], ~mask_flatten, spatial_shapes_list
             )
 
             # hack implementation as in two-stage Deformable DETR
