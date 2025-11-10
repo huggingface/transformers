@@ -209,8 +209,8 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_pad = True
     return_row_col_info = False
-    image_mean = IMAGENET_STANDARD_STD
-    image_std = IMAGENET_STANDARD_MEAN
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     valid_kwargs = Lfm2VlImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
 

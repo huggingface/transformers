@@ -69,10 +69,6 @@ class ChameleonProcessor(ProcessorMixin):
             The special token used to indicate image in the text.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
-    image_processor_class = "ChameleonImageProcessor"
-
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         self.image_seq_length = image_seq_length
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token

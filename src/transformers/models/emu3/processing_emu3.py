@@ -64,10 +64,6 @@ class Emu3Processor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast")
-    image_processor_class = "Emu3ImageProcessor"
-
     def __init__(
         self,
         image_processor,
