@@ -848,9 +848,7 @@ class ZambaModel(ZambaPreTrainedModel):
             if layer_type == "hybrid":
                 linear = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
                 layers.append(ZambaHybridLayer(ZambaAttentionDecoderLayer(config), linear, mamba))
-                _tied_weights_keys = {
-                    r"layers.(?![0])\d+.shared_transf.*" : "layers.0.shared_transf"
-                }
+                _tied_weights_keys = {r"layers.(?![0])\d+.shared_transf.*": "layers.0.shared_transf"}
             else:
                 layers.append(mamba)
         self.layers = nn.ModuleList(layers)

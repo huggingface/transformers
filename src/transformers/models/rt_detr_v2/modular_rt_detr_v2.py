@@ -13,13 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from copy import deepcopy
 from functools import partial
 from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from copy import deepcopy
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import (
@@ -600,7 +601,6 @@ class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedMod
         # TODO this increases usage but is really the least worst way of doing it for now.
         self.model.decoder.class_embed = deepcopy(self.class_embed)
         self.model.decoder.bbox_embed = deepcopy(self.bbox_embed)
-
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -600,7 +600,7 @@ class LxmertLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.transform = LxmertPredictionHeadTransform(config)
-        self.decoder = nn.Linear( config.hidden_size,config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
     def forward(self, hidden_states):
@@ -848,6 +848,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.weight": "lxmert.embeddings.word_embeddings.weight",
     }
+
     def __init__(self, config):
         super().__init__(config)
         # Configuration

@@ -2638,7 +2638,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if missing_keys is None:
             # called from `post_init`
             self.tie_weight_source_and_target(self, missing_keys, "")
-        else: # this is from_pretrained, so its not called on every sub module
+        else:  # this is from_pretrained, so its not called on every sub module
             for module_prefix, module in self.named_modules():
                 # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
                 if isinstance(module, PreTrainedModel):

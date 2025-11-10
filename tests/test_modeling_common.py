@@ -954,8 +954,7 @@ class ModelTesterMixin:
             # Everything must be exactly the same as we set the same seed for each init
             different_weights = []
             from_pre_state = dict(model_from_pretrained.state_dict())
-            for (k1, v1) in    model_from_config.state_dict().items():
-
+            for k1, v1 in model_from_config.state_dict().items():
                 # In case using torch.nn.utils.parametrizations on a module, we should skip the resulting keys
                 if re.search(r"\.parametrizations\..*?\.original[01]", k1):
                     continue
@@ -1191,7 +1190,7 @@ class ModelTesterMixin:
                             if "shared" in k:
                                 print(
                                     f"None for {k}, Probaby a model that does not default to tie the encoder and decoder!"
-                            )
+                                )
                             else:
                                 with self.subTest(f"{k}"):
                                     self.assertTrue(
@@ -1939,8 +1938,10 @@ class ModelTesterMixin:
                     for k, v in model_tied.state_dict().items():
                         with self.subTest(f"{model_class.__name__}.{k}"):
                             torch.testing.assert_close(
-                                v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}.\n"
-                                "This probably means that it was not set with the correct value when tying."
+                                v,
+                                reloaded_state[k],
+                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}.\n"
+                                "This probably means that it was not set with the correct value when tying.",
                             )
 
                     # Checking the tensor sharing are correct on the new model (weights are properly tied in both cases)
@@ -1959,7 +1960,11 @@ class ModelTesterMixin:
                         )
 
                     # Checking there was no complain of missing weights
-                    self.assertEqual(infos["missing_keys"], set(), "These keys were removed when serializing, and were not properly loaded by `from_pretrained`.")
+                    self.assertEqual(
+                        infos["missing_keys"],
+                        set(),
+                        "These keys were removed when serializing, and were not properly loaded by `from_pretrained`.",
+                    )
 
     def test_load_save_without_tied_weights(self):
         for model_class in self.all_model_classes:
@@ -2021,8 +2026,11 @@ class ModelTesterMixin:
 
             # Detect we get a hit for each key
             for key in tied_weight_keys:
-                is_tied_key = any(re.search(key, p)  for group in tied_params for p in group)
-                self.assertTrue(is_tied_key, f"{key} is not a tied weight key pattern for {model_class}: {is_tied_key}. With same patams: {tied_params}")
+                is_tied_key = any(re.search(key, p) for group in tied_params for p in group)
+                self.assertTrue(
+                    is_tied_key,
+                    f"{key} is not a tied weight key pattern for {model_class}: {is_tied_key}. With same patams: {tied_params}",
+                )
 
             # Removed tied weights found from tied params -> there should only be one left after
             for key in tied_weight_keys:
