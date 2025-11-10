@@ -2510,7 +2510,7 @@ class ModelTesterMixin:
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     model = model_class(config)
                     model.save_pretrained(tmp_dir)
-
+                    num_labels = config.num_labels
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(RuntimeError):
                         new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
@@ -2527,7 +2527,7 @@ class ModelTesterMixin:
                     new_model.to(torch_device)
                     inputs = self._prepare_for_class(inputs_dict, model_class)
                     logits = new_model(**inputs).logits
-                    self.assertEqual(logits.shape[1], 3)  # we still want to load :)
+                    self.assertEqual(logits.shape[1], 42)
 
                     with CaptureLogger(logger) as cl:
                         new_model_without_prefix = AutoModel.from_pretrained(
@@ -2622,7 +2622,7 @@ class ModelTesterMixin:
                         else:
                             # The old model should have `num_labels=3` (here it's the first dim of shape, as Linear layers
                             # are transposed)
-                            self.assertEqual(v2.shape[0], 3)
+                            self.assertEqual(v2.shape[0], 42)
                             # Make sure the mean of the new Linear layer is correctly centered around 0 (we cannot use
                             # a lower value for the check as some models hardcode a std of 0.02 instead of using the
                             # config, which we set very small with `config_no_init`)

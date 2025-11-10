@@ -29,10 +29,10 @@ from functools import partial
 from typing import Any, Optional, Union
 
 import torch
-from torch.distributed.tensor import DTensor
 
-from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer
+from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer,DTensor,Replicate
 from .utils import logging
+
 
 
 logger = logging.get_logger(__name__)
@@ -442,28 +442,34 @@ def set_param_for_module(
         module_obj = model.get_submodule(module_path) if module_path else model
         param_value = param_value[0] if isinstance(param_value, list) else param_value[...]
         ref = meta_model_state_dict.get(layer_name, empty_param)
+
+
         use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
         if not isinstance(param_value, torch.nn.Parameter):
-            if distributed_operation is not None and use_dtensor:
+            if distributed_operation is not None:
                 param_value = DTensor.from_local(
                     param_value,
                     distributed_operation.device_mesh,
-                    distributed_operation.shard,
+                    getattr(distributed_operation, "shard", Replicate()),
                     run_check=False,
                     shape=ref.size(),
                     stride=ref.stride(),
                 )
-            else:
-                pass  # TODO for "local" stuff, it will trigger missmatched no?
+                if not use_dtensor:
+                    # we convert to local
+                    param_value = param_value.to_local()
             param_value: LoadedParameter = LoadedParameter(param_value, requires_grad=param_value.is_floating_point())
         else:
             param_value: LoadedParameter = LoadedParameter(param_value.data)
 
         if ref is not None and ref.shape != param_value.shape:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
-        missing_keys.discard(layer_name)
-        param_value._is_hf_initialized = True  # super important otherwise _init_weight re-initi if bias is missing
-        setattr(module_obj, param_name, param_value)
+            setattr(module_obj._parameters[param_name], "_is_hf_initialized", False) # Needs to be initialized
+            missing_keys.discard(layer_name)
+        else:
+            missing_keys.discard(layer_name)
+            param_value._is_hf_initialized = True  # super important otherwise _init_weight re-initi if bias is missing
+            setattr(module_obj, param_name, param_value)
 
 
 class SkipLayer(Exception):
