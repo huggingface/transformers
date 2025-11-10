@@ -44,7 +44,11 @@ class IsaacModelTester:
             "num_attention_heads": num_attention_heads,
             "num_hidden_layers": num_hidden_layers,
             "num_key_value_heads": num_attention_heads,
-            "rope_parameters": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
+            # Keep the same multi-RoPE setup as the reference checkpoints but shrink the
+            # sections so they sum to the rotary half-dimension (4) of this tiny test model.
+            "rope_parameters": {"rope_type": "default", "mrope_section": [2, 1, 1], "mrope_interleaved": True},
+            # Qwen3 config expects `rope_theta` to be present on the text sub-config, so we
+            # set it explicitly to mimic real checkpoints and keep attribute mirroring working.
             "rope_theta": 10000,
             "tie_word_embeddings": True,
         }
