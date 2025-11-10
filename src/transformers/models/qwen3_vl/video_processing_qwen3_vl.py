@@ -40,8 +40,6 @@ def smart_resize(
     min_pixels: int = 128 * 128,
     max_pixels: int = 16 * 16 * 2 * 2 * 2 * 6144,
 ):
-    if num_frames < temporal_factor:
-        raise ValueError(f"t:{num_frames} must be larger than temporal_factor:{temporal_factor}")
     if height < factor or width < factor:
         raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
     elif max(height, width) / min(height, width) > 200:
@@ -50,7 +48,7 @@ def smart_resize(
         )
     h_bar = round(height / factor) * factor
     w_bar = round(width / factor) * factor
-    t_bar = round(num_frames / temporal_factor) * temporal_factor
+    t_bar = math.ceil(num_frames / temporal_factor) * temporal_factor
 
     if t_bar * h_bar * w_bar > max_pixels:
         beta = math.sqrt((num_frames * height * width) / max_pixels)
@@ -232,9 +230,10 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
             patches = stacked_videos
 
             # Check that videos have `num_frames` divisible by `temporal_patch_size`
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
+            T = patches.shape[1]
+            if pad := -T % temporal_patch_size:
+                repeats = patches[:, -1:].expand(-1, pad, -1, -1, -1)
+                patches = torch.cat((patches, repeats), dim=1)
             batch_size, grid_t, channel = patches.shape[:3]
             grid_t = grid_t // temporal_patch_size
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
