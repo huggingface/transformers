@@ -247,7 +247,8 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         prompt_prefilled_suffix_length (`int`, *optional*, defaults to 8):
             Number of prompt tokens (counting back from the prompt boundary) that should be treated as potentially
             containing prefilled `<think>` markup. Any unmatched `<think>` in this suffix is treated as an active block
-            when generation starts.
+            when generation starts. Only the first unmatched block inside this suffix is replayed, so nested `<think>`
+            markup earlier in the prompt is intentionally ignored to keep the lookback bounded.
     """
 
     def __init__(
