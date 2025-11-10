@@ -42,6 +42,7 @@ from transformers.models.mamba2.modeling_mamba2 import (
     segment_sum,
 )
 
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -51,50 +52,37 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.import_utils import (
-    is_causal_conv1d_available,
-    is_einops_available,
-    is_kernels_available,
-    is_mamba_2_ssm_available,
-)
 from .configuration_bamba import BambaConfig
+
+
+def _lazy_load_kernels():
+    global causal_conv1d_update, causal_conv1d_fn
+
+    causal_conv1d = lazy_load_kernel("causal-conv1d")
+    causal_conv1d_update, causal_conv1d_fn = (
+        (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+        if causal_conv1d is not None
+        else (None, None)
+    )
+
+    global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+
+    mamba_ssm = lazy_load_kernel("mamba-ssm")
+    selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = (
+        (
+            mamba_ssm.ops.triton.selective_state_update.selective_state_update,
+            mamba_ssm.ops.triton.ssd_combined.mamba_chunk_scan_combined,
+            mamba_ssm.ops.triton.ssd_combined.mamba_split_conv1d_scan_combined,
+        )
+        if mamba_ssm is not None
+        else (None, None, None)
+    )
 
 
 selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = None, None, None
 causal_conv1d_update, causal_conv1d_fn = None, None
 
-
-def _lazy_load_mamba2_ssm():
-    global selective_state_update
-
-    if is_kernels_available() and is_einops_available():
-        from kernels import get_kernel
-
-        mamba_ssm = get_kernel("kernels-community/mamba-ssm")
-
-        selective_state_update = mamba_ssm.ops.triton.selective_state_update.selective_state_update
-        mamba_chunk_scan_combined = mamba_ssm.ops.triton.ssd_combined.mamba_chunk_scan_combined
-        mamba_split_conv1d_scan_combined = mamba_ssm.ops.triton.ssd_combined.mamba_split_conv1d_scan_combined
-
-    elif is_mamba_2_ssm_available():
-        from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-
-
-def _lazy_load_causal_conv1d():
-    global causal_conv1d_update, causal_conv1d_fn
-
-    if is_kernels_available() and is_einops_available():
-        from kernels import get_kernel
-
-        causal_conv1d = get_kernel("kernels-community/causal-conv1d")
-        causal_conv1d_fn = causal_conv1d.causal_conv1d_fn
-        causal_conv1d_update = causal_conv1d.causal_conv1d_update
-
-    elif is_causal_conv1d_available:
-        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-
-is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
-
+is_fast_path_available = False
 
 logger = logging.get_logger(__name__)
 
@@ -302,8 +290,7 @@ class BambaMixer(nn.Module):
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
 
-        _lazy_load_causal_conv1d()
-        _lazy_load_mamba2_ssm()
+        _lazy_load_kernels()
 
         global is_fast_path_available
         is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))

@@ -23,6 +23,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -30,33 +31,40 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_mamba2 import Mamba2Config
 
 
 logger = logging.get_logger(__name__)
 
 
-if is_mamba_2_ssm_available():
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
-else:
-    mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined, selective_state_update = None, None, None
+def _lazy_load_kernels():
+    global causal_conv1d_update, causal_conv1d_fn
 
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
-
-is_fast_path_available = all(
-    (
-        selective_state_update,
-        mamba_chunk_scan_combined,
-        mamba_split_conv1d_scan_combined,
-        causal_conv1d_fn,
-        causal_conv1d_update,
+    causal_conv1d = lazy_load_kernel("causal-conv1d")
+    causal_conv1d_update, causal_conv1d_fn = (
+        (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+        if causal_conv1d is not None
+        else (None, None)
     )
-)
+
+    global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+
+    mamba_ssm = lazy_load_kernel("mamba-ssm")
+    selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = (
+        (
+            mamba_ssm.ops.triton.selective_state_update.selective_state_update,
+            mamba_ssm.ops.triton.ssd_combined.mamba_chunk_scan_combined,
+            mamba_ssm.ops.triton.ssd_combined.mamba_split_conv1d_scan_combined,
+        )
+        if mamba_ssm is not None
+        else (None, None, None)
+    )
+
+
+selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = None, None, None
+causal_conv1d_update, causal_conv1d_fn = None, None
+
+is_fast_path_available = False
 
 
 # Helper methods for segment sum computation
@@ -284,6 +292,19 @@ class Mamba2Mixer(nn.Module):
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
+
+        _lazy_load_kernels()
+        global is_fast_path_available
+
+        is_fast_path_available = all(
+            (
+                selective_state_update,
+                mamba_chunk_scan_combined,
+                mamba_split_conv1d_scan_combined,
+                causal_conv1d_fn,
+                causal_conv1d_update,
+            )
+        )
 
         if not is_fast_path_available:
             logger.warning_once(
