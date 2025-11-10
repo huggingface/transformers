@@ -60,6 +60,7 @@ else:
             ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
             ("sam2_video", "Sam2VideoVideoProcessor"),
             ("smolvlm", "SmolVLMVideoProcessor"),
+            ("video_llama_3", "VideoLlama3VideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
             ("videomae", "VideoMAEVideoProcessor"),
             ("vjepa2", "VJEPA2VideoProcessor"),
@@ -291,7 +292,7 @@ class AutoVideoProcessor:
 
                 # Some models have different image processors, e.g. InternVL uses GotOCRImageProcessor
                 # We cannot use GotOCRVideoProcessor when falling back for BC and should try to infer from config later on
-                if video_processor_class_inferred in VIDEO_PROCESSOR_MAPPING_NAMES.values():
+                if video_processor_class_from_name(video_processor_class_inferred) is not None:
                     video_processor_class = video_processor_class_inferred
             if "AutoImageProcessor" in config_dict.get("auto_map", {}):
                 image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
