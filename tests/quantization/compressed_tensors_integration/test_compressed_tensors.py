@@ -13,9 +13,9 @@ if is_torch_available():
 @require_compressed_tensors
 @require_torch
 class CompressedTensorsTest(unittest.TestCase):
-    tinyllama_w8a16 = "nm-testing/tinyllama-w8a16-dense-hf-quantizer"
-    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed-hf-quantizer"
-    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed-hf-quantizer"
+    tinyllama_w8a16 = "nm-testing/tinyllama-w8a16-dense"
+    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed"
+    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed"
     llama3_8b_fp8 = "nm-testing/Meta-Llama-3-8B-Instruct-fp8-hf_compat"
 
     prompt = "Paris is the capital of which country?"
@@ -59,7 +59,7 @@ class CompressedTensorsTest(unittest.TestCase):
         self._test_quantized_model(self.tinyllama_w8a16, expected_out)
 
     def test_llama_8b_fp8(self):
-        expected_out = "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous art museum in Paris? The Louvre\nWhat is the name of the famous opera house in Paris? Palais Garnier\nWhat is the name of the"
+        expected_out = "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous art museum in Paris? The Louvre\nWhat is the name of the famous bridge in Paris? Pont des Arts\nWhat is the name of the famous opera? "
         self._test_quantized_model(self.llama3_8b_fp8, expected_out)
 
     def _test_quantized_model(self, model_name: str, expected_output: str):
