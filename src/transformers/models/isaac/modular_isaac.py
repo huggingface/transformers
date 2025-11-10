@@ -113,7 +113,7 @@ from genesis.public.tensorstream.tensor_stream_utils import (
 )
 
 from ...cache_utils import Cache, SlidingWindowCache, StaticCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
 from ...image_processing_utils_fast import (
@@ -129,6 +129,7 @@ from ...image_utils import (
 )
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...models.auto.modeling_auto import AutoModel
 from ...models.auto.tokenization_auto import AutoTokenizer
