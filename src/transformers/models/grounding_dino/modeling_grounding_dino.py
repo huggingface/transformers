@@ -2413,35 +2413,32 @@ def build_text_mask(logits, attention_mask):
 class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # the bbox_embed in the decoder are all clones though
-    _tied_weights_keys = {"bbox_embed": "model.decoder.bbox_embed"}
+    _tied_weights_keys = {
+        "model.decoder.bbox_embed":"bbox_embed",
+        "model.decoder.class_embed":"class_embed",
+        r"class_embed.(?![0])\d+": "class_embed.0",
+    }
 
     def __init__(self, config: GroundingDinoConfig):
         super().__init__(config)
 
         self.model = GroundingDinoModel(config)
-        _class_embed = GroundingDinoContrastiveEmbedding(config)
-
         if config.decoder_bbox_embed_share:
-            # a single shared instance
-            shared_head = GroundingDinoMLPPredictionHead(
-                input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-            )
-            self.bbox_embed = nn.ModuleList([shared_head] * config.decoder_layers)
-        else:
-            # each layer has its own head (implicit deep copy through a new instance)
-            self.bbox_embed = nn.ModuleList(
-                [
-                    GroundingDinoMLPPredictionHead(
-                        input_dim=config.d_model,
-                        hidden_dim=config.d_model,
-                        output_dim=4,
-                        num_layers=3,
-                    )
-                    for _ in range(config.decoder_layers)
-                ]
-            )
+            self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]= "bbox_embed.0"
 
-        self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
+        self.bbox_embed = nn.ModuleList(
+            [
+                GroundingDinoMLPPredictionHead(
+                    input_dim=config.d_model,
+                    hidden_dim=config.d_model,
+                    output_dim=4,
+                    num_layers=3,
+                )
+                for _ in range(config.decoder_layers)
+            ]
+        )
+
+        self.class_embed = nn.ModuleList([GroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)])
         # hack for box-refinement
         self.model.decoder.bbox_embed = self.bbox_embed
         # hack implementation for two-stage
