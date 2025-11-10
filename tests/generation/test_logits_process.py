@@ -146,12 +146,6 @@ class LogitsProcessorTest(unittest.TestCase):
     def test_max_thinking_tokens_processor_enforces_budget(self):
         begin_token_id = 30
         end_token_id = 31
-        processor = MaxThinkingTokensLogitsProcessor(
-            max_thinking_tokens=2,
-            begin_thinking_token_id=begin_token_id,
-            end_thinking_token_id=end_token_id,
-        )
-
         prompt_input_ids = torch.tensor(
             [
                 [7, 8, begin_token_id, 9, 10],
@@ -171,6 +165,13 @@ class LogitsProcessorTest(unittest.TestCase):
             ],
             device=torch_device,
             dtype=torch.long,
+        )
+
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=2,
+            begin_thinking_token_id=begin_token_id,
+            end_thinking_token_id=end_token_id,
+            prompt_length=prompt_input_ids.shape[-1],
         )
 
         vocab_size = 64
@@ -196,12 +197,6 @@ class LogitsProcessorTest(unittest.TestCase):
     def test_max_thinking_tokens_processor_ignores_closed_blocks(self):
         begin_token_id = 40
         end_token_id = 41
-        processor = MaxThinkingTokensLogitsProcessor(
-            max_thinking_tokens=1,
-            begin_thinking_token_id=begin_token_id,
-            end_thinking_token_id=end_token_id,
-        )
-
         prompt_input_ids = torch.tensor(
             [[begin_token_id, 5, 6, 7]],
             device=torch_device,
@@ -211,6 +206,13 @@ class LogitsProcessorTest(unittest.TestCase):
             [[8, end_token_id, 9, begin_token_id, 10, end_token_id]],
             device=torch_device,
             dtype=torch.long,
+        )
+
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=1,
+            begin_thinking_token_id=begin_token_id,
+            end_thinking_token_id=end_token_id,
+            prompt_length=prompt_input_ids.shape[-1],
         )
 
         vocab_size = 50
@@ -224,35 +226,6 @@ class LogitsProcessorTest(unittest.TestCase):
         # All thinking blocks are closed, so logits should remain untouched.
         torch.testing.assert_close(processed_scores, scores)
 
-    def test_max_thinking_tokens_processor_prompt_length_reset(self):
-        begin_token_id = 45
-        end_token_id = 46
-        processor = MaxThinkingTokensLogitsProcessor(
-            max_thinking_tokens=1,
-            begin_thinking_token_id=begin_token_id,
-            end_thinking_token_id=end_token_id,
-        )
-
-        vocab_size = max(begin_token_id, end_token_id) + 10
-        warmup_scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
-        short_prompt = torch.tensor([[begin_token_id, 1, 2, 3]], device=torch_device, dtype=torch.long)
-        processor(short_prompt, warmup_scores)
-
-        longer_prompt = torch.tensor(
-            [[begin_token_id, 1, 2, 3, 4, 5, 6]],
-            device=torch_device,
-            dtype=torch.long,
-        )
-        scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
-        processed_without_reset = processor(longer_prompt, scores)
-
-        vocab_positions = torch.arange(vocab_size, device=torch_device)
-        not_end_mask = vocab_positions != end_token_id
-        self.assertTrue(torch.all(torch.isinf(processed_without_reset[:, not_end_mask])))
-
-        processor.set_prompt_length(longer_prompt.shape[-1])
-        processed_with_reset = processor(longer_prompt, scores)
-        torch.testing.assert_close(processed_with_reset, scores)
 
     def test_max_thinking_tokens_processor_blocks_immediate_reclose(self):
         begin_token_id = 47
@@ -261,6 +234,7 @@ class LogitsProcessorTest(unittest.TestCase):
             max_thinking_tokens=1,
             begin_thinking_token_id=begin_token_id,
             end_thinking_token_id=end_token_id,
+            prompt_length=0,
         )
 
         vocab_size = max(begin_token_id, end_token_id) + 10
@@ -274,12 +248,6 @@ class LogitsProcessorTest(unittest.TestCase):
     def test_max_thinking_tokens_processor_ignores_prompt_history_blocks(self):
         begin_token_id = 49
         end_token_id = 50
-        processor = MaxThinkingTokensLogitsProcessor(
-            max_thinking_tokens=1,
-            begin_thinking_token_id=begin_token_id,
-            end_thinking_token_id=end_token_id,
-        )
-
         vocab_size = max(begin_token_id, end_token_id) + 10
         warmup_scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
 
@@ -288,6 +256,13 @@ class LogitsProcessorTest(unittest.TestCase):
             [[begin_token_id, 5, 6, begin_token_id]],
             device=torch_device,
             dtype=torch.long,
+        )
+
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=1,
+            begin_thinking_token_id=begin_token_id,
+            end_thinking_token_id=end_token_id,
+            prompt_length=prompt_input_ids.shape[-1],
         )
         processor(prompt_input_ids, warmup_scores)
 
@@ -332,12 +307,6 @@ class LogitsProcessorTest(unittest.TestCase):
     def test_max_thinking_tokens_processor_ignores_unmatched_prompt_history(self):
         begin_token_id = 51
         end_token_id = 52
-        processor = MaxThinkingTokensLogitsProcessor(
-            max_thinking_tokens=1,
-            begin_thinking_token_id=begin_token_id,
-            end_thinking_token_id=end_token_id,
-        )
-
         vocab_size = 80
         warmup_scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
 
@@ -346,6 +315,13 @@ class LogitsProcessorTest(unittest.TestCase):
             [[begin_token_id, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]],
             device=torch_device,
             dtype=torch.long,
+        )
+
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=1,
+            begin_thinking_token_id=begin_token_id,
+            end_thinking_token_id=end_token_id,
+            prompt_length=prompt_input_ids.shape[-1],
         )
         processor(prompt_input_ids, warmup_scores)
 
@@ -371,12 +347,6 @@ class LogitsProcessorTest(unittest.TestCase):
     def test_max_thinking_tokens_processor_ignores_prompt_markup(self):
         begin_token_id = 53
         end_token_id = 54
-        processor = MaxThinkingTokensLogitsProcessor(
-            max_thinking_tokens=3,
-            begin_thinking_token_id=begin_token_id,
-            end_thinking_token_id=end_token_id,
-        )
-
         vocab_size = 80
         warmup_scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
 
@@ -384,6 +354,13 @@ class LogitsProcessorTest(unittest.TestCase):
             [[11, begin_token_id, 12, end_token_id, 13, begin_token_id, 14, end_token_id, 15]],
             device=torch_device,
             dtype=torch.long,
+        )
+
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=3,
+            begin_thinking_token_id=begin_token_id,
+            end_thinking_token_id=end_token_id,
+            prompt_length=prompt_input_ids.shape[-1],
         )
         processor(prompt_input_ids, warmup_scores)
 
@@ -396,12 +373,6 @@ class LogitsProcessorTest(unittest.TestCase):
         begin_token_id = 55
         end_token_id = 56
         newline_token_id = 57
-        processor = MaxThinkingTokensLogitsProcessor(
-            max_thinking_tokens=2,
-            begin_thinking_token_id=begin_token_id,
-            end_thinking_token_id=end_token_id,
-        )
-
         vocab_size = 90
         warmup_scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
 
@@ -410,6 +381,13 @@ class LogitsProcessorTest(unittest.TestCase):
             [[21, 22, begin_token_id, newline_token_id]],
             device=torch_device,
             dtype=torch.long,
+        )
+
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=2,
+            begin_thinking_token_id=begin_token_id,
+            end_thinking_token_id=end_token_id,
+            prompt_length=prompt_input_ids.shape[-1],
         )
         processor(prompt_input_ids, warmup_scores)
 
@@ -425,16 +403,17 @@ class LogitsProcessorTest(unittest.TestCase):
     def test_max_thinking_tokens_processor_allows_redundant_close_tokens(self):
         begin_token_id = 58
         end_token_id = 59
-        processor = MaxThinkingTokensLogitsProcessor(
-            max_thinking_tokens=1,
-            begin_thinking_token_id=begin_token_id,
-            end_thinking_token_id=end_token_id,
-        )
-
         vocab_size = 90
         warmup_scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
 
         prompt_input_ids = torch.tensor([[begin_token_id]], device=torch_device, dtype=torch.long)
+
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=1,
+            begin_thinking_token_id=begin_token_id,
+            end_thinking_token_id=end_token_id,
+            prompt_length=prompt_input_ids.shape[-1],
+        )
         processor(prompt_input_ids, warmup_scores)
 
         reasoning_token = torch.tensor([[401]], device=torch_device, dtype=torch.long)

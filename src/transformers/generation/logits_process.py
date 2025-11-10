@@ -241,10 +241,9 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             Token id that marks the start of the thinking segment (for example a `<think>` special token).
         end_thinking_token_id (`int`):
             Token id that closes the thinking segment (for example a `</think>` special token).
-        prompt_length (`int`, *optional*):
-            Length of the prompt sequence before any new tokens are generated. If unset, the processor infers (and
-            continually tracks) the shortest sequence length it has seen so far, which matches the prompt length when
-            the processor is freshly instantiated.
+        prompt_length (`int`):
+            Length of the prompt sequence before any new tokens are generated. Typically set to the length of the input
+            prompt (`input_ids.shape[-1]`) when the processor is instantiated.
     """
 
     _PROMPT_PREFILLED_LOOKBACK = 256
@@ -255,13 +254,12 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         max_thinking_tokens: int,
         begin_thinking_token_id: int,
         end_thinking_token_id: int,
-        prompt_length: Optional[int] = None,
+        prompt_length: int,
     ):
         self.max_thinking_tokens = max_thinking_tokens
         self.begin_thinking_token_id = begin_thinking_token_id
         self.end_thinking_token_id = end_thinking_token_id
-        self._prompt_length_override: Optional[int] = prompt_length
-        self._tracked_prompt_length: Optional[int] = prompt_length
+        self.prompt_length = prompt_length
 
     def _find_prefilled_block_start(self, sequence: torch.LongTensor, prompt_length: int) -> Optional[int]:
         """
@@ -303,8 +301,6 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         that tokenizer templates that append `<think>` automatically remain compatible with the thinking budget.
         """
         sequence_length = sequence.shape[-1]
-        if sequence_length == 0:
-            return None
 
         prompt_length = min(prompt_length, sequence_length)
         prefilled_start = self._find_prefilled_block_start(sequence, prompt_length)
@@ -327,49 +323,20 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             return open_stack[0]
         return None
 
-    def set_prompt_length(self, prompt_length: Optional[int]) -> None:
-        """
-        Overrides the prompt length used to determine how many tokens have been generated inside the thinking block.
-
-        This is useful when reusing the same processor instance across multiple calls to `generate`, where each call
-        may start from prompts of different lengths.
-        """
-        self._prompt_length_override = prompt_length
-        self._tracked_prompt_length = prompt_length
-
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        batch_size, sequence_length = input_ids.shape
-
-        if batch_size == 0:
-            return scores
-
-        prompt_length = self._prompt_length_override
-        if prompt_length is None:
-            if self._tracked_prompt_length is None:
-                self._tracked_prompt_length = sequence_length
-            else:
-                self._tracked_prompt_length = min(self._tracked_prompt_length, sequence_length)
-            prompt_length = self._tracked_prompt_length
-        else:
-            self._tracked_prompt_length = prompt_length
-
-        if prompt_length is None:
-            prompt_length = sequence_length
-            self._tracked_prompt_length = prompt_length
+        batch_size = input_ids.shape[0]
 
         force_end_indices: list[int] = []
 
         for batch_index in range(batch_size):
             sequence = input_ids[batch_index]
-            batch_prompt_length = min(prompt_length, sequence.shape[-1])
+            batch_prompt_length = min(self.prompt_length, sequence.shape[-1])
             first_open_position = self._active_block_start(sequence, batch_prompt_length)
             if first_open_position is None:
                 continue
 
             count_start = max(first_open_position + 1, batch_prompt_length)
-            if count_start >= sequence.shape[-1]:
-                continue
 
             tokens_inside_block = sequence.shape[-1] - count_start
             if tokens_inside_block >= self.max_thinking_tokens:
@@ -379,10 +346,8 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             return scores
 
         scores_processed = scores.clone()
-        if force_end_indices:
-            scores_processed[force_end_indices] = -math.inf
-            zero_logits = torch.zeros(len(force_end_indices), device=scores.device, dtype=scores.dtype)
-            scores_processed[force_end_indices, self.end_thinking_token_id] = zero_logits
+        scores_processed[force_end_indices] = -math.inf
+        scores_processed[force_end_indices, self.end_thinking_token_id] = 0.0
 
         return scores_processed
 

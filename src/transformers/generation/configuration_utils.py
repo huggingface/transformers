@@ -576,11 +576,6 @@ class GenerationConfig(PushToHubMixin):
                     "or when calling `generate`) so there is budget for the closing token and the final response."
                 )
             else:
-                if self.max_new_tokens <= 1:
-                    raise ValueError(
-                        "Using `max_thinking_tokens` requires `max_new_tokens` to be at least 2 so there is room for "
-                        "the closing token and final response."
-                    )
                 if self.max_thinking_tokens > self.max_new_tokens - 2:
                     raise ValueError(
                         "`max_thinking_tokens` must be at most `max_new_tokens - 2` so there is room for the closing "
