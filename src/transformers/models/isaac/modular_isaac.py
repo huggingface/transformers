@@ -2305,6 +2305,23 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         """
         Prepare inputs for generation, handling TensorStream inputs properly.
         """
+        if cache_position is None:
+            seq_length = None
+            device = None
+            if input_ids is not None:
+                seq_length = input_ids.shape[1]
+                device = input_ids.device
+            elif inputs_embeds is not None:
+                seq_length = inputs_embeds.shape[1]
+                device = inputs_embeds.device
+            elif tensor_stream is not None:
+                _, seq_length = tensor_stream.shape
+                device = tensor_stream.device
+            if seq_length is not None:
+                # prepare_inputs_for_generation may be invoked outside `generate`, so synthesize the
+                # same cache positions that GenerationMixin would have created during prefill.
+                cache_position = torch.arange(seq_length, dtype=torch.long, device=device)
+
         # Call parent preparation
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
@@ -2316,6 +2333,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             use_cache=use_cache,
             **kwargs,
         )
+
+        cache_position = model_inputs.get("cache_position", cache_position)
 
         # Handle TensorStream for first forward pass only
         if tensor_stream is not None and (cache_position is None or cache_position[0] == 0):
