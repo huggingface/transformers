@@ -475,7 +475,7 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: BlenderbotConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -486,12 +486,9 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = BlenderbotScaledWordEmbedding(
-                config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
-            )
+        self.embed_tokens = BlenderbotScaledWordEmbedding(
+            config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = BlenderbotLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -624,7 +621,7 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: BlenderbotConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -632,12 +629,9 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = BlenderbotScaledWordEmbedding(
-                config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
-            )
+        self.embed_tokens = BlenderbotScaledWordEmbedding(
+            config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = BlenderbotLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -864,8 +858,8 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = BlenderbotScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
-        self.encoder = BlenderbotEncoder(config, self.shared)
-        self.decoder = BlenderbotDecoder(config, self.shared)
+        self.encoder = BlenderbotEncoder(config)
+        self.decoder = BlenderbotDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()

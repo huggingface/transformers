@@ -389,7 +389,6 @@ class GLPNPreTrainedModel(PreTrainedModel):
     input_modalities = "image"
     _no_split_modules = []
 
-    # Copied from transformers.models.segformer.modeling_segformer.SegformerPreTrainedModel._init_weights
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""

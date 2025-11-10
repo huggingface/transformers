@@ -87,6 +87,9 @@ jobs:
       PR_FILES: ${{ steps.pr_info.outputs.files }}
     if: ${{ inputs.pr_number != '' }}
     steps:
+      - uses: GitHubSecurityLab/actions-permissions/monitor@v1
+        with:
+          config: ${{ vars.PERMISSIONS_CONFIG }}
       - name: Extract PR details
         id: pr_info
         uses: actions/github-script@v6
@@ -153,14 +156,15 @@ jobs:
 
       - name: Convert dates to timestamps
         id: get_timestamps
+        env:
+          head_commit_date: ${{ steps.pr_info.outputs.head_commit_date }}
+          merge_commit_date: ${{ steps.pr_info.outputs.merge_commit_date }}
         run: |
-          head_commit_date=${{ steps.pr_info.outputs.head_commit_date }}
-          merge_commit_date=${{ steps.pr_info.outputs.merge_commit_date }}
-          echo $head_commit_date
-          echo $merge_commit_date
+          echo "$head_commit_date"
+          echo "$merge_commit_date"
           head_commit_timestamp=$(date -d "$head_commit_date" +%s)
           merge_commit_timestamp=$(date -d "$merge_commit_date" +%s)
-          echo $head_commit_timestamp
-          echo $merge_commit_timestamp
+          echo "$head_commit_timestamp"
+          echo "$merge_commit_timestamp"
           echo "head_commit_timestamp=$head_commit_timestamp" >> $GITHUB_OUTPUT
           echo "merge_commit_timestamp=$merge_commit_timestamp" >> $GITHUB_OUTPUT

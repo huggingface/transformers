@@ -1446,13 +1446,10 @@ class FlavaMaskedPredictionHead(nn.Module):
         super().__init__()
         self.config = config
         self.transform = FlavaPredictionHeadTransform(config)
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
         if weight is not None:
             self.decoder.weight = weight
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
 
     def forward(self, x):
         x = self.transform(x)
@@ -1522,9 +1519,9 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
     # Those are linked to xxx.bias
     _tied_weights_keys = {
         "mmm_text_head.bias": "mmm_text_head.decoder.bias",
-        'mim_head.bias':'mim_head.decoder.bias',
-        'mlm_head.bias': 'mlm_head.decoder.bias',
-        'mmm_image_head.bias': 'mmm_image_head.decoder.bias'
+        "mim_head.bias": "mim_head.decoder.bias",
+        "mlm_head.bias": "mlm_head.decoder.bias",
+        "mmm_image_head.bias": "mmm_image_head.decoder.bias",
     }
 
     def __init__(self, config: FlavaConfig, image_codebook: Optional[nn.Module] = None):

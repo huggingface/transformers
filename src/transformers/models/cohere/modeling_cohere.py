@@ -476,6 +476,8 @@ class CohereForCausalLM(CoherePreTrainedModel, GenerationMixin):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.logit_scale = config.logit_scale
+        self.tie_word_embeddings = config.tie_word_embeddings
+
         # Initialize weights and apply final processing
         self.post_init()
 

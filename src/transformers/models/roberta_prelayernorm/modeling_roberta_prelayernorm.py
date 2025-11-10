@@ -554,7 +554,6 @@ class RobertaPreLayerNormPreTrainedModel(PreTrainedModel):
         "cross_attentions": RobertaPreLayerNormCrossAttention,
     }
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with BertLMPredictionHead->RobertaPreLayerNormLMHead
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -749,7 +748,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.40,ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm, RobertaPreLayerNormTokenizer->RobertaTokenizer
 class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "roberta_prelayernorm.embeddings.weight",
+        "lm_head.decoder.weight": "roberta_prelayernorm.embeddings.word_embeddings.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
@@ -962,7 +961,6 @@ class RobertaPreLayerNormLMHead(nn.Module):
 
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        self.decoder.bias = self.bias
 
     def forward(self, features, **kwargs):
         x = self.dense(features)

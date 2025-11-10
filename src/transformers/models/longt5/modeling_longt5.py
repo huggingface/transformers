@@ -1240,12 +1240,10 @@ class LongT5PreTrainedModel(PreTrainedModel):
 
 
 class LongT5Stack(LongT5PreTrainedModel):
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config):
         super().__init__(config)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
         self.is_decoder = config.is_decoder
 
         self.local_radius = config.local_radius
@@ -1582,13 +1580,13 @@ class LongT5Model(LongT5PreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = LongT5Stack(encoder_config, self.shared)
+        self.encoder = LongT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = LongT5Stack(decoder_config, self.shared)
+        self.decoder = LongT5Stack(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1747,13 +1745,13 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = LongT5Stack(encoder_config, self.shared)
+        self.encoder = LongT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = LongT5Stack(decoder_config, self.shared)
+        self.decoder = LongT5Stack(decoder_config)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -1930,7 +1928,7 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
-        self.encoder = LongT5Stack(encoder_config, self.shared)
+        self.encoder = LongT5Stack(encoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()

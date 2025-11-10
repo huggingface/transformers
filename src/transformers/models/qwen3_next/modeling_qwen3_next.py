@@ -827,8 +827,8 @@ class Qwen3NextExperts(nn.Module):
         self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(
@@ -997,7 +997,7 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif isinstance(module, Qwen3NextRMSNorm):
             module.weight.zero_()
-        if isinstance(module,  Qwen3NextExperts):
+        if isinstance(module, Qwen3NextExperts):
             module.gate_up_proj.normal_(mean=0.0, std=self.config.initializer_range)
             module.down_proj.normal_(mean=0.0, std=self.config.initializer_range)
 

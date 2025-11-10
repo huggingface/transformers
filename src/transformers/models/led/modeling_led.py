@@ -1291,7 +1291,7 @@ class LEDEncoder(LEDPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: LEDConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: LEDConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -1314,10 +1314,7 @@ class LEDEncoder(LEDPreTrainedModel):
                     f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
                 )
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         self.embed_positions = LEDLearnedPositionalEmbedding(
             self.max_source_positions,
@@ -1554,17 +1551,14 @@ class LEDDecoder(LEDPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: LEDConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: LEDConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_decoder_position_embeddings
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = LEDLearnedPositionalEmbedding(
             self.max_target_positions,
@@ -1775,8 +1769,8 @@ class LEDModel(LEDPreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = LEDEncoder(config, self.shared)
-        self.decoder = LEDDecoder(config, self.shared)
+        self.encoder = LEDEncoder(config)
+        self.decoder = LEDDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2256,7 +2250,6 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
 
 @auto_docstring
 class LEDForQuestionAnswering(LEDPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 

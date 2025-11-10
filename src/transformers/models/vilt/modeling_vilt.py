@@ -850,9 +850,6 @@ class ViltMLMHead(nn.Module):
         if weight is not None:
             self.decoder.weight = weight
 
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
     def forward(self, x):
         x = self.transform(x)
         x = self.decoder(x)

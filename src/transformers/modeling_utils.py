@@ -187,6 +187,7 @@ TORCH_INIT_FUNCTIONS = {
     "xavier_normal": nn.init.xavier_normal,
     "kaiming_uniform": nn.init.kaiming_uniform,
     "kaiming_normal": nn.init.kaiming_normal,
+    "orthogonal_": nn.init.orthogonal_,
 }
 
 # DO NOT MODIFY, KEPT FOR BC ONLY
@@ -1050,7 +1051,7 @@ def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
             if t is not None and getattr(t, flag_name, False):
                 # mimic init.* return convention (returns the tensor)
                 return t
-            return fn(*args, **kwargs)
+            return fn(*args, **kwargs)  # TODO we could set is init here.
 
         return wrapped
 
@@ -2200,7 +2201,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
                 message += ', `"attn_implementation=flash_attention_3"`, `"attn_implementation=flash_attention_2"`, `"attn_implementation=paged|flash_attention_2"`'
             if self._supports_sdpa:
-                message += ', `"attn_implementation=sdpa"`, `"attn_implementation=paged|spda"`'
+                message += ', `"attn_implementation=sdpa"`, `"attn_implementation=paged|sdpa"`'
             if self._supports_flex_attn:
                 message += ', `"attn_implementation=flex_attention"`'
             raise ValueError(message + ".")
@@ -2443,6 +2444,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     module.weight.fill_(1.0)
                 if hasattr(module, "bias") and module.bias is not None:
                     module.bias.zero_()
+            if hasattr(module, "gate_up_proj"):
+                module.gate_up_proj.normal_(mean=0.0, std=std)
+            if hasattr(module, "down_proj"):
+                module.down_proj.normal_(mean=0.0, std=std)
+            if hasattr(module, "gate"):
+                module.gate.normal_(mean=0.0, std=std)
         except Exception as e:
             logger.warning(f"Failed to init: {str(e)}")
 
@@ -2455,8 +2462,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         self._init_weights(module)
         module._is_hf_initialized = True
-        for p in module.parameters(recurse=False):
-            setattr(p, "_is_hf_initialized", True)
 
     @torch.no_grad()
     @guard_nn_init_functions()
@@ -2520,7 +2525,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
             # if neither are here, we still want to the training to have same grads
-            target_is_not_there = missing_keys and re.search(target_name, "\n".join(missing_keys), flags=re.MULTILINE) and not source_is_there
+            target_is_not_there = (
+                missing_keys
+                and re.search(target_name, "\n".join(missing_keys), flags=re.MULTILINE)
+                and not source_is_there
+            )
             if source_is_there or missing_keys is None or target_is_not_there:
                 try:
                     if source_name.endswith(".bias") or source_name.endswith(".weight"):
@@ -2534,18 +2543,33 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 if "d+" in target_name:
                     reg = re.compile(target_name)
-                    for target_n, _ in self.named_parameters():
-                        if reg.search(target_n):
-                            submodule, target_entity = target_n.rsplit(".", 1)
-                            submodule = self.get_submodule(submodule)
-                            setattr(submodule, target_entity, source_param_or_module)
+                    modules = dict(self.named_modules())
+                    params = dict(self.named_parameters())
+                    for target_n in modules.keys() | params.keys():
+                        if not reg.fullmatch(target_n):
+                            continue
+                        if "." in target_n:
+                            parent_path, last = target_n.rsplit(".", 1)
+                            parent = self.get_submodule(parent_path)
+                        else:
+                            parent_path, last = "", target_n
+                            parent = self  # top-level
+                        if last in parent._modules:
+                            parent._modules[last] = source_param_or_module
                             if missing_keys:
-                                missing_keys.discard(target_n)  # probably not full match here?
+                                for k, _ in parent.named_parameters():
+                                    missing_keys.discard(k)
+                        else:
+                            setattr(parent, last, source_param_or_module)
+                            self._adjust_bias(parent, source_param_or_module)
+                            if missing_keys:
+                                missing_keys.discard(target_n)
                 else:
                     if "." in target_name:
                         submodule, weight = target_name.rsplit(".", 1)
                         submodule = top_level.get_submodule(submodule)
                         setattr(submodule, weight, source_param_or_module)
+                        self._adjust_bias(submodule, source_param_or_module)
                     else:
                         setattr(top_level, target_name, source_param_or_module)
 
@@ -2563,6 +2587,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         missing_keys.discard(target_n)
                 else:
                     missing_keys.discard(target_name)
+
+    def _adjust_bias(self, output_embeddings, input_embeddings):
+        if getattr(output_embeddings, "bias", None) is not None and hasattr(output_embeddings, "weight"):
+            weight_shape = output_embeddings.weight.shape
+            output_embeddings.bias.data = nn.functional.pad(
+                output_embeddings.bias.data,
+                (0, weight_shape[0] - output_embeddings.bias.shape[0]),
+                "constant",
+                0,
+            )
+        if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
+            output_embeddings.out_features = input_embeddings.num_embeddings
 
     def tie_weights(self, missing_keys: Optional[set[str]] = None):
         """
@@ -3476,10 +3512,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 error_names.extend(shared_names)
 
             if len(error_names) > 0:
+                suggested_fix = {v: k for k, v in list(shared_ptrs.values())}
                 raise RuntimeError(
-                    f"The weights trying to be saved contained shared tensors {error_names} that are mismatching "
-                    "the transformers base configuration. Try saving using `safe_serialization=False`, setting the "
-                    "`_dynamic_tied_weights_keys` attribute for affected modules, or remove this tensor sharing.",
+                    f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined"
+                    f"as being shared in `_tied_weight_keys`. You should probably add: `_tied_weight_keys = {suggested_fix}. If a whole module is shared you can use it directly",
                 )
 
         # Shard the model if it is too big.
@@ -3763,9 +3799,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if use_kernels:
             if not is_kernels_available():
                 raise ValueError(
-                    "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
+                    "`use_kernels=True` requires kernels>=0.9.0. Please install the latest version with `pip install -U kernels`"
                 )
             from kernels import use_kernel_mapping
+
+            from .integrations.hub_kernels import register_kernel_mapping_transformers
+
+            register_kernel_mapping_transformers()
 
             if kernel_config is not None and isinstance(kernel_config, KernelConfig):
                 # This will make sure the mapping is valid, and the layers are registered in the model
@@ -4384,7 +4424,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for k in all_pointer:  # finally close all opened file pointers TODO async
             k.__exit__(None, None, None)
 
-
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
         # Remove tied weights keys and etc
@@ -4414,7 +4453,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # were not part of the loaded weights: do it now
             if loading_task_model_from_base_state_dict:
                 parameters_to_initialize = {
-                    name: param for name, param in model.named_parameters() if not name.startswith(prefix)
+                    name: param
+                    for name, param in model.named_parameters()
+                    if not name.startswith(model.base_model_prefix)
                 }
                 for name, param in parameters_to_initialize.items():
                     # If it is still on meta here, it means that it's a tied weight that will be tied later anyway -> skip it
@@ -4684,6 +4725,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 for part in parts[:-1]:
                     submod = getattr(submod, part)
                 setattr(submod, parts[-1], p._original_param)
+                setattr(p, "_is_hf_initialized", True)
 
     def _adjust_missing_and_unexpected_keys(
         self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool, model

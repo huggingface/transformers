@@ -542,7 +542,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: M2M100Config, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: M2M100Config):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -556,9 +556,6 @@ class M2M100Encoder(M2M100PreTrainedModel):
         self.embed_tokens = M2M100ScaledWordEmbedding(
             config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
         )
-
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -695,7 +692,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: M2M100Config, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: M2M100Config):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -706,9 +703,6 @@ class M2M100Decoder(M2M100PreTrainedModel):
         self.embed_tokens = M2M100ScaledWordEmbedding(
             config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
         )
-
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -933,8 +927,8 @@ class M2M100Model(M2M100PreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = M2M100ScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
 
-        self.encoder = M2M100Encoder(config, self.shared)
-        self.decoder = M2M100Decoder(config, self.shared)
+        self.encoder = M2M100Encoder(config)
+        self.decoder = M2M100Decoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()

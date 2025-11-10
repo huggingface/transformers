@@ -689,7 +689,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         "attentions": NllbMoeAttention,
     }
 
-    def __init__(self, config: NllbMoeConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: NllbMoeConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -703,9 +703,6 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         self.embed_tokens = NllbMoeScaledWordEmbedding(
             config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
         )
-
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = NllbMoeSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -776,7 +773,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         "cross_attentions": OutputRecorder(NllbMoeAttention, layer_name="cross_attention", index=1),
     }
 
-    def __init__(self, config: NllbMoeConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: NllbMoeConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -787,9 +784,6 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         self.embed_tokens = NllbMoeScaledWordEmbedding(
             config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
         )
-
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = NllbMoeSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -901,8 +895,8 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = NllbMoeScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
 
-        self.encoder = NllbMoeEncoder(config, self.shared)
-        self.decoder = NllbMoeDecoder(config, self.shared)
+        self.encoder = NllbMoeEncoder(config)
+        self.decoder = NllbMoeDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()

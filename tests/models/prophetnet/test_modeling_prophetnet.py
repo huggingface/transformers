@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import tempfile
 import unittest
 
@@ -862,7 +861,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_fast_integration(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_fast_integration(*config_and_inputs)
-
 
     def test_shift_labels_via_shift_left(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -516,10 +516,7 @@ class MvpEncoder(MvpPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         self.embed_positions = MvpLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -666,9 +663,7 @@ class MvpDecoder(MvpPreTrainedModel):
         use_prompt (bool): whether to use prompt
     """
 
-    def __init__(
-        self, config: MvpConfig, embed_tokens: Optional[nn.Embedding] = None, use_prompt: Optional[bool] = False
-    ):
+    def __init__(self, config: MvpConfig, use_prompt: Optional[bool] = False):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -676,11 +671,7 @@ class MvpDecoder(MvpPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
-
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
         self.embed_positions = MvpLearnedPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
@@ -900,8 +891,8 @@ class MvpModel(MvpPreTrainedModel):
         self.use_prompt = config.use_prompt
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = MvpEncoder(config, self.shared, config.use_prompt)
-        self.decoder = MvpDecoder(config, self.shared, config.use_prompt)
+        self.encoder = MvpEncoder(config, config.use_prompt)
+        self.decoder = MvpDecoder(config, config.use_prompt)
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -1964,8 +1964,12 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             config.tie_word_embeddings = False
-            config.get_text_config().tie_word_embeddings = False
-            config.tie_encoder_decoder = False
+            try:
+                config.get_text_config().tie_word_embeddings = False
+            except Exception as _:
+                pass
+
+            # config.tie_encoder_decoder = False
             model = model_class(config)  # we init the model without tie
             # if this test fails later on, it means init tied the weights
             with tempfile.TemporaryDirectory() as d:
@@ -1980,11 +1984,18 @@ class ModelTesterMixin:
                     for k, v in model.state_dict().items():
                         with self.subTest(k):
                             torch.testing.assert_close(
-                                v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}, this means it was probably aliased and safetensors removed it"
+                                v,
+                                reloaded_state[k],
+                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key",
                             )
 
                 # Checking there was no complain of missing weights
-                self.assertEqual(infos["missing_keys"], set())
+                self.assertEqual(
+                    infos["missing_keys"],
+                    set(),
+                    "Given that the loaded weights are the same, the issue is in `tie_weights`: it tied these keys and removed them from serialization. But because of tiying (hardcoded or not) the previous check is fine.\
+                        This can happen if `save_pretrained` remove the targets and not the keys from serialiazation",
+                )
 
     def test_tied_weights_keys(self):
         original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
