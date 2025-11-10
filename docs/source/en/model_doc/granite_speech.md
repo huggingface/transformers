@@ -41,7 +41,111 @@ This model was contributed by [Alexander Brooks](https://huggingface.co/abrooks9
 
 - This model bundles its own LoRA adapter, which will be automatically loaded and enabled/disabled as needed during inference calls. Be sure to install [PEFT](https://github.com/huggingface/peft) to ensure the LoRA is correctly applied!
 
-<!-- TODO (@alex-jw-brooks) Add an example here once the model compatible with the transformers implementation is released -->
+## Usage example
+
+Granite Speech is a multimodal speech-to-text model that can transcribe audio and respond to text prompts. Here's how to use it:
+
+### Basic Speech Transcription
+
+```python
+from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
+import torch
+
+# Load model and processor
+model = GraniteSpeechForConditionalGeneration.from_pretrained(
+    "ibm-granite/granite-3.2-8b-speech",
+    torch_dtype=torch.bfloat16,
+    device_map="auto"
+)
+processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
+
+# Prepare audio input (16kHz sampling rate required)
+# audio can be a file path, numpy array, or tensor
+audio_input = "path/to/audio.wav"
+
+# Process audio
+inputs = processor(audio=audio_input, return_tensors="pt").to(model.device)
+
+# Generate transcription
+generated_ids = model.generate(**inputs, max_new_tokens=256)
+transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(transcription)
+```
+
+### Speech-to-Text with Additional Context
+
+You can provide text context along with audio for more controlled generation:
+
+```python
+from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
+import torch
+
+model = GraniteSpeechForConditionalGeneration.from_pretrained(
+    "ibm-granite/granite-3.2-8b-speech",
+    torch_dtype=torch.bfloat16,
+    device_map="auto"
+)
+processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
+
+# Prepare inputs with text prompt
+text_prompt = "Transcribe the following audio:"
+audio_input = "path/to/audio.wav"
+
+inputs = processor(
+    text=text_prompt,
+    audio=audio_input,
+    return_tensors="pt"
+).to(model.device)
+
+# Generate with custom parameters
+generated_ids = model.generate(
+    **inputs,
+    max_new_tokens=512,
+    do_sample=True,
+    temperature=0.7,
+    top_p=0.9
+)
+
+output_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(output_text)
+```
+
+### Batch Processing
+
+Process multiple audio files efficiently:
+
+```python
+from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
+import torch
+
+model = GraniteSpeechForConditionalGeneration.from_pretrained(
+    "ibm-granite/granite-3.2-8b-speech",
+    torch_dtype=torch.bfloat16,
+    device_map="auto"
+)
+processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
+
+# Multiple audio files
+audio_files = ["audio1.wav", "audio2.wav", "audio3.wav"]
+
+# Process batch
+inputs = processor(audio=audio_files, return_tensors="pt", padding=True).to(model.device)
+
+# Generate for all inputs
+generated_ids = model.generate(**inputs, max_new_tokens=256)
+transcriptions = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+for i, transcription in enumerate(transcriptions):
+    print(f"Audio {i+1}: {transcription}")
+```
+
+### Tips for Best Results
+
+- **Audio Format**: The model expects 16kHz sampling rate audio. The processor will automatically resample if needed.
+- **LoRA Adapter**: The LoRA adapter is automatically enabled when audio features are present, so you don't need to manage it manually.
+- **Memory Usage**: For large models, use `torch.bfloat16` or quantization to reduce memory footprint.
+- **Temperature**: Use lower temperatures (0.1-0.5) for accurate transcription, higher (0.7-1.0) for more creative responses.
+- **Batch Size**: Adjust batch size based on available GPU memory. Larger batches improve throughput but require more memory.
 
 ## GraniteSpeechConfig
 
