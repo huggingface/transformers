@@ -2244,23 +2244,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
     def can_generate(self) -> bool:
         return True
 
-
-AutoImageProcessor.register(
-    IsaacConfig,
-    fast_image_processor_class=IsaacImageProcessorFast,
-    exist_ok=True,
-)
-
-
-__all__ = [
-    "IsaacConfig",
-    "IsaacModel",
-    "IsaacForConditionalGeneration",
-    "IsaacImageProcessorFast",
-    "IsaacProcessor",
-]
-
-
 def _compute_residual_p_frames(frames: torch.Tensor, is_p_frame: list[bool]) -> torch.Tensor:
     """Compute residuals for P-frames to stay in sync with the training pipeline."""
     if not any(is_p_frame):
@@ -2272,3 +2255,11 @@ def _compute_residual_p_frames(frames: torch.Tensor, is_p_frame: list[bool]) -> 
     p_indices = frame_indices[torch.tensor(is_p_frame, device=frames.device)]
     frames[p_indices] = frames[p_indices] - frames[last_i_indices[p_indices]]
     return frames
+
+__all__ = [
+    "IsaacConfig",
+    "IsaacModel",
+    "IsaacForConditionalGeneration",
+    "IsaacImageProcessorFast",
+    "IsaacProcessor",
+]
