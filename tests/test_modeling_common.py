@@ -121,6 +121,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
+    from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -3896,6 +3897,28 @@ class ModelTesterMixin:
                         self.assertEqual(k1, k2)
                         self.assertEqual(v1.dtype, v2.dtype)
                         self.assertTrue((v1 == v2).all())
+
+    def test_tp_plan_matches_params(self):
+        """Make sure that each entry of the tp plan matches at least one param (this avoid typos and/or edge cases
+        with regexes)"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        if config.base_model_tp_plan is None:
+            self.skipTest("Model does not have a TP plan.")
+
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            param_names = {name for name, _ in model.named_parameters()} | {name for name, _ in model.named_buffers()}
+            tp_plan = model.tp_plan
+            pattern_usage = {}
+            for pattern in tp_plan:
+                pattern_usage[pattern] = any(
+                    _get_parameter_tp_plan(param, tp_plan) is not None for param in param_names
+                )
+
+            unused_entries = {k for k, v in pattern_usage.items() if not v}
+            self.assertTrue(
+                len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
+            )
 
 
 global_rng = random.Random()
