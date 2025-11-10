@@ -130,7 +130,7 @@ class GPT2Attention(nn.Module):
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
-        self.is_causal = True
+        self.is_causal = not is_cross_attention
 
     def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
@@ -243,8 +243,6 @@ class GPT2Attention(nn.Module):
             if is_cross_attention:
                 past_key_values.is_updated[self.layer_idx] = True
 
-        is_causal = attention_mask is None and query_states.shape[-2] > 1 and not is_cross_attention
-
         using_eager = self.config._attn_implementation == "eager"
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -262,7 +260,6 @@ class GPT2Attention(nn.Module):
                 value_states,
                 attention_mask,
                 dropout=self.attn_dropout.p if self.training else 0.0,
-                is_causal=is_causal,
                 **kwargs,
             )
 
