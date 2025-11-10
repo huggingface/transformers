@@ -691,8 +691,6 @@ class PreTrainedConfig(PushToHubMixin):
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
-            except ValueError as e:
-                raise OSError(f"{e}") from e
             except Exception:
                 # For any other exception, we throw a generic error.
                 raise OSError(
