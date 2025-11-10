@@ -828,7 +828,25 @@ def _cast_tensor_to_float(x):
 
 
 def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = False):
-    """Helper function to flatten a single level of nested image and batch structures and group by shape."""
+    """
+    Helper function to flatten a single level of nested image and batch structures and group by shape.
+    Args:
+        nested_images (list):
+            A list of images or a single tensor
+        paired_inputs (Any, *optional*):
+            Zero or more lists that mirror the structure of `nested_images` (flat list, or list of lists when
+            `is_nested=True`). Each element is paired 1:1 with the corresponding image so it can be grouped by the
+            same shape key. These paired values are grouped alongside `nested_images` but are not stacked in the output, so
+            they do not need to be tensors.
+        is_nested (bool, *optional*, defaults to False):
+            Whether the images are nested.
+    Returns:
+        tuple[dict, ...]:
+            - A dictionary with shape as key and list of images with that shape as value
+            - A dictionary with shape as key and list of paired values with that shape as value
+            - A dictionary mapping original indices to (shape, index) tuples
+            - A dictionary mapping original indices to (shape, index) tuples for each paired input
+    """
     grouped_images = defaultdict(list)
     grouped_images_index = {}
     paired_grouped_values = [defaultdict(list) for _ in paired_inputs]

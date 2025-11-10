@@ -103,6 +103,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     rescale_factor = 1 / 255
     do_normalize = True
     do_pad = True
+    model_input_names = ["pixel_values", "pixel_mask"]
     size_divisor = 32
     do_reduce_labels = False
     valid_kwargs = Mask2FormerImageProcessorKwargs
