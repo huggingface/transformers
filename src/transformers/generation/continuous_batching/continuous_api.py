@@ -826,6 +826,12 @@ class ContinuousBatchingManager:
         if block:
             self.join(stop_trigger_time, timeout)
 
+        torch.cuda.synchronize()
+        import gc
+
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def join(self, stop_trigger_time: float, timeout: Optional[float] = None) -> None:
         """Wait for the background thread to finish.
 
