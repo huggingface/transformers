@@ -112,18 +112,6 @@ def chunked_overlay(chunk_size: int, left_padding: torch.Tensor) -> Callable:
     return inner_mask
 
 
-def _legacy_chunked_overlay(chunk_size: int) -> Callable:
-    """
-    Same as the above function, but do not correctly account for left padding tokens.
-    Only kept for compatibility with older torch versions (< 2.6).
-    """
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        return kv_idx // chunk_size == q_idx // chunk_size
-
-    return inner_mask
-
-
 def sliding_window_causal_mask_function(sliding_window: int) -> Callable:
     """
     This return the mask_function function to create a sliding window mask.
@@ -260,7 +248,7 @@ def _vmap_expansion_sdpa(mask_function: Callable) -> Callable:
     return mask_function
 
 
-def _non_vmap_expansion_sdpa(batch_size, cache_position, kv_arange):
+def _non_vmap_expansion_sdpa(batch_size: int, cache_position: torch.Tensor, kv_arange: torch.Tensor):
     """
     Used to broadcast our mask_functions over the all 4 dimensions (b_idx, h_idx, q_idx, kv_idx) of the inputs.
     Allows the usage of any index-based mask function without relying on vmap.
@@ -271,10 +259,10 @@ def _non_vmap_expansion_sdpa(batch_size, cache_position, kv_arange):
         - https://github.com/huggingface/optimum-onnx/blob/c123e8f4fab61b54a8e0e31ce74462bcacca576e/optimum/exporters/onnx/model_patcher.py#L362-L365
     """
     device = cache_position.device
-    batch_indices = torch.arange(batch_size, dtype=torch.long, device=device)[:, None, None, None]
-    head_indices = torch.arange(1, dtype=torch.long, device=device)[None, :, None, None]
+    batch_indices = torch.arange(batch_size, device=device)[:, None, None, None]
+    head_indices = torch.arange(1, device=device)[None, :, None, None]
     q_indices = cache_position[None, None, :, None]
-    kv_indices = kv_arange.to(dtype=torch.long)[None, None, None, :]
+    kv_indices = kv_arange[None, None, None, :]
     return batch_indices, head_indices, q_indices, kv_indices
 
 
