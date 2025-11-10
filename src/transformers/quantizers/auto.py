@@ -35,10 +35,10 @@ from ..utils.quantization_config import (
     QuantizationMethod,
     QuantoConfig,
     QuarkConfig,
+    SinqConfig,
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
-    SinqConfig
 )
 from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
@@ -58,10 +58,10 @@ from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_mxfp4 import Mxfp4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
+from .quantizer_sinq import SinqHfQuantizer
 from .quantizer_spqr import SpQRHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer
-from .quantizer_sinq import SinqHfQuantizer
 
 
 AUTO_QUANTIZER_MAPPING = {
@@ -85,7 +85,7 @@ AUTO_QUANTIZER_MAPPING = {
     "fp8": FineGrainedFP8HfQuantizer,
     "auto-round": AutoRoundQuantizer,
     "mxfp4": Mxfp4HfQuantizer,
-    "sinq":SinqHfQuantizer
+    "sinq": SinqHfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -109,7 +109,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "fp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
     "mxfp4": Mxfp4Config,
-    "sinq": SinqConfig
+    "sinq": SinqConfig,
 }
 
 logger = logging.get_logger(__name__)

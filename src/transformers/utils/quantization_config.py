@@ -2093,7 +2093,8 @@ class Mxfp4Config(QuantizationConfigMixin):
             `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         return {"quant_method": self.quant_method, "modules_to_not_convert": self.modules_to_not_convert}
-    
+
+
 @dataclass
 class SinqConfig(QuantizationConfigMixin):
     """
@@ -2101,14 +2102,15 @@ class SinqConfig(QuantizationConfigMixin):
 
     Users pass this to `from_pretrained(..., quantization_config=SinqConfig(...))`.
     """
-    #quant_method: str = "sinq"  # used by the auto-quantization mapping
+
+    # quant_method: str = "sinq"  # used by the auto-quantization mapping
 
     def __init__(
         self,
         nbits: int = 4,
         group_size: int = 64,
-        tiling_mode: str = "1D",   # "1D" | "2D" (if you support it)
-        method: str = "sinq",      # "sinq" (calibration-free) or "asinq" (calibrated)
+        tiling_mode: str = "1D",  # "1D" | "2D" (if you support it)
+        method: str = "sinq",  # "sinq" (calibration-free) or "asinq" (calibrated)
         per_channel: bool = True,
         symmetric: bool = True,
         use_nf4: bool = False,
@@ -2117,7 +2119,7 @@ class SinqConfig(QuantizationConfigMixin):
         device: Optional[Union[str, int]] = "cpu",
         **kwargs: Any,
     ):
-        #super().__init__(quant_method=QuantizationMethod.SINQ, **kwargs)
+        # super().__init__(quant_method=QuantizationMethod.SINQ, **kwargs)
         self.quant_method = QuantizationMethod.SINQ
         self.nbits = int(nbits)
         self.group_size = int(group_size)
@@ -2144,18 +2146,19 @@ class SinqConfig(QuantizationConfigMixin):
     def to_dict(self) -> dict[str, Any]:
         base = super().to_dict()
         base.update(
-            dict(
-                nbits=self.nbits,
-                group_size=self.group_size,
-                tiling_mode=self.tiling_mode,
-                method=self.method,
-                per_channel=self.per_channel,
-                symmetric=self.symmetric,
-                use_nf4=self.use_nf4,
-                modules_to_not_convert=list(self.modules_to_not_convert),
-                dtype=self.dtype,
-                device=self.device,
-            )
+            {
+                "nbits": self.nbits,
+                "group_size": self.group_size,
+                "tiling_mode": self.tiling_mode,
+                "method": self.method,
+                "per_channel": self.per_channel,
+                "symmetric": self.symmetric,
+                "use_nf4": self.use_nf4,
+                "modules_to_not_convert": list(self.modules_to_not_convert),
+                "dtype": self.dtype,
+                "device": self.device,
+            }
         )
         base.update(self._extra_kwargs)
+
         return base

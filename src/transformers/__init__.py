@@ -258,7 +258,7 @@ _import_structure = {
         "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
-        "SinqConfig"
+        "SinqConfig",
     ],
     "video_utils": [],
     "utils.kernel_config": ["KernelConfig"],
@@ -764,10 +764,10 @@ if TYPE_CHECKING:
     from .utils.quantization_config import HqqConfig as HqqConfig
     from .utils.quantization_config import QuantoConfig as QuantoConfig
     from .utils.quantization_config import QuarkConfig as QuarkConfig
+    from .utils.quantization_config import SinqConfig as SinqConfig
     from .utils.quantization_config import SpQRConfig as SpQRConfig
     from .utils.quantization_config import TorchAoConfig as TorchAoConfig
     from .utils.quantization_config import VptqConfig as VptqConfig
-    from .utils.quantization_config import SinqConfig as SinqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
 else:
     import sys

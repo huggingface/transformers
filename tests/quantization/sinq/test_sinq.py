@@ -2,23 +2,20 @@
 # Licensed under the Apache License, Version 2.0
 
 import gc
-import os
-import tempfile
 import unittest
 
 import accelerate
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, SinqConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, SinqConfig
 from transformers.testing_utils import (
     backend_empty_cache,
     require_accelerate,
-    require_deterministic_for_xpu,
     require_torch_accelerator,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
 from transformers.utils import is_torch_available
+
 
 if is_torch_available():
     import torch
@@ -30,6 +27,7 @@ from sinq.sinqlinear import SINQLinear
 # Helpers
 # --------------------------------------------------------------------------------------------
 
+
 def cleanup():
     backend_empty_cache(torch_device)
     gc.collect()
@@ -37,6 +35,7 @@ def cleanup():
 
 class SINQLLMRunner:
     """Small helper to load a CausalLM + tokenizer with SINQ quantization."""
+
     def __init__(self, model_id, quant_config, torch_dtype, device_map, cache_dir=None):
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id,
@@ -93,6 +92,7 @@ LARGE_MODEL_ID = "Qwen/Qwen3-1.7B"
 # Config tests
 # --------------------------------------------------------------------------------------------
 
+
 @require_torch_accelerator
 class SinqConfigTest(unittest.TestCase):
     def test_to_dict_roundtrip(self):
@@ -127,10 +127,12 @@ class SinqConfigTest(unittest.TestCase):
 # Smoke / conversion tests
 # --------------------------------------------------------------------------------------------
 
+
 @require_torch_accelerator
 @require_accelerate
 class SINQSmokeTest(unittest.TestCase):
-    def tearDown(self): cleanup()
+    def tearDown(self):
+        cleanup()
 
     def test_fp16_quantized_small_model(self):
         q = SinqConfig(nbits=8, group_size=64, dtype="float16")
@@ -161,20 +163,21 @@ class SINQSmokeTest(unittest.TestCase):
 # Conversion coverage: how many linears replaced
 # --------------------------------------------------------------------------------------------
 
+
 @require_torch_accelerator
 @require_accelerate
 class SinqConversionCountTest(unittest.TestCase):
-    def tearDown(self): cleanup()
+    def tearDown(self):
+        cleanup()
 
     def _count(self, model, typ):
         return sum(1 for _ in model.modules() if isinstance(_, typ))
 
     def test_converted_linears_and_skip_list(self):
-        import torch.nn as nn
         q = SinqConfig(nbits=8, group_size=64, dtype="float16")
         m = AutoModelForCausalLM.from_pretrained(SMALL_MODEL_ID, device_map=torch_device, quantization_config=q)
-        base = self._count(m, nn.Linear)
         from sinq.sinqlinear import SINQLinear
+
         sinq = self._count(m, SINQLinear)
         self.assertGreater(sinq, 0)
         q2 = SinqConfig(nbits=8, group_size=64, dtype="float16", modules_to_not_convert=["lm_head"])
@@ -187,11 +190,13 @@ class SinqConversionCountTest(unittest.TestCase):
 # Generation tests
 # --------------------------------------------------------------------------------------------
 
+
 @slow
 @require_torch_accelerator
 @require_accelerate
 class SinqGenerateTest(unittest.TestCase):
-    def tearDown(self): cleanup()
+    def tearDown(self):
+        cleanup()
 
     def test_generate_zero_temp(self):
         q = SinqConfig(nbits=8, group_size=64, dtype="float16")
@@ -209,11 +214,13 @@ class SinqGenerateTest(unittest.TestCase):
 # ASINQ
 # --------------------------------------------------------------------------------------------
 
+
 @slow
 @require_torch_accelerator
 @require_accelerate
 class SINQASINQTest(unittest.TestCase):
-    def tearDown(self): cleanup()
+    def tearDown(self):
+        cleanup()
 
     def test_asinq_activation_path_fallback_safe(self):
         q = SinqConfig(nbits=8, group_size=64, method="asinq")
@@ -222,14 +229,17 @@ class SINQASINQTest(unittest.TestCase):
         check_sinq_linear_api(self, sinq_layer, context_size=8)
         check_model_forward_logits_shape(self, r.model, context_size=4)
 
+
 # --------------------------------------------------------------------------------------------
 # Dequantize one layer
 # --------------------------------------------------------------------------------------------
 
+
 @require_torch_accelerator
 @require_accelerate
 class SinqLayerDequantizeTest(unittest.TestCase):
-    def tearDown(self): cleanup()
+    def tearDown(self):
+        cleanup()
 
     def test_layer_dequantize_shapes_and_device(self):
         q = SinqConfig(nbits=4, group_size=64, dtype="float16")
@@ -242,15 +252,16 @@ class SinqLayerDequantizeTest(unittest.TestCase):
             W = W.to(layer.device)  # allow CPU-returning implementations
 
 
-
 # --------------------------------------------------------------------------------------------
 # Trainability (backprop through quantized model)
 # --------------------------------------------------------------------------------------------
 
+
 @require_torch_accelerator
 @require_accelerate
 class SinqTrainabilityTest(unittest.TestCase):
-    def tearDown(self): cleanup()
+    def tearDown(self):
+        cleanup()
 
     def test_backward_through_head(self):
         q = SinqConfig(nbits=8, group_size=64, dtype="float16")

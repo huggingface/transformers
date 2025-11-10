@@ -1,18 +1,20 @@
 # src/transformers/quantizers/quantizer_sinq.py
 from __future__ import annotations
+
 import importlib
-import os
-from typing import Dict, List, Set, Tuple, Optional, Union, Any, Callable
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 
 from ..utils import is_torch_bf16_gpu_available
-from .base import HfQuantizer
 from ..utils.quantization_config import SinqConfig
+from .base import HfQuantizer
+
 
 try:
     from ..utils import logging
+
     logger = logging.get_logger(__name__)
 except Exception:  # pragma: no cover
     logger = None
@@ -34,6 +36,7 @@ def _normalize_cuda_device(dev: Optional[Union[str, int]]) -> str:
             return dev
     raise ValueError(f"Unsupported device spec: {dev!r}")
 
+
 def _validate_cuda_device_str(device_str: str) -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("SinqHfQuantizer requires CUDA, but no CUDA device is available.")
@@ -44,26 +47,32 @@ def _validate_cuda_device_str(device_str: str) -> None:
             raise ValueError(f"Invalid CUDA device string: {device_str!r}")
         if idx < 0 or idx >= torch.cuda.device_count():
             raise ValueError(
-                f"Requested {device_str!r}, but visible CUDA devices are [0 .. {torch.cuda.device_count()-1}]."
+                f"Requested {device_str!r}, but visible CUDA devices are [0 .. {torch.cuda.device_count() - 1}]."
             )
-        
+
+
 def _flatten_device_map(dmap: Optional[dict]) -> set[str]:
     if not isinstance(dmap, dict):
         return set()
     # HF device_map can be nested; collect all device strings
     out = set()
+
     def _walk(v):
         if isinstance(v, str):
             out.add(v)
         elif isinstance(v, dict):
-            for vv in v.values(): _walk(vv)
+            for vv in v.values():
+                _walk(vv)
+
     _walk(dmap)
     return out
-        
+
+
 # ------------------------------------------------------------------------------------
 # SINQ dynamic import
 # ------------------------------------------------------------------------------------
 _SINQ_IMPORTED = False
+
 
 def _import_sinq():
     """
@@ -76,10 +85,11 @@ def _import_sinq():
     if importlib.util.find_spec("sinq") is None:
         raise ImportError("The 'sinq' package is not installed. Please `pip install sinq` to use SinqConfig.")
 
-    from sinq.sinqlinear import SINQLinear, sinq_base_quant_config as sinq_base_quant_config_fn
-    from sinq.awq import get_simple_calibration_data as awq_get_simple_calibration_data
-    from sinq.awq import get_calib_dataset as awq_get_calib_dataset
     from sinq.awq import collect_activations as awq_collect_activations
+    from sinq.awq import get_calib_dataset as awq_get_calib_dataset
+    from sinq.awq import get_simple_calibration_data as awq_get_simple_calibration_data
+    from sinq.sinqlinear import SINQLinear
+    from sinq.sinqlinear import sinq_base_quant_config as sinq_base_quant_config_fn
 
     _SINQ_IMPORTED = True
 
@@ -91,6 +101,7 @@ class _SinqLoadTimeLinear(nn.Module):
     """
     Placeholder exposing weight/bias for state_dict loading and storing SINQ settings.
     """
+
     def __init__(
         self,
         in_features: int,
@@ -99,7 +110,7 @@ class _SinqLoadTimeLinear(nn.Module):
         *,
         sinq_quant_dict: dict,
         compute_dtype: torch.dtype,
-        device_str: str #= "cuda"
+        device_str: str,  # = "cuda"
     ):
         super().__init__()
         self.in_features = in_features
@@ -116,8 +127,9 @@ class SinqHfQuantizer(HfQuantizer):
     """
     Hugging Face Quantizer integration for SINQ
     """
+
     requires_calibration: bool = False
-    required_packages: List[str] = ["sinq"]
+    required_packages: list[str] = ["sinq"]
     requires_parameters_quantization: bool = False
 
     def is_serializable(self, safe_serialization=None):
@@ -137,7 +149,7 @@ class SinqHfQuantizer(HfQuantizer):
             raise ValueError(f"Unsupported dtype: {cfg.dtype}")
         if not torch.cuda.is_available():
             raise RuntimeError("SINQ currently expects a CUDA device.")
-        
+
         device_str = _normalize_cuda_device(getattr(cfg, "device", "auto"))
         _validate_cuda_device_str(device_str)
         # Optionally: store normalized device for later
@@ -171,7 +183,7 @@ class SinqHfQuantizer(HfQuantizer):
         return device_map
 
     @staticmethod
-    def _should_skip(name: str, modules_to_skip: Set[str]) -> bool:
+    def _should_skip(name: str, modules_to_skip: set[str]) -> bool:
         """
         Check which layers from the original model should not be quantized
         """
@@ -193,10 +205,10 @@ class SinqHfQuantizer(HfQuantizer):
             tiling_mode=str(cfg.tiling_mode),
             method=str(getattr(cfg, "method", "sinq")).lower(),
         )
-        
+
     # ---------------- pre-load: install placeholders ----------------
 
-    def _process_model_before_weight_loading(self, model: nn.Module, **kwargs) -> Tuple[nn.Module, dict]:
+    def _process_model_before_weight_loading(self, model: nn.Module, **kwargs) -> tuple[nn.Module, dict]:
         _import_sinq()
 
         # 🔁 Second chance autopatch (in case environment ran before patchers were importable)
@@ -213,7 +225,8 @@ class SinqHfQuantizer(HfQuantizer):
                 full = f"{prefix}.{child_name}" if prefix else child_name
                 if isinstance(child, nn.Linear) and not self._should_skip(full, to_skip):
                     ph = _SinqLoadTimeLinear(
-                        child.in_features, child.out_features,
+                        child.in_features,
+                        child.out_features,
                         use_bias=(child.bias is not None),
                         sinq_quant_dict=sinq_quant_dict,
                         compute_dtype=compute_dtype,
@@ -243,7 +256,8 @@ class SinqHfQuantizer(HfQuantizer):
         model = model  # keep original device for now
 
         # Collect placeholders
-        placeholders: List[Tuple[str, _SinqLoadTimeLinear, nn.Module]] = []
+        placeholders: list[tuple[str, _SinqLoadTimeLinear, nn.Module]] = []
+
         def _gather(m: nn.Module, prefix: str = "", parent: Optional[nn.Module] = None):
             for child_name, child in list(m.named_children()):
                 full = f"{prefix}.{child_name}" if prefix else child_name
@@ -274,6 +288,7 @@ class SinqHfQuantizer(HfQuantizer):
                 if tok is None and model_id is not None:
                     try:
                         from transformers import AutoTokenizer
+
                         tok = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir)
                         print("[SinqHfQuantizer] Tokenizer loaded from model_id.", flush=True)
                         if logger:
@@ -292,7 +307,7 @@ class SinqHfQuantizer(HfQuantizer):
         tokenizer, _resolved_model_id = _resolve_tokenizer_and_model_id(model, kwargs, logger)
 
         # === A-SINQ branch: run internal calibration ===
-        layer_acts: Dict[str, torch.Tensor] = {}
+        layer_acts: dict[str, torch.Tensor] = {}
         if method == "asinq":
             # Swap placeholders -> dense Linear so hooks see real nn.Linear.
             for full, ph, parent in placeholders:
@@ -302,7 +317,7 @@ class SinqHfQuantizer(HfQuantizer):
                         ph.out_features,
                         bias=(ph.bias is not None),
                         device=torch.device("meta"),
-                        dtype=ph._compute_dtype
+                        dtype=ph._compute_dtype,
                     )
                     w = ph.weight.detach().to(device, dtype=ph._compute_dtype, non_blocking=True)
                     dense.weight = nn.Parameter(w, requires_grad=False)
@@ -313,7 +328,11 @@ class SinqHfQuantizer(HfQuantizer):
 
             model.to(dtype=torch.bfloat16, device=device)
 
-            if tokenizer is not None and getattr(tokenizer, "pad_token_id", None) is None and getattr(tokenizer, "eos_token_id", None) is not None:
+            if (
+                tokenizer is not None
+                and getattr(tokenizer, "pad_token_id", None) is None
+                and getattr(tokenizer, "eos_token_id", None) is not None
+            ):
                 tokenizer.pad_token = tokenizer.eos_token
 
             calib = None
@@ -321,13 +340,15 @@ class SinqHfQuantizer(HfQuantizer):
                 try:
                     calib = awq_get_simple_calibration_data(tokenizer, block_size=128)
                 except Exception as e:
-                    if logger: logger.warning("get_simple_calibration_data failed: %s", e)
+                    if logger:
+                        logger.warning("get_simple_calibration_data failed: %s", e)
                     calib = None
             if (calib is None or len(calib) == 0) and tokenizer is not None:
                 try:
                     calib = awq_get_calib_dataset(tokenizer, n_samples=16, max_seq_len=512, col="text")
                 except Exception as e:
-                    if logger: logger.warning("get_calib_dataset failed: %s", e)
+                    if logger:
+                        logger.warning("get_calib_dataset failed: %s", e)
                     calib = None
 
             wrapped = model
@@ -339,22 +360,29 @@ class SinqHfQuantizer(HfQuantizer):
                         super().__init__()
                         self._base = base
                         self._pad = pad_id
+
                     def forward(self, x):
                         attn = (x != self._pad).to(x.device)
                         return self._base(input_ids=x, attention_mask=attn)
+
                     @property
                     def device(self):
                         try:
                             return next(self._base.parameters()).device
                         except StopIteration:
                             return device
-                            #return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                            # return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
                     def named_modules(self, *args, **kwargs):
                         return self._base.named_modules(*args, **kwargs)
+
                     def eval(self):
-                        self._base.eval(); return self
+                        self._base.eval()
+                        return self
+
                     def train(self, mode: bool = True):
-                        self._base.train(mode); return self
+                        self._base.train(mode)
+                        return self
 
                 wrapped = _WrapHF(model, pad_id)
 
@@ -362,10 +390,12 @@ class SinqHfQuantizer(HfQuantizer):
                     try:
                         layer_acts = awq_collect_activations(wrapped, calib, num_samples=len(calib))
                     except Exception as e:
-                        if logger: logger.warning("collect_activations failed; falling back to SINQ. %s", e)
+                        if logger:
+                            logger.warning("collect_activations failed; falling back to SINQ. %s", e)
                         layer_acts = {}
                 else:
-                    if logger: logger.warning("No calibration data produced; falling back to SINQ.")
+                    if logger:
+                        logger.warning("No calibration data produced; falling back to SINQ.")
                     layer_acts = {}
 
         def _lookup_acts(name: str) -> Optional[torch.Tensor]:
@@ -419,7 +449,7 @@ class SinqHfQuantizer(HfQuantizer):
 
         final_dtype = self.update_dtype(None)
 
-        if kwargs.get("device_map", None) is not None:
+        if kwargs.get("device_map") is not None:
             raise RuntimeError(
                 "SinqHfQuantizer: device_map was provided, but SINQ currently supports a single CUDA device only. "
                 "Please remove device_map and set SinqConfig(device='cuda:x')."
