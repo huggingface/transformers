@@ -26,6 +26,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from torch import Tensor, nn
+from copy import deepcopy
 
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
@@ -1548,7 +1549,7 @@ class DFineObjectDetectionOutput(ModelOutput):
 )
 class DFineForObjectDetection(DFinePreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = {"model.decoder.bbox_embed": "bbox_embed", "model.decoder.class_embed": "class_embed"}
+
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
 
@@ -1571,11 +1572,9 @@ class DFineForObjectDetection(DFinePreTrainedModel):
                 for _ in range(config.decoder_layers - self.eval_idx - 1)
             ]
         )
-
-        # here self.model.decoder.bbox_embed is null, but not self.bbox_embed
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
-
+        # TODO this increases usage but is really the least worst way of doing it for now.
+        self.model.decoder.class_embed = deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = deepcopy(self.bbox_embed)
         # Initialize weights and apply final processing
         self.post_init()
 

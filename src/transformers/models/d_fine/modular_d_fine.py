@@ -19,6 +19,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from torch import nn
+from copy import deepcopy
 
 from ...activations import ACT2CLS
 from ...configuration_utils import PreTrainedConfig
@@ -896,10 +897,9 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
             ]
         )
 
-        # here self.model.decoder.bbox_embed is null, but not self.bbox_embed
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
-
+        # TODO this increases usage but is really the least worst way of doing it for now.
+        self.model.decoder.class_embed = deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = deepcopy(self.bbox_embed)
         # Initialize weights and apply final processing
         self.post_init()
 

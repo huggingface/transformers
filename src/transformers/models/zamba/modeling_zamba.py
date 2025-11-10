@@ -834,45 +834,24 @@ class ZambaModel(ZambaPreTrainedModel):
     Args:
         config: ZambaConfig
     """
-
+    _tied_weights_keys = {
+        r"layers.(?![0])\d+.shared_transf.*" : "layers.0.shared_transf"
+    }
     def __init__(self, config: ZambaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        block = ZambaAttentionDecoderLayer(config)
-        mamba_layers = []
-        linear_layers = []
         self.layers_block_type = config.layers_block_type
-        for i in range(config.num_hidden_layers):
-            if config.layers_block_type[i] == "mamba":
-                mamba_layers.append(ZambaMambaDecoderLayer(config, layer_idx=i))
-            elif config.layers_block_type[i] == "hybrid":
-                linear_layers.append(nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False))
-                mamba_layers.append(ZambaMambaDecoderLayer(config, layer_idx=i))
-        mamba_layers = iter(mamba_layers)
-        linear_layers = iter(linear_layers)
         layers = []
-        self._tied_weights_keys = {}
         for layer_id, layer_type in enumerate(self.layers_block_type):
+            mamba = ZambaMambaDecoderLayer(config, layer_idx=layer_id)
             if layer_type == "hybrid":
-                prefix_name = f"layers.{layer_id}."
-                tied_keys = [
-                    "shared_transf.self_attn.q_proj.weight",
-                    "shared_transf.self_attn.k_proj.weight",
-                    "shared_transf.self_attn.v_proj.weight",
-                    "shared_transf.self_attn.o_proj.weight",
-                    "shared_transf.feed_forward.gate_proj.weight",
-                    "shared_transf.feed_forward.up_proj.weight",
-                    "shared_transf.feed_forward.down_proj.weight",
-                    "shared_transf.input_layernorm.weight",
-                    "shared_transf.pre_ff_layernorm.weight",
-                ]
-                self._tied_weights_keys.update({prefix_name + key: f"layers.0.{key}" for key in tied_keys})
-                layers.append(ZambaHybridLayer(block, next(linear_layers), next(mamba_layers)))
+                linear = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
+                layers.append(ZambaHybridLayer(ZambaAttentionDecoderLayer(config), linear, mamba))
             else:
-                layers.append(next(mamba_layers))
+                layers.append(mamba)
         self.layers = nn.ModuleList(layers)
 
         self._attn_implementation = config._attn_implementation

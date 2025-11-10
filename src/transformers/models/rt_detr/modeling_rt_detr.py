@@ -19,7 +19,7 @@ import warnings
 from dataclasses import dataclass
 from functools import partial
 from typing import Optional, Union
-
+from copy import deepcopy
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
@@ -1814,8 +1814,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
 )
 class RTDetrForObjectDetection(RTDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = {"model.decoder.bbox_embed": "bbox_embed", "model.decoder.class_embed": "class_embed"}
-    
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
 
@@ -1828,11 +1826,13 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         if config.with_box_refine:
+            self._tied_weights_keys = {}
             self._tied_weights_keys[r"bbox_embed.(?![0])\d+"] = "bbox_embed.0"
             self._tied_weights_keys[r"class_embed.(?![0])\d+"] = "class_embed.0"
                 # hack implementation for iterative bounding box refinement
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        # TODO this increases usage but is really the least worst way of doing it for now.
+        self.model.decoder.class_embed = deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = deepcopy(self.bbox_embed)
 
         # Initialize weights and apply final processing
         self.post_init()
