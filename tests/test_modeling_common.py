@@ -1190,6 +1190,10 @@ class ModelTesterMixin:
                                 print(
                                     f"None for {k}, Probaby running a MOE, make sure grad is not NONE on EVERY layer. At LEAST 1 of the expert layer should have grads!"
                                 )
+                            if "shared" in k:
+                                print(
+                                    f"None for {k}, Probaby a model that does not default to tie the encoder and decoder!"
+                            )
                             else:
                                 with self.subTest(f"{k}"):
                                     self.assertTrue(
