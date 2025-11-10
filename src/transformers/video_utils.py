@@ -81,7 +81,6 @@ VideoInput = Union[
 class VideoMetadata(Mapping):
     total_num_frames: int
     fps: Optional[float] = None
-    sampled_fps: Optional[float] = None
     width: Optional[int] = None
     height: Optional[int] = None
     duration: Optional[float] = None
