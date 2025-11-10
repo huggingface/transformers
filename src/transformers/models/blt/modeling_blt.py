@@ -462,7 +462,6 @@ class BltPreTrainedModel(PreTrainedModel):
     }
 
 
-
 class BltLocalEncoder(BltPreTrainedModel):
     config: BltLocalEncoderConfig
     _can_record_outputs = {

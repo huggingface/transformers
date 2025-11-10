@@ -4466,7 +4466,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # were not part of the loaded weights: do it now
             if loading_task_model_from_base_state_dict:
                 parameters_to_initialize = {
-                    name: param for name, param in model.named_parameters() if not name.startswith(prefix)
+                    name: param for name, param in model.named_parameters() if not name.startswith(model.base_model_prefix)
                 }
                 for name, param in parameters_to_initialize.items():
                     # If it is still on meta here, it means that it's a tied weight that will be tied later anyway -> skip it

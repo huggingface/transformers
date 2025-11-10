@@ -1396,7 +1396,6 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         # tie text encoder, decoder weights if config set accordingly
         self.post_init()
 
-
     def get_audio_encoder(self):
         return self.audio_encoder
 
