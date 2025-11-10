@@ -136,6 +136,7 @@ from ...models.qwen3.modeling_qwen3 import Qwen3ForCausalLM, Qwen3PreTrainedMode
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils import TensorType
 from ...utils import auto_docstring
+from ...configuration_utils import PretrainedConfig
 
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
@@ -177,15 +178,35 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 
     def __init__(
         self,
-        pixel_shuffle_scale_factor: int = 1,
-        num_patches: int = 256,
+        hidden_size=768,
+        intermediate_size=3072,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        num_channels=3,
+        num_patches=256,
+        patch_size=16,
+        hidden_act="gelu_pytorch_tanh",
+        layer_norm_eps=1e-6,
+        attention_dropout=0.0,
+        pixel_shuffle_scale_factor=1,
         **kwargs,
     ):
+        # Copied from transformers.models.siglip2.configuration_siglip2.Siglip2VisionConfig.__init__
         super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.patch_size = patch_size
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
+        self.num_patches = num_patches
 
         # Add our custom fields
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
-        self.num_patches = num_patches
 
         if self._attn_implementation is None:
             self._attn_implementation = "flash_attention_2"
@@ -1318,7 +1339,7 @@ def patchify_vision(image: torch.Tensor, patch_size: int) -> torch.Tensor:
     return patches
 
 
-class IsaacConfig(Qwen3Config):
+class IsaacConfig(PretrainedConfig):
     """Configuration class for Isaac multimodal model."""
 
     model_type = "isaac"
@@ -1347,12 +1368,51 @@ class IsaacConfig(Qwen3Config):
 
         text_config_kwargs.update(kwargs)
 
-        super().__init__(**text_config_kwargs)
-        self.text_config = Qwen3Config(**text_config_kwargs)
+        self.text_config = self.sub_configs["text_config"](**text_config_kwargs)
+
+        super().__init__(**kwargs)
+
         if self._rope_scaling is None:
             self._rope_scaling = getattr(self.text_config, "rope_scaling", None)
         else:
             self.text_config.rope_scaling = self._rope_scaling
+
+        # Mirror frequently accessed Qwen3 attributes at the composite config level for BC.
+        self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", False)
+        self.vocab_size = self.text_config.vocab_size
+        self.max_position_embeddings = self.text_config.max_position_embeddings
+        self.hidden_size = self.text_config.hidden_size
+        self.intermediate_size = self.text_config.intermediate_size
+        self.num_hidden_layers = self.text_config.num_hidden_layers
+        self.num_attention_heads = self.text_config.num_attention_heads
+        self.use_sliding_window = getattr(self.text_config, "use_sliding_window", False)
+        sliding_window = getattr(self.text_config, "sliding_window", None)
+        self.sliding_window = sliding_window if self.use_sliding_window else None
+        self.max_window_layers = getattr(self.text_config, "max_window_layers", None)
+        self.num_key_value_heads = getattr(self.text_config, "num_key_value_heads", None)
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        self.head_dim = self.text_config.head_dim
+        self.hidden_act = self.text_config.hidden_act
+        self.initializer_range = self.text_config.initializer_range
+        self.rms_norm_eps = self.text_config.rms_norm_eps
+        self.use_cache = self.text_config.use_cache
+        self.rope_theta = self.text_config.rope_theta
+        self.attention_bias = getattr(self.text_config, "attention_bias", False)
+        self.attention_dropout = getattr(self.text_config, "attention_dropout", 0.0)
+
+        # Validate rotary parameters now that they have been mirrored locally.
+        rope_config_validation(self)
+
+        self.layer_types = getattr(self.text_config, "layer_types", None)
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Handle vision config - either dict or IsaacVisionConfig instance
         if isinstance(vision_config, dict):
