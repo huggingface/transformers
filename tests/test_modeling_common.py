@@ -42,6 +42,7 @@ from transformers import (
     set_seed,
 )
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
+from transformers.exporters.utils import UNSUPPORTED_CACHE_CLASS_MODEL_TYPES
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -3485,6 +3486,7 @@ class ModelTesterMixin:
                     isinstance(model, GenerationMixin)
                     and getattr(model.config, "use_cache", False)
                     and "past_key_values" in inspect.signature(model.forward).parameters
+                    and model.config.model_type not in UNSUPPORTED_CACHE_CLASS_MODEL_TYPES
                 ):
                     # Only needed to get the cache and run the eager inference with it
                     DynamoExporter.prepare_cache_inputs_for_export(model, inputs_dict)
@@ -3508,6 +3510,9 @@ class ModelTesterMixin:
                 with torch.no_grad():
                     set_seed(1234)
                     exported_outputs = exported_program.module().forward(**copy.deepcopy(inputs_dict))
+
+                if "lsh" in getattr(config, "attn_layers", []):
+                    self.skipTest("LSH attention is not deterministic, skipping the output comparison.")
 
                 # Check if outputs are close:
                 # is_tested is a boolean flag indicating if we compare any outputs,
