@@ -3904,7 +3904,7 @@ class ModelTesterMixin:
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         # If none of the config and subconfigs have a tp_plan, then skip (otherwise we should make sure to respect the plan)
         if config.base_model_tp_plan is None and all(
-            getattr(config, key).base_model_tp_plan is None for key in config.sub_configs
+            getattr(getattr(config, key), "base_model_tp_plan", None) is None for key in config.sub_configs
         ):
             self.skipTest("Model does not have a TP plan.")
 
