@@ -60,6 +60,7 @@ else:
             ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
             ("sam2_video", "Sam2VideoVideoProcessor"),
             ("smolvlm", "SmolVLMVideoProcessor"),
+            ("video_llama_3", "VideoLlama3VideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
             ("videomae", "VideoMAEVideoProcessor"),
             ("vjepa2", "VJEPA2VideoProcessor"),
@@ -122,7 +123,7 @@ def get_video_processor_config(
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
               huggingface.co.
             - a path to a *directory* containing a configuration file saved using the
-              [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
+              [`~BaseVideoProcessor.save_pretrained`] method, e.g., `./my_model_directory/`.
 
         cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
@@ -291,7 +292,7 @@ class AutoVideoProcessor:
 
                 # Some models have different image processors, e.g. InternVL uses GotOCRImageProcessor
                 # We cannot use GotOCRVideoProcessor when falling back for BC and should try to infer from config later on
-                if video_processor_class_inferred in VIDEO_PROCESSOR_MAPPING_NAMES.values():
+                if video_processor_class_from_name(video_processor_class_inferred) is not None:
                     video_processor_class = video_processor_class_inferred
             if "AutoImageProcessor" in config_dict.get("auto_map", {}):
                 image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
@@ -313,9 +314,14 @@ class AutoVideoProcessor:
 
         has_remote_code = video_processor_auto_map is not None
         has_local_code = video_processor_class is not None or type(config) in VIDEO_PROCESSOR_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
+        if has_remote_code:
+            if "--" in video_processor_auto_map:
+                upstream_repo = video_processor_auto_map.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
             class_ref = video_processor_auto_map
