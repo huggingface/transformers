@@ -179,9 +179,9 @@ class IsaacVisionConfig(Siglip2VisionConfig):
         self,
         pixel_shuffle_scale_factor: int = 1,
         num_patches: int = 256,
-        **super_kwargs,
+        **kwargs,
     ):
-        super().__init__(**super_kwargs)
+        super().__init__(**kwargs)
 
         # Add our custom fields
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
@@ -234,9 +234,9 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(
         self,
-        **super_kwargs: Unpack[IsaacImageProcessorKwargs],
+        **kwargs: Unpack[IsaacImageProcessorKwargs],
     ) -> None:
-        super().__init__(**super_kwargs)
+        super().__init__(**kwargs)
 
         pixel_shuffle_scale = 1 if self.pixel_shuffle_scale is None else int(self.pixel_shuffle_scale)
         if pixel_shuffle_scale < 1:
@@ -748,9 +748,9 @@ class IsaacVisionAttention(Siglip2Attention):
 class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
     """Isaac vision encoder layer with variable-length attention."""
 
-    def __init__(self, vision_config: IsaacVisionConfig):
-        super().__init__(vision_config)
-        self.self_attn = IsaacVisionAttention(vision_config)
+    def __init__(self, config: IsaacVisionConfig):
+        super().__init__(config)
+        self.self_attn = IsaacVisionAttention(config)
 
     def forward(
         self,
@@ -1332,10 +1332,10 @@ class IsaacConfig(Qwen3Config):
         vision_rescale_factor: float = 1 / 255,
         max_sequence_length: int = 16384,
         vision_token: str = "<image>",
-        **super_kwargs,
+        **kwargs,
     ):
         self._rope_scaling: dict[str, Any] | None = None
-        resolved_text_config = super_kwargs.pop("text_config", text_config)
+        resolved_text_config = kwargs.pop("text_config", text_config)
         if isinstance(resolved_text_config, Qwen3Config):
             text_config_kwargs = copy.deepcopy(resolved_text_config.to_dict())
         elif isinstance(resolved_text_config, dict):
@@ -1345,7 +1345,7 @@ class IsaacConfig(Qwen3Config):
         else:
             raise TypeError("`text_config` must be a mapping or `Qwen3Config` instance when provided.")
 
-        text_config_kwargs.update(super_kwargs)
+        text_config_kwargs.update(kwargs)
 
         super().__init__(**text_config_kwargs)
         self.text_config = Qwen3Config(**text_config_kwargs)
