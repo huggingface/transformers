@@ -103,7 +103,7 @@ from ...utils import auto_docstring
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from .processing_isaac import IsaacImageProcessorKwargs
+from .image_processing_isaac import IsaacImageProcessorKwargs
 
 
 def get_scaled_image_size(

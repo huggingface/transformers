@@ -116,7 +116,6 @@ from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import Qwen3PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import TransformersKwargs, can_return_tuple
 from ...utils.import_utils import is_torchdynamo_compiling
 from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
@@ -920,6 +919,7 @@ class IsaacAttention(nn.Module):
 
     def __init__(self, config: IsaacConfig, layer_idx: int):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -942,9 +942,8 @@ class IsaacAttention(nn.Module):
         )
         self.q_norm = IsaacRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = IsaacRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1002,7 +1001,6 @@ class IsaacDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = IsaacRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1011,7 +1009,7 @@ class IsaacDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
