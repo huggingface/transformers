@@ -142,7 +142,7 @@ from ...utils import auto_docstring
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.generic import can_return_tuple
+from ...utils.generic import TransformersKwargs, can_return_tuple
 from ...utils.import_utils import is_torchdynamo_compiling
 from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
@@ -779,7 +779,16 @@ class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
         cu_seqlens: torch.Tensor | None = None,
         max_seqlen: int | None = None,
         output_attentions: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        cu_seqlens (`torch.Tensor`, *optional*):
+            Prefix-sum tensor whose length equals the number of documents + 1. The difference between successive
+            entries gives each document's token count and enables block-diagonal attention masking for packed batches.
+        max_seqlen (`int`, *optional*):
+            Maximum document length referenced by `cu_seqlens`. Passed to FlashAttention so it can size temporary
+            buffers for packed variable-length attention.
+        """
         if cu_seqlens is not None or max_seqlen is not None:
             self.self_attn._variable_length_context(
                 cu_seqlens=cu_seqlens,
@@ -798,6 +807,7 @@ class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
             hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
+            **kwargs,
         )
 
 
@@ -829,6 +839,7 @@ class IsaacVisionEncoder(Siglip2Encoder):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         self.__variable_length_context(cu_seqlens, max_seqlen)
 
@@ -846,6 +857,7 @@ class IsaacVisionEncoder(Siglip2Encoder):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
 
@@ -2199,9 +2211,13 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
-        """
+        r"""
         Forward pass for conditional generation supporting both standard inputs and TensorStream.
-        Uses our embed_stream approach for multimodal inputs.
+
+        tensor_stream (`TensorStream`, *optional*):
+            Packed multimodal stream (text, vision, audio tokens) that already encodes spatial metadata. When provided,
+            the model derives embeddings, modality masks, and 3D rotary coordinates directly from the stream instead of
+            `input_ids`.
         """
 
         # Don't compute embeddings here - let the model handle it
