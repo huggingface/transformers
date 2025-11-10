@@ -510,14 +510,12 @@ def set_param_for_module(
                     shape=ref.size(),
                     stride=ref.stride(),
                 )
-            else:
-                pass  # TODO for "local" stuff, it will trigger missmatched no?
+            if not use_dtensor:
+                    # we convert to local
+                    param_value = param_value.to_local()
             
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
-                if not use_dtensor:
-                    # we convert to local
-                    param_value = param_value.to_local()
 
         # to skip any inplace method that modifies the param data
         param_value = get_loaded_parameter_class(param_value.__class__)(from_existing=param_value)
