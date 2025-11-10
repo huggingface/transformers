@@ -2372,10 +2372,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         applicable_attn_implementation = attn_implementation
 
         # If FA not installed, do not fail but use kernels instead
+        requested_original_flash_attn = attn_implementation == "flash_attention_2" or attn_implementation == "flash_attention_3"
         if (
             attn_implementation is not None
-            and "flash" in attn_implementation
             and self._supports_flash_attn
+            and requested_original_flash_attn
             and not (is_flash_attn_2_available() or is_flash_attn_3_available())
             and is_kernels_available()
             and not is_torch_npu_available()
@@ -2391,14 +2392,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 lazy_import_flash_attention(applicable_attn_implementation)
 
                 # log that we used kernel fallback if successful
-                if "flash_" in attn_implementation:
+                if requested_original_flash_attn:
                     logger.warning_once(
                         f"You do not have `flash_attn` installed, using `{applicable_attn_implementation}` "
                         "from the `kernels` library instead!"
                     )
             except Exception as e:
                 # raise the proper exception for requested flash attention
-                if attn_implementation.startswith("flash_"):
+                if requested_original_flash_attn:
                     if attn_implementation.endswith("2"):
                         self._flash_attn_2_can_dispatch()
                     else:
