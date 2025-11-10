@@ -2372,7 +2372,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         applicable_attn_implementation = attn_implementation
 
         # If FA not installed, do not fail but use kernels instead
-        requested_original_flash_attn = attn_implementation == "flash_attention_2" or attn_implementation == "flash_attention_3"
+        requested_original_flash_attn = (
+            attn_implementation == "flash_attention_2" or attn_implementation == "flash_attention_3"
+        )
         if (
             attn_implementation is not None
             and self._supports_flash_attn
