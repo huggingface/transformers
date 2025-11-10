@@ -131,7 +131,7 @@ def _resolve_component_dir(dirpath: Path):
     return ("file", cands[0]) if len(cands) == 1 else None
 
 
-def merge_and_shard_weights(src_root: Path, dst_root: Path):
+def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlamingo3Processor):
     state: dict[str, Any] = {}
     for tag in PREFIX_MAP.keys():
         comp = _resolve_component_dir(src_root / tag)
@@ -159,10 +159,14 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path):
     if not state:
         raise FileNotFoundError("No tensors found in llm/, sound_tower/, or sound_mm_projector/.")
 
+    tok = processor.tokenizer
+
     text_config = Qwen2Config(
-        bos_token_id=151643,
+        bos_token_id=tok.bos_token_id,
+        eos_token_id=tok.eos_token_id,
+        pad_token_id=tok.pad_token_id,
+        vocab_size=len(tok),
         dtype="bfloat16",
-        eos_token_id=151645,
         hidden_size=3584,
         intermediate_size=18944,
         model_max_length=8192,
@@ -171,10 +175,14 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path):
         num_key_value_heads=4,
         rope_theta=1000000.0,
         use_cache=False,
-        vocab_size=151672,
     )
     audio_config = AudioFlamingo3EncoderConfig(dtype="bfloat16")
-    config = AudioFlamingo3Config(text_config=text_config, audio_config=audio_config, dtype="bfloat16")
+    config = AudioFlamingo3Config(
+        text_config=text_config,
+        audio_config=audio_config,
+        audio_token_id=tok.get_vocab()["<sound>"],
+        dtype="bfloat16",
+    )
     model = AudioFlamingo3ForConditionalGeneration(config)
 
     # Update state dict to new key names if necessary
@@ -198,21 +206,17 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path):
         uk = load_res.unexpected_keys
         raise ValueError(f"Unexpected keys when loading: {uk[:10]}{' ...' if len(uk) > 10 else ''}")
 
+    generation_config = GenerationConfig(
+        bos_token_id=tok.bos_token_id,
+        eos_token_id=tok.eos_token_id,
+        pad_token_id=tok.pad_token_id,
+        max_new_tokens=2048,
+    )
+    model.generation_config = generation_config
+
     model.save_pretrained(save_directory=str(dst_root))
     logger.info("model.safetensors index and shards")
     return model
-
-
-def write_generation_config(dst_root: Path) -> GenerationConfig:
-    generation_config = GenerationConfig(
-        bos_token_id=151670,
-        eos_token_id=[151645],
-        pad_token_id=151671,
-        max_new_tokens=2048,
-    )
-    generation_config.save_pretrained(dst_root)
-    logger.info("generation_config.json")
-    return generation_config
 
 
 """
@@ -275,10 +279,7 @@ def main() -> None:
         raise FileExistsError(f"Destination already exists: {dst_root}")
 
     processor = write_processor(src_root, dst_root)
-    model = merge_and_shard_weights(src_root, dst_root)
-    gen_config = write_generation_config(dst_root)
-    # Ensure the same generation config is shipped when pushing to Hub
-    model.generation_config = gen_config
+    model = merge_and_shard_weights(src_root, dst_root, processor)
 
     # Optionally push converted assets using native push_to_hub only
     if args.push_to_hub:
