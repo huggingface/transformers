@@ -2103,8 +2103,6 @@ class SinqConfig(QuantizationConfigMixin):
     Users pass this to `from_pretrained(..., quantization_config=SinqConfig(...))`.
     """
 
-    # quant_method: str = "sinq"  # used by the auto-quantization mapping
-
     def __init__(
         self,
         nbits: int = 4,
@@ -2119,7 +2117,6 @@ class SinqConfig(QuantizationConfigMixin):
         device: Optional[Union[str, int]] = "cpu",
         **kwargs: Any,
     ):
-        # super().__init__(quant_method=QuantizationMethod.SINQ, **kwargs)
         self.quant_method = QuantizationMethod.SINQ
         self.nbits = int(nbits)
         self.group_size = int(group_size)
@@ -2135,12 +2132,10 @@ class SinqConfig(QuantizationConfigMixin):
 
     @property
     def is_trainable(self) -> bool:
-        # PEFT/LoRA on top of weight-only quantization is supported
         return True
 
     @property
     def is_serializable(self) -> bool:
-        # qweight/scales are buffers/params in modules -> serializable
         return True
 
     def to_dict(self) -> dict[str, Any]:
