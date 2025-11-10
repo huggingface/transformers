@@ -804,7 +804,7 @@ class ContinuousBatchingManager:
         """Check if the background generation thread is running."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
 
-    def stop(self, block: bool = False, timeout: Optional[float] = None) -> None:
+    def stop(self, block: bool = True, timeout: Optional[float] = None) -> None:
         """Signal the background thread to stop.
 
         Args:
@@ -815,14 +815,15 @@ class ContinuousBatchingManager:
             logger.warning("Manager not started.")
             return
 
+        stop_trigger_time = perf_counter()
         if not self.stop_event.is_set():
             self.stop_event.set()
             logger.info("Stopping continuous batching manager...")
 
         if block:
-            self.join(timeout)
+            self.join(stop_trigger_time, timeout)
 
-    def join(self, timeout: Optional[float] = None) -> None:
+    def join(self, stop_trigger_time: float, timeout: Optional[float] = None) -> None:
         """Wait for the background thread to finish.
 
         Args:
@@ -831,9 +832,10 @@ class ContinuousBatchingManager:
         if self._generation_thread is not None:
             self._generation_thread.join(timeout=timeout)
             if self._generation_thread.is_alive():
-                logger.warning("Generation thread did not exit after join timeout.")
+                logger.warning(f"Generation thread did not exit after join timeout ({timeout}).")
             else:
-                logger.info("Continuous Batching Manager stopped.")
+                end = perf_counter()
+                logger.info(f"Continuous Batching Manager stopped after {end - stop_trigger_time:.2f}s.")
                 self._generation_thread = None
 
     def add_request(
@@ -874,9 +876,11 @@ class ContinuousBatchingManager:
         self.input_queue.put(state, block=True, timeout=10)  # XXX: pass timeout as fn arg?
         return request_id
 
-    def add_requests(self, inputs: list[list[int]], max_new_tokens: Optional[int] = None) -> None:
+    def add_requests(
+        self, inputs: list[list[int]], max_new_tokens: Optional[int] = None, streaming: bool = False
+    ) -> None:
         for input_ids in inputs:
-            self.add_request(input_ids, max_new_tokens=max_new_tokens)
+            self.add_request(input_ids, max_new_tokens=max_new_tokens, streaming=streaming)
 
     def cancel_request(self, request_id: str) -> None:
         """Cancel a request by its ID.
@@ -887,6 +891,7 @@ class ContinuousBatchingManager:
         if self.batch_processor is not None:
             self.batch_processor.scheduler.set_request_cancellation(request_id)
 
+    # TODO:handle benchmarking properly when updating / fixing the requeue logic
     def get_result(
         self, request_id: Optional[str] = None, timeout: Optional[float] = None
     ) -> Optional[GenerationOutput]:
@@ -902,6 +907,7 @@ class ContinuousBatchingManager:
             return None
         try:
             result = self.output_queue.get(block=True, timeout=timeout)
+            # NOTE: requeue logic here
             if request_id is not None and result.request_id != request_id:
                 self.output_queue.put(result)
                 return None
@@ -916,6 +922,7 @@ class ContinuousBatchingManager:
             if result is not None:
                 yield result
 
+    # FIXME: stop iteration when request status is finished?
     def request_id_iter(self, request_id: str) -> Generator[GenerationOutput]:
         """Iterate over results matching a specific request id as they become available."""
         request_cancelled = False
@@ -1088,6 +1095,7 @@ class ContinuousMixin:
             num_kv_cuda_graphs=num_kv_cuda_graphs,
         )
 
+    # TODO: support streaming
     @traced
     @torch.inference_mode()
     def generate_batch(
@@ -1144,7 +1152,7 @@ class ContinuousMixin:
                         result = manager.get_result(timeout=1)
                         if result:
                             req_id = result.request_id
-                            if result.status == RequestStatus.FINISHED:
+                            if result.is_finished():
                                 results[req_id] = result
                                 finished_count += 1
                                 pbar.update(1)
