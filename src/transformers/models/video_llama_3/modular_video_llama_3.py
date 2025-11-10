@@ -1134,7 +1134,7 @@ class VideoLlama3Processor(Qwen2VLProcessor):
                 for grid_thw, merge_size in zip(videos_inputs["video_grid_thw"], videos_inputs["video_merge_sizes"])
             ]
             video_compression_masks = videos_inputs["video_compression_mask"].split(num_video_tokens)
-            if "return_metadata" not in kwargs:
+            if not kwargs.get("return_metadata"):
                 video_metadata = videos_inputs.pop("video_metadata")
             else:
                 video_metadata = videos_inputs["video_metadata"]
