@@ -1708,11 +1708,6 @@ class GenerationMixin(ContinuousMixin):
                     "`max_thinking_tokens` is set, but `max_new_tokens` is undefined. "
                     "Please set `max_new_tokens` so there is budget for the final response."
                 )
-            if generation_config.max_new_tokens <= 1:
-                raise ValueError(
-                    "`max_thinking_tokens` requires `max_new_tokens >= 2` so that `</think>` and the response fit in "
-                    f"the generation budget (got {generation_config.max_new_tokens})."
-                )
             if generation_config.max_thinking_tokens > generation_config.max_new_tokens - 2:
                 raise ValueError(
                     "`max_thinking_tokens` must be at most `max_new_tokens - 2` so there is room for the closing "
