@@ -144,9 +144,8 @@ class Phi3VPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
         super()._init_weights(module)
-        if hasattr(module, "logit_scale"):
-            if isinstance(module.logit_scale, nn.Parameter):
-                module.data.normal_(mean=0.0, std=std)
+        if isinstance(module, nn.Parameter):
+            module.data.normal_(mean=0.0, std=std)
 
 
 class Phi3VImageProjection(Llama4VisionMLP, nn.Module):
