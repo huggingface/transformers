@@ -147,15 +147,9 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLRotaryEmbedding
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
     Siglip2Attention,
-)
-from ..siglip2.modeling_siglip2 import (
-    Siglip2Encoder as HFSiglip2Encoder,
-)
-from ..siglip2.modeling_siglip2 import (
-    Siglip2EncoderLayer as HFSiglip2EncoderLayer,
-)
-from ..siglip2.modeling_siglip2 import (
-    Siglip2VisionEmbeddings as HFSiglip2VisionEmbeddings,
+    Siglip2Encoder,
+    Siglip2EncoderLayer,
+    Siglip2VisionEmbeddings,
 )
 
 
@@ -581,7 +575,7 @@ def sdpa_document_mask_forward(
     return Y.squeeze(0).permute(1, 0, 2)  # Back to (L, H, D)
 
 
-class IsaacVisionEmbeddings(HFSiglip2VisionEmbeddings):
+class IsaacVisionEmbeddings(Siglip2VisionEmbeddings):
     """Adapter around SigLIP2 vision embeddings that consumes packed patch sequences."""
 
     def __init__(self, config: IsaacVisionConfig):
@@ -751,7 +745,7 @@ class IsaacVisionAttention(Siglip2Attention):
         return y.unsqueeze(0), None  # (1, L, E)
 
 
-class IsaacVisionEncoderLayer(HFSiglip2EncoderLayer):
+class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
     """Isaac vision encoder layer with variable-length attention."""
 
     def __init__(self, vision_config: IsaacVisionConfig):
@@ -787,7 +781,7 @@ class IsaacVisionEncoderLayer(HFSiglip2EncoderLayer):
         )
 
 
-class IsaacVisionEncoder(HFSiglip2Encoder):
+class IsaacVisionEncoder(Siglip2Encoder):
     """Encoder using Isaac encoder layers with variable-length attention support."""
 
     def __init__(self, config: IsaacVisionConfig):
