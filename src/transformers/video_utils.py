@@ -108,8 +108,10 @@ class VideoMetadata(Mapping):
 
     @property
     def sampled_fps(self) -> float:
-        "fps of the sampled video."
-        return len(self.frames_indices) / self.total_num_frames * self.fps if self.fps else 24
+        "FPS of the sampled video."
+        if self.frames_indices is None or self.total_num_frames is None or self.fps is None:
+            return self.fps or 24
+        return len(self.frames_indices) / self.total_num_frames * self.fps
 
     def update(self, dictionary):
         for key, value in dictionary.items():
