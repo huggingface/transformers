@@ -23,23 +23,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-<<<<<<< HEAD
-<<<<<<< HEAD
-from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
-=======
-from ...modeling_attn_mask_utils import (
-    _create_4d_causal_attention_mask,
-    _prepare_4d_attention_mask,
-)
->>>>>>> 251683a68d (Added sdpa attention)
-=======
-from ...modeling_attn_mask_utils import (
-    _create_4d_causal_attention_mask,
-    _prepare_4d_attention_mask,
-    _prepare_4d_causal_attention_mask_for_sdpa,
-)
->>>>>>> e81d53c670 (Fixed nits)
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -497,18 +481,28 @@ class OwlViTAttention(nn.Module):
 
 
 class OwlViTSdpaAttention(OwlViTAttention):
+    """
+    OWL-ViT SDPA attention - CORRECTED VERSION
+    Key findings:
+    1. OWL-ViT uses BIDIRECTIONAL attention (not causal) for BOTH text and vision
+    2. The is_causal=True in base class is misleading and not actually used
+    3. Should use create_bidirectional_mask, not create_causal_mask
+    """
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
+
+        if output_attentions:
+            return super().forward(hidden_states, attention_mask, causal_attention_mask, output_attentions)
 
         bsz, tgt_len, embed_dim = hidden_states.size()
 
-        # get query projection
         query_states = self.q_proj(hidden_states) * self.scale
         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
@@ -518,12 +512,16 @@ class OwlViTSdpaAttention(OwlViTAttention):
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
         if query_states.device.type == "cuda" and attention_mask is not None:
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
@@ -531,17 +529,16 @@ class OwlViTSdpaAttention(OwlViTAttention):
             value_states,
             attn_mask=attention_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=self.is_causal and causal_attention_mask is None,
+            is_causal=False,
         )
 
-        if attn_output.size() != (bsz  ,  self.num_heads, tgt_len, self.head_dim):
+        if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
 
         attn_output = self.out_proj(attn_output)
@@ -792,19 +789,13 @@ class OwlViTTextTransformer(nn.Module):
         # num_samples, seq_len = input_shape  where num_samples = batch_size * num_max_text_queries
         # OWLVIT's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = _create_4d_causal_attention_mask(
-            input_shape, hidden_states.dtype, device=hidden_states.device
+        # OWL-ViT uses a bidirectional (non-causal) encoder.
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
         )
-
-        # expand attention_mask
-        if attention_mask is not None:
-            # [num_samples, seq_len] -> [num_samples, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
-
-        if self._use_sdpa and not output_attentions:
-            # output_attentions=True can not be supported when using SDPA, and we fall back on
-            # the manual implementation that requires a 4D causal mask in all cases.
-            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(attention_mask, input_shape, hidden_states, 0)
+        causal_attention_mask = None
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
