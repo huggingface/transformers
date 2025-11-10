@@ -43,6 +43,50 @@ if _is_dtensor_available:
     from torch.distributed.tensor import DTensor
 
 
+import itertools
+import os
+import re
+from abc import abstractmethod
+from collections import defaultdict
+from collections.abc import MutableMapping, MutableSet, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from functools import partial
+from types import MethodType
+from typing import Any, Optional, Union
+
+import torch
+
+from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer
+from .quantizers import HfQuantizer
+from .utils import is_torch_greater_or_equal, logging
+from .utils.quantization_config import QuantizationMethod
+
+
+_torch_distributed_available = torch.distributed.is_available()
+_is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
+if _is_dtensor_available:
+    from torch.distributed.tensor import DTensor
+
+
+logger = logging.get_logger(__name__)
+
+str_to_torch_dtype = {
+    "BOOL": torch.bool,
+    "U8": torch.uint8,
+    "I8": torch.int8,
+    "I16": torch.int16,
+    "F16": torch.float16,
+    "BF16": torch.bfloat16,
+    "I32": torch.int32,
+    "F32": torch.float32,
+    "F64": torch.float64,
+    "I64": torch.int64,
+    "F8_E4M3": torch.float8_e4m3fn,
+    "F8_E5M2": torch.float8_e5m2,
+}
+
 
 logger = logging.get_logger(__name__)
 
@@ -303,24 +347,24 @@ class ConversionEntry:
 
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
-
 # Factory function to create LoadedParameter subclasses dynamically
 def get_loaded_parameter_class(base_cls):
     """
     base_cls: an nn.Parameter subclass (or nn.Parameter) or a Tensor
     Returns a new class that combines the base_cls with LoadedParameterMixin
+
     """
     class LoadedParam(base_cls):
         _inplace_methods = [
                 'add_', 'mul_', 'clamp_', 'zero_', 'fill_', 'normal_', 'uniform_',
-                'copy_', 'erfinv_', 'log_'
+                'copy_', 'erfinv_', 'log_', "__getitem__", "neg_", "exp_", "sub_"
             ]
         def __new__(cls, from_existing, **kwargs):
             if isinstance(from_existing, torch.nn.Parameter):
                 inst = super().__new__(cls, from_existing.data, from_existing.requires_grad, **from_existing.__dict__)
             else:
                 inst = super().__new__(cls, from_existing)
-            inst._original = from_existing
+            inst._original_type = from_existing
             # Explicitly override all in-place methods per instance
             for method_name in inst._inplace_methods:
                 setattr(inst, method_name, MethodType(inst._skip, inst))
@@ -342,10 +386,29 @@ def get_loaded_parameter_class(base_cls):
         def data(self, new):
             pass
 
+    def __lt__(self, other):  return torch.Tensor.__lt__(self, other)
+    def __le__(self, other):  return torch.Tensor.__le__(self, other)
+    def __gt__(self, other):  return torch.Tensor.__gt__(self, other)
+    def __ge__(self, other):  return torch.Tensor.__ge__(self, other)
+    def __eq__(self, other):  return torch.Tensor.__eq__(self, other)
+    def __ne__(self, other):  return torch.Tensor.__ne__(self, other)
+    def __iadd__(self, *args, **kwargs): return self
+    def __isub__(self, *args, **kwargs): return self
+    def __imul__(self, *args, **kwargs): return self
+    def __imatmul__(self, *args, **kwargs): return self
+    def __itruediv__(self, *args, **kwargs): return self
+    def __ifloordiv__(self, *args, **kwargs): return self
+    def __imod__(self, *args, **kwargs): return self
+    def __ipow__(self, *args, **kwargs): return self
+    def __iand__(self, *args, **kwargs): return self
+    def __ior__(self, *args, **kwargs): return self
+    def __ixor__(self, *args, **kwargs): return self
+    def __ilshift__(self, *args, **kwargs): return self
+    def __irshift__(self, *args, **kwargs): return self
+
     return LoadedParam
 
 def _materialize_copy(tensor, dtype=None):
-    # PyTorch: this runs in C and releases the GIL; good for threads.
     tensor = tensor[...]
     if dtype is not None:
         tensor = tensor.to(dtype)
@@ -431,9 +494,7 @@ def set_param_for_module(
         module_obj = model.get_submodule(module_path) if module_path else model
         if isinstance(param_value, list):
             param_value = param_value[0]
-        elif isinstance(param_value, torch.nn.Parameter):
-            pass
-        else:
+        elif not isinstance(param_value, torch.nn.Parameter):
             param_value = param_value[...]
         ref = meta_model_state_dict.get(layer_name, empty_param)
 
