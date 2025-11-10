@@ -52,11 +52,6 @@ class DeepseekVLHybridProcessor(ProcessorMixin):
             The number of special image tokens used as placeholders for visual content in text sequences.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "num_image_tokens"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor,
@@ -92,10 +87,8 @@ class DeepseekVLHybridProcessor(ProcessorMixin):
                 tensor. Both channels-first and channels-last formats are supported.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

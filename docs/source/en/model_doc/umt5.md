@@ -39,7 +39,7 @@ Google has released the following variants:
 This model was contributed by [agemagician](https://huggingface.co/agemagician) and [stefan-it](https://huggingface.co/stefan-it). The original code can be
 found [here](https://github.com/google-research/t5x).
 
-## Usage tips 
+## Usage tips
 
 - UMT5 was only pre-trained on [mC4](https://huggingface.co/datasets/mc4) excluding any supervised training.
 Therefore, this model has to be fine-tuned before it is usable on a downstream task, unlike the original T5 model.
@@ -47,6 +47,7 @@ Therefore, this model has to be fine-tuned before it is usable on a downstream t
 fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
 
 ## Differences with mT5?
+
 `UmT5` is based on mT5, with a non-shared relative positional bias that is computed for each layer. This means that the model set `has_relative_bias` for each layer.
 The conversion script is also different because the model was saved in t5x's latest checkpointing format.
 
@@ -67,7 +68,7 @@ The conversion script is also different because the model was saved in t5x's lat
 ['<pad><extra_id_0>nyone who<extra_id_1> drink<extra_id_2> a<extra_id_3> alcohol<extra_id_4> A<extra_id_5> A. This<extra_id_6> I<extra_id_7><extra_id_52><extra_id_53></s>']
 ```
 
-<Tip> 
+<Tip>
 
 Refer to [T5's documentation page](t5) for more tips, code examples and notebooks.
 </Tip>
@@ -105,4 +106,3 @@ Refer to [T5's documentation page](t5) for more tips, code examples and notebook
 
 [[autodoc]] UMT5ForQuestionAnswering
     - forward
-

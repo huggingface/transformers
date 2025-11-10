@@ -43,26 +43,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] modeling_utils.ModuleUtilsMixin
 
-## TFPreTrainedModel
-
-[[autodoc]] TFPreTrainedModel
-    - push_to_hub
-    - all
-
-## TFModelUtilsMixin
-
-[[autodoc]] modeling_tf_utils.TFModelUtilsMixin
-
-## FlaxPreTrainedModel
-
-[[autodoc]] FlaxPreTrainedModel
-    - push_to_hub
-    - all
-
 ## 허브에 저장하기
 
 [[autodoc]] utils.PushToHubMixin
-
-## 공유된 체크포인트
-
-[[autodoc]] modeling_utils.load_sharded_checkpoint

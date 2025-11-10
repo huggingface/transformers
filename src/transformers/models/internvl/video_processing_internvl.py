@@ -17,22 +17,17 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, is_torchvision_v2_available
+from ...utils import TensorType
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-class InternVLVideoProcessorInitKwargs(VideosKwargs):
+class InternVLVideoProcessorInitKwargs(VideosKwargs, total=False):
     initial_shift: Union[bool, float, int]
 
 
@@ -48,7 +43,6 @@ class InternVLVideoProcessor(BaseVideoProcessor):
     initial_shift = True
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
     valid_kwargs = InternVLVideoProcessorInitKwargs
-    model_input_names = ["pixel_values_videos"]
 
     def __init__(self, **kwargs: Unpack[InternVLVideoProcessorInitKwargs]):
         super().__init__(**kwargs)

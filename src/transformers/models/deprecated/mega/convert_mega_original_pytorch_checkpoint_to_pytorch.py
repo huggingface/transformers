@@ -29,13 +29,15 @@ import argparse
 
 # utilities to import the model weights and config file
 import os
-import pickle as pkl
+import pickle
 
 # PyTorch + new model classes
 import torch
 from torch import nn
 
 from transformers import AutoTokenizer, MegaConfig, MegaForMaskedLM
+
+from ....utils import strtobool
 
 
 # import the EncoderLayer class used to pretrain
@@ -122,8 +124,15 @@ class OriginalMegaForMaskedLM(nn.Module):
 
 # code to convert the checkpoint located in the user-specified location
 def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, includes_tokenizer):
+    if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+        raise ValueError(
+            "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+            "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+            "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+            "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+        )
     with open(os.path.join(pretrained_checkpoint_path, "model_args.pkl"), "rb") as f:
-        mega_original_args = pkl.load(f)
+        mega_original_args = pickle.load(f)
 
     # load the original encoder
     original_mlm = OriginalMegaForMaskedLM(**mega_original_args).eval()

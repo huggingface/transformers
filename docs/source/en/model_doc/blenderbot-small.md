@@ -55,7 +55,6 @@ found [here](https://github.com/facebookresearch/ParlAI).
 Blenderbot Small is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
 the left.
 
-
 ## Resources
 
 - [Causal language modeling task guide](../tasks/language_modeling)

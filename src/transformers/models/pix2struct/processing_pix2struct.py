@@ -16,21 +16,15 @@
 Processor class for Pix2Struct.
 """
 
-from typing import Optional, Union
+from typing import Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import logging
 
 
-class Pix2StructImagesKwargs(ImagesKwargs, total=False):
-    max_patches: Optional[int]
-    header_text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
-
-
 class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Pix2StructImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -67,10 +61,6 @@ class Pix2StructProcessor(ProcessorMixin):
             An instance of ['T5TokenizerFast`] or ['T5Tokenizer`]. The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Pix2StructImageProcessor"
-    tokenizer_class = ("T5Tokenizer", "T5TokenizerFast")
-
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
@@ -79,8 +69,6 @@ class Pix2StructProcessor(ProcessorMixin):
         self,
         images=None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Pix2StructProcessorKwargs],
     ) -> Union[BatchEncoding, BatchFeature]:
         """
@@ -103,7 +91,6 @@ class Pix2StructProcessor(ProcessorMixin):
             output_kwargs["text_kwargs"]["add_special_tokens"] = (
                 add_special_tokens if add_special_tokens is not None else True
             )
-            self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
             return text_encoding
 

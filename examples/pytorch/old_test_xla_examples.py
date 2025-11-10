@@ -55,7 +55,6 @@ class TorchXLAExamplesTests(TestCasePlus):
             ./examples/pytorch/text-classification/run_glue.py
             --model_name_or_path distilbert/distilbert-base-uncased
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
             --validation_file ./tests/fixtures/tests_samples/MRPC/dev.csv
             --do_train

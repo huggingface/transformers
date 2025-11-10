@@ -15,8 +15,9 @@
 """PyTorch SAM model."""
 
 import collections
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -1008,6 +1009,7 @@ class SamPreTrainedModel(PreTrainedModel):
     config: SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["SamVisionAttention"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -1059,7 +1061,7 @@ class SamVisionEncoder(SamPreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_embed
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
     ) -> SamVisionEncoderOutput:
@@ -1110,6 +1112,7 @@ class SamVisionModel(SamPreTrainedModel):
     """
 )
 class SamModel(SamPreTrainedModel):
+    input_modalities = ["image", "text"]
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
@@ -1197,7 +1200,7 @@ class SamModel(SamPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

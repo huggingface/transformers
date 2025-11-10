@@ -20,7 +20,7 @@ from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, Gemma2Config, is_torch_available, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, is_torch_available, pipeline
 from transformers.cache_utils import DynamicLayer, DynamicSlidingWindowLayer
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
@@ -34,73 +34,32 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_large_accelerator,
     require_torch_large_gpu,
+    run_test_using_subprocess,
     slow,
     torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        Gemma2ForCausalLM,
-        Gemma2ForSequenceClassification,
-        Gemma2ForTokenClassification,
         Gemma2Model,
     )
 
 
 class Gemma2ModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Gemma2Config
         base_model_class = Gemma2Model
-        causal_lm_class = Gemma2ForCausalLM
-        sequence_class = Gemma2ForSequenceClassification
-        token_class = Gemma2ForTokenClassification
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Gemma2Model,
-            "text-classification": Gemma2ForSequenceClassification,
-            "token-classification": Gemma2ForTokenClassification,
-            "text-generation": Gemma2ForCausalLM,
-            "zero-shot": Gemma2ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch
 class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (Gemma2Model, Gemma2ForCausalLM, Gemma2ForSequenceClassification, Gemma2ForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Gemma2Model,
-            "text-classification": Gemma2ForSequenceClassification,
-            "token-classification": Gemma2ForTokenClassification,
-            "text-generation": Gemma2ForCausalLM,
-            "zero-shot": Gemma2ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = Gemma2ModelTester
-
-    def setUp(self):
-        self.model_tester = Gemma2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma2Config, hidden_size=37)
 
 
 @slow
@@ -178,6 +137,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
         self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
 
+    # TODO: run_test_using_subprocess was added because of an issue in torch 2.9, which is already fixed in nightly
+    # We can remove this once we upgrade to torch 2.10
+    @run_test_using_subprocess
     @require_read_token
     def test_model_2b_pipeline_bf16_flex_attention(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR

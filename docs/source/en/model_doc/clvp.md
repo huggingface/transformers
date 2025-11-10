@@ -29,28 +29,24 @@ The abstract from the paper is the following:
 
 *In recent years, the field of image generation has been revolutionized by the application of autoregressive transformers and DDPMs. These approaches model the process of image generation as a step-wise probabilistic processes and leverage large amounts of compute and data to learn the image distribution. This methodology of improving performance need not be confined to images. This paper describes a way to apply advances in the image generative domain to speech synthesis. The result is TorToise - an expressive, multi-voice text-to-speech system.*
 
-
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
 The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
-
 
 ## Usage tips
 
 1. CLVP is an integral part of the Tortoise TTS model.
 2. CLVP can be used to compare different generated speech candidates with the provided text, and the best speech tokens are forwarded to the diffusion model.
 3. The use of the [`ClvpModelForConditionalGeneration.generate()`] method is strongly recommended for tortoise usage.
-4. Note that the CLVP model expects the audio to be sampled at 22.05 kHz contrary to other audio models which expects 16 kHz. 
+4. Note that the CLVP model expects the audio to be sampled at 22.05 kHz contrary to other audio models which expects 16 kHz.
 
-
-## Brief Explanation:
+## Brief Explanation
 
 - The [`ClvpTokenizer`] tokenizes the text input, and the [`ClvpFeatureExtractor`] extracts the log mel-spectrogram from the desired audio.
 - [`ClvpConditioningEncoder`] takes those text tokens and audio representations and converts them into embeddings conditioned on the text and audio.
 - The [`ClvpForCausalLM`] uses those embeddings to generate multiple speech candidates.
-- Each speech candidate is passed through the speech encoder ([`ClvpEncoder`]) which converts them into a vector representation, and the text encoder ([`ClvpEncoder`]) converts the text tokens into the same latent space. 
-- At the end, we compare each speech vector with the text vector to see which speech vector is most similar to the text vector. 
+- Each speech candidate is passed through the speech encoder ([`ClvpEncoder`]) which converts them into a vector representation, and the text encoder ([`ClvpEncoder`]) converts the text tokens into the same latent space.
+- At the end, we compare each speech vector with the text vector to see which speech vector is most similar to the text vector.
 - [`ClvpModelForConditionalGeneration.generate()`] compresses all of the logic described above into a single method.  
-
 
 Example :
 
@@ -74,11 +70,9 @@ Example :
 >>> generated_output = model.generate(**processor_output)
 ```
 
-
 ## ClvpConfig
 
 [[autodoc]] ClvpConfig
-    - from_sub_model_configs
 
 ## ClvpEncoderConfig
 
@@ -128,4 +122,3 @@ Example :
 ## ClvpDecoder
 
 [[autodoc]] ClvpDecoder
-

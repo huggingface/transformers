@@ -39,9 +39,10 @@ pipeline("the secret to baking a really good cake is ")
 When you have more than one input, pass them as a list.
 
 ```py
-from transformers import pipeline, infer_device
+from transformers import pipeline
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 pipeline = pipeline(task="text-generation", model="google/gemma-2-2b", device=device)
 pipeline(["the secret to baking a really good cake is ", "a baguette is "])
@@ -173,9 +174,10 @@ pipeline("the secret to baking a really good cake is ")
 In the example below, when there are 4 inputs and `batch_size` is set to 2, [`Pipeline`] passes a batch of 2 inputs to the model at a time.
 
 ```py
-from transformers import pipeline, infer_device()
+from transformers import pipeline
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 pipeline = pipeline(task="text-generation", model="google/gemma-2-2b", device=device, batch_size=2)
 pipeline(["the secret to baking a really good cake is", "a baguette is", "paris is the", "hotdogs are"])
@@ -188,11 +190,12 @@ pipeline(["the secret to baking a really good cake is", "a baguette is", "paris 
 Another good use case for batch inference is for streaming data in [`Pipeline`].
 
 ```py
-from transformers import pipeline, infer_device
+from transformers import pipeline
+from accelerate import Accelerator
 from transformers.pipelines.pt_utils import KeyDataset
 import datasets
 
-device = infer_device()
+device = Accelerator().device
 
 # KeyDataset is a utility that returns the item in the dict returned by the dataset
 dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
@@ -302,10 +305,11 @@ For inference with large datasets, you can iterate directly over the dataset its
 
 ```py
 from transformers.pipelines.pt_utils import KeyDataset
-from transformers import pipeline, infer_device
+from transformers import pipeline
+from accelerate import Accelerator
 from datasets import load_dataset
 
-device = infer_device()
+device = Accelerator().device
 
 dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
 pipeline = pipeline(task="text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english", device=device)
@@ -341,7 +345,7 @@ The `device_map="auto"` setting is useful for automatically distributing the mod
 > [!TIP]
 > Inputs are internally converted to torch.float16 and it only works for models with a PyTorch backend.
 
-Lastly, [`Pipeline`] also accepts quantized models to reduce memory usage even further. Make sure you have the [bitsandbytes](https://hf.co/docs/bitsandbytes/installation) library installed first, and then add `load_in_8bit=True` to `model_kwargs` in the pipeline.
+Lastly, [`Pipeline`] also accepts quantized models to reduce memory usage even further. Make sure you have the [bitsandbytes](https://hf.co/docs/bitsandbytes/installation) library installed first, and then add `quantization_config` to `model_kwargs` in the pipeline.
 
 ```py
 import torch

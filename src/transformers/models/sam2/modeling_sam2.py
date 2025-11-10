@@ -20,8 +20,9 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -37,10 +38,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-)
+from ...utils import ModelOutput, auto_docstring
 from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import AutoModel
 from .configuration_sam2 import (
@@ -553,6 +551,7 @@ class Sam2PreTrainedModel(PreTrainedModel):
     config_class = Sam2Config
     base_model_prefix = "sam2"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
@@ -621,7 +620,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -673,7 +672,7 @@ class Sam2VisionModel(Sam2PreTrainedModel):
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1278,6 +1277,7 @@ class Sam2MaskDecoder(nn.Module):
     """
 )
 class Sam2Model(Sam2PreTrainedModel):
+    input_modalities = ["image", "text"]
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
@@ -1390,7 +1390,7 @@ class Sam2Model(Sam2PreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

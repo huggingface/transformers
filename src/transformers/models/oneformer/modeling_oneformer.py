@@ -23,7 +23,6 @@ from typing import Optional, Union
 import numpy as np
 import torch
 from torch import Tensor, nn
-from torch.cuda.amp import autocast
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -322,7 +321,7 @@ class OneFormerHungarianMatcher(nn.Module):
                 align_corners=False,
             ).squeeze(1)
 
-            with autocast(enabled=False):
+            with torch.autocast(device_type="cuda", enabled=False):
                 pred_mask = pred_mask.float()
                 target_mask = target_mask.float()
 
@@ -719,7 +718,7 @@ class OneFormerLoss(nn.Module):
         """
         Computes the average number of target masks across the batch, for normalization purposes.
         """
-        num_masks = sum([len(classes) for classes in class_labels])
+        num_masks = sum(len(classes) for classes in class_labels)
         num_masks = torch.as_tensor([num_masks], dtype=torch.float, device=device)
         world_size = 1
         if is_accelerate_available():
@@ -2303,11 +2302,7 @@ class OneFormerTransformerDecoder(nn.Module):
 
         return outputs_class, outputs_mask, attention_mask
 
-    @torch.jit.unused
     def _get_aux_predictions(self, outputs_class, outputs_seg_masks):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
         aux_list = [
             {"class_queries_logits": a, "masks_queries_logits": b}
             for a, b in zip(outputs_class[:-1], outputs_seg_masks[:-1])
@@ -2573,9 +2568,6 @@ class OneFormerTextMLP(nn.Module):
     ):
         super().__init__()
         self.activation_fn = ACT2FN["quick_gelu"]
-        hidden_size = hidden_size
-        intermediate_size = intermediate_size
-        output_size = output_size
         self.fc1 = nn.Linear(hidden_size, intermediate_size)
         self.fc2 = nn.Linear(intermediate_size, output_size)
 
@@ -2772,6 +2764,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
     config: OneFormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def _init_weights(self, module: nn.Module):
         xavier_std = self.config.init_xavier_std
@@ -2882,7 +2875,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
             Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
             for details.
         text_inputs (`list[torch.Tensor]`, *optional*):
-            Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
+            Tensor of shape `(num_queries, sequence_length)` to be fed to a model
 
         Example:
 
@@ -3068,7 +3061,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
             Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
             for details.
         text_inputs (`list[torch.Tensor]`, *optional*):
-            Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
+            Tensor of shape `(num_queries, sequence_length)` to be fed to a model
         mask_labels (`list[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
         class_labels (`list[torch.LongTensor]`, *optional*):

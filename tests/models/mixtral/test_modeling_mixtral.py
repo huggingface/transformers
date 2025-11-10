@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import MixtralConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_flash_attn,
@@ -34,9 +34,6 @@ if is_torch_available():
 
     from transformers import (
         MixtralForCausalLM,
-        MixtralForQuestionAnswering,
-        MixtralForSequenceClassification,
-        MixtralForTokenClassification,
         MixtralModel,
     )
 
@@ -44,42 +41,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class MixtralModelTester(CausalLMModelTester):
-    config_class = MixtralConfig
     if is_torch_available():
         base_model_class = MixtralModel
-        causal_lm_class = MixtralForCausalLM
-        sequence_class = MixtralForSequenceClassification
-        token_class = MixtralForTokenClassification
-        question_answering_class = MixtralForQuestionAnswering
 
 
 @require_torch
-class MistralModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            MixtralModel,
-            MixtralForCausalLM,
-            MixtralForSequenceClassification,
-            MixtralForTokenClassification,
-            MixtralForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": MixtralModel,
-            "text-classification": MixtralForSequenceClassification,
-            "token-classification": MixtralForTokenClassification,
-            "text-generation": MixtralForCausalLM,
-            "question-answering": MixtralForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_headmasking = False
-    test_pruning = False
+class MixtralModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = MixtralModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
@@ -100,7 +67,7 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Mistral flash attention does not support right padding")
+        self.skipTest(reason="Mixtral flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):

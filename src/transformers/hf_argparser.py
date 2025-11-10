@@ -18,12 +18,12 @@ import os
 import sys
 import types
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, ArgumentTypeError
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from copy import copy
 from enum import Enum
 from inspect import isclass
 from pathlib import Path
-from typing import Any, Callable, Literal, NewType, Optional, Union, get_type_hints
+from typing import Any, Literal, NewType, Optional, Union, get_type_hints
 
 import yaml
 
@@ -262,19 +262,6 @@ class HfArgumentParser(ArgumentParser):
                 "removing line of `from __future__ import annotations` which opts in Postponed "
                 "Evaluation of Annotations (PEP 563)"
             )
-        except TypeError as ex:
-            # Remove this block when we drop Python 3.9 support
-            if sys.version_info[:2] < (3, 10) and "unsupported operand type(s) for |" in str(ex):
-                python_version = ".".join(map(str, sys.version_info[:3]))
-                raise RuntimeError(
-                    f"Type resolution failed for {dtype} on Python {python_version}. Try removing "
-                    "line of `from __future__ import annotations` which opts in union types as "
-                    "`X | Y` (PEP 604) via Postponed Evaluation of Annotations (PEP 563). To "
-                    "support Python versions that lower than 3.10, you need to use "
-                    "`typing.Union[X, Y]` instead of `X | Y` and `typing.Optional[X]` instead of "
-                    "`X | None`."
-                ) from ex
-            raise
 
         for field in dataclasses.fields(dtype):
             if not field.init:

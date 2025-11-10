@@ -36,19 +36,18 @@ import traceback
 import types
 import unittest
 from collections import UserDict, defaultdict
-from collections.abc import Generator, Iterable, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from dataclasses import MISSING, fields
 from functools import cache, wraps
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
-import huggingface_hub.utils
-import requests
+import httpx
 import urllib3
-from huggingface_hub import delete_repo
+from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
 from transformers import Trainer
@@ -58,7 +57,6 @@ from .integrations import (
     is_clearml_available,
     is_optuna_available,
     is_ray_available,
-    is_sigopt_available,
     is_swanlab_available,
     is_tensorboard_available,
     is_trackio_available,
@@ -78,7 +76,6 @@ from .utils import (
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
-    is_bitsandbytes_multi_backend_available,
     is_bs4_available,
     is_compressed_tensors_available,
     is_cv2_available,
@@ -91,7 +88,6 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_flax_available,
     is_flute_available,
     is_fp_quant_available,
     is_fsdp_available,
@@ -106,8 +102,8 @@ from .utils import (
     is_huggingface_hub_greater_or_equal,
     is_ipex_available,
     is_jinja_available,
+    is_jmespath_available,
     is_jumanpp_available,
-    is_keras_nlp_available,
     is_kernels_available,
     is_levenshtein_available,
     is_librosa_available,
@@ -133,7 +129,6 @@ from .utils import (
     is_qutlass_available,
     is_rjieba_available,
     is_sacremoses_available,
-    is_safetensors_available,
     is_schedulefree_available,
     is_scipy_available,
     is_sentencepiece_available,
@@ -143,13 +138,11 @@ from .utils import (
     is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
-    is_tf_available,
     is_tiktoken_available,
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
-    is_torch_bf16_gpu_available,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
@@ -164,7 +157,6 @@ from .utils import (
     is_torchao_available,
     is_torchaudio_available,
     is_torchcodec_available,
-    is_torchdynamo_available,
     is_torchvision_available,
     is_triton_available,
     is_vision_available,
@@ -207,6 +199,17 @@ ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
 
 # Not critical, only usable on the sandboxed CI instance.
 TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
+
+
+# Used in CausalLMModelTester (and related classes/methods) to infer the common model classes from the base model class
+_COMMON_MODEL_NAMES_MAP = {
+    "config_class": "Config",
+    "causal_lm_class": "ForCausalLM",
+    "question_answering_class": "ForQuestionAnswering",
+    "sequence_classification_class": "ForSequenceClassification",
+    "token_classification_class": "ForTokenClassification",
+}
+
 
 if is_torch_available():
     import torch
@@ -492,13 +495,6 @@ def require_g2p_en(test_case):
     return unittest.skipUnless(is_g2p_en_available(), "test requires g2p_en")(test_case)
 
 
-def require_safetensors(test_case):
-    """
-    Decorator marking a test that requires safetensors. These tests are skipped when safetensors isn't installed.
-    """
-    return unittest.skipUnless(is_safetensors_available(), "test requires safetensors")(test_case)
-
-
 def require_rjieba(test_case):
     """
     Decorator marking a test that requires rjieba. These tests are skipped when rjieba isn't installed.
@@ -511,6 +507,13 @@ def require_jinja(test_case):
     Decorator marking a test that requires jinja. These tests are skipped when jinja isn't installed.
     """
     return unittest.skipUnless(is_jinja_available(), "test requires jinja")(test_case)
+
+
+def require_jmespath(test_case):
+    """
+    Decorator marking a test that requires jmespath. These tests are skipped when jmespath isn't installed.
+    """
+    return unittest.skipUnless(is_jmespath_available(), "test requires jmespath")(test_case)
 
 
 def require_onnx(test_case):
@@ -680,18 +683,6 @@ def require_torchcodec(test_case):
     return unittest.skipUnless(is_torchcodec_available(), "test requires Torchcodec")(test_case)
 
 
-def require_torch_or_tf(test_case):
-    """
-    Decorator marking a test that requires PyTorch or TensorFlow.
-
-    These tests are skipped when neither PyTorch not TensorFlow is installed.
-
-    """
-    return unittest.skipUnless(is_torch_available() or is_tf_available(), "test requires PyTorch or TensorFlow")(
-        test_case
-    )
-
-
 def require_intel_extension_for_pytorch(test_case):
     """
     Decorator marking a test that requires Intel Extension for PyTorch.
@@ -747,13 +738,6 @@ def require_tokenizers(test_case):
     Decorator marking a test that requires 🤗 Tokenizers. These tests are skipped when 🤗 Tokenizers isn't installed.
     """
     return unittest.skipUnless(is_tokenizers_available(), "test requires tokenizers")(test_case)
-
-
-def require_keras_nlp(test_case):
-    """
-    Decorator marking a test that requires keras_nlp. These tests are skipped when keras_nlp isn't installed.
-    """
-    return unittest.skipUnless(is_keras_nlp_available(), "test requires keras_nlp")(test_case)
 
 
 def require_pandas(test_case):
@@ -1023,21 +1007,6 @@ if is_torch_available():
 else:
     torch_device = None
 
-if is_tf_available():
-    import tensorflow as tf
-
-if is_flax_available():
-    import jax
-
-    jax_device = jax.default_backend()
-else:
-    jax_device = None
-
-
-def require_torchdynamo(test_case):
-    """Decorator marking a test that requires TorchDynamo"""
-    return unittest.skipUnless(is_torchdynamo_available(), "test requires TorchDynamo")(test_case)
-
 
 def require_torchao(test_case):
     """Decorator marking a test that requires torchao"""
@@ -1108,15 +1077,6 @@ def require_torch_large_accelerator(test_case, memory: float = 20):
     )(test_case)
 
 
-def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
-    """
-    Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
-    """
-    if is_bitsandbytes_available() and is_bitsandbytes_multi_backend_available():
-        return test_case
-    return require_torch_gpu(test_case)
-
-
 def require_torch_accelerator(test_case):
     """Decorator marking a test that requires an accessible accelerator and PyTorch."""
     return unittest.skipUnless(torch_device is not None and torch_device != "cpu", "test requires accelerator")(
@@ -1142,14 +1102,6 @@ def require_torch_bf16(test_case):
     """Decorator marking a test that requires a device that supports bf16"""
     return unittest.skipUnless(
         is_torch_bf16_available_on_device(torch_device), "test requires device with bf16 support"
-    )(test_case)
-
-
-def require_torch_bf16_gpu(test_case):
-    """Decorator marking a test that requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0"""
-    return unittest.skipUnless(
-        is_torch_bf16_gpu_available(),
-        "test requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0",
     )(test_case)
 
 
@@ -1204,16 +1156,6 @@ def require_ray(test_case):
 
     """
     return unittest.skipUnless(is_ray_available(), "test requires Ray/tune")(test_case)
-
-
-def require_sigopt(test_case):
-    """
-    Decorator marking a test that requires SigOpt.
-
-    These tests are skipped when SigOpt isn't installed.
-
-    """
-    return unittest.skipUnless(is_sigopt_available(), "test requires SigOpt")(test_case)
 
 
 def require_swanlab(test_case):
@@ -1326,15 +1268,7 @@ def require_bitsandbytes(test_case):
     """
     Decorator marking a test that requires the bitsandbytes library. Will be skipped when the library or its hard dependency torch is not installed.
     """
-    if is_bitsandbytes_available() and is_torch_available():
-        try:
-            import pytest
-
-            return pytest.mark.bitsandbytes(test_case)
-        except ImportError:
-            return test_case
-    else:
-        return unittest.skip(reason="test requires bitsandbytes and torch")(test_case)
+    return unittest.skipUnless(is_bitsandbytes_available(), "test requires bitsandbytes")(test_case)
 
 
 def require_optimum(test_case):
@@ -1545,20 +1479,12 @@ def require_mistral_common(test_case):
 
 def get_gpu_count():
     """
-    Return the number of available gpus (regardless of whether torch, tf or jax is used)
+    Return the number of available gpus
     """
     if is_torch_available():
         import torch
 
         return torch.cuda.device_count()
-    elif is_tf_available():
-        import tensorflow as tf
-
-        return len(tf.config.list_physical_devices("GPU"))
-    elif is_flax_available():
-        import jax
-
-        return jax.device_count()
     else:
         return 0
 
@@ -1629,65 +1555,13 @@ def evaluate_side_effect_factory(
 # final message
 # it can handle a single string or a multiline buffer
 def apply_print_resets(buf):
-    return re.sub(r"^.*\r", "", buf, 0, re.M)
+    return re.sub(r"^.*\r", "", buf, 0, re.MULTILINE)
 
 
 def assert_screenout(out, what):
     out_pr = apply_print_resets(out).lower()
     match_str = out_pr.find(what.lower())
     assert match_str != -1, f"expecting to find {what} in output: f{out_pr}"
-
-
-def set_model_tester_for_less_flaky_test(test_case):
-    # NOTE: this function edits the config object, which may lead to hard-to-debug side-effects. Use with caution.
-    # Do not use in tests/models where objects behave very differently based on the config's hidden layer settings
-    # (e.g. KV caches, sliding window attention, ...)
-
-    # TODO (if possible): Avoid exceptional cases
-    exceptional_classes = [
-        "ZambaModelTester",
-        "Zamba2ModelTester",
-        "RwkvModelTester",
-        "AriaVisionText2TextModelTester",
-        "GPTNeoModelTester",
-        "DPTModelTester",
-        "Qwen3NextModelTester",
-    ]
-    if test_case.model_tester.__class__.__name__ in exceptional_classes:
-        return
-
-    target_num_hidden_layers = 1
-    if hasattr(test_case.model_tester, "out_features") or hasattr(test_case.model_tester, "out_indices"):
-        target_num_hidden_layers = None
-
-    if hasattr(test_case.model_tester, "num_hidden_layers") and target_num_hidden_layers is not None:
-        test_case.model_tester.num_hidden_layers = target_num_hidden_layers
-    if (
-        hasattr(test_case.model_tester, "vision_config")
-        and "num_hidden_layers" in test_case.model_tester.vision_config
-        and target_num_hidden_layers is not None
-    ):
-        test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
-        if isinstance(test_case.model_tester.vision_config, dict):
-            test_case.model_tester.vision_config["num_hidden_layers"] = 1
-        else:
-            test_case.model_tester.vision_config.num_hidden_layers = 1
-    if (
-        hasattr(test_case.model_tester, "text_config")
-        and "num_hidden_layers" in test_case.model_tester.text_config
-        and target_num_hidden_layers is not None
-    ):
-        test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
-        if isinstance(test_case.model_tester.text_config, dict):
-            test_case.model_tester.text_config["num_hidden_layers"] = 1
-        else:
-            test_case.model_tester.text_config.num_hidden_layers = 1
-
-    # A few model class specific handling
-
-    # For Albert
-    if hasattr(test_case.model_tester, "num_hidden_groups"):
-        test_case.model_tester.num_hidden_groups = test_case.model_tester.num_hidden_layers
 
 
 def set_config_for_less_flaky_test(config):
@@ -1940,7 +1814,7 @@ class TemporaryHubRepo:
             repo_id = Path(tmp_dir).name
             if namespace is not None:
                 repo_id = f"{namespace}/{repo_id}"
-            self.repo_url = huggingface_hub.create_repo(repo_id, token=self.token)
+            self.repo_url = create_repo(repo_id, token=self.token)
 
     def __enter__(self):
         return self.repo_url
@@ -2398,7 +2272,7 @@ def pytest_terminal_summary_main(tr, id):
             msg = tr._getfailureheadline(rep)
             tr.write_sep("_", msg, red=True, bold=True)
             # chop off the optional leading extra frames, leaving only the last one
-            longrepr = re.sub(r".*_ _ _ (_ ){10,}_ _ ", "", rep.longreprtext, 0, re.M | re.S)
+            longrepr = re.sub(r".*_ _ _ (_ ){10,}_ _ ", "", rep.longreprtext, 0, re.MULTILINE | re.DOTALL)
             tr._tw.line(longrepr)
             # note: not printing out any rep.sections to keep the report short
 
@@ -2546,7 +2420,7 @@ def pytest_xdist_worker_id():
     if `-n 1` or `pytest-xdist` isn't being used.
     """
     worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
-    worker = re.sub(r"^gw", "", worker, 0, re.M)
+    worker = re.sub(r"^gw", "", worker, 0, re.MULTILINE)
     return int(worker)
 
 
@@ -2581,8 +2455,6 @@ def nested_simplify(obj, decimals=3):
         return obj
     elif is_torch_available() and isinstance(obj, torch.Tensor):
         return nested_simplify(obj.tolist(), decimals)
-    elif is_tf_available() and tf.is_tensor(obj):
-        return nested_simplify(obj.numpy().tolist())
     elif isinstance(obj, float):
         return round(obj, decimals)
     elif isinstance(obj, (np.int32, np.float32, np.float16)):
@@ -2754,13 +2626,14 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
             while retry_count < max_attempts:
                 try:
                     return test_func_ref(*args, **kwargs)
-                # We catch all exceptions related to network issues from requests
+                # We catch all exceptions related to network issues from httpx
                 except (
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.Timeout,
-                    requests.exceptions.ReadTimeout,
-                    requests.exceptions.HTTPError,
-                    requests.exceptions.RequestException,
+                    httpx.HTTPError,
+                    httpx.RequestError,
+                    httpx.TimeoutException,
+                    httpx.ReadTimeout,
+                    httpx.ConnectError,
+                    httpx.NetworkError,
                 ) as err:
                     logger.error(
                         f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specified Hub repository."
@@ -2847,8 +2720,6 @@ def run_test_using_subprocess(func):
         else:
             test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
             try:
-                import copy
-
                 env = copy.deepcopy(os.environ)
                 env["_INSIDE_SUB_PROCESS"] = "1"
                 # This prevents the entries in `short test summary info` given by the subprocess being truncated. so the
@@ -2864,7 +2735,7 @@ def run_test_using_subprocess(func):
                             test = test.split("::")[1:]
                             command[idx] = "::".join([f"{func.__globals__['__file__']}"] + test)
                     command = [f"{sys.executable}", "-m", "pytest"] + command
-                    command = [x for x in command if x not in ["--no-summary"]]
+                    command = [x for x in command if x != "--no-summary"]
                 # Otherwise, simply run the test with no option at all
                 else:
                     command = [f"{sys.executable}", "-m", "pytest", f"{test}"]
@@ -3340,7 +3211,9 @@ def unpack_device_properties(
 class Expectations(UserDict[PackedDeviceProperties, Any]):
     def get_expectation(self) -> Any:
         """
-        Find best matching expectation based on environment device properties.
+        Find best matching expectation based on environment device properties. We look at device_type, major and minor
+        versions of the drivers. Expectations are stored as a dictionary with keys of the form
+        (device_type, (major, minor)). If the major and minor versions are not provided, we use None.
         """
         return self.find_expectation(get_device_properties())
 
@@ -3453,15 +3326,27 @@ def _get_test_info():
     stack_from_inspect = inspect.stack()
     # but visit from the top frame to the most recent frame
 
+    actual_test_file, _actual_test_class = test_file, test_class
     test_frame, test_obj, test_method = None, None, None
     for frame in reversed(stack_from_inspect):
-        if test_file in str(frame).replace(r"\\", "/"):
-            if test_name == frame.frame.f_locals["self"]._testMethodName:
-                test_frame = frame
-                # The test instance
-                test_obj = frame.frame.f_locals["self"]
-                test_method = getattr(test_obj, test_name)
-                break
+        # if test_file in str(frame).replace(r"\\", "/"):
+        # check frame's function + if it has `self` as locals; double check if self has the (function) name
+        # TODO: Question: How about expanded?
+        if (
+            frame.function == test_name
+            and "self" in frame.frame.f_locals
+            and hasattr(frame.frame.f_locals["self"], test_name)
+        ):
+            # if test_name == frame.frame.f_locals["self"]._testMethodName:
+            test_frame = frame
+            # The test instance
+            test_obj = frame.frame.f_locals["self"]
+            # TODO: Do we get the (relative?) path or it's just a file name?
+            # TODO: Does `test_obj` always have `tearDown` object?
+            actual_test_file = frame.filename
+            # TODO: check `test_method` will work used at the several places!
+            test_method = getattr(test_obj, test_name)
+            break
 
     if test_frame is not None:
         line_number = test_frame.lineno
@@ -3475,9 +3360,12 @@ def _get_test_info():
     # From the most outer (i.e. python's `runpy.py`) frame to most inner frame (i.e. the frame of this method)
     # Between `the test method being called` and `before entering `patched``.
     for frame in reversed(stack_from_inspect):
-        if test_file in str(frame).replace(r"\\", "/"):
-            if "self" in frame.frame.f_locals and test_name == frame.frame.f_locals["self"]._testMethodName:
-                to_capture = True
+        if (
+            frame.function == test_name
+            and "self" in frame.frame.f_locals
+            and hasattr(frame.frame.f_locals["self"], test_name)
+        ):
+            to_capture = True
         # TODO: check simply with the name is not robust.
         elif "patched" == frame.frame.f_code.co_name:
             frame_of_patched_obj = frame
@@ -3511,7 +3399,7 @@ def _get_test_info():
     # Get the code context in the test function/method.
     from _pytest._code.source import Source
 
-    with open(test_file) as fp:
+    with open(actual_test_file) as fp:
         s = fp.read()
         source = Source(s)
         test_code_context = "\n".join(source.getstatement(test_lineno - 1).lines)
@@ -3522,9 +3410,7 @@ def _get_test_info():
         source = Source(s)
         caller_code_context = "\n".join(source.getstatement(caller_lineno - 1).lines)
 
-    test_info = (
-        f"test:\n\n{full_test_name}\n\n{'-' * 80}\n\ntest context: {test_file}:{test_lineno}\n\n{test_code_context}"
-    )
+    test_info = f"test:\n\n{full_test_name}\n\n{'-' * 80}\n\ntest context: {actual_test_file}:{test_lineno}\n\n{test_code_context}"
     test_info = f"{test_info}\n\n{'-' * 80}\n\ncaller context: {caller_path}:{caller_lineno}\n\n{caller_code_context}"
 
     return (
@@ -3635,8 +3521,15 @@ def _patched_tearDown(self, *args, **kwargs):
     # We still record those failures not handled by the patched methods, and add custom messages along with the usual
     # pytest failure report.
     regular_failures_info = []
-    if hasattr(self, "_outcome") and self._outcome.errors:
-        for error_entry in self._outcome.errors:
+
+    errors = None
+    if hasattr(self._outcome, "errors"):
+        errors = self._outcome.errors
+    elif hasattr(self._outcome, "result") and hasattr(self._outcome.result, "errors"):
+        errors = self._outcome.result.errors
+
+    if hasattr(self, "_outcome") and errors:
+        for error_entry in errors:
             test_instance, (exc_type, exc_obj, exc_tb) = error_entry
             # breakpoint()
             regular_failures_info.append(
@@ -3649,7 +3542,10 @@ def _patched_tearDown(self, *args, **kwargs):
             )
 
         # Clear the regular failure (i.e. that is not from any of our patched assertion methods) from pytest's records.
-        self._outcome.errors.clear()
+        if hasattr(self._outcome, "errors"):
+            self._outcome.errors.clear()
+        elif hasattr(self._outcome, "result") and hasattr(self._outcome.result, "errors"):
+            self._outcome.result.errors.clear()
 
     # reset back to the original tearDown method, so `_patched_tearDown` won't be run by the subsequent tests if they
     # have only test failures that are not handle by the patched methods (or no test failure at all).
@@ -3745,6 +3641,17 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
             info = _parse_call_info_func(orig_method, args, kwargs, call_argument_expressions, target_args)
             info = _prepare_debugging_info(test_info, info)
 
+            # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
+            # behaves as usual.
+            # On Github Actions or CircleCI, this is set automatically.
+            # When running manually, it's the user to determine if to set it.
+            # This is to avoid the patched function being called `with self.assertRaises(AssertionError):` and fails
+            # because of the missing expected `AssertionError`.
+            # TODO (ydshieh): If there is way to raise only when we are inside such context managers?
+            # TODO (ydshieh): How not to record the failure if it happens inside `self.assertRaises(AssertionError)`?
+            if os.getenv("CI") == "true":
+                raise captured_exception.with_traceback(test_traceback)
+
             # Save this, so we can raise at the end of the current test
             captured_failure = {
                 "result": "failed",
@@ -3827,6 +3734,18 @@ def patch_testing_methods_to_collect_info():
         _patch_with_call_info(torch.testing, "assert_close", _parse_call_info, target_args=("actual", "expected"))
 
     _patch_with_call_info(unittest.case.TestCase, "assertEqual", _parse_call_info, target_args=("first", "second"))
+    _patch_with_call_info(unittest.case.TestCase, "assertListEqual", _parse_call_info, target_args=("list1", "list2"))
+    _patch_with_call_info(
+        unittest.case.TestCase, "assertTupleEqual", _parse_call_info, target_args=("tuple1", "tuple2")
+    )
+    _patch_with_call_info(unittest.case.TestCase, "assertSetEqual", _parse_call_info, target_args=("set1", "set1"))
+    _patch_with_call_info(unittest.case.TestCase, "assertDictEqual", _parse_call_info, target_args=("d1", "d2"))
+    _patch_with_call_info(unittest.case.TestCase, "assertIn", _parse_call_info, target_args=("member", "container"))
+    _patch_with_call_info(unittest.case.TestCase, "assertNotIn", _parse_call_info, target_args=("member", "container"))
+    _patch_with_call_info(unittest.case.TestCase, "assertLess", _parse_call_info, target_args=("a", "b"))
+    _patch_with_call_info(unittest.case.TestCase, "assertLessEqual", _parse_call_info, target_args=("a", "b"))
+    _patch_with_call_info(unittest.case.TestCase, "assertGreater", _parse_call_info, target_args=("a", "b"))
+    _patch_with_call_info(unittest.case.TestCase, "assertGreaterEqual", _parse_call_info, target_args=("a", "b"))
 
 
 def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: Optional[dict] = None):
@@ -4139,7 +4058,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
                     if element_types[0] in [int, float]:
                         # one-line repr. without width limit
                         return no_new_line_in_elements
-                    elif element_types[0] in [str]:
+                    elif element_types[0] is str:
                         if len(obj) == 1:
                             # one single string element --> one-line repr. without width limit
                             return no_new_line_in_elements

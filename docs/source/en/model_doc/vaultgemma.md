@@ -12,10 +12,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2016-07-01 and added to Hugging Face Transformers on 2025-09-12.*
 
 # VaultGemma
 
@@ -30,7 +30,7 @@ sequence length.
 VaultGemma was trained from scratch with sequence-level differential privacy (DP). Its training data includes the same
 mixture as the [Gemma 2 models](https://huggingface.co/collections/google/gemma-2-release-667d6600fd5220e7b967f315),
 consisting of a number of documents of varying lengths. Additionally, it is trained using
-[DP stochastic gradient descent (DP-SGD)](https://arxiv.org/abs/1607.00133) and provides a
+[DP stochastic gradient descent (DP-SGD)](https://huggingface.co/papers/1607.00133) and provides a
 (ε ≤ 2.0, δ ≤ 1.1e-10)-sequence-level DP guarantee, where a sequence consists of 1024 consecutive tokens extracted from
 heterogeneous data sources. Specifically, the privacy unit of the guarantee is for the sequences after sampling and
 packing of the mixture.
@@ -43,7 +43,6 @@ command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
-
 
 ```python
 from transformers import pipeline
@@ -82,7 +81,7 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 <hfoption id="transformers CLI">
 
-```
+```bash
 echo -e "Write me a poem about Machine Learning. Answer:" | transformers run --task text2text-generation --model google/vaultgemma-1b-pt --device 0
 ```
 

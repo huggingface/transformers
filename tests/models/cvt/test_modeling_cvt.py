@@ -154,10 +154,7 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
     test_torch_exportable = True
 

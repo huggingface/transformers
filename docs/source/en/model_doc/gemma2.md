@@ -40,7 +40,6 @@ The example below demonstrates how to chat with the model with [`Pipeline`] or t
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-
 ```python
 import torch
 from transformers import pipeline
@@ -81,9 +80,10 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 </hfoption>
 <hfoption id="transformers CLI">
 
-```
+```bash
 echo -e "Explain quantum computing simply." | transformers run --task text-generation --model google/gemma-2-2b --device 0
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -112,7 +112,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
-
 
 ```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer

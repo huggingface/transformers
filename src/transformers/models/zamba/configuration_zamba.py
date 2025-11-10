@@ -16,14 +16,14 @@
 
 import math
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ZambaConfig(PretrainedConfig):
+class ZambaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ZambaModel`]. It is used to instantiate a
     Zamba model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -31,8 +31,8 @@ class ZambaConfig(PretrainedConfig):
 
     [Zyphra/Zamba-7B-v1](https://huggingface.co/Zyphra/Zamba-7B-v1)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

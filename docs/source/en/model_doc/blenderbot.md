@@ -71,7 +71,6 @@ An example:
   `facebook/blenderbot_small_90M`, have a different architecture and consequently should be used with
   [BlenderbotSmall](blenderbot-small).
 
-
 ## Resources
 
 - [Causal language modeling task guide](../tasks/language_modeling)

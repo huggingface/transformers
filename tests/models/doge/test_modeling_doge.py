@@ -274,10 +274,6 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     has_attentions = False
-    test_headmasking = False
-    test_pruning = False
-    test_torchscript = False
-    fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

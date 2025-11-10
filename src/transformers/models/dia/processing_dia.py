@@ -55,7 +55,9 @@ class DiaProcessorKwargs(ProcessingKwargs, total=False):
             "generation": True,
             "sampling_rate": 44100,
         },
-        "common_kwargs": {"return_tensors": "pt"},
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
     }
 
 
@@ -75,8 +77,6 @@ class DiaProcessor(ProcessorMixin):
             An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is is a required input.
     """
 
-    feature_extractor_class = "DiaFeatureExtractor"
-    tokenizer_class = "DiaTokenizer"
     audio_tokenizer_class = "DacModel"
 
     def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
@@ -111,9 +111,7 @@ class DiaProcessor(ProcessorMixin):
 
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
-
-        return_tensors = common_kwargs.pop("return_tensors", None)
+        return_tensors = text_kwargs.get("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 

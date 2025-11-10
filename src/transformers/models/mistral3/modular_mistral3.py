@@ -332,6 +332,6 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
 
 __all__ = [
     "Mistral3Model",
-    "Mistral3PreTrainedModel",  # noqa
+    "Mistral3PreTrainedModel",
     "Mistral3ForConditionalGeneration",
 ]

@@ -51,7 +51,7 @@ Hugging Faceチームのメンバーがサポートを提供するので、一�
 
 ### Overview of models
 
-モデルを正常に追加するためには、モデルとその設定、[`PreTrainedModel`]、および[`PretrainedConfig`]の相互作用を理解することが重要です。
+モデルを正常に追加するためには、モデルとその設定、[`PreTrainedModel`]、および[`PreTrainedConfig`]の相互作用を理解することが重要です。
 例示的な目的で、🤗 Transformersに追加するモデルを「BrandNewBert」と呼びます。
 
 以下をご覧ください：
@@ -77,7 +77,7 @@ model = BrandNewBertModel.from_pretrained("brandy/brand_new_bert")
 model.config  # model has access to its config
 ```
 
-モデルと同様に、設定は[`PretrainedConfig`]から基本的なシリアル化および逆シリアル化の機能を継承しています。注意すべきは、設定とモデルは常に2つの異なる形式にシリアル化されることです - モデルは*pytorch_model.bin*ファイルに、設定は*config.json*ファイルにシリアル化されます。[`~PreTrainedModel.save_pretrained`]を呼び出すと、自動的に[`~PretrainedConfig.save_pretrained`]も呼び出され、モデルと設定の両方が保存されます。
+モデルと同様に、設定は[`PreTrainedConfig`]から基本的なシリアル化および逆シリアル化の機能を継承しています。注意すべきは、設定とモデルは常に2つの異なる形式にシリアル化されることです - モデルは*pytorch_model.bin*ファイルに、設定は*config.json*ファイルにシリアル化されます。[`~PreTrainedModel.save_pretrained`]を呼び出すと、自動的に[`~PreTrainedConfig.save_pretrained`]も呼び出され、モデルと設定の両方が保存されます。
 
 ### Code style
 

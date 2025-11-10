@@ -42,7 +42,7 @@ Currently 6 checkpoints are available for MatCha:
 - `google/matcha-chartqa`: MatCha model fine-tuned on ChartQA dataset. It can be used to answer questions about charts.
 - `google/matcha-plotqa-v1`: MatCha model fine-tuned on PlotQA dataset. It can be used to answer questions about plots.
 - `google/matcha-plotqa-v2`: MatCha model fine-tuned on PlotQA dataset. It can be used to answer questions about plots.
-- `google/matcha-chart2text-statista`: MatCha model fine-tuned on Statista dataset. 
+- `google/matcha-chart2text-statista`: MatCha model fine-tuned on Statista dataset.
 - `google/matcha-chart2text-pew`: MatCha model fine-tuned on Pew dataset.
 
 The models finetuned on `chart2text-pew` and `chart2text-statista` are more suited for summarization, whereas the models finetuned on `plotqa` and `chartqa` are more suited for question answering.
@@ -67,6 +67,7 @@ print(processor.decode(predictions[0], skip_special_tokens=True))
 ## Fine-tuning
 
 To fine-tune MatCha, refer to the pix2struct [fine-tuning notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_captioning_pix2struct.ipynb). For `Pix2Struct` models, we have found out that fine-tuning the model with Adafactor and cosine learning rate scheduler leads to faster convergence:
+
 ```python
 from transformers.optimization import Adafactor, get_cosine_schedule_with_warmup
 

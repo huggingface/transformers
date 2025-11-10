@@ -20,8 +20,9 @@
 # limitations under the License.
 import math
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -395,7 +396,6 @@ class Siglip2VisionTransformer(nn.Module):
         if self.use_head:
             self.head = Siglip2MultiheadAttentionPoolingHead(config)
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -541,6 +541,7 @@ def default_flax_embed_init(tensor):
 class Siglip2PreTrainedModel(PreTrainedModel):
     config: Siglip2Config
     base_model_prefix = "siglip2"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
     _no_split_modules = [
@@ -709,6 +710,7 @@ class Siglip2TextTransformer(nn.Module):
 )
 class Siglip2TextModel(Siglip2PreTrainedModel):
     config: Siglip2TextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Siglip2TextConfig):
         super().__init__(config)
@@ -722,7 +724,7 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -795,6 +797,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
 class Siglip2VisionModel(Siglip2PreTrainedModel):
     config: Siglip2VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
@@ -807,7 +810,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -1084,6 +1087,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
 )
 class Siglip2ForImageClassification(Siglip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: Siglip2Config) -> None:
         super().__init__(config)
@@ -1103,7 +1107,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

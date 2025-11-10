@@ -21,8 +21,9 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from functools import cached_property
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -39,7 +40,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
@@ -142,12 +142,11 @@ class Emu3Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -236,7 +235,6 @@ class Emu3DecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Emu3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.dropout = nn.Dropout(config.attention_dropout)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -928,6 +926,7 @@ class Emu3VQVAE(PreTrainedModel):
     config: Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -1093,6 +1092,7 @@ class Emu3ImageVocabularyMapping:
 class Emu3PreTrainedModel(PreTrainedModel):
     config: Emu3Config
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Emu3DecoderLayer",
@@ -1112,20 +1112,49 @@ class Emu3RotaryEmbedding(nn.Module):
 
     def __init__(self, config: Emu3Config, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[Emu3Config] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -1166,7 +1195,7 @@ class Emu3TextModel(Emu3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -1207,16 +1236,16 @@ class Emu3TextModel(Emu3PreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -1363,7 +1392,7 @@ class Emu3Model(Emu3PreTrainedModel):
         image_features = torch.split(image_features, split_sizes)
         return image_features
 
-    @torch.no_grad
+    @torch.no_grad()
     def decode_image_tokens(self, image_tokens: torch.LongTensor, height: int, width: int):
         """
         Decodes generated image tokens from language model to continuous pixel values
@@ -1459,6 +1488,7 @@ class Emu3Model(Emu3PreTrainedModel):
 
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     base_model_prefix = ""
+    output_modalities = ["image", "text"]
     _tied_weights_keys = ["lm_head.weight"]
     _checkpoint_conversion_mapping = {
         "^text_model.model": "model.text_model",

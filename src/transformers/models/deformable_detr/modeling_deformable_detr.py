@@ -923,6 +923,7 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
     config: DeformableDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         r"DeformableDetrConvEncoder",
@@ -959,8 +960,6 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.output_proj.weight.data)
             nn.init.constant_(module.output_proj.bias.data, 0.0)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()

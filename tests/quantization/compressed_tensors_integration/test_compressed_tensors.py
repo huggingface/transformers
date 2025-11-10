@@ -47,7 +47,7 @@ class CompressedTensorsTest(unittest.TestCase):
         self.assertIsInstance(config_from_dict.sparsity_config, SparsityCompressionConfig)
 
     def test_tinyllama_w8a8(self):
-        expected_out = "<s> Paris is the capital of which country?\n\n  1. Paris is the capital of which country?\n\n  1. Paris is the capital of which country?\n\n  1. Paris is the capital of which country?\n\n"
+        expected_out = "<s> Paris is the capital of which country?\n\n**A) 10** Paris is the capital of which country?\n\n**B) 11** Paris is the capital of which country?\n\n**C) 1"
         self._test_quantized_model(self.tinyllama_w8a8, expected_out)
 
     def test_tinyllama_w4a16(self):
@@ -59,7 +59,7 @@ class CompressedTensorsTest(unittest.TestCase):
         self._test_quantized_model(self.tinyllama_w8a16, expected_out)
 
     def test_llama_8b_fp8(self):
-        expected_out = "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous museum in Paris that is home to the Mona Lisa? The Louvre\nWhat is the name of the famous bridge in Paris that is often associated with the city"
+        expected_out = "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous art museum in Paris? The Louvre\nWhat is the name of the famous opera house in Paris? Palais Garnier\nWhat is the name of the"
         self._test_quantized_model(self.llama3_8b_fp8, expected_out)
 
     def _test_quantized_model(self, model_name: str, expected_output: str):

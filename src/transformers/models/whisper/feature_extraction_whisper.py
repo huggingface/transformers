@@ -236,7 +236,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):

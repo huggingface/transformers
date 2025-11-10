@@ -124,6 +124,7 @@ class CsmDecoderLayer(LlamaDecoderLayer):
 class CsmPreTrainedModel(PreTrainedModel):
     config: CsmConfig
     base_model_prefix = "model"
+    input_modalities = ["audio", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["CsmDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -156,7 +157,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
         self.embed_tokens = nn.Embedding((config.num_codebooks * config.vocab_size), config.backbone_hidden_size)
         self.inputs_embeds_projector = nn.Linear(config.backbone_hidden_size, config.hidden_size, bias=False)
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -222,7 +223,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
 
         # create position embeddings to be shared across the decoder layers
         position_ids = cache_position.unsqueeze(0)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
@@ -314,7 +315,7 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
         backbone_last_hidden_state: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -395,7 +396,7 @@ class CsmBackboneModel(LlamaModel):
         super().__init__(config)
         self.embed_tokens = CsmBackboneModelEmbeddings(config)
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(self, **super_kwargs):
         r"""
@@ -442,7 +443,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
 
     def _tie_weights(self):
         if self.config.tie_codebooks_embeddings:
-            self._tie_or_clone_weights(
+            self._tie_embedding_weights(
                 self.backbone_model.embed_tokens.embed_audio_tokens,
                 self.depth_decoder.model.embed_tokens,
             )
@@ -606,7 +607,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         input_values_cutoffs: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

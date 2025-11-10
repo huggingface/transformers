@@ -40,6 +40,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -48,6 +49,16 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class JanusImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    min_size (`int`, *optional*, defaults to 14):
+        The minimum allowed size for the resized image. Ensures that neither the height nor width
+        falls below this value after resizing.
+    """
+
+    min_size: int
 
 
 class JanusImageProcessor(BaseImageProcessor):
@@ -91,6 +102,8 @@ class JanusImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+
+    valid_kwargs = JanusImageProcessorKwargs
 
     def __init__(
         self,
@@ -247,10 +260,8 @@ class JanusImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -280,10 +291,7 @@ class JanusImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -355,7 +363,7 @@ class JanusImageProcessor(BaseImageProcessor):
         background_color: Union[int, tuple[int, int, int]] = 0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Pads an image to a square based on the longest edge.
 
@@ -480,7 +488,7 @@ class JanusImageProcessor(BaseImageProcessor):
         image_mean: Union[float, Iterable[float]],
         image_std: Union[float, Iterable[float]],
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Unnormalizes `image` using the mean and standard deviation specified by `mean` and `std`.
         image = (image * image_std) + image_mean
