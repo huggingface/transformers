@@ -2420,12 +2420,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif isinstance(
                 module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)
             ):
-                module.weight.normal_(mean=0.0, std=std)
-                if module.bias is not None:
+                if getattr(module, "weight", None) is not None:
+                    module.weight.normal_(mean=0.0, std=std)
+                if getattr(module, "bias", None) is not None:
                     module.bias.zero_()
             elif isinstance(module, nn.Embedding):
-                module.weight.normal_(mean=0.0, std=std)
-                if module.padding_idx is not None:
+                if getattr(module, "weight", None) is not None:
+                    module.weight.normal_(mean=0.0, std=std)
+                if getattr(module, "padding_idx", None) is not None:
                     module.weight[module.padding_idx].zero_()
             elif isinstance(module, nn.Parameter):
                 module.normal_(mean=0.0, std=std)
@@ -2444,11 +2446,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     module.weight.fill_(1.0)
                 if hasattr(module, "bias") and module.bias is not None:
                     module.bias.zero_()
-            if hasattr(module, "gate_up_proj"):
+            if hasattr(module, "gate_up_proj") and isinstance(module, nn.Parameter):
                 module.gate_up_proj.normal_(mean=0.0, std=std)
-            if hasattr(module, "down_proj"):
+            if hasattr(module, "down_proj") and isinstance(module, nn.Parameter):
                 module.down_proj.normal_(mean=0.0, std=std)
-            if hasattr(module, "gate"):
+            if hasattr(module, "gate") and isinstance(module, nn.Parameter):
                 module.gate.normal_(mean=0.0, std=std)
         except Exception as e:
             logger.warning(f"Failed to init: {str(e)}")
