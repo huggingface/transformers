@@ -345,9 +345,10 @@ class DeepseekOcrPatchEmbeddings(nn.Module):
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        if height != self.image_size[0] or width != self.image_size[1]:
+        if height % self.patch_size[0] != 0 or width % self.patch_size[1] != 0:
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+                "Input height and width must be divisible by the patch size "
+                f"({self.patch_size[0]}x{self.patch_size[1]}). Received {height}x{width}."
             )
         embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
         return embeddings
@@ -1577,6 +1578,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
                 crop_shape = image_spatial_crops[image_idx]
                 if isinstance(crop_shape, torch.Tensor):
                     crop_shape = crop_shape.tolist()
+
             width_crop_num = int(crop_shape[0]) if crop_shape is not None else 1
             height_crop_num = int(crop_shape[1]) if crop_shape is not None else 1
             has_local_crops = width_crop_num > 1 or height_crop_num > 1
@@ -1626,7 +1628,8 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
                         .to(local_features.device, dtype=local_features.dtype)
                         .expand(local_features.shape[0], 1, -1)
                     )
-                    local_features = torch.cat((local_features, newline), dim=1).view(-1, local_features.shape[-1])
+                    local_features = torch.cat((local_features, newline), dim=1)
+                    local_features = local_features.view(-1, local_features.shape[-1])
                 else:
                     local_features = local_features.view(-1, local_features.shape[-1])
                     newline = newline_token.unsqueeze(0).to(local_features.device, dtype=local_features.dtype)
@@ -1644,7 +1647,8 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
                     .to(global_features.device, dtype=global_features.dtype)
                     .expand(global_grid, 1, -1)
                 )
-                global_features = torch.cat((global_features, newline), dim=1).view(-1, global_features.shape[-1])
+                global_features = torch.cat((global_features, newline), dim=1)
+                global_features = global_features.view(-1, global_features.shape[-1])
             else:
                 global_features = torch.cat(
                     (
@@ -1671,8 +1675,6 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         num_local_crops: Optional[torch.LongTensor] = None,
     ):
         """Wrapper for the two image feature stacks used in deepseek OCR."""
-        if image_spatial_crops is None and image_sizes is not None:
-            image_spatial_crops = image_sizes
 
         image_feature_groups: list[list[torch.Tensor]] = []
 

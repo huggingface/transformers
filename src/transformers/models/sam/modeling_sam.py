@@ -126,9 +126,10 @@ class SamPatchEmbeddings(nn.Module):
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        if height != self.image_size[0] or width != self.image_size[1]:
+        if height % self.patch_size[0] != 0 or width % self.patch_size[1] != 0:
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+                "Input height and width must be divisible by the patch size "
+                f"({self.patch_size[0]}x{self.patch_size[1]}). Received {height}x{width}."
             )
         embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
         return embeddings

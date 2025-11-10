@@ -952,6 +952,7 @@ class DeepseekOcrModel(LlavaNextModel):
                 crop_shape = image_spatial_crops[image_idx]
                 if isinstance(crop_shape, torch.Tensor):
                     crop_shape = crop_shape.tolist()
+
             width_crop_num = int(crop_shape[0]) if crop_shape is not None else 1
             height_crop_num = int(crop_shape[1]) if crop_shape is not None else 1
             has_local_crops = width_crop_num > 1 or height_crop_num > 1
@@ -1001,7 +1002,8 @@ class DeepseekOcrModel(LlavaNextModel):
                         .to(local_features.device, dtype=local_features.dtype)
                         .expand(local_features.shape[0], 1, -1)
                     )
-                    local_features = torch.cat((local_features, newline), dim=1).view(-1, local_features.shape[-1])
+                    local_features = torch.cat((local_features, newline), dim=1)
+                    local_features = local_features.view(-1, local_features.shape[-1])
                 else:
                     local_features = local_features.view(-1, local_features.shape[-1])
                     newline = newline_token.unsqueeze(0).to(local_features.device, dtype=local_features.dtype)
@@ -1019,7 +1021,8 @@ class DeepseekOcrModel(LlavaNextModel):
                     .to(global_features.device, dtype=global_features.dtype)
                     .expand(global_grid, 1, -1)
                 )
-                global_features = torch.cat((global_features, newline), dim=1).view(-1, global_features.shape[-1])
+                global_features = torch.cat((global_features, newline), dim=1)
+                global_features = global_features.view(-1, global_features.shape[-1])
             else:
                 global_features = torch.cat(
                     (
@@ -1070,8 +1073,6 @@ class DeepseekOcrModel(LlavaNextModel):
         num_local_crops: Optional[torch.LongTensor] = None,
     ):
         """Wrapper for the two image feature stacks used in deepseek OCR."""
-        if image_spatial_crops is None and image_sizes is not None:
-            image_spatial_crops = image_sizes
 
         image_feature_groups: list[list[torch.Tensor]] = []
 

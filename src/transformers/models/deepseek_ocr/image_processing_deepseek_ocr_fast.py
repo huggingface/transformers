@@ -57,7 +57,7 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
     size = {"height": 1024, "width": 1024}
     base_size = {"height": 1024, "width": 1024}
     patch_size = 16
-    patch_size_side = 1024
+    patch_size_side = 640
     max_crops = 9
     image_mean = [0.5, 0.5, 0.5]
     image_std = [0.5, 0.5, 0.5]
