@@ -87,7 +87,7 @@ import math
 import re
 from collections import defaultdict
 from collections.abc import Sequence
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable
 
 import PIL.Image
 import torch
@@ -159,7 +159,7 @@ from ..siglip2.modeling_siglip2 import (
 )
 
 
-_ORIGINAL_ATTENTION_FUNCTIONS: dict[str, Callable[..., tuple[torch.Tensor, Optional[torch.Tensor]]]] = {}
+_ORIGINAL_ATTENTION_FUNCTIONS: dict[str, Callable[..., tuple[torch.Tensor, torch.Tensor | None]]] = {}
 for _attn_name in ("flash_attention_2", "sdpa", "eager"):
     if _attn_name in ALL_ATTENTION_FUNCTIONS:
         _ORIGINAL_ATTENTION_FUNCTIONS[_attn_name] = ALL_ATTENTION_FUNCTIONS[_attn_name]
@@ -185,9 +185,9 @@ class IsaacVisionConfig(Siglip2VisionConfig):
         self,
         pixel_shuffle_scale_factor: int = 1,
         num_patches: int = 256,
-        **kwargs,
+        **super_kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(**super_kwargs)
 
         # Add our custom fields
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
@@ -240,9 +240,9 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(
         self,
-        **kwargs: Unpack[IsaacImageProcessorKwargs],
+        **super_kwargs: Unpack[IsaacImageProcessorKwargs],
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(**super_kwargs)
 
         pixel_shuffle_scale = 1 if self.pixel_shuffle_scale is None else int(self.pixel_shuffle_scale)
         if pixel_shuffle_scale < 1:
@@ -262,7 +262,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: Optional[Any] = None,
+        interpolation: Any | None = None,
         antialias: bool = True,
         **kwargs,
     ) -> torch.Tensor:
@@ -297,19 +297,19 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list[torch.Tensor],
         do_resize: bool,
-        size: Optional[SizeDict],
-        interpolation: Optional[Any],
+        size: SizeDict | None,
+        interpolation: Any | None,
         do_center_crop: bool,
-        crop_size: Optional[SizeDict],
-        do_rescale: Optional[bool],
-        rescale_factor: Optional[float],
-        do_normalize: Optional[bool],
-        image_mean: Optional[Union[float, Sequence[float]]],
-        image_std: Optional[Union[float, Sequence[float]]],
-        disable_grouping: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        do_pad: Optional[bool] = None,
-        pad_size: Optional[SizeDict] = None,
+        crop_size: SizeDict | None,
+        do_rescale: bool | None,
+        rescale_factor: float | None,
+        do_normalize: bool | None,
+        image_mean: float | Sequence[float] | None,
+        image_std: float | Sequence[float] | None,
+        disable_grouping: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        do_pad: bool | None = None,
+        pad_size: SizeDict | None = None,
         *,
         patch_size: int | None = None,
         max_num_patches: int | None = None,
@@ -479,12 +479,12 @@ def build_document_attention_mask(
 
 
 def ensure_document_attention_mask(
-    attention_mask: Optional[torch.Tensor],
-    cu_seqlens: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
+    cu_seqlens: torch.Tensor | None,
     total_tokens: int,
     dtype: torch.dtype,
     device: torch.device,
-) -> Optional[torch.Tensor]:
+) -> torch.Tensor | None:
     if attention_mask is not None or cu_seqlens is None:
         return attention_mask
 
@@ -761,9 +761,9 @@ class IsaacVisionEncoderLayer(HFSiglip2EncoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        cu_seqlens: Optional[torch.Tensor] = None,
-        max_seqlen: Optional[int] = None,
+        attention_mask: torch.Tensor | None = None,
+        cu_seqlens: torch.Tensor | None = None,
+        max_seqlen: int | None = None,
         output_attentions: bool = False,
     ):
         if cu_seqlens is not None or max_seqlen is not None:
@@ -809,12 +809,12 @@ class IsaacVisionEncoder(HFSiglip2Encoder):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        cu_seqlens: Optional[torch.Tensor] = None,
-        max_seqlen: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        attention_mask: torch.Tensor | None = None,
+        cu_seqlens: torch.Tensor | None = None,
+        max_seqlen: int | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
     ):
         self.__variable_length_context(cu_seqlens, max_seqlen)
 
@@ -840,12 +840,12 @@ def _isaac_flash_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
+    scaling: float | None = None,
     is_causal: bool = False,
     **kwargs,
-) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+) -> tuple[torch.Tensor, torch.Tensor | None]:
     base_fn = _ORIGINAL_ATTENTION_FUNCTIONS.get("flash_attention_2")
     if not isinstance(module, IsaacVisionAttention) or base_fn is None:
         if base_fn is None:
@@ -911,12 +911,12 @@ def _isaac_sdpa_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
+    scaling: float | None = None,
     is_causal: bool = False,
     **kwargs,
-) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+) -> tuple[torch.Tensor, torch.Tensor | None]:
     base_fn = _ORIGINAL_ATTENTION_FUNCTIONS.get("sdpa")
     if not isinstance(module, IsaacVisionAttention) or base_fn is None:
         if base_fn is None:
@@ -975,12 +975,12 @@ def _isaac_eager_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
+    scaling: float | None = None,
     is_causal: bool = False,
     **kwargs,
-) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+) -> tuple[torch.Tensor, torch.Tensor | None]:
     base_fn = _ORIGINAL_ATTENTION_FUNCTIONS.get("eager")
     if not isinstance(module, IsaacVisionAttention) or base_fn is None:
         if base_fn is None:
@@ -1338,10 +1338,10 @@ class IsaacConfig(Qwen3Config):
         vision_rescale_factor: float = 1 / 255,
         max_sequence_length: int = 16384,
         vision_token: str = "<image>",
-        **kwargs,
+        **super_kwargs,
     ):
         self._rope_scaling: dict[str, Any] | None = None
-        resolved_text_config = kwargs.pop("text_config", text_config)
+        resolved_text_config = super_kwargs.pop("text_config", text_config)
         if isinstance(resolved_text_config, Qwen3Config):
             text_config_kwargs = copy.deepcopy(resolved_text_config.to_dict())
         elif isinstance(resolved_text_config, dict):
@@ -1351,7 +1351,7 @@ class IsaacConfig(Qwen3Config):
         else:
             raise TypeError("`text_config` must be a mapping or `Qwen3Config` instance when provided.")
 
-        text_config_kwargs.update(kwargs)
+        text_config_kwargs.update(super_kwargs)
 
         super().__init__(**text_config_kwargs)
         self.text_config = Qwen3Config(**text_config_kwargs)
