@@ -37,7 +37,6 @@ from torch.nn import CrossEntropyLoss, LayerNorm
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -536,7 +535,7 @@ class FSMTDecoder(nn.Module):
         super().__init__()
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx =  config.pad_token_id
+        self.padding_idx = config.pad_token_id
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.embed_tokens = nn.Embedding(config.tgt_vocab_size, config.d_model, self.padding_idx)
         embed_dim = self.embed_tokens.embedding_dim
