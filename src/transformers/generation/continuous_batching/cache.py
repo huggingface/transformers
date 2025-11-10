@@ -335,6 +335,14 @@ class PagedAttentionCache:
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
 
+    @traced
+    def close(self):
+        self.key_cache.clear()
+        self.value_cache.clear()
+
+        torch._dynamo.reset()
+        torch._dynamo.reset_code_caches()
+
 
 # TODO: rework computation with the groups and their sizes
 class PagedAttentionMemoryHandler:
