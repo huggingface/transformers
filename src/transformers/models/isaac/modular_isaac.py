@@ -191,7 +191,6 @@ class IsaacVisionConfig(Siglip2VisionConfig):
         pixel_shuffle_scale_factor=1,
         **kwargs,
     ):
-        # Copied from transformers.models.siglip2.configuration_siglip2.Siglip2VisionConfig.__init__
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
