@@ -1346,7 +1346,7 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
             # If user has not requested video metadata, pop it
-            if "return_metadata" not in kwargs:
+            if not kwargs.get("return_metadata"):
                 video_metadata = videos_inputs.pop("video_metadata")
             else:
                 video_metadata = videos_inputs["video_metadata"]
