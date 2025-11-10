@@ -2388,11 +2388,8 @@ def build_text_mask(logits, attention_mask):
 )
 class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
     _tied_weights_keys = {
-        r"bbox_embed\.[1-9]\d*": [
-            r"model\.decoder\.bbox_embed\.[0-9]\d*",
-            r"class_embed\.[1-9]\d*",
-            r"model\.decoder\.class_embed\.[0-9]\d*",
-        ]
+        r"bbox_embed.(?![0])\d+": "bbox_embed.0",
+        r"class_embed.(?![0])\d+": "class_embed.0",
     }
 
     def __init__(self, config: MMGroundingDinoConfig):
@@ -2412,12 +2409,6 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
                 for _ in range(config.decoder_layers)
             ]
         )
-
-        # hack for box-refinement
-        self.model.decoder.bbox_embed = self.bbox_embed
-        # hack implementation for two-stage
-        self.model.decoder.class_embed = self.class_embed
-
         # Initialize weights and apply final processing
         self.post_init()
 

@@ -1702,8 +1702,8 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
     _tied_weights_keys = {
-        r"bbox_embed.(\d+)": "bbox_embed.0",
-        r"class_embed.(\d+)": "class_embed.0",
+        r"bbox_embed.(?![0])\d+": "bbox_embed.0",
+        r"class_embed.(?![0])\d+": "class_embed.0",
     }
 
     def __init__(self, config: DeformableDetrConfig):
@@ -1733,17 +1733,9 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             ]
         )
         if config.with_box_refine:
-            self._tied_weights_keys.update(
-                {
-                    "model.decoder.bbox_embed": "bbox_embed",
-                }
-            )
+            self._tied_weights_keys["model.decoder.bbox_embed"] = "bbox_embed"
         if config.two_stage:
-            self._tied_weights_keys.update(
-                {
-                    "model.decoder.class_embed": "class_embed",
-                }
-            )
+            self._tied_weights_keys["model.decoder.class_embed"] = "class_embed"
         self.post_init()
 
     @auto_docstring

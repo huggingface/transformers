@@ -26,7 +26,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ..deepseek_v3.modeling_deepseek_v3 import (
@@ -34,14 +34,13 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3Model,
-    DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
     DeepseekV3TopkRouter,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
-
+from .configuration_longcat_flash import LongcatFlashConfig
 
 logger = logging.get_logger(__name__)
 
@@ -324,7 +323,18 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class LongcatFlashPreTrainedModel(DeepseekV3PreTrainedModel):
+@auto_docstring
+class LongcatFlashPreTrainedModel(PreTrainedModel):
+    config: LongcatFlashConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LongcatFlashDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _can_compile_fullgraph = False
+    _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": LongcatFlashDecoderLayer,
         "attentions": LongcatFlashMLA,
