@@ -218,7 +218,9 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                 repetition_mask = audio_inputs_ids_window == next_tokens.unsqueeze(1)
 
                 # avoid counting the repetition of the audio stream EOS and BOS tokens
-                not_excluded_mask = (audio_inputs_ids_window != self.config.audio_stream_bos_id) & (audio_inputs_ids_window != self.config.audio_stream_eos_id)
+                not_excluded_mask = (audio_inputs_ids_window != self.config.audio_stream_bos_id) & (
+                    audio_inputs_ids_window != self.config.audio_stream_eos_id
+                )
                 repetition_mask = repetition_mask & not_excluded_mask
                 rep_num = repetition_mask.sum(dim=1)
 
@@ -248,14 +250,18 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             next_audio_input_ids_mask[has_all_audio_stream_eos] = 0
             audio_input_ids_mask = model_kwargs.get("audio_input_ids_mask")
             if audio_input_ids_mask is not None:
-                model_kwargs["audio_input_ids_mask"] = torch.cat([audio_input_ids_mask, next_audio_input_ids_mask], dim=1)
+                model_kwargs["audio_input_ids_mask"] = torch.cat(
+                    [audio_input_ids_mask, next_audio_input_ids_mask], dim=1
+                )
             else:
                 model_kwargs["audio_input_ids_mask"] = next_audio_input_ids_mask
 
             # generation of a stream eos audio token will start delay pattern masking in the logits processor
             # for that, we need to set next text token to audio_eos_start_delay_token_id
             next_tokens_flat = input_ids.new_ones(batch_size) * self.config.audio_token_id
-            next_tokens_flat[has_audio_stream_eos | (input_ids[:, -1] == self.config.audio_delay_token_id)] = self.config.audio_delay_token_id
+            next_tokens_flat[has_audio_stream_eos | (input_ids[:, -1] == self.config.audio_delay_token_id)] = (
+                self.config.audio_delay_token_id
+            )
             next_tokens_flat[has_all_audio_stream_eos] = self.config.eos_token_id
             next_tokens = next_tokens_flat
             # ============================

@@ -33,28 +33,13 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_higgs_audio import HiggsAudioConfig
 from .generation_higgs_audio import HiggsAudioGenerationMixin
 
 
-class HiggsAudioDecoderProjector(nn.Module):
-    def __init__(self, config: HiggsAudioConfig):
-        super().__init__()
-        self.text_lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.audio_lm_head = nn.Linear(config.hidden_size, config.num_codebooks * config.codebook_size, bias=False)
-
-    def forward(
-        self,
-        hidden_states,
-        audio_out_mask,
-    ):
-        # TODO: see if I can come up with a way of not loading text_lm_head when generating
-        logits = self.text_lm_head(hidden_states)
-        audio_logits = self.audio_lm_head(hidden_states[audio_out_mask])
-
-        return logits, audio_logits
+logger = logging.get_logger(__name__)
 
 
 class HiggsAudioMLP(nn.Module):
@@ -486,15 +471,13 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
 )
 class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGenerationMixin):
     base_model_prefix = "model"
+    _keys_to_ignore_on_load_unexpected = ["text_lm_head.weight"]
 
-    def __init__(self, config: HiggsAudioConfig):
+    def __init__(self, config: HiggsAudioConfig, use_text_head: bool = False):
         super().__init__(config)
-        self.config = config
         self.model = HiggsAudioModel(config)
-        self.audio_decoder_proj = HiggsAudioDecoderProjector(config)
-        self.audio_codebook_weights = (
-            torch.ones(config.num_codebooks) / config.num_codebooks
-        )  # default to equal weights
+        self.audio_lm_head = nn.Linear(config.hidden_size, config.num_codebooks * config.codebook_size, bias=False)
+        self.text_lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False) if use_text_head else None
 
         self.post_init()
 
@@ -562,22 +545,21 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
             **kwargs,
         )
 
-        hidden_state = outputs.last_hidden_state
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.audio_decoder_proj.audio_lm_head(hidden_state[:, slice_indices, :])
+        logits = self.audio_lm_head(hidden_states[:, slice_indices, :])
 
-        # TODO: can be improved by not inferring audio head on text tokens in a training regime
         loss = None
         if audio_labels is not None:
-            audio_logits = logits[input_ids == self.config.audio_token_id]
-            audio_logits = audio_logits.reshape(-1, self.config.num_codebooks, self.config.codebook_size)
-            audio_labels = audio_labels[audio_input_ids_mask]
+            audio_logits = logits.reshape(*logits.shape[:2], self.config.num_codebooks, self.config.codebook_size)
+            audio_labels_expanded = input_ids.new_ones((*input_ids.shape[:2], 8)) * -100
+            audio_labels_expanded[input_ids == self.config.audio_token_id] = audio_labels[audio_input_ids_mask]
 
             codebook_losses = []
             for codebook_idx in range(self.config.num_codebooks):
-                codebook_logits = audio_logits[:, codebook_idx, :]
-                codebook_labels = audio_labels[:, codebook_idx]
+                codebook_logits = audio_logits[:, :, codebook_idx, :]
+                codebook_labels = audio_labels_expanded[:, :, codebook_idx]
                 codebook_losses.append(
                     self.loss_function(codebook_logits, codebook_labels, self.config.codebook_size, **kwargs)
                 )
@@ -585,9 +567,15 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
             loss = sum(codebook_losses)
 
         if labels is not None:
-            text_logits = self.audio_decoder_proj.text_lm_head(hidden_state)
-            text_loss = self.loss_function(text_logits, labels, self.config.vocab_size, **kwargs)
-            loss = text_loss if loss is None else loss + text_loss
+            if self.text_lm_head is not None:
+                text_logits = self.text_lm_head(hidden_states[:, slice_indices, :])
+                text_loss = self.loss_function(text_logits, labels, self.config.vocab_size, **kwargs)
+                loss = text_loss if loss is None else loss + text_loss
+            else:
+                logger.warning_once(
+                    f"`labels` provided to {self.__class__.__name__} but `text_lm_head` is disabled. "
+                    f"Text labels ignored. Set `use_text_head=True` in model init to enable text loss."
+                )
 
         return CausalLMOutputWithPast(
             loss=loss,

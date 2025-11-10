@@ -3271,7 +3271,7 @@ class HiggsAudioDelayPatternLogitsProcessor(LogitsProcessor):
     ):
         self.delay_pattern = torch.tensor(delay_pattern)
         self.audio_bos_token_id = audio_bos_token_id
-        self.audio_eos_token_id = audio_eos_token_id 
+        self.audio_eos_token_id = audio_eos_token_id
         self.audio_stream_bos_id = audio_stream_bos_id
         self.audio_stream_eos_id = audio_stream_eos_id
         self.num_codebooks = num_codebooks
@@ -3296,7 +3296,7 @@ class HiggsAudioDelayPatternLogitsProcessor(LogitsProcessor):
                 batch_idxs = audio_bos_idxs[:, 0]
                 is_last = torch.cat([batch_idxs[1:] != batch_idxs[:-1], batch_idxs.new_ones(1, dtype=torch.bool)])
                 max_bos_idxs = audio_bos_idxs[is_last]
-        
+
                 current_after_bos = (input_ids.shape[-1] - max_bos_idxs[:, 1] - 1).unsqueeze(-1)
                 unique_batch_idxs = batch_idxs.unique().to(self.bos_delay_pattern.device)
                 self.bos_delay_pattern[unique_batch_idxs] = (
@@ -3324,7 +3324,7 @@ class HiggsAudioDelayPatternLogitsProcessor(LogitsProcessor):
         row_mask = self.bos_delay_pattern > 0
         scores[(row_mask[..., None] & self.vocab_mask_bos).to(scores.device)] = -float("inf")
         self.bos_delay_pattern[row_mask] -= 1
-        
+
         # when the audio eos token is generated, we decrement the eos delay pattern until all zeros
         self.eos_delay_pattern[input_ids[:, -1].to(self.eos_delay_pattern.device) == self.audio_eos_token_id] -= 1
         row_mask = self.eos_delay_pattern <= 0

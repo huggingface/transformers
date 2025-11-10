@@ -197,7 +197,7 @@ class HiggsAudioProcessor(ProcessorMixin):
             labels[labels == self.tokenizer.pad_token_id] = -100
             labels[labels == self.audio_bos_token_id] = -100
             data["labels"] = labels
-    
+
             if audio is not None:
                 audio_labels = audio_input_ids.clone()
                 audio_labels[audio_labels == self.audio_stream_bos_id] = -100
