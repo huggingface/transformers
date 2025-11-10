@@ -41,14 +41,10 @@ from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
     auto_docstring,
-    is_torch_flex_attn_available,
     logging,
 )
 from .configuration_mt5 import MT5Config
 
-
-if is_torch_flex_attn_available():
-    pass
 
 logger = logging.get_logger(__name__)
 
