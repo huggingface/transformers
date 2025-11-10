@@ -251,7 +251,6 @@ class DecisionTransformerGPT2Attention(nn.Module):
                 value_states,
                 attention_mask,
                 dropout=self.attn_dropout.p if self.training else 0.0,
-                is_causal=self.is_causal,
                 **kwargs,
             )
 
