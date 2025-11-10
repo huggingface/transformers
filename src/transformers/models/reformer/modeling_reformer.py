@@ -738,7 +738,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
                 cur_product = cur_product * bucket_factor
 
-        if attention_mask is not None and (attention_mask.sum().item() < batch_size * attention_mask.shape[-1]):
+        if attention_mask is not None and (
+            torch.compiler.is_exporting() or (attention_mask.sum().item() < batch_size * attention_mask.shape[-1])
+        ):
             # add an extra bucket for padding tokens only
             num_buckets = num_buckets + 1
             # assign padding tokens extra bucket

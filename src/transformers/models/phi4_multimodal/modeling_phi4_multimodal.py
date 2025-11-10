@@ -537,7 +537,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         # The call to `_upad_input` in `_flash_attention_forward` is expensive
         # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
-        if not torch.any(~patch_attention_mask):
+        if not torch.compiler.is_exporting() and not torch.any(~patch_attention_mask):
             attention_mask = None
         else:
             attention_mask = (
@@ -1480,7 +1480,9 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
                 image_sizes=image_sizes,
                 image_attention_mask=image_attention_mask,
             )
-        if audio_input_features is not None and (input_ids == self.audio_token_id).any():
+        if audio_input_features is not None and (
+            torch.compiler.is_exporting() or (input_ids == self.audio_token_id).any()
+        ):
             audio_projection_mode = "vision" if image_pixel_values is not None else "speech"
             audio_embeds = self.audio_embed(
                 input_ids,

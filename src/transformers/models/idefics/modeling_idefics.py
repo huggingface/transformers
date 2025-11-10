@@ -389,12 +389,8 @@ class IdeficsEmbedding(torch.nn.Module):
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if seq_len > self.max_seq_len_cached:
+        if not torch.compiler.is_exporting() and seq_len > self.max_seq_len_cached:
             self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
-
-        if torch.compiler.is_exporting():
-            torch._check(seq_len > 0)
-            torch._check(seq_len <= max(self.cos_cached.shape[0], self.sin_cached.shape[0]))
 
         return (
             self.cos_cached[:seq_len].to(dtype=x.dtype),

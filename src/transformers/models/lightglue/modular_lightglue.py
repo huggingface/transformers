@@ -835,7 +835,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                     # Early stopping always occurs at the last layer
                     early_stopped_pairs = torch.ones(batch_size, dtype=torch.bool)
 
-                if torch.any(early_stopped_pairs):
+                if torch.compiler.is_exporting() or torch.any(early_stopped_pairs):
                     # If a pair of images is considered early stopped, we compute the matches for the remaining
                     # keypoints and stop the forward pass through the transformer layers for this pair of images.
                     early_stops = early_stopped_pairs.repeat_interleave(2)

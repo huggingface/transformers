@@ -522,7 +522,7 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
         if self.config._attn_implementation != "flash_attention_2":
             patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
-        elif not torch.any(~patch_attention_mask):
+        elif not torch.compiler.is_exporting() and not torch.any(~patch_attention_mask):
             patch_attention_mask = None
 
         encoder_outputs: BaseModelOutput = self.encoder(
