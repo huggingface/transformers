@@ -114,9 +114,9 @@ from ...models.auto.modeling_auto import AutoModel
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import Qwen3PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import auto_docstring
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple
+from ...utils.generic import TransformersKwargs, can_return_tuple
 from ...utils.import_utils import is_torchdynamo_compiling
 from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from .configuration_isaac import IsaacConfig, IsaacVisionConfig
@@ -464,7 +464,16 @@ class IsaacVisionEncoderLayer(GradientCheckpointingLayer):
         cu_seqlens: torch.Tensor | None = None,
         max_seqlen: int | None = None,
         output_attentions: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
+        r"""
+        cu_seqlens (`torch.Tensor`, *optional*):
+            Prefix-sum tensor whose length equals the number of documents + 1. The difference between successive
+            entries gives each document's token count and enables block-diagonal attention masking for packed batches.
+        max_seqlen (`int`, *optional*):
+            Maximum document length referenced by `cu_seqlens`. Passed to FlashAttention so it can size temporary
+            buffers for packed variable-length attention.
+        """
         if cu_seqlens is not None or max_seqlen is not None:
             self.self_attn._variable_length_context(
                 cu_seqlens=cu_seqlens,
@@ -516,6 +525,7 @@ class IsaacVisionEncoder(nn.Module):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         self.__variable_length_context(cu_seqlens, max_seqlen)
 
@@ -1479,9 +1489,13 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
-        """
+        r"""
         Forward pass for conditional generation supporting both standard inputs and TensorStream.
-        Uses our embed_stream approach for multimodal inputs.
+
+        tensor_stream (`TensorStream`, *optional*):
+            Packed multimodal stream (text, vision, audio tokens) that already encodes spatial metadata. When provided,
+            the model derives embeddings, modality masks, and 3D rotary coordinates directly from the stream instead of
+            `input_ids`.
         """
 
         # Don't compute embeddings here - let the model handle it
