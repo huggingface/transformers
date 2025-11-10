@@ -305,13 +305,10 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
         is_batched_sequence = isinstance(raw_speech, Sequence) and isinstance(raw_speech[0], (np.ndarray, Sequence))
         is_batched = is_batched_numpy or is_batched_sequence
 
-        if is_batched:
-            raw_speech = [np.asarray([rs]).T for rs in raw_speech]
-        elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech)
-
-        if not is_batched:  # always return a batch
-            raw_speech = [np.asarray([raw_speech])]
+        # Always return a batch
+        if not is_batched:
+            raw_speech = [raw_speech]
+        raw_speech = [np.asarray([rs]).T for rs in raw_speech]
 
         batched_speech = self.pad(
             BatchFeature({"input_features": raw_speech}),
