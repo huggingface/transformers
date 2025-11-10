@@ -200,8 +200,6 @@
       title: モデル
     - local: main_classes/text_generation
       title: テキストの生成
-    - local: main_classes/onnx
-      title: ONNX
     - local: main_classes/optimizer_schedules
       title: 最適化
     - local: main_classes/output
