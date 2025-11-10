@@ -28,7 +28,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 
 def load_vocab(vocab_file):
@@ -128,6 +128,7 @@ class SplinterTokenizer(TokenizersBackend):
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
+            question_token=question_token,
             do_lower_case=do_lower_case,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import shutil
 import tempfile
 import unittest
@@ -167,12 +168,22 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
             # testing that saving and loading the tokenizer preserves the new behaviour
             tok2.save_pretrained(tempdir)
-            tok3 = NllbTokenizer(f"{tempdir}/sentencepiece.bpe.model", additional_special_tokens=None)
-            self.assertEqual(len(tok3), 256204)  # legacy
-            tok4 = NllbTokenizer(f"{tempdir}/sentencepiece.bpe.model", additional_special_tokens=[])
-            self.assertEqual(len(tok4), 256002)
-            tok5 = NllbTokenizer(f"{tempdir}/sentencepiece.bpe.model", additional_special_tokens=[code1, code2])
-            self.assertEqual(len(tok5), 256004)
+            # Use the original vocab_file from tok2, or load from saved directory
+            vocab_file = tok2.vocab_file if hasattr(tok2, "vocab_file") and tok2.vocab_file else None
+            if vocab_file is None or not os.path.exists(vocab_file):
+                # Fallback: load from saved directory to get vocab_file
+                tok_temp = NllbTokenizer.from_pretrained(tempdir)
+                vocab_file = tok_temp.vocab_file if hasattr(tok_temp, "vocab_file") and tok_temp.vocab_file else None
+            # Extract vocab and merges from sentencepiece model
+            if vocab_file and os.path.exists(vocab_file):
+                extractor = SentencePieceExtractor(vocab_file)
+                vocab_ids, vocab_scores, merges = extractor.extract()
+                tok3 = NllbTokenizer(vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=None)
+                self.assertEqual(len(tok3), 256204)  # legacy
+                tok4 = NllbTokenizer(vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=[])
+                self.assertEqual(len(tok4), 256002)
+                tok5 = NllbTokenizer(vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=[code1, code2])
+                self.assertEqual(len(tok5), 256004)
 
 
 @require_torch

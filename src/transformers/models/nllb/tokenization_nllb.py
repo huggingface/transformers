@@ -107,7 +107,7 @@ class NllbTokenizer(TokenizersBackend):
         **kwargs,
     ):
         if additional_special_tokens is None:
-            additional_special_tokens = FAIRSEQ_LANGUAGE_CODES
+            additional_special_tokens = kwargs.get("extra_special_tokens", FAIRSEQ_LANGUAGE_CODES)
 
         self.vocab_file = vocab_file
         
@@ -160,6 +160,9 @@ class NllbTokenizer(TokenizersBackend):
 
         tokenizer_object = self._tokenizer
 
+        # Remove extra_special_tokens from kwargs if present to avoid conflict
+        kwargs.pop("extra_special_tokens", None)
+
         super().__init__(
             tokenizer_object=tokenizer_object,
             bos_token=bos_token,
@@ -171,7 +174,7 @@ class NllbTokenizer(TokenizersBackend):
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             mask_token=mask_token,
-            additional_special_tokens=additional_special_tokens,
+            extra_special_tokens=additional_special_tokens,
             legacy_behaviour=legacy_behaviour,
             **kwargs,
         )

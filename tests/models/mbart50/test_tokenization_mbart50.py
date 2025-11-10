@@ -49,19 +49,6 @@ class MBart50TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     expected_tokens_from_ids = ['▁This', '▁is', '▁a', '▁test', '▁', '😊', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fals', 'é', '.', '▁', '生活的', '真', '谛', '是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '<s>', '▁hi', '<s>', '▁there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁en', 'code', 'd', ':', '▁Hello', '.', '▁But', '▁ir', 'd', '▁and', '▁ปี', '▁ir', 'd', '▁ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']
     integration_expected_decoded_text = 'This is a test 😊 I was born in 92000, and this is falsé. 生活的真谛是 Hi Hello Hi Hello Hello<s> hi<s> there The following string should be properly encoded: Hello. But ird and ปี ird ด Hey how are you doing'
 
-    # @classmethod
-    # def setUpClass(cls):
-    #     super().setUpClass()
-
-    #     # Extract vocab from SentencePiece model
-    #     extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-    #     vocab_ids, vocab_scores, merges = extractor.extract()
-
-    #     # Create tokenizer with extracted vocab
-    #     tokenizer = MBart50Tokenizer(vocab=vocab_scores, src_lang="en_XX", tgt_lang="ro_RO")
-    #     tokenizer.save_pretrained(cls.tmpdirname)
-
-
 @require_torch
 @require_sentencepiece
 @require_tokenizers
