@@ -1079,7 +1079,7 @@ def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
             if t is not None and getattr(t, flag_name, False):
                 # mimic init.* return convention (returns the tensor)
                 return t
-            return fn(*args, **kwargs)
+            return fn(*args, **kwargs) # TODO we could set is init here.
 
         return wrapped
 
