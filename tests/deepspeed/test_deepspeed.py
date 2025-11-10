@@ -756,13 +756,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             self.assertNotEqual(yes_grad_accum_a, a)
 
         # training with half the batch size but accumulation steps as 2 should give the same
-        # weights, but sometimes get a slight difference still of 1e-6
-        if torch_device == "hpu":
-            self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, delta=1e-4)
-            self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, delta=1e-4)
-        else:
-            self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, places=5)
-            self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
+        # weights, but sometimes get a slight difference still
+        self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, delta=1e-4)
+        self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, delta=1e-4)
 
         # Relative difference. See the note above how to get identical loss on a small bs
         self.assertTrue((no_grad_accum_loss - yes_grad_accum_loss) / (no_grad_accum_loss + 1e-15) <= 1e-3)

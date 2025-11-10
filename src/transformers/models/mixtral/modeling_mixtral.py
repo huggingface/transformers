@@ -409,14 +409,15 @@ class MixtralPreTrainedModel(PreTrainedModel):
         "attentions": MixtralAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, MixtralExperts):
-            module.gate_up_proj.data.normal_(mean=0.0, std=std)
-            module.down_proj.data.normal_(mean=0.0, std=std)
+            module.gate_up_proj.normal_(mean=0.0, std=std)
+            module.down_proj.normal_(mean=0.0, std=std)
         elif isinstance(module, MixtralTopKRouter):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
 
 
 @auto_docstring

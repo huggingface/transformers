@@ -187,7 +187,7 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         sliding_window: int = 512,
@@ -1876,14 +1876,15 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     input_modalities = ["image", "text", "audio"]
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, Gemma3nAudioAttention):
-            module.per_dim_scale.data.zero_()
+            module.per_dim_scale.zero_()
         elif isinstance(module, Gemma3nTextAltUp):
-            module.correct_output_scale.data.zero_()
+            module.correct_output_scale.zero_()
 
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")

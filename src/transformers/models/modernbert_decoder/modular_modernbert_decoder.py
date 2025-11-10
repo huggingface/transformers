@@ -174,7 +174,7 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         local_attention: Optional[int] = 128,
         global_attn_every_n_layers: Optional[int] = 3,
         layer_types: Optional[list[str]] = None,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
         super().__init__(
@@ -420,6 +420,7 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
         "attentions": ModernBertDecoderAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
@@ -462,9 +463,9 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
         elif isinstance(module, ModernBertDecoderForCausalLM):
             init_weight(module.decoder, stds["out"])
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
 
     def _check_and_adjust_attn_implementation(self, attn_implementation, is_init_check):
         raise AttributeError("No need to inherit!")

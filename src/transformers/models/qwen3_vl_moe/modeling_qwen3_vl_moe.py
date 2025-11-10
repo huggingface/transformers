@@ -404,6 +404,7 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
         "attentions": Qwen3VLMoeTextAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)
@@ -412,8 +413,8 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
         else:
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
         if isinstance(module, Qwen3VLMoeTextExperts):
-            module.gate_up_proj.data.normal_(mean=0.0, std=std)
-            module.down_proj.data.normal_(mean=0.0, std=std)
+            module.gate_up_proj.normal_(mean=0.0, std=std)
+            module.down_proj.normal_(mean=0.0, std=std)
 
 
 class Qwen3VLMoeVisionMLP(nn.Module):

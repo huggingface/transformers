@@ -26,6 +26,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
+from types import MethodType
 from typing import Any, Optional, Union
 
 import torch
@@ -302,6 +303,43 @@ class ConversionEntry:
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
 
+# Factory function to create LoadedParameter subclasses dynamically
+def get_loaded_parameter_class(base_cls):
+    """
+    base_cls: an nn.Parameter subclass (or nn.Parameter)
+    Returns a new class that combines the base_cls with LoadedParameterMixin
+    """
+    class LoadedParam(base_cls):
+        _inplace_methods = [
+                'add_', 'mul_', 'clamp_', 'zero_', 'fill_', 'normal_', 'uniform_',
+                'copy_', 'erfinv_', 'log_'
+            ]
+        def __new__(cls, from_existing, **kwargs):
+            inst = super().__new__(cls, from_existing.data, from_existing.requires_grad, **from_existing.__dict__)
+            inst._original_param = from_existing
+            # Explicitly override all in-place methods per instance
+            for method_name in inst._inplace_methods:
+                setattr(inst, method_name, MethodType(inst._skip, inst))
+
+            return inst
+
+        def _skip(self, *args, **kwargs):
+            """Helper to skip in-place operations."""
+            return self
+
+        def __repr__(self):
+            return f"LoadedParameter(data={self.data})"
+
+        @property
+        def data(self):
+            return super().data
+
+        @data.setter
+        def data(self, new):
+            pass
+
+    return LoadedParam
+
 def _materialize_copy(tensor, dtype=None):
     # PyTorch: this runs in C and releases the GIL; good for threads.
     tensor = tensor[...]
@@ -409,10 +447,15 @@ def set_param_for_module(
                 pass  # TODO for "local" stuff, it will trigger missmatched no?
             param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
+        # to skip any inplace method that modifies the param data
+        param_value = get_loaded_parameter_class(param_value.__class__)(from_existing=param_value)
+
         # skip mismatch for hf_quantizer for now
         if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
         missing_keys.discard(layer_name)
+        # maybe not needed anymore, but let's keep this as there are still code related to that
+        param_value._is_hf_initialized = True  # super important otherwise _init_weight re-initi if bias is missing
         setattr(module_obj, param_name, param_value)
 
 
@@ -477,16 +520,14 @@ def convert_and_load_state_dict_in_model(
             converter_key = entry_key = target_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
-        new_target_key = []
         _dtype = dtype
+        new_target_key = []  # test_load_with_mismatched_shapes for AutoModel.from_pretrained(AutoForCausal, vocab=10)
         for t in target_key.split("|"):
-            # let's correct the prefix if needed
-            if loading_base_model_from_task_state_dict:
+            if t.startswith(prefix) and meta_model_state_dict.get(t.replace(f"{prefix}.", "")) is not None:
                 t = t.replace(f"{prefix}.", "")
-            elif loading_task_model_from_base_state_dict:
+            elif meta_model_state_dict.get(f"{prefix}.{t}") is not None:
                 t = f"{prefix}.{t}"
             new_target_key.append(t)
-
             empty_param = meta_model_state_dict.get(t)
             # If it does not exist, it's unexpected
             if empty_param is None:
@@ -513,6 +554,7 @@ def convert_and_load_state_dict_in_model(
 
         first_target_key = new_target_key[0]
         target_key = "|".join(new_target_key)
+
         future = None
         if device_mesh:
             if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name):
@@ -584,8 +626,8 @@ def convert_and_load_state_dict_in_model(
                                 converter.distributed_operation,
                                 hf_quantizer
                             )
-                except SkipLayer:
-                    continue
+                except Exception as e :
+                    raise e
             del group
 
             # Update progress bar
@@ -620,7 +662,7 @@ def _infer_parameter_dtype(
     param_name: str,
     empty_param: torch.Tensor,
     hf_quantizer: Optional[HfQuantizer] = None,
-) -> Union[bool, Optional[torch.dtype]]:
+) -> tuple[bool, Optional[torch.dtype]]:
     try:
         old_param = model.get_parameter_or_buffer(param_name)
     except Exception as e:

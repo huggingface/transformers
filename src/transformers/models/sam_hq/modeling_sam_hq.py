@@ -429,15 +429,16 @@ class SamHQPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_sdpa = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, SamHQVisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
+                module.rel_pos_h.zero_()
+                module.rel_pos_w.zero_()
         elif isinstance(module, SamHQVisionEncoder):
             if self.config.use_abs_pos:
-                module.pos_embed.data.zero_()
+                module.pos_embed.zero_()
 
 
 class SamHQPatchEmbeddings(nn.Module):

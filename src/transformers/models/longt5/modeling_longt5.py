@@ -1176,46 +1176,45 @@ class LongT5PreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, LongT5LayerNorm):
-            module.weight.data.fill_(factor * 1.0)
+            module.weight.fill_(factor * 1.0)
         elif isinstance(module, (LongT5Model, LongT5ForConditionalGeneration, LongT5EncoderModel)):
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            module.shared.weight.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+                module.lm_head.weight.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, LongT5DenseActDense):
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            module.wi.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                module.wi.bias.zero_()
+            module.wo.weight.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+                module.wo.bias.zero_()
         elif isinstance(module, LongT5DenseGatedActDense):
-            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            module.wi_0.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                module.wi_0.bias.data.zero_()
-            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+                module.wi_0.bias.zero_()
+            module.wi_1.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                module.wi_1.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                module.wi_1.bias.zero_()
+            module.wo.weight.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+                module.wo.bias.zero_()
         elif isinstance(module, (LongT5Attention, LongT5LocalAttention, LongT5TransientGlobalAttention)):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            module.q.weight.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            module.k.weight.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.v.weight.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.o.weight.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+                module.relative_attention_bias.weight.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
                 if isinstance(module, LongT5TransientGlobalAttention):
-                    module.global_relative_attention_bias.weight.data.normal_(
-                        mean=0.0, std=factor * ((d_model) ** -0.5)
-                    )
+                    module.global_relative_attention_bias.weight.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right with T5->LongT5
     def _shift_right(self, input_ids):
@@ -1241,12 +1240,10 @@ class LongT5PreTrainedModel(PreTrainedModel):
 
 
 class LongT5Stack(LongT5PreTrainedModel):
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config):
         super().__init__(config)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
         self.is_decoder = config.is_decoder
 
         self.local_radius = config.local_radius
@@ -1583,13 +1580,13 @@ class LongT5Model(LongT5PreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = LongT5Stack(encoder_config, self.shared)
+        self.encoder = LongT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = LongT5Stack(decoder_config, self.shared)
+        self.decoder = LongT5Stack(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1748,13 +1745,13 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = LongT5Stack(encoder_config, self.shared)
+        self.encoder = LongT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = LongT5Stack(decoder_config, self.shared)
+        self.decoder = LongT5Stack(decoder_config)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -1931,7 +1928,7 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
-        self.encoder = LongT5Stack(encoder_config, self.shared)
+        self.encoder = LongT5Stack(encoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()

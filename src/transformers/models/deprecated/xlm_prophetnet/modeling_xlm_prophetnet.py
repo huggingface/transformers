@@ -520,15 +520,16 @@ class XLMProphetNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "prophetnet"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -1169,14 +1170,10 @@ class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
         embeddings instead of randomly initialized word embeddings.
     """
 
-    def __init__(self, config: XLMProphetNetConfig, word_embeddings: Optional[nn.Embedding] = None):
+    def __init__(self, config: XLMProphetNetConfig):
         super().__init__(config)
 
-        self.word_embeddings = (
-            word_embeddings
-            if word_embeddings is not None
-            else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        )
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = XLMProphetNetPositionalEmbeddings(config)
         self.embeddings_layer_norm = LayerNorm(config.hidden_size)
 
@@ -1287,7 +1284,7 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
         embeddings instead of randomly initialized word embeddings.
     """
 
-    def __init__(self, config: XLMProphetNetConfig, word_embeddings: Optional[nn.Embedding] = None):
+    def __init__(self, config: XLMProphetNetConfig):
         super().__init__(config)
 
         self.ngram = config.ngram
@@ -1296,11 +1293,7 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
         self.dropout = config.dropout
         self.max_target_positions = config.max_position_embeddings
 
-        self.word_embeddings = (
-            word_embeddings
-            if word_embeddings is not None
-            else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        )
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = XLMProphetNetPositionalEmbeddings(config)
 
         self.ngram_embeddings = nn.Embedding(self.ngram, config.hidden_size, None)
@@ -1623,12 +1616,12 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_encoder_decoder = False
         encoder_config.use_cache = False
-        self.encoder = XLMProphetNetEncoder(encoder_config, self.word_embeddings)
+        self.encoder = XLMProphetNetEncoder(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
-        self.decoder = XLMProphetNetDecoder(decoder_config, self.word_embeddings)
+        self.decoder = XLMProphetNetDecoder(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()

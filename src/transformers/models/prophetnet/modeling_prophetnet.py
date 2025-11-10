@@ -332,15 +332,16 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "prophetnet"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -975,7 +976,7 @@ class ProphetNetDecoderLayer(GradientCheckpointingLayer):
     """
 )
 class ProphetNetEncoder(ProphetNetPreTrainedModel):
-    def __init__(self, config: ProphetNetConfig, word_embeddings: Optional[nn.Embedding] = None):
+    def __init__(self, config: ProphetNetConfig):
         r"""
         word_embeddings (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
             The word embedding parameters. This can be used to initialize [`ProphetNetEncoder`] with pre-defined word
@@ -983,11 +984,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         """
         super().__init__(config)
 
-        self.word_embeddings = (
-            word_embeddings
-            if word_embeddings is not None
-            else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        )
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = ProphetNetPositionalEmbeddings(config)
         self.embeddings_layer_norm = LayerNorm(config.hidden_size)
 
@@ -1090,7 +1087,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
     """
 )
 class ProphetNetDecoder(ProphetNetPreTrainedModel):
-    def __init__(self, config: ProphetNetConfig, word_embeddings: Optional[nn.Embedding] = None):
+    def __init__(self, config: ProphetNetConfig):
         r"""
         word_embeddings (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
             The word embedding parameters. This can be used to initialize [`ProphetNetEncoder`] with pre-defined word
@@ -1104,11 +1101,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         self.dropout = config.dropout
         self.max_target_positions = config.max_position_embeddings
 
-        self.word_embeddings = (
-            word_embeddings
-            if word_embeddings is not None
-            else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        )
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = ProphetNetPositionalEmbeddings(config)
 
         self.ngram_embeddings = nn.Embedding(self.ngram, config.hidden_size, None)
@@ -1412,12 +1405,12 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = ProphetNetEncoder(encoder_config, self.word_embeddings)
+        self.encoder = ProphetNetEncoder(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
-        self.decoder = ProphetNetDecoder(decoder_config, self.word_embeddings)
+        self.decoder = ProphetNetDecoder(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1715,7 +1708,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
 )
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.weight": "prophetnet.decoder.word_embeddings.weight",
+        "lm_head.weight": "prophetnet.word_embeddings.weight",
     }
 
     def __init__(self, config: ProphetNetConfig):
@@ -1926,7 +1919,7 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
         super().__init__(config)
 
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.decoder = ProphetNetDecoder(config, word_embeddings=self.word_embeddings)
+        self.decoder = ProphetNetDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()

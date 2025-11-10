@@ -26,7 +26,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ..deepseek_v3.modeling_deepseek_v3 import (
@@ -330,10 +330,14 @@ class LongcatFlashPreTrainedModel(DeepseekV3PreTrainedModel):
         "attentions": LongcatFlashMLA,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
+        super()._init_weights(module)
         if isinstance(module, LongcatFlashTopkRouter):
-            module.classifier.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.classifier.weight.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, LongcatFlashExperts):
+            module.gate_up_proj.normal_(mean=0.0, std=self.config.initializer_range)
+            module.down_proj.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 class LongcatFlashModel(DeepseekV3Model):

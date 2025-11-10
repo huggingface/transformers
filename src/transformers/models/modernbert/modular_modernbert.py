@@ -181,7 +181,7 @@ class ModernBertConfig(PreTrainedConfig):
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         layer_types: Optional[list[str]] = None,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         local_attention: Optional[int] = 128,
         embedding_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
@@ -802,6 +802,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = False
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
@@ -850,9 +851,9 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         ):
             init_weight(module.classifier, stds["final_out"])
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
 
     def _check_and_adjust_attn_implementation(
         self, attn_implementation: Optional[str], is_init_check: bool = False
@@ -1014,6 +1015,8 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     inputs_embeds, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(
                         inputs=inputs_embeds, attention_mask=attention_mask
                     )
+            if position_ids is None:
+                position_ids = indices.unsqueeze(0)
         else:
             if position_ids is None:
                 position_ids = torch.arange(seq_len, device=device).unsqueeze(0)

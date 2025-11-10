@@ -120,7 +120,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         bos_token_id: Optional[int] = 2,
         hidden_activation: Optional[str] = "gelu_pytorch_tanh",
         partial_rotary_factor: Optional[float] = 0.5,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         block_types: Optional[list[str]] = ("recurrent", "recurrent", "attention"),
         attention_dropout: Optional[float] = 0.0,
         num_key_value_heads: Optional[int] = None,

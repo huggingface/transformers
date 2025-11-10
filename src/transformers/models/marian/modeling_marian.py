@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch MarianMTModel model, ported from the Marian C++ repo."""
 
-import copy
 import math
 from collections.abc import Callable
 from typing import Optional, Union
@@ -446,21 +445,22 @@ class MarianPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
 
+    @torch.no_grad()
     def _init_weights(self, module: Union[nn.Linear, nn.Embedding, MarianSinusoidalPositionalEmbedding]):
         std = self.config.init_std
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, MarianSinusoidalPositionalEmbedding):
             module._init_weight()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
 
     @property
     def dummy_inputs(self):
@@ -484,7 +484,7 @@ class MarianEncoder(MarianPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: MarianConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: MarianConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -495,10 +495,7 @@ class MarianEncoder(MarianPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         self.embed_positions = MarianSinusoidalPositionalEmbedding(
             config.max_position_embeddings, embed_dim, self.padding_idx
@@ -626,7 +623,7 @@ class MarianDecoder(MarianPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: MarianConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: MarianConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -634,10 +631,7 @@ class MarianDecoder(MarianPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.decoder_vocab_size, config.d_model, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.decoder_vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = MarianSinusoidalPositionalEmbedding(
             config.max_position_embeddings, config.d_model, self.padding_idx
@@ -857,18 +851,11 @@ class MarianModel(MarianPreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
 
         # We always use self.shared for token embeddings to ensure compatibility with all marian models
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
         if self.config.share_encoder_decoder_embeddings:
-            encoder_embed_tokens = decoder_embed_tokens = self.shared
-        else:
-            # Since the embeddings are not shared, deepcopy the embeddings here for encoder
-            # and decoder to make sure they are not tied.
-            encoder_embed_tokens = copy.deepcopy(self.shared)
-            decoder_embed_tokens = copy.deepcopy(self.shared)
-            self.shared = None
+            self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = MarianEncoder(config, encoder_embed_tokens)
-        self.decoder = MarianDecoder(config, decoder_embed_tokens)
+        self.encoder = MarianEncoder(config)
+        self.decoder = MarianDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -166,6 +166,7 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         # tie encoder, decoder weights if config set accordingly
         self.tie_weights()
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if module in self.encoder.modules():
             self.encoder._init_weights(module)

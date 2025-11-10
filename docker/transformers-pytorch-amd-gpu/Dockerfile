@@ -39,7 +39,7 @@ RUN python3 -m pip install --no-cache-dir "torchcodec==0.5"
 # Install flash attention from source. Tested with commit 6387433156558135a998d5568a9d74c1778666d8
 RUN git clone https://github.com/ROCm/flash-attention/ -b tridao && \
     cd flash-attention && \
-    GPU_ARCHS="gfx942;gfx950" python setup.py install  
-# GPU_ARCHS builds for MI300, MI325 and MI355
+    GPU_ARCHS="gfx942" python setup.py install  
+# GPU_ARCHS builds for MI300, MI325 but not MI355: we would need to add `;gfx950` but it takes too long to build.
 
 RUN python3 -m pip install --no-cache-dir einops
