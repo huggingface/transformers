@@ -113,6 +113,7 @@ from genesis.public.tensorstream.tensor_stream_utils import (
 )
 
 from ...cache_utils import Cache, SlidingWindowCache, StaticCache
+from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
 from ...image_processing_utils_fast import (
@@ -136,7 +137,6 @@ from ...models.qwen3.modeling_qwen3 import Qwen3ForCausalLM, Qwen3PreTrainedMode
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils import TensorType
 from ...utils import auto_docstring
-from ...configuration_utils import PretrainedConfig
 
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
