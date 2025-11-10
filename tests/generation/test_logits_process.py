@@ -226,7 +226,6 @@ class LogitsProcessorTest(unittest.TestCase):
         # All thinking blocks are closed, so logits should remain untouched.
         torch.testing.assert_close(processed_scores, scores)
 
-
     def test_max_thinking_tokens_processor_blocks_immediate_reclose(self):
         begin_token_id = 47
         end_token_id = 48
