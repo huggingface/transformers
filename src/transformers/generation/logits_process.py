@@ -244,10 +244,11 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         prompt_length (`int`):
             Length of the prompt sequence before any new tokens are generated. Typically set to the length of the input
             prompt (`input_ids.shape[-1]`) when the processor is instantiated.
+        prompt_prefilled_suffix_length (`int`, *optional*, defaults to 8):
+            Number of prompt tokens (counting back from the prompt boundary) that should be treated as potentially
+            containing prefilled `<think>` markup. Any unmatched `<think>` in this suffix is treated as an active block
+            when generation starts.
     """
-
-    _PROMPT_PREFILLED_LOOKBACK = 256
-    _PROMPT_PREFILLED_SUFFIX_LENGTH = 8
 
     def __init__(
         self,
@@ -255,79 +256,66 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         begin_thinking_token_id: int,
         end_thinking_token_id: int,
         prompt_length: int,
+        prompt_prefilled_suffix_length: int = 8,
     ):
         self.max_thinking_tokens = max_thinking_tokens
         self.begin_thinking_token_id = begin_thinking_token_id
         self.end_thinking_token_id = end_thinking_token_id
         self.prompt_length = prompt_length
+        self._prompt_prefilled_suffix_length = prompt_prefilled_suffix_length
 
-    def _find_prefilled_block_start(self, sequence: torch.LongTensor, prompt_length: int) -> Optional[int]:
+    def _replay_range(
+        self,
+        sequence: torch.LongTensor,
+        start: int,
+        end: int,
+        stack: list[int],
+    ) -> None:
         """
-        Detects a thinking block that was prefilled in the prompt (e.g. `enable_thinking=True`) by looking for unmatched
-        `<think>` tokens that appear at the very end of the prompt. The search is limited to the final
-        `_PROMPT_PREFILLED_LOOKBACK` tokens both for efficiency and to avoid treating historical context as active
-        reasoning.
+        Replays `<think>` / `</think>` events for `sequence[start:end]` by mutating `stack` in place. Every time the
+        model emits `<think>` we push the token index, capturing the start position of a nested reasoning block. When a
+        closing token is seen we pop, collapsing just the innermost block. After the range is processed, `stack`
+        contains (old entries plus) any `<think>` blocks that continue past `end`, which lets callers keep iterating
+        seamlessly across prompt + generated spans.
         """
-        if prompt_length == 0:
-            return None
-
-        lookback_start = max(0, prompt_length - self._PROMPT_PREFILLED_LOOKBACK)
-        unmatched_positions: list[int] = []
-
-        for position in range(lookback_start, prompt_length):
+        for position in range(start, end):
             token_id = int(sequence[position])
             if token_id == self.begin_thinking_token_id:
-                unmatched_positions.append(position)
-            elif token_id == self.end_thinking_token_id and unmatched_positions:
-                unmatched_positions.pop()
-
-        if not unmatched_positions:
-            return None
-
-        suffix_candidates = [
-            position
-            for position in unmatched_positions
-            if prompt_length - position <= self._PROMPT_PREFILLED_SUFFIX_LENGTH
-        ]
-        if not suffix_candidates:
-            return None
-
-        return suffix_candidates[0]
+                stack.append(position)
+            elif token_id == self.end_thinking_token_id and stack:
+                stack.pop()
 
     def _active_block_start(self, sequence: torch.LongTensor, prompt_length: int) -> Optional[int]:
         """
-        Returns the position of the earliest open thinking block, ignoring any markup that belongs purely to the prompt
-        history. Prefilled `<think>` tokens at the prompt boundary are treated as part of the current reasoning chain so
-        that tokenizer templates that append `<think>` automatically remain compatible with the thinking budget.
+        Returns the position of the earliest open `<think>` block. Only the final `prompt_prefilled_suffix_length`
+        prompt tokens are inspected; if they contain an unmatched `<think>`, that position is treated as the start of an
+        active block so prompt templates that prefill `<think>` remain compatible with the thinking budget. Generated
+        tokens are then scanned left-to-right and extend or close the block using the same stack bookkeeping.
         """
         sequence_length = sequence.shape[-1]
-
         prompt_length = min(prompt_length, sequence_length)
-        prefilled_start = self._find_prefilled_block_start(sequence, prompt_length)
-        prefilled_open = prefilled_start is not None
 
+        # Track only the prompt suffix so `<think>` tags further up the prompt do not count toward the budget.
         open_stack: list[int] = []
-        for position in range(prompt_length, sequence_length):
-            token_id = int(sequence[position])
-            if token_id == self.begin_thinking_token_id:
-                open_stack.append(position)
-            elif token_id == self.end_thinking_token_id:
-                if open_stack:
-                    open_stack.pop()
-                elif prefilled_open:
-                    prefilled_open = False
+        if prompt_length:
+            suffix_start = max(0, prompt_length - self._prompt_prefilled_suffix_length)
+            prompt_stack: list[int] = []
+            self._replay_range(sequence, suffix_start, prompt_length, prompt_stack)
 
-        if prefilled_open:
-            return prefilled_start
-        if open_stack:
-            return open_stack[0]
-        return None
+            # Any unmatched `<think>` in the suffix seeds the stack; generation continues inside that block.
+            if prompt_stack:
+                open_stack.append(prompt_stack[0])
+
+        # Replay generated tokens in order. Whatever remains on the stack marks currently active thinking blocks.
+        self._replay_range(sequence, prompt_length, sequence_length, open_stack)
+
+        return open_stack[0] if open_stack else None
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         batch_size = input_ids.shape[0]
 
-        force_end_indices: list[int] = []
+        force_end_indices: list[int] = []  # batch entries that exhausted their thinking budget
 
         for batch_index in range(batch_size):
             sequence = input_ids[batch_index]
@@ -336,6 +324,7 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             if first_open_position is None:
                 continue
 
+            # Only count tokens that are inside the open `<think>` block and were generated after the prompt
             count_start = max(first_open_position + 1, batch_prompt_length)
 
             tokens_inside_block = sequence.shape[-1] - count_start
