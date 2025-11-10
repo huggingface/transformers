@@ -165,8 +165,8 @@ class IsaacProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        image_processor: "IsaacImageProcessorFast | None" = None,  # noqa
-        tokenizer: Qwen2Tokenizer | None = None,
+        image_processor: "IsaacImageProcessorFast | None" = None,  # noqa: UP037
+        tokenizer: "Qwen2Tokenizer | None" = None,  # noqa: UP037
         *,
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
