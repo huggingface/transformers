@@ -107,6 +107,11 @@ class VideoMetadata(Mapping):
             raise ValueError("Cannot infer video `timestamps` when `fps` or `frames_indices` is None.")
         return [frame_idx / self.fps for frame_idx in self.frames_indices]
 
+    @property
+    def sampled_fps(self) -> float:
+        "fps of the sampled video."
+        return len(self.indices) / self.total_num_frames * self.video_fps if self.video_fps else 24
+
     def update(self, dictionary):
         for key, value in dictionary.items():
             if hasattr(self, key):
@@ -375,7 +380,6 @@ def read_video_opencv(
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
-    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     index = 0
     frames = []
     while video.isOpened():
@@ -393,7 +397,6 @@ def read_video_opencv(
 
     video.release()
     metadata.frames_indices = indices
-    metadata.sampled_fps = float(sampled_fps)
     return np.stack(frames), metadata
 
 
@@ -437,13 +440,11 @@ def read_video_decord(
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
-    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     video = vr.get_batch(indices).asnumpy()
 
     metadata.update(
         {
             "frames_indices": indices,
-            "sampled_fps": sampled_fps,
             "height": video.shape[1],
             "width": video.shape[2],
         }
@@ -493,7 +494,6 @@ def read_video_pyav(
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
-    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     frames = []
     container.seek(0)
     end_index = indices[-1]
@@ -505,7 +505,6 @@ def read_video_pyav(
 
     video = np.stack([x.to_ndarray(format="rgb24") for x in frames])
     metadata.frames_indices = indices
-    metadata.sampled_fps = sampled_fps
     return video, metadata
 
 
@@ -555,12 +554,10 @@ def read_video_torchvision(
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
-    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     video = video[indices].contiguous()
     metadata.update(
         {
             "frames_indices": indices,
-            "sampled_fps": sampled_fps,
             "height": video.shape[2],
             "width": video.shape[3],
         }
@@ -616,10 +613,8 @@ def read_video_torchcodec(
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
-    sampled_fps = len(indices) / total_num_frames * video_fps if video_fps else 24
     video = decoder.get_frames_at(indices=indices).data.contiguous()
     metadata.frames_indices = indices
-    metadata.sampled_fps = sampled_fps
     return video, metadata
 
 

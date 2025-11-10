@@ -934,7 +934,7 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             else:
                 video_metadata = videos_inputs["video_metadata"]
 
-            fps = [metadata.sampled_fps or metadata.fps or 24 for metadata in video_metadata]
+            fps = [metadata.sampled_fps for metadata in video_metadata]
 
             if isinstance(fps, (int, float)):
                 second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
