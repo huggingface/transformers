@@ -2003,6 +2003,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             copied_config = copy.deepcopy(original_config)
             copied_config.get_text_config().tie_word_embeddings = True
+            copied_config.tie_word_embeddings = True
             model_tied = model_class(copied_config)
 
             tied_weight_keys = _get_tied_weight_keys(model_tied)
@@ -2020,8 +2021,8 @@ class ModelTesterMixin:
 
             # Detect we get a hit for each key
             for key in tied_weight_keys:
-                is_tied_key = any(re.search(key, p) for group in tied_params for p in group)
-                self.assertTrue(is_tied_key, f"{key} is not a tied weight key for {model_class}.")
+                is_tied_key = any(re.search(key, p)  for group in tied_params for p in group)
+                self.assertTrue(is_tied_key, f"{key} is not a tied weight key pattern for {model_class}: {is_tied_key}. With same patams: {tied_params}")
 
             # Removed tied weights found from tied params -> there should only be one left after
             for key in tied_weight_keys:
