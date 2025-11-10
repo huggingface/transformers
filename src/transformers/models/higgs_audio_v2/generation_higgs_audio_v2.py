@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""HiggsAudioGenerationMixin."""
+"""HiggsAudioV2GenerationMixin."""
 
 import os
 from dataclasses import dataclass
@@ -28,7 +28,7 @@ from ...generation import (
     LogitsProcessorList,
     StoppingCriteriaList,
 )
-from ...generation.logits_process import HiggsAudioDelayPatternLogitsProcessor
+from ...generation.logits_process import HiggsAudioV2DelayPatternLogitsProcessor
 from ...generation.streamers import BaseStreamer
 from ...generation.utils import GenerateNonBeamOutput
 from ...utils import logging
@@ -38,9 +38,9 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class HiggsAudioGenerationOutput(GenerateDecoderOnlyOutput):
+class HiggsAudioV2GenerationOutput(GenerateDecoderOnlyOutput):
     """
-    Outputs of HiggsAudio generation models, when using non-beam methods.
+    Outputs of HiggsAudioV2 generation models, when using non-beam methods.
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -74,7 +74,7 @@ class HiggsAudioGenerationOutput(GenerateDecoderOnlyOutput):
     audio_sequences: Optional[list[torch.LongTensor]] = None
 
 
-class HiggsAudioGenerationMixin(GenerationMixin):
+class HiggsAudioV2GenerationMixin(GenerationMixin):
     def _get_logits_processor(self, *args, **kwargs):
         if kwargs.get("logits_processor") is None:
             logits_processor = LogitsProcessorList()
@@ -82,7 +82,7 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             logits_processor = kwargs.get("logits_processor")
 
         logits_processor.append(
-            HiggsAudioDelayPatternLogitsProcessor(
+            HiggsAudioV2DelayPatternLogitsProcessor(
                 delay_pattern=[el + 1 for el in range(self.config.num_codebooks)],
                 audio_bos_token_id=self.config.audio_bos_token_id,
                 audio_eos_token_id=self.config.audio_delay_token_id,
@@ -283,7 +283,7 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             streamer.end()
 
         if return_dict_in_generate:
-            return HiggsAudioGenerationOutput(
+            return HiggsAudioV2GenerationOutput(
                 sequences=model_kwargs.get("audio_input_ids"),
                 scores=scores,
                 logits=raw_logits,

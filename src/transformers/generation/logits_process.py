@@ -3231,14 +3231,14 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class HiggsAudioDelayPatternLogitsProcessor(LogitsProcessor):
+class HiggsAudioV2DelayPatternLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] for Higgs Audio text-to-speech model to handle codebook delay pattern.
+    [`LogitsProcessor`] for Higgs Audio V2 text-to-speech model to handle codebook delay pattern.
 
     <Tip warning={true}>
 
     This logits processor is exclusively compatible with
-    [HiggsAudio](https://huggingface.co/docs/transformers/main/en/model_doc/higgs_audio)
+    [Higgs Audio V2](https://huggingface.co/docs/transformers/main/en/model_doc/higgs_audio_v2)
 
     </Tip>
 

@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert HiggsAudio Tokenizer to Hugging Face format."""
+"""Convert HiggsAudioV2 Tokenizer to Hugging Face format."""
 
 import argparse
 import io
@@ -25,8 +25,8 @@ import yaml
 from transformers import (
     AutoConfig,
     DacFeatureExtractor,
-    HiggsAudioTokenizerConfig,
-    HiggsAudioTokenizerModel,
+    HiggsAudioV2TokenizerConfig,
+    HiggsAudioV2TokenizerModel,
     logging,
 )
 
@@ -201,7 +201,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
     else:
         raise ValueError(f"Unknown semantic model: {semantic_teacher}")
 
-    config = HiggsAudioTokenizerConfig(
+    config = HiggsAudioV2TokenizerConfig(
         target_bandwidths=target_bandwidths,
         sample_rate=sample_rate,
         codebook_dim=codebook_dim,
@@ -214,7 +214,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
     if not torch.cuda.is_available():
         raise ValueError("Run this script on a machine with a GPU for weight norm layers to be correctly copied.")
     torch_device = "cuda"
-    model = HiggsAudioTokenizerModel(config).to(torch_device)
+    model = HiggsAudioV2TokenizerModel(config).to(torch_device)
 
     logger.info("Loading original checkpoint ...")
 
@@ -255,13 +255,13 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
 """
 ```
 # Download config and checkpoint files
-wget https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/resolve/main/model.pth -P /workspace/higgs_audio_tokenizer_original
-wget https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/resolve/main/config.json -P /workspace/higgs_audio_tokenizer_original
+wget https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/resolve/main/model.pth -P /workspace/higgs_audio_v2_tokenizer_original
+wget https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/resolve/main/config.json -P /workspace/higgs_audio_v2_tokenizer_original
 # The bosonai/higgs-audio-v2-tokenizer repo does not have complete config, so we will just use the default config which has been matched with the actual config.
 # Run conversion:
-python src/transformers/models/higgs_audio_tokenizer/convert_higgs_audio_tokenizer_to_hf.py \
-    --checkpoint_path /workspace/higgs_audio_tokenizer_original/model.pth \
-    --config_path /workspace/higgs_audio_tokenizer_original/config.json \
+python src/transformers/models/higgs_audio_v2_tokenizer/convert_higgs_audio_v2_tokenizer_to_hf.py \
+    --checkpoint_path /workspace/higgs_audio_v2_tokenizer_original/model.pth \
+    --config_path /workspace/higgs_audio_v2_tokenizer_original/config.json \
     --push_to_hub hf-audio/higgs-audio-v2-tokenizer
 ```
 """

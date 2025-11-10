@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_higgs_audio_tokenizer import *
-    from .modeling_higgs_audio_tokenizer import *
+    from .configuration_higgs_audio_v2_tokenizer import *
+    from .modeling_higgs_audio_v2_tokenizer import *
 else:
     import sys
 

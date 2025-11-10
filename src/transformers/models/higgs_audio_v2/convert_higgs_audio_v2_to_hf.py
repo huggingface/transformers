@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert HiggsAudio to Hugging Face format."""
+"""Convert HiggsAudioV2 to Hugging Face format."""
 
 import argparse
 import glob
@@ -25,10 +25,10 @@ from safetensors.torch import load_file
 from transformers import (
     AutoTokenizer,
     DacFeatureExtractor,
-    HiggsAudioConfig,
-    HiggsAudioForConditionalGeneration,
-    HiggsAudioProcessor,
-    HiggsAudioTokenizerModel,
+    HiggsAudioV2Config,
+    HiggsAudioV2ForConditionalGeneration,
+    HiggsAudioV2Processor,
+    HiggsAudioV2TokenizerModel,
     logging,
 )
 
@@ -76,13 +76,13 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
     original_model_config.pop("skip_audio_tower")
     original_model_config["text_config"]["rms_norm_eps"] = float(original_model_config["text_config"]["rms_norm_eps"])
 
-    config = HiggsAudioConfig(**original_model_config)
+    config = HiggsAudioV2Config(**original_model_config)
 
     # create model
     if not torch.cuda.is_available():
         raise ValueError("Run this script on a machine with a GPU for weight norm layers to be correctly copied.")
     torch_device = "cuda"
-    model = HiggsAudioForConditionalGeneration(config).to(torch_device)
+    model = HiggsAudioV2ForConditionalGeneration(config).to(torch_device)
 
     logger.info("Loading original checkpoint ...")
 
@@ -139,10 +139,10 @@ if __name__ == "__main__":
     )
 
     if args.convert_preprocessor:
-        processor = HiggsAudioProcessor(
+        processor = HiggsAudioV2Processor(
             DacFeatureExtractor(sampling_rate=24000, hop_length=1),
             AutoTokenizer.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base"),
-            HiggsAudioTokenizerModel.from_pretrained("szhengac25/higgs-audio-v2-tokenizer"),
+            HiggsAudioV2TokenizerModel.from_pretrained("szhengac25/higgs-audio-v2-tokenizer"),
         )
         processor.save_pretrained(args.pytorch_dump_folder_path)
 

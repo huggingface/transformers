@@ -19,10 +19,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_higgs_audio import *
-    from .generation_higgs_audio import *
-    from .modeling_higgs_audio import *
-    from .processing_higgs_audio import *
+    from .configuration_higgs_audio_v2 import *
+    from .generation_higgs_audio_v2 import *
+    from .modeling_higgs_audio_v2 import *
+    from .processing_higgs_audio_v2 import *
 else:
     import sys
 

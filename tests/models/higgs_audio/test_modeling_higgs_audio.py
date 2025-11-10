@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch HiggsAudio model."""
+"""Testing suite for the PyTorch HiggsAudioV2 model."""
 
 import copy
 import pathlib
@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 from transformers import AutoTokenizer
-from transformers.models.higgs_audio import HiggsAudioConfig
+from transformers.models.higgs_audio_v2 import HiggsAudioV2Config
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -51,8 +51,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        HiggsAudioForConditionalGeneration,
-        HiggsAudioProcessor,
+        HiggsAudioV2ForConditionalGeneration,
+        HiggsAudioV2Processor,
         PretrainedConfig,
         PreTrainedModel,
     )
@@ -69,7 +69,7 @@ if is_soundfile_available():
 
 
 @require_torch
-class HiggsAudioModelTester:
+class HiggsAudioV2ModelTester:
     def __init__(
         self,
         parent,
@@ -134,7 +134,7 @@ class HiggsAudioModelTester:
         audio_num_codebooks = self.num_quantizers
         audio_codebook_size = self.codebook_size
 
-        higgs_audio_config = HiggsAudioConfig(
+        higgs_audio_v2_config = HiggsAudioV2Config(
             audio_adapter_type=self.audio_adapter_type,
             audio_dual_ffn_layers=self.audio_dual_ffn_layers,
             audio_decoder_proj_num_layers=self.audio_decoder_proj_num_layers,
@@ -155,9 +155,9 @@ class HiggsAudioModelTester:
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
         )
-        return higgs_audio_config
+        return higgs_audio_v2_config
 
-    def prepare_config_and_inputs(self) -> tuple[HiggsAudioConfig, dict]:
+    def prepare_config_and_inputs(self) -> tuple[HiggsAudioV2Config, dict]:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 5)
         attention_mask = input_ids.ne(self.pad_token_id)
 
@@ -188,12 +188,12 @@ class HiggsAudioModelTester:
 
         return config, inputs_dict
 
-    def prepare_config_and_inputs_for_common(self) -> tuple[HiggsAudioConfig, dict]:
+    def prepare_config_and_inputs_for_common(self) -> tuple[HiggsAudioV2Config, dict]:
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
     def create_and_check_model_forward(self, config, inputs_dict):
-        model = HiggsAudioForConditionalGeneration(config=config).to(torch_device).eval()
+        model = HiggsAudioV2ForConditionalGeneration(config=config).to(torch_device).eval()
 
         # first forward pass
         last_hidden_states = model(**inputs_dict).last_hidden_states
@@ -208,7 +208,7 @@ class HiggsAudioModelTester:
         )
 
 
-class HiggsAudioGenerationTesterMixin(GenerationTesterMixin):
+class HiggsAudioV2GenerationTesterMixin(GenerationTesterMixin):
     def prepare_config_and_inputs_for_generate(self, batch_size=1):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -263,18 +263,18 @@ class HiggsAudioGenerationTesterMixin(GenerationTesterMixin):
 
 
 @require_torch
-class HiggsAudioForConditionalGenerationTest(
+class HiggsAudioV2ForConditionalGenerationTest(
     ModelTesterMixin,
-    HiggsAudioGenerationTesterMixin,
+    HiggsAudioV2GenerationTesterMixin,
     PipelineTesterMixin,
     unittest.TestCase,
 ):
-    all_model_classes = (HiggsAudioForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (HiggsAudioV2ForConditionalGeneration,) if is_torch_available() else ()
     # We only allow greedy search / sampling with one sequence; see `skip_non_greedy_generate`
-    all_generative_model_classes = (HiggsAudioForConditionalGeneration,)
+    all_generative_model_classes = (HiggsAudioV2ForConditionalGeneration,)
     # TODO: support new pipeline behavior in tests
     pipeline_model_mapping = {}
-    # pipeline_model_mapping = {"text-to-audio": HiggsAudioForConditionalGeneration} if is_torch_available() else {}
+    # pipeline_model_mapping = {"text-to-audio": HiggsAudioV2ForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
     test_resize_embeddings = False
@@ -283,9 +283,9 @@ class HiggsAudioForConditionalGenerationTest(
     has_attentions = True
 
     def setUp(self):
-        self.model_tester = HiggsAudioModelTester(self)
+        self.model_tester = HiggsAudioV2ModelTester(self)
         # Skipping `has_text_modality` but manually testing down below
-        self.config_tester = ConfigTester(self, has_text_modality=False, config_class=HiggsAudioConfig)
+        self.config_tester = ConfigTester(self, has_text_modality=False, config_class=HiggsAudioV2Config)
         self.skip_non_greedy_generate()
         self.skip_input_embeds()
 
@@ -306,7 +306,7 @@ class HiggsAudioForConditionalGenerationTest(
 
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
-                self.skipTest(reason="HiggsAudio only supports greedy search / sampling with one sequence.")
+                self.skipTest(reason="HiggsAudioV2 only supports greedy search / sampling with one sequence.")
 
     def skip_input_embeds(self):
         skippable_tests = [
@@ -317,10 +317,10 @@ class HiggsAudioForConditionalGenerationTest(
 
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
-                self.skipTest(reason="HiggsAudio does not support generation from input_embeds.")
+                self.skipTest(reason="HiggsAudioV2 does not support generation from input_embeds.")
 
     @pytest.mark.generate
-    @unittest.skip(reason="HiggsAudio does not support input_embeds.")
+    @unittest.skip(reason="HiggsAudioV2 does not support input_embeds.")
     def test_generate_from_inputs_embeds_0_greedy(self):
         pass
 
@@ -349,7 +349,7 @@ class HiggsAudioForConditionalGenerationTest(
         return inputs_dict
 
     def _get_logits_processor_kwargs(self, do_sample=False, config=None):
-        # HiggsAudio does not support repetition_penalty
+        # HiggsAudioV2 does not support repetition_penalty
         logits_processor_kwargs = {
             "bad_words_ids": [[1, 0]],
             "remove_invalid_values": True,
@@ -453,7 +453,7 @@ class HiggsAudioForConditionalGenerationTest(
                 model_input_length = 1
             else:
                 model_input_length = prompt_length + generated_length
-                # HiggsAudio embeds audio features and tokens inside its forward
+                # HiggsAudioV2 embeds audio features and tokens inside its forward
                 model_input_length += (self.model_tester.num_audio_in + self.model_tester.num_audio_out) * (
                     self.model_tester.audio_length - 1
                 )
@@ -516,7 +516,7 @@ class HiggsAudioForConditionalGenerationTest(
                 model_input_length = 1
             else:
                 model_input_length = prompt_length + generated_length
-                # HiggsAudio embeds audio features and tokens inside its forward
+                # HiggsAudioV2 embeds audio features and tokens inside its forward
                 model_input_length += (self.model_tester.num_audio_in + self.model_tester.num_audio_out) * (
                     self.model_tester.audio_length - 1
                 )
@@ -553,7 +553,7 @@ class HiggsAudioForConditionalGenerationTest(
             )
 
     def _check_scores(self, batch_size, scores, generated_length, config):
-        # Special case where HiggsAudio keeps score in a 2D mesh of (bsz * num_quantizers, codebook_size) for audio scores and (bsz, vocab) for text tokens
+        # Special case where HiggsAudioV2 keeps score in a 2D mesh of (bsz * num_quantizers, codebook_size) for audio scores and (bsz, vocab) for text tokens
         vocab_size = config.vocab_size
         expected_audio_score_shape = (
             batch_size * self.model_tester.num_quantizers,
@@ -609,25 +609,25 @@ class HiggsAudioForConditionalGenerationTest(
         self.model_tester.encoder_seq_length = None
 
     @pytest.mark.generate
-    @unittest.skip("HiggsAudio has complicated attention mask schemes and doesn't support continue from past kv")
+    @unittest.skip("HiggsAudioV2 has complicated attention mask schemes and doesn't support continue from past kv")
     def test_generate_continue_from_past_key_values(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip("HiggsAudio has to DynamicCache, and DynamicCache object has no attribute key_cache")
+    @unittest.skip("HiggsAudioV2 has to DynamicCache, and DynamicCache object has no attribute key_cache")
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip(reason="Indirectly checked in HiggsAudio through the generate methods.")
+    @unittest.skip(reason="Indirectly checked in HiggsAudioV2 through the generate methods.")
     def test_past_key_values_format(self, custom_all_cache_shapes=None):
         pass
 
-    @unittest.skip(reason="Indirectly checked in HiggsAudio through the generate methods.")
+    @unittest.skip(reason="Indirectly checked in HiggsAudioV2 through the generate methods.")
     def test_hidden_states_output(self):
         pass
 
     @unittest.skip(
-        reason="HiggsAudio has too many mixed embedding types which would cause unintentional side effects, e.g. attempts at tying embeddings"
+        reason="HiggsAudioV2 has too many mixed embedding types which would cause unintentional side effects, e.g. attempts at tying embeddings"
     )
     def test_model_get_set_embeddings(self):
         pass
@@ -652,16 +652,16 @@ class HiggsAudioForConditionalGenerationTest(
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(reason="HiggsAudio does not support left-padding")
+    @unittest.skip(reason="HiggsAudioV2 does not support left-padding")
     def test_left_padding_compatibility(self):
         pass
 
 
-class HiggsAudioForConditionalGenerationIntegrationTest(unittest.TestCase):
+class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     """
     See https://gist.github.com/szhengac/22060ca87e654d85886a6dec161fe01e for generating the integration tests
 
-    NOTE: We add a single `eos` line for the last channel which is skipped in the original HiggsAudio
+    NOTE: We add a single `eos` line for the last channel which is skipped in the original HiggsAudioV2
     (It doesn't change the behaviour as we cut by the eos token position)
     """
 
@@ -674,9 +674,9 @@ class HiggsAudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=self.sampling_rate))
         audio_sample = librispeech_dummy[-1]["audio"]["array"]
-        # 10 and 5 codebooks as prefix - saved as files as we need wav files for the original HiggsAudio
+        # 10 and 5 codebooks as prefix - saved as files as we need wav files for the original HiggsAudioV2
         dac_chunk_len = 512
-        self.audio_prompt_path = "/tmp/higgs_audio_test_sample.mp3"
+        self.audio_prompt_path = "/tmp/higgs_audio_v2_test_sample.mp3"
         sf.write(
             self.audio_prompt_path,
             audio_sample[: (dac_chunk_len * 10)],
@@ -689,7 +689,7 @@ class HiggsAudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    def test_higgs_audio_model_integration_generate_tts(self):
+    def test_higgs_audio_v2_model_integration_generate_tts(self):
         conversation = [
             {
                 "role": "system",
@@ -700,11 +700,11 @@ class HiggsAudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": "I hear that you can understand what people say and even know their age and gender, so can you guess my age and gender from my voice?",
             },
         ]
-        processor = HiggsAudioProcessor.from_pretrained(self.model_checkpoint, torch_dtype="auto")
+        processor = HiggsAudioV2Processor.from_pretrained(self.model_checkpoint, torch_dtype="auto")
         text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
         inputs = processor(text=text, padding=True, return_tensors="pt").to(torch_device)
 
-        model = HiggsAudioForConditionalGeneration.from_pretrained(self.model_checkpoint, torch_dtype="auto").to(
+        model = HiggsAudioV2ForConditionalGeneration.from_pretrained(self.model_checkpoint, torch_dtype="auto").to(
             torch_device
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_checkpoint)
@@ -760,7 +760,7 @@ class HiggsAudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    def test_higgs_audio_model_integration_generate_audio_context(self):
+    def test_higgs_audio_v2_model_integration_generate_audio_context(self):
         conversation = [
             {
                 "role": "system",
@@ -781,11 +781,11 @@ class HiggsAudioForConditionalGenerationIntegrationTest(unittest.TestCase):
             torchaudio.load(self.audio_prompt_path, channels_first=True, backend="soundfile")[0].squeeze().numpy()
         )
         audio = [audio_sample]
-        processor = HiggsAudioProcessor.from_pretrained(self.model_checkpoint, torch_dtype="auto")
+        processor = HiggsAudioV2Processor.from_pretrained(self.model_checkpoint, torch_dtype="auto")
         text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
         inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt").to(torch_device)
 
-        model = HiggsAudioForConditionalGeneration.from_pretrained(self.model_checkpoint, torch_dtype="auto").to(
+        model = HiggsAudioV2ForConditionalGeneration.from_pretrained(self.model_checkpoint, torch_dtype="auto").to(
             torch_device
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_checkpoint)

@@ -38,7 +38,7 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaRMSNorm,
 )
-from .generation_higgs_audio import HiggsAudioGenerationMixin
+from .generation_higgs_audio_v2 import HiggsAudioV2GenerationMixin
 
 
 if is_torch_flex_attn_available():
@@ -48,7 +48,7 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-class HiggsAudioConfig(LlamaConfig):
+class HiggsAudioV2Config(LlamaConfig):
     def __init__(
         self,
         vocab_size=128256,
@@ -122,21 +122,21 @@ class HiggsAudioConfig(LlamaConfig):
         self.audio_stream_eos_id = audio_stream_eos_id
 
 
-class HiggsAudioMLP(LlamaMLP):
+class HiggsAudioV2MLP(LlamaMLP):
     pass
 
 
-class HiggsAudioRMSNorm(LlamaRMSNorm):
+class HiggsAudioV2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class HiggsAudioDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: HiggsAudioConfig, layer_idx: int):
+class HiggsAudioV2DecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: HiggsAudioV2Config, layer_idx: int):
         super().__init__(config, layer_idx)
 
-        self.audio_mlp = HiggsAudioMLP(config)
-        self.audio_input_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.audio_post_attention_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.audio_mlp = HiggsAudioV2MLP(config)
+        self.audio_input_layernorm = HiggsAudioV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.audio_post_attention_layernorm = HiggsAudioV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -194,8 +194,8 @@ class HiggsAudioDecoderLayer(LlamaDecoderLayer):
     """
 )
 @auto_docstring
-class HiggsAudioPreTrainedModel(PreTrainedModel):
-    config_class = HiggsAudioConfig
+class HiggsAudioV2PreTrainedModel(PreTrainedModel):
+    config_class = HiggsAudioV2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = []
@@ -221,21 +221,21 @@ class HiggsAudioPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, HiggsAudioRMSNorm):
+        elif isinstance(module, HiggsAudioV2RMSNorm):
             module.weight.data.fill_(1.0)
 
 
-class HiggsAudioEmbeddings(CsmBackboneModelEmbeddings):
+class HiggsAudioV2Embeddings(CsmBackboneModelEmbeddings):
     def forward(self, input_ids):
         inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
         inputs_embeds = inputs_embeds.sum(dim=1)
         return inputs_embeds
 
 
-class HiggsAudioModel(LlamaModel):
-    def __init__(self, config: HiggsAudioConfig):
+class HiggsAudioV2Model(LlamaModel):
+    def __init__(self, config: HiggsAudioV2Config):
         super().__init__(config)
-        self.embed_audio_tokens = HiggsAudioEmbeddings(config)
+        self.embed_audio_tokens = HiggsAudioV2Embeddings(config)
 
     @auto_docstring
     @can_return_tuple
@@ -312,13 +312,13 @@ class HiggsAudioModel(LlamaModel):
     The Higgs Audio model, a llama-like auto-regressive transformer model with dual-FFN.
     """
 )
-class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGenerationMixin):
+class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAudioV2GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_unexpected = ["text_lm_head.weight"]
 
-    def __init__(self, config: HiggsAudioConfig, use_text_head: bool = False):
+    def __init__(self, config: HiggsAudioV2Config, use_text_head: bool = False):
         super().__init__(config)
-        self.model = HiggsAudioModel(config)
+        self.model = HiggsAudioV2Model(config)
         self.audio_lm_head = nn.Linear(config.hidden_size, config.num_codebooks * config.codebook_size, bias=False)
         self.text_lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False) if use_text_head else None
 
@@ -429,4 +429,4 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         )
 
 
-__all__ = ["HiggsAudioForConditionalGeneration", "HiggsAudioPreTrainedModel", "HiggsAudioModel", "HiggsAudioConfig"]
+__all__ = ["HiggsAudioV2ForConditionalGeneration", "HiggsAudioV2PreTrainedModel", "HiggsAudioV2Model", "HiggsAudioV2Config"]

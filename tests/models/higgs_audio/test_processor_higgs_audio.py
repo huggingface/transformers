@@ -20,8 +20,8 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers import DacFeatureExtractor, HiggsAudioProcessor, HiggsAudioTokenizer, PreTrainedTokenizerFast
-from transformers.models.higgs_audio.processing_higgs_audio import HiggsAudioProcessorKwargs, build_delay_pattern_mask
+from transformers import DacFeatureExtractor, HiggsAudioV2Processor, HiggsAudioV2Tokenizer, PreTrainedTokenizerFast
+from transformers.models.higgs_audio_v2.processing_higgs_audio_v2 import HiggsAudioV2ProcessorKwargs, build_delay_pattern_mask
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -41,13 +41,13 @@ def check_models_equal(model1, model2):
 
 
 @require_torch
-class HiggsAudioProcessorTest(unittest.TestCase):
+class HiggsAudioV2ProcessorTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint = "szhengac25/higgs-audio-v2-generation-3B-base"
         self.tmpdirname = tempfile.mkdtemp()
         self.chunk_len = 24000
 
-        self.processor = HiggsAudioProcessor.from_pretrained(self.checkpoint, torch_dtype="auto")
+        self.processor = HiggsAudioV2Processor.from_pretrained(self.checkpoint, torch_dtype="auto")
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -55,7 +55,7 @@ class HiggsAudioProcessorTest(unittest.TestCase):
 
     def test_save_load_pretrained_default(self):
         self.processor.save_pretrained(self.tmpdirname)
-        processor = HiggsAudioProcessor.from_pretrained(self.tmpdirname, torch_dtype="auto")
+        processor = HiggsAudioV2Processor.from_pretrained(self.tmpdirname, torch_dtype="auto")
 
         self.assertEqual(processor.tokenizer.get_vocab(), self.processor.tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
@@ -70,7 +70,7 @@ class HiggsAudioProcessorTest(unittest.TestCase):
         )
         self.assertEqual(processor.audio_tokenizer.name_or_path, self.processor.audio_tokenizer.name_or_path)
         self.assertTrue(check_models_equal(processor.audio_tokenizer, self.processor.audio_tokenizer))
-        self.assertIsInstance(processor.audio_tokenizer, HiggsAudioTokenizer)
+        self.assertIsInstance(processor.audio_tokenizer, HiggsAudioV2Tokenizer)
 
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
@@ -96,7 +96,7 @@ class HiggsAudioProcessorTest(unittest.TestCase):
                 ],
             },
         ]
-        processor = HiggsAudioProcessor.from_pretrained(self.checkpoint)
+        processor = HiggsAudioV2Processor.from_pretrained(self.checkpoint)
         rendered = processor.apply_chat_template(messages, tokenize=False)
 
         expected_rendered = (
@@ -127,7 +127,7 @@ class HiggsAudioProcessorTest(unittest.TestCase):
         raw_speeches = [np.random.rand(self.chunk_len * l).astype(np.float32) for l in audio_lens]
         decoder_text_ids = torch.randint(0, 1024, (10,))
         prompt_token_length = 5
-        kwargs = HiggsAudioProcessorKwargs._defaults
+        kwargs = HiggsAudioV2ProcessorKwargs._defaults
 
         for batch_idx, speech in enumerate(raw_speeches):
             input_values = self.processor.feature_extractor(

@@ -37,7 +37,7 @@ if is_soundfile_available():
 logger = logging.get_logger(__name__)
 
 
-class HiggsAudioProcessorKwargs(ProcessingKwargs, total=False):
+class HiggsAudioV2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": True,
@@ -51,27 +51,27 @@ class HiggsAudioProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class HiggsAudioProcessor(ProcessorMixin):
+class HiggsAudioV2Processor(ProcessorMixin):
     r"""
     Constructs a Higgs Audio processor which wraps a [`DacFeatureExtractor`], a [`AutoTokenizer`],
-    and a [`HiggsAudioTokenizerModel`] into a single processor. It inherits, the audio feature extraction, tokenizer,
+    and a [`HiggsAudioV2TokenizerModel`] into a single processor. It inherits, the audio feature extraction, tokenizer,
     and audio encode/decode functionalities.
-    See [`~HiggsAudioProcessor.__call__`] and [`~HiggsAudioProcessor.decode`] for more information.
+    See [`~HiggsAudioV2Processor.__call__`] and [`~HiggsAudioV2Processor.decode`] for more information.
 
     Args:
         feature_extractor (`DacFeatureExtractor`):
             An instance of [`DacFeatureExtractor`]. The feature extractor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of [`AutoTokenizer`]. The tokenizer is a required input.
-        audio_tokenizer (`HiggsAudioTokenizerModel`):
-            An instance of [`HiggsAudioTokenizerModel`]. The audio tokenizer is a required input.
+        audio_tokenizer (`HiggsAudioV2TokenizerModel`):
+            An instance of [`HiggsAudioV2TokenizerModel`]. The audio tokenizer is a required input.
         chat_template (`str`, *optional*):
             A template string for chat formatting when combining text and audio interactions.
     """
 
     feature_extractor_class = "DacFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
-    audio_tokenizer_class = "HiggsAudioTokenizerModel"
+    audio_tokenizer_class = "HiggsAudioV2TokenizerModel"
 
     def __init__(
         self,
@@ -106,10 +106,10 @@ class HiggsAudioProcessor(ProcessorMixin):
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio: Optional[AudioInput] = None,
         output_labels: Optional[bool] = False,
-        **kwargs: Unpack[HiggsAudioProcessorKwargs],
+        **kwargs: Unpack[HiggsAudioV2ProcessorKwargs],
     ):
         output_kwargs = self._merge_kwargs(
-            HiggsAudioProcessorKwargs,
+            HiggsAudioV2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -272,12 +272,12 @@ class HiggsAudioProcessor(ProcessorMixin):
 
         return torch.cat(slices, dim=1)
 
-    # Copied from transformers.models.csm.processing_csm.CsmProcessor.save_audio with Csm->HiggsAudio
+    # Copied from transformers.models.csm.processing_csm.CsmProcessor.save_audio with Csm->HiggsAudioV2
     def save_audio(
         self,
         audio: AudioInput,
         saving_path: Union[str, Path, list[Union[str, Path]]],
-        **kwargs: Unpack[HiggsAudioProcessorKwargs],
+        **kwargs: Unpack[HiggsAudioV2ProcessorKwargs],
     ):
         # TODO: @eustlb, this should be in AudioProcessor
         if not is_soundfile_available():
@@ -296,7 +296,7 @@ class HiggsAudioProcessor(ProcessorMixin):
             raise ValueError("The number of audio and saving paths must be the same")
 
         output_kwargs = self._merge_kwargs(
-            HiggsAudioProcessorKwargs,
+            HiggsAudioV2ProcessorKwargs,
             **kwargs,
         )
         audio_kwargs = output_kwargs["audio_kwargs"]
@@ -308,4 +308,4 @@ class HiggsAudioProcessor(ProcessorMixin):
             sf.write(p, audio_value, sampling_rate)
 
 
-__all__ = ["HiggsAudioProcessor"]
+__all__ = ["HiggsAudioV2Processor"]

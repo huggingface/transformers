@@ -22,7 +22,7 @@ from ..xcodec.configuration_xcodec import XcodecConfig
 from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecModel
 
 
-class HiggsAudioTokenizerConfig(XcodecConfig):
+class HiggsAudioV2TokenizerConfig(XcodecConfig):
     def __init__(
         self,
         target_bandwidths=None,
@@ -61,13 +61,13 @@ class HiggsAudioTokenizerConfig(XcodecConfig):
         self.downsample_factor = downsample_factor
 
 
-class HiggsAudioTokenizerEuclideanCodebook(XcodecEuclideanCodebook): ...
+class HiggsAudioV2TokenizerEuclideanCodebook(XcodecEuclideanCodebook): ...
 
 
-class HiggsAudioTokenizerVectorQuantization(nn.Module):
-    def __init__(self, config: HiggsAudioTokenizerConfig):
+class HiggsAudioV2TokenizerVectorQuantization(nn.Module):
+    def __init__(self, config: HiggsAudioV2TokenizerConfig):
         super().__init__()
-        self.codebook = HiggsAudioTokenizerEuclideanCodebook(config)
+        self.codebook = HiggsAudioV2TokenizerEuclideanCodebook(config)
         codebook_dim = config.codebook_dim
         dim = config.hidden_size
         requires_projection = codebook_dim != dim
@@ -87,7 +87,7 @@ class HiggsAudioTokenizerVectorQuantization(nn.Module):
         return quantize
 
 
-class HiggsAudioTokenizerModel(XcodecModel):
+class HiggsAudioV2TokenizerModel(XcodecModel):
     def _extract_semantic_features(self, input_values: torch.FloatTensor) -> torch.FloatTensor:
         if self.config.sample_rate != self.config.semantic_sample_rate:
             input_values = torchaudio.functional.resample(
@@ -95,7 +95,7 @@ class HiggsAudioTokenizerModel(XcodecModel):
             )
 
         input_values = input_values[:, 0, :]
-        # TODO: there is a diff here with original codebase https://github.com/boson-ai/higgs-audio/blob/f644b62b855ba2b938896436221e01efadcc76ca/boson_multimodal/audio_processing/higgs_audio_tokenizer.py#L173-L174
+        # TODO: there is a diff here with original codebase https://github.com/boson-ai/higgs-audio/blob/f644b62b855ba2b938896436221e01efadcc76ca/boson_multimodal/audio_processing/higgs_audio_v2_tokenizer.py#L173-L174
         # input_values = F.pad(input_values, (self.pad, self.pad))
         input_values = F.pad(input_values, (160, 160))
         with torch.no_grad():
@@ -116,4 +116,4 @@ class HiggsAudioTokenizerModel(XcodecModel):
         return semantic_features
 
 
-__all__ = ["HiggsAudioTokenizerConfig", "HiggsAudioTokenizerModel"]
+__all__ = ["HiggsAudioV2TokenizerConfig", "HiggsAudioV2TokenizerModel"]
