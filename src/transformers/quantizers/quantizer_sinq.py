@@ -139,7 +139,7 @@ class SinqHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return True
 
-    # Check that the environment is ok (and attempt HF I/O autopatch)
+    # Check that the environment is ok
     def validate_environment(self, dtype=None, device_map=None, weights_only=None, **kwargs) -> None:
         _import_sinq()
 
@@ -152,7 +152,7 @@ class SinqHfQuantizer(HfQuantizer):
 
         device_str = _normalize_cuda_device(getattr(cfg, "device", "auto"))
         _validate_cuda_device_str(device_str)
-        # Optionally: store normalized device for later
+        
         self._normalized_device_str = device_str
 
         # Not supported: multi-GPU sharding via device_map
@@ -211,10 +211,8 @@ class SinqHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(self, model: nn.Module, **kwargs) -> tuple[nn.Module, dict]:
         _import_sinq()
 
-        # 🔁 Second chance autopatch (in case environment ran before patchers were importable)
         cfg: SinqConfig = self.quantization_config
 
-        print("[SINQ] pre-load hook running")  # temp trace
         sinq_quant_dict = self._build_sinq_quant_dict(cfg)
         compute_dtype = self.update_dtype(None)
         to_skip = set(cfg.modules_to_not_convert or [])
@@ -253,9 +251,8 @@ class SinqHfQuantizer(HfQuantizer):
         method = str(getattr(cfg, "method", "sinq")).lower()
         device_str = getattr(self, "_normalized_device_str", _normalize_cuda_device(cfg.device))
         device = torch.device(device_str)
-        model = model  # keep original device for now
+        model = model 
 
-        # Collect placeholders
         placeholders: list[tuple[str, _SinqLoadTimeLinear, nn.Module]] = []
 
         def _gather(m: nn.Module, prefix: str = "", parent: Optional[nn.Module] = None):
@@ -268,7 +265,6 @@ class SinqHfQuantizer(HfQuantizer):
 
         _gather(model)
 
-        # === Resolve tokenizer (and print model_id) for BOTH SINQ and A-SINQ ===
         def _resolve_tokenizer_and_model_id(model, kwargs, logger):
             tok = kwargs.get("tokenizer", None)
             model_id = None
@@ -309,7 +305,6 @@ class SinqHfQuantizer(HfQuantizer):
         # === A-SINQ branch: run internal calibration ===
         layer_acts: dict[str, torch.Tensor] = {}
         if method == "asinq":
-            # Swap placeholders -> dense Linear so hooks see real nn.Linear.
             for full, ph, parent in placeholders:
                 with torch.inference_mode():
                     dense = nn.Linear(
@@ -371,7 +366,6 @@ class SinqHfQuantizer(HfQuantizer):
                             return next(self._base.parameters()).device
                         except StopIteration:
                             return device
-                            # return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
                     def named_modules(self, *args, **kwargs):
                         return self._base.named_modules(*args, **kwargs)
