@@ -170,6 +170,7 @@ if TYPE_CHECKING:
     from .instructblip import *
     from .instructblipvideo import *
     from .internvl import *
+    from .isaac import *
     from .jamba import *
     from .janus import *
     from .jetmoe import *
@@ -256,7 +257,6 @@ if TYPE_CHECKING:
     from .pegasus_x import *
     from .perceiver import *
     from .perception_lm import *
-    from .isaac import *
     from .persimmon import *
     from .phi import *
     from .phi3 import *
