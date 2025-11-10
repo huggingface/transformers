@@ -247,6 +247,9 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             the processor is freshly instantiated.
     """
 
+    _PROMPT_PREFILLED_LOOKBACK = 256
+    _PROMPT_PREFILLED_SUFFIX_LENGTH = 8
+
     def __init__(
         self,
         max_thinking_tokens: int,
@@ -260,56 +263,69 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         self._prompt_length_override: Optional[int] = prompt_length
         self._tracked_prompt_length: Optional[int] = prompt_length
 
-    def _thinking_block_state(self, sequence: torch.LongTensor, prompt_length: int) -> tuple[Optional[int], bool]:
+    def _find_prefilled_block_start(self, sequence: torch.LongTensor, prompt_length: int) -> Optional[int]:
         """
-        Returns the first open `<think>` position (if any) together with a flag indicating whether a thinking block has
-        started either in the prompt (and carried over) or in the generated continuation.
+        Detects a thinking block that was prefilled in the prompt (e.g. `enable_thinking=True`) by looking for unmatched
+        `<think>` tokens that appear at the very end of the prompt. The search is limited to the final
+        `_PROMPT_PREFILLED_LOOKBACK` tokens both for efficiency and to avoid treating historical context as active
+        reasoning.
+        """
+        if prompt_length == 0:
+            return None
+
+        lookback_start = max(0, prompt_length - self._PROMPT_PREFILLED_LOOKBACK)
+        unmatched_positions: list[int] = []
+
+        for position in range(lookback_start, prompt_length):
+            token_id = int(sequence[position])
+            if token_id == self.begin_thinking_token_id:
+                unmatched_positions.append(position)
+            elif token_id == self.end_thinking_token_id and unmatched_positions:
+                unmatched_positions.pop()
+
+        if not unmatched_positions:
+            return None
+
+        suffix_candidates = [
+            position
+            for position in unmatched_positions
+            if prompt_length - position <= self._PROMPT_PREFILLED_SUFFIX_LENGTH
+        ]
+        if not suffix_candidates:
+            return None
+
+        return suffix_candidates[0]
+
+    def _active_block_start(self, sequence: torch.LongTensor, prompt_length: int) -> Optional[int]:
+        """
+        Returns the position of the earliest open thinking block, ignoring any markup that belongs purely to the prompt
+        history. Prefilled `<think>` tokens at the prompt boundary are treated as part of the current reasoning chain so
+        that tokenizer templates that append `<think>` automatically remain compatible with the thinking budget.
         """
         sequence_length = sequence.shape[-1]
         if sequence_length == 0:
-            return None, False
+            return None
+
+        prompt_length = min(prompt_length, sequence_length)
+        prefilled_start = self._find_prefilled_block_start(sequence, prompt_length)
+        prefilled_open = prefilled_start is not None
 
         open_stack: list[int] = []
-        prompt_open_depth = 0
-        prompt_open_depth_at_boundary = 0
-        boundary_recorded = prompt_length <= 0
-        seen_begin_after_prompt = False
-
-        for position in range(sequence_length):
+        for position in range(prompt_length, sequence_length):
             token_id = int(sequence[position])
-
             if token_id == self.begin_thinking_token_id:
-                if position < prompt_length:
-                    prompt_open_depth += 1
-                else:
-                    open_stack.append(position)
-                    seen_begin_after_prompt = True
+                open_stack.append(position)
             elif token_id == self.end_thinking_token_id:
-                if position < prompt_length:
-                    if prompt_open_depth > 0:
-                        prompt_open_depth -= 1
-                else:
-                    if open_stack:
-                        open_stack.pop()
-                    elif prompt_open_depth > 0:
-                        prompt_open_depth -= 1
+                if open_stack:
+                    open_stack.pop()
+                elif prefilled_open:
+                    prefilled_open = False
 
-            if not boundary_recorded and position >= prompt_length - 1:
-                prompt_open_depth_at_boundary = prompt_open_depth
-                boundary_recorded = True
-
-        if not boundary_recorded:
-            prompt_open_depth_at_boundary = prompt_open_depth
-
-        first_open_position: Optional[int] = None
-        if prompt_open_depth > 0:
-            first_open_position = max(prompt_length - 1, 0)
-        elif open_stack:
-            first_open_position = open_stack[0]
-
-        block_started = prompt_open_depth_at_boundary > 0 or seen_begin_after_prompt or first_open_position is not None
-
-        return first_open_position, block_started
+        if prefilled_open:
+            return prefilled_start
+        if open_stack:
+            return open_stack[0]
+        return None
 
     def set_prompt_length(self, prompt_length: Optional[int]) -> None:
         """
@@ -343,40 +359,30 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             self._tracked_prompt_length = prompt_length
 
         force_end_indices: list[int] = []
-        disallow_close_indices: list[int] = []
 
         for batch_index in range(batch_size):
-            first_open_position, block_started = self._thinking_block_state(input_ids[batch_index], prompt_length)
-
+            sequence = input_ids[batch_index]
+            batch_prompt_length = min(prompt_length, sequence.shape[-1])
+            first_open_position = self._active_block_start(sequence, batch_prompt_length)
             if first_open_position is None:
-                if block_started:
-                    disallow_close_indices.append(batch_index)
                 continue
 
-            count_start = max(first_open_position + 1, prompt_length)
-            if count_start >= sequence_length:
+            count_start = max(first_open_position + 1, batch_prompt_length)
+            if count_start >= sequence.shape[-1]:
                 continue
 
-            tokens_inside_block = sequence_length - count_start
+            tokens_inside_block = sequence.shape[-1] - count_start
             if tokens_inside_block >= self.max_thinking_tokens:
                 force_end_indices.append(batch_index)
 
-        if not force_end_indices and not disallow_close_indices:
+        if not force_end_indices:
             return scores
 
         scores_processed = scores.clone()
-        if disallow_close_indices:
-            scores_processed[disallow_close_indices, self.end_thinking_token_id] = -math.inf
-
         if force_end_indices:
             scores_processed[force_end_indices] = -math.inf
-            end_token_logits = scores[force_end_indices, self.end_thinking_token_id]
-            safe_end_token_logits = torch.where(
-                torch.isfinite(end_token_logits),
-                end_token_logits,
-                torch.zeros_like(end_token_logits),
-            )
-            scores_processed[force_end_indices, self.end_thinking_token_id] = safe_end_token_logits
+            zero_logits = torch.zeros(len(force_end_indices), device=scores.device, dtype=scores.dtype)
+            scores_processed[force_end_indices, self.end_thinking_token_id] = zero_logits
 
         return scores_processed
 
