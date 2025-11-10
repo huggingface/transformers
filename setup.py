@@ -113,7 +113,7 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "hf_xet",
-    "huggingface-hub==1.0.0.rc6",
+    "huggingface-hub>=1.0.0,<2.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
@@ -392,6 +392,7 @@ extras["torchhub"] = deps_list(
 extras["benchmark"] = deps_list("optimum-benchmark")
 
 # OpenTelemetry dependencies for metrics collection in continuous batching
+# TODO: refactor this to split API and SDK; SDK and exporter should only be needed to run code that collects metrics whereas API is what people will need to instrument their code and handle exporter themselves
 extras["open-telemetry"] = deps_list("opentelemetry-api") + ["opentelemetry-exporter-otlp", "opentelemetry-sdk"]
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py

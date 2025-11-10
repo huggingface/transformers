@@ -83,6 +83,9 @@ class GenerationOutput:
     status: RequestStatus = RequestStatus.PENDING
     created_time: float = field(default_factory=time.time)
 
+    def is_finished(self) -> bool:
+        return self.status == RequestStatus.FINISHED
+
 
 @dataclass
 class RequestState:
