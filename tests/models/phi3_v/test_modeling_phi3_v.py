@@ -120,7 +120,6 @@ class Phi3VModelTester:
             ]
         )
         config = self.get_config()
-        print(config.__class__.__name__, "in test_modeling_phi3_v.py")
         return config, pixel_values
 
     def prepare_config_and_inputs_for_common(self):
@@ -378,7 +377,6 @@ class Phi3VIntegrationTest(unittest.TestCase):
         ]
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         text = processor.batch_decode(output, skip_special_tokens=True)
-        # print(repr(text))
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
@@ -411,7 +409,5 @@ class Phi3VIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = "\n \n \nWhat do these two images have in common? \n Both of"
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        # print(generated_ids.shape, generated_ids[0][len(inputs['input_ids'][0]):], "multi-image")
         text = processor.decode(output[0], skip_special_tokens=True)
-        # print(repr(text),"multi-image")
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
