@@ -105,10 +105,16 @@ def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Cal
 
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
-            if flash_attn_varlen_func is None or flash_attn_func is None:
+            if flash_attn_varlen_func is None:
                 raise ValueError(
                     f"Could not find the currently requested flash attention implementation at `{implementation}`."
-                    f"Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn`."
+                    "Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn`."
+                )
+            if flash_attn_func is None:
+                logger.warning(
+                    f"The loaded flash attention implementation at `{implementation}` only supports varlen, i.e. "
+                    "it can only be used with continous batching and does not support the full functionality for "
+                    "the base transformers generation methods."
                 )
 
     return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input
