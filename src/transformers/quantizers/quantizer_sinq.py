@@ -23,17 +23,34 @@ except Exception:  # pragma: no cover
 # top-level helpers in quantizer_sinq.py
 def _normalize_cuda_device(dev: Optional[Union[str, int]]) -> str:
     """
-    Returns a canonical CUDA device string like 'cuda' or 'cuda:1'.
-    Accepts: 'auto', None -> 'cuda'
-             'cuda', 'cuda:0', 0, 1 -> canonicalized forms
+    Returns a canonical device string like 'cuda', 'cuda:1', or 'cpu'.
+    Behavior:
+      - 'auto' or None -> 'cuda' if available, else 'cpu'
+      - 'cpu' -> 'cpu'
+      - 'cuda', 'cuda:0', 0, 1 -> canonicalized CUDA forms
     """
+    # Handle 'auto' or None
     if dev is None or dev == "auto":
-        return "cuda"
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    
+    # Explicit CPU
+    if dev == "cpu":
+        return "cpu"
+    
+    # Numeric device index
     if isinstance(dev, int):
-        return f"cuda:{dev}"
+        if torch.cuda.is_available():
+            return f"cuda:{dev}"
+        else:
+            return "cpu"
+    
+    # String CUDA device
     if isinstance(dev, str):
         if dev.startswith("cuda"):
+            if not torch.cuda.is_available():
+                return "cpu"
             return dev
+    
     raise ValueError(f"Unsupported device spec: {dev!r}")
 
 

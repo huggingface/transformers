@@ -9,7 +9,7 @@
 
 ### 🔍 What You’ll Find Here
 
-- <u>[1. Quantize (and save) any LLM with SINQ](#1-quantize-any-llm-with-sinq)</u>
+- [1. Quantize (and save) any LLM with SINQ](#1-quantize-any-llm-with-sinq)
 - [2. How to Cite This Work](#2-how-to-cite-this-work)
 - [3. Current Limitations](#3-current-limitations)
 
@@ -167,4 +167,4 @@ If you find **SINQ** useful in your research or applications
 
 ## 3. Current Limitations
 
-SINQ quantization strategy and SINQ quantized models do not support Multi-GPU option, so if your system counts multiple GPUs please specify which one should be used.
+At the moment the SINQ quantization strategy and SINQ quantized models do not support Multi-GPU option, so if your system counts multiple GPUs please specify which one should be used.
