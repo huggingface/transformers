@@ -2585,8 +2585,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         if last in parent._modules:
                             parent._modules[last] = source_param_or_module
                             if missing_keys:
-                                for k, _ in parent.named_parameters():
-                                    missing_keys.discard(k)
+                                for k, _ in source_param_or_module.named_parameters():
+                                    missing_keys.discard(f"{parent_path}.{last}.{k}")
                         else:
                             setattr(parent, last, source_param_or_module)
                             self._adjust_bias(parent, source_param_or_module)

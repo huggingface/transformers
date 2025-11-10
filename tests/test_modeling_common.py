@@ -1937,7 +1937,8 @@ class ModelTesterMixin:
                     for k, v in model_tied.state_dict().items():
                         with self.subTest(f"{model_class.__name__}.{k}"):
                             torch.testing.assert_close(
-                                v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
+                                v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}.\n"
+                                "This probably means that it was not set with the correct value when tying."
                             )
 
                     # Checking the tensor sharing are correct on the new model (weights are properly tied in both cases)
