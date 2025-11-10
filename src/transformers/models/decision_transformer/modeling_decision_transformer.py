@@ -121,7 +121,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
-        self.is_causal = True
+        self.is_causal = not is_cross_attention
 
     def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
@@ -234,13 +234,6 @@ class DecisionTransformerGPT2Attention(nn.Module):
             if is_cross_attention:
                 past_key_values.is_updated[self.layer_idx] = True
 
-        is_causal = attention_mask is None and query_states.shape[-2] > 1 and not is_cross_attention
-
-        # For flash attention backends, we must keep causal behavior even when a 2D padding mask is provided
-        # (flash attention uses `is_causal` for the triangular mask and expects an optional 2D key padding mask)
-        if self.config._attn_implementation in {"flash_attention_2", "flash_attention_3"} and not is_cross_attention:
-            is_causal = query_states.shape[-2] > 1
-
         using_eager = self.config._attn_implementation == "eager"
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -258,7 +251,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
                 value_states,
                 attention_mask,
                 dropout=self.attn_dropout.p if self.training else 0.0,
-                is_causal=is_causal,
+                is_causal=self.is_causal,
                 **kwargs,
             )
 
