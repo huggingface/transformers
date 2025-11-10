@@ -2472,11 +2472,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     module.weight.fill_(1.0)
                 if hasattr(module, "bias") and module.bias is not None:
                     module.bias.zero_()
-            if hasattr(module, "gate_up_proj"):
+            if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
                 module.gate_up_proj.normal_(mean=0.0, std=std)
-            if hasattr(module, "down_proj"):
+            if isinstance(getattr(module, "down_proj", None), nn.Parameter):
                 module.down_proj.normal_(mean=0.0, std=std)
-            if hasattr(module, "gate"):
+            if isinstance(getattr(module, "gate", None), nn.Parameter):
                 module.gate.normal_(mean=0.0, std=std)
         except Exception as e:
             logger.warning(f"Failed to init: {str(e)}")
@@ -2636,7 +2636,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if missing_keys is None:
             # called from `post_init`
             self.tie_weight_source_and_target(self, missing_keys, "")
-        else:
+        else: # this is from_pretrained, so its not called on every sub module
             for module_prefix, module in self.named_modules():
                 # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
                 if isinstance(module, PreTrainedModel):
