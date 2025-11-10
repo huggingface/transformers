@@ -147,7 +147,11 @@ class IsaacVisionConfig(PreTrainedConfig):
 
 
 class IsaacConfig(PretrainedConfig):
-    """Configuration class for Isaac multimodal model."""
+    """Configuration class for Isaac multimodal model.
+
+    This configuration corresponds to checkpoints such as
+    [Perceptron/isaac-base](https://huggingface.co/Perceptron/isaac-base).
+    """
 
     model_type = "isaac"
     sub_configs = {"vision_config": IsaacVisionConfig, "text_config": Qwen3Config}
