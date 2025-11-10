@@ -1832,6 +1832,11 @@ class IsaacModel(Qwen3PreTrainedModel):
             VisionType: self.embed_vision,
         }
 
+        # Keep track of config attributes that downstream utilities may query directly on the model.
+        self.max_sequence_length = config.max_sequence_length
+        self.vision_rescale_factor = config.vision_rescale_factor
+        self.vision_token = config.vision_token
+
     def get_input_embeddings(self) -> nn.Module:
         return self.text_model.get_input_embeddings()
 
