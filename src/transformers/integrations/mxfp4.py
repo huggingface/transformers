@@ -104,6 +104,7 @@ class Mxfp4Quantize(ConversionOps):
 
             # We return an empty mapping since the module was updated in-place. This prevents
             # the loader from trying to materialize the original meta-parameter names again.
+            # We don't use set_param_for_module since it expects mainly a torch.nn.Parameter or a safetensors pointer
             return {}
 
 
@@ -547,7 +548,7 @@ def load_and_swizzle_mxfp4_convertops(module, param_name, param_value, target_de
         else:
             triton_weight_tensor.shape = torch.Size([local_experts, module.intermediate_size, module.hidden_size])
 
-        # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
+        # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It's like a subtensor
         setattr(module, proj, triton_weight_tensor)
         setattr(module, f"{proj}_precision_config", PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())))
         delattr(module, scales_attr)
