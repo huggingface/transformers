@@ -3902,13 +3902,21 @@ class ModelTesterMixin:
         """Make sure that each entry of the tp plan matches at least one param (this avoid typos and/or edge cases
         with regexes)"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        if config.base_model_tp_plan is None:
+        # If none of the config and subconfigs have a tp_plan, then skip (otherwise we should make sure to respect the plan)
+        if config.base_model_tp_plan is None and all(
+            getattr(config, key).base_model_tp_plan is None for key in config.sub_configs
+        ):
             self.skipTest("Model does not have a TP plan.")
 
         for model_class in self.all_model_classes:
             model = model_class(copy.deepcopy(config))
             param_names = {name for name, _ in model.named_parameters()} | {name for name, _ in model.named_buffers()}
             tp_plan = model.tp_plan
+            # Make sure the plan is not empty
+            self.assertTrue(
+                len(tp_plan) > 0,
+                f"No TP-plan found for class {model_class.__name__} even though the associated config has one",
+            )
             pattern_usage = {}
             for pattern in tp_plan:
                 # Check if this given pattern matches any param (the value attributed to the pattern does not matter)
