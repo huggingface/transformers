@@ -18,7 +18,7 @@ import os
 from shutil import copyfile
 from typing import Optional
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -99,6 +99,7 @@ class AlbertTokenizer(TokenizersBackend):
         self.vocab_file = vocab_file
         self.add_prefix_space = add_prefix_space
         self.trim_offsets = trim_offsets
+
         self.do_lower_case = do_lower_case
         self.keep_accents = keep_accents
 
@@ -126,6 +127,10 @@ class AlbertTokenizer(TokenizersBackend):
         list_normalizers = [
             normalizers.Replace("``", '"'),
             normalizers.Replace("''", '"'),
+            normalizers.NFKD(),
+            normalizers.StripAccents(),
+            normalizers.Lowercase(),
+            normalizers.Replace(Regex(" {2,}"), " "),
         ]
         if not self.keep_accents:
             list_normalizers.append(normalizers.NFKD())
@@ -159,8 +164,8 @@ class AlbertTokenizer(TokenizersBackend):
 
         super().__init__(
             tokenizer_object=tokenizer_object,
-            do_lower_case=do_lower_case,
-            keep_accents=keep_accents,
+            do_lower_case=self.do_lower_case,
+            keep_accents=self.keep_accents,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,
