@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 # Installation
 
-Transformers works with [PyTorch](https://pytorch.org/get-started/locally/). It has been tested on Python 3.9+ and PyTorch 2.2+.
+Transformers works with [PyTorch](https://pytorch.org/get-started/locally/). It has been tested on Python 3.9+ and PyTorch 2.3+.
 
 ## Virtual environment
 
