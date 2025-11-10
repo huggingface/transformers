@@ -90,7 +90,6 @@
 import copy
 from typing import Any
 
-# Build the list of all image processors
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...models.qwen3.configuration_qwen3 import Qwen3Config

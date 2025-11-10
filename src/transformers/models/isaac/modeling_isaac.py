@@ -93,6 +93,12 @@ from typing import Any, Callable, Optional
 
 import torch
 import torch.nn as nn
+from genesis.public.tensorstream.tensor_stream import TensorStream, TextType, VisionType, group_streams
+from genesis.public.tensorstream.tensor_stream_utils import (
+    compute_mrope_pos_tensor,
+    modality_mask,
+    reconstruct_tensor_stream_from_compact_dict,
+)
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, SlidingWindowCache, StaticCache

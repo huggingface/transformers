@@ -92,6 +92,9 @@ from typing import Optional
 
 import PIL.Image
 import torch
+from genesis.public.tensorstream.tensor_stream import Event, Stream, TensorStream, TextType, VisionType, create_stream
+from genesis.public.tensorstream.tensor_stream_utils import slice as ts_slice
+from genesis.public.tensorstream.tensor_stream_utils import tensor_stream_token_view
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import DefaultFastImageProcessorKwargs

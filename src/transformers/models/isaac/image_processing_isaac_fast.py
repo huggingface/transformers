@@ -292,7 +292,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     def resize(
         self,
-        image: "torch.Tensor",
+        image: torch.Tensor,
         size: SizeDict,
         interpolation: Optional[Any] = None,
         antialias: bool = True,
@@ -327,7 +327,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[torch.Tensor],
         do_resize: bool,
         size: Optional[SizeDict],
         interpolation: Optional[Any],
