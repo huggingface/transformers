@@ -804,6 +804,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
 @auto_docstring
 class Qwen3VLModel(Qwen2_5_VLModel):
     config: Qwen3VLConfig
+    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {}
     _no_split_modules = ["Qwen3VLTextDecoderLayer", "Qwen3VLVisionBlock"]
 

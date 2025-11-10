@@ -915,7 +915,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel):
 
 @auto_docstring
 class Qwen3VLModel(Qwen3VLPreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

@@ -1872,7 +1872,6 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
 
 class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     config: Gemma3nConfig
-    base_model_prefix = ""
     input_modalities = ["image", "text", "audio"]
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
 

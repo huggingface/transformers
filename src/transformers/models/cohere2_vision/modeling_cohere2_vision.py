@@ -129,7 +129,7 @@ class Cohere2VisionCausalLMOutputWithPast(ModelOutput):
 @auto_docstring
 class Cohere2VisionPreTrainedModel(PreTrainedModel):
     config: Cohere2VisionConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"

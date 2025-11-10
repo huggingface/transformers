@@ -1496,6 +1496,7 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
 @auto_docstring
 class Florence2PreTrainedModel(LlavaPreTrainedModel):
     config_class = Florence2Config
+    base_model_prefix = "model"
 
     _supports_attention_backend = False
 

@@ -1585,7 +1585,7 @@ class Gemma3nDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Gemma3nPreTrainedModel(PreTrainedModel):
     config: Gemma3nConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
