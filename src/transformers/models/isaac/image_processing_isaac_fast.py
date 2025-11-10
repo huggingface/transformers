@@ -4,7 +4,9 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Perceptron, Inc. Non-Production License
+# Copyright (c) 2024 Perceptron, Inc.  All rights reserved.
+# Perceptron, Inc. Non-Production License (2024-01-01)
+
 
 ### 1. Scope and acceptance
 
@@ -91,16 +93,12 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn.functional as F
 
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    BatchFeature,
-    SizeDict,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, group_images_by_shape, reorder_images
 from ...image_utils import ChannelDimension, PILImageResampling
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...tokenization_utils import TensorType
+from ...utils import auto_docstring
 
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
@@ -294,7 +292,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     def resize(
         self,
-        image: torch.Tensor,
+        image: "torch.Tensor",
         size: SizeDict,
         interpolation: Optional[Any] = None,
         antialias: bool = True,
@@ -329,7 +327,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: list[torch.Tensor],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: Optional[SizeDict],
         interpolation: Optional[Any],

@@ -4,7 +4,9 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Perceptron, Inc. Non-Production License
+# Copyright (c) 2024 Perceptron, Inc.  All rights reserved.
+# Perceptron, Inc. Non-Production License (2024-01-01)
+
 
 ### 1. Scope and acceptance
 
@@ -88,8 +90,10 @@
 import copy
 from typing import Any
 
+# Build the list of all image processors
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
+from ...models.qwen3.configuration_qwen3 import Qwen3Config
 
 
 class IsaacVisionConfig(PretrainedConfig):
@@ -132,14 +136,6 @@ class IsaacVisionConfig(PretrainedConfig):
 
         if self._attn_implementation is None:
             self._attn_implementation = "flash_attention_2"
-
-    @property
-    def attn_implementation(self) -> str | None:
-        return self._attn_implementation
-
-    @attn_implementation.setter
-    def attn_implementation(self, value: str | None) -> None:
-        self._attn_implementation = value
 
 
 class IsaacConfig(PretrainedConfig):

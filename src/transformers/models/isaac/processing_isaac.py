@@ -4,7 +4,9 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Perceptron, Inc. Non-Production License
+# Copyright (c) 2024 Perceptron, Inc.  All rights reserved.
+# Perceptron, Inc. Non-Production License (2024-01-01)
+
 
 ### 1. Scope and acceptance
 
@@ -86,17 +88,16 @@
 
 import math
 import re
+from typing import Optional
 
 import PIL.Image
 import torch
-from genesis.public.tensorstream.tensor_stream import Event, Stream, TensorStream, TextType, VisionType, create_stream
-from genesis.public.tensorstream.tensor_stream_utils import slice as ts_slice
-from genesis.public.tensorstream.tensor_stream_utils import tensor_stream_token_view
 
-from ...image_processing_utils_fast import BatchFeature, DefaultFastImageProcessorKwargs
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils_fast import DefaultFastImageProcessorKwargs
+from ...models.auto.tokenization_auto import AutoTokenizer
 from ...processing_utils import ProcessorMixin
-from ...utils import TensorType
-from ..auto import AutoTokenizer
+from ...tokenization_utils import TensorType
 from .configuration_isaac import IsaacConfig
 
 
@@ -157,12 +158,12 @@ def create_text_event(tokenizer: AutoTokenizer, text: str, time: float = 0.0) ->
 
 class IsaacProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "IsaacImageProcessorFast"
+    image_processor_class = ("IsaacImageProcessorFast",)
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(
         self,
-        image_processor: "IsaacImageProcessorFast | None" = None,
+        image_processor: Optional["IsaacImageProcessorFast"] = None,
         tokenizer: Qwen2Tokenizer | None = None,
         *,
         vision_token: str = "<image>",
