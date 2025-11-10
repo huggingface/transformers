@@ -1,0 +1,3 @@
+tests/models/bert_japanese/test_tokenization_bert_japanese.py
+tests/models/clip/test_tokenization_clip.py
+tests/models/openai/test_tokenization_openai.py
