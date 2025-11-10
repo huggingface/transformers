@@ -1489,6 +1489,8 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         r"""
+        Forward pass for conditional generation supporting both standard inputs and TensorStream.
+
         tensor_stream (`TensorStream`, *optional*):
             Packed multimodal stream (text, vision, audio tokens) that already encodes spatial metadata. When provided,
             the model derives embeddings, modality masks, and 3D rotary coordinates directly from the stream instead of
