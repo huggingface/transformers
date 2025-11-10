@@ -1535,15 +1535,16 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- Support for expanding tensors without a batch size dimension
-        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_t
+        # Overwritten -- Qwen3VL use timestamps and remove second_per_grid_ts
+        # Support for expanding tensors without a batch size dimension
+        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw
         # pixel_values.shape[0] is sum(seqlen_images for samples)
         # image_grid_thw.shape[0] is sum(num_images for samples)
 
         if expand_size == 1:
             return input_ids, model_kwargs
 
-        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
+        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
         def _expand_dict_for_generation_visual(dict_to_expand):
             image_grid_thw = model_kwargs.get("image_grid_thw", None)
@@ -1551,6 +1552,17 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
             image_nums, video_nums = self._get_image_nums_and_video_nums(
                 input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None)
             )
+
+            # video_nums: (batch_size,)
+            # since video_nums is the number of videos in the input dependent on the input_ids(vision_start),
+            # but qwen3vl append vision_start to each frame of each video, so we need to recover the real video_nums according to video_grid_thw
+            if video_grid_thw is not None:
+                cumulative_frame_counts = torch.cumsum(video_grid_thw[:, 0], dim=0)
+                cumulative_token_video_counts = torch.cumsum(video_nums, dim=0)
+                # Find video boundaries in cumulative_frame_counts
+                video_boundary_indices = torch.searchsorted(cumulative_frame_counts, cumulative_token_video_counts)
+                # example: video_boundary_indices = [3, 5] means video_nums = [4, 2]
+                video_nums = torch.diff(torch.cat([-video_boundary_indices.new_ones(1), video_boundary_indices]))
 
             def _repeat_interleave_samples(x, lengths, repeat_times):
                 samples = torch.split(x, lengths)
@@ -1583,10 +1595,6 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
                     lengths = list(video_nums)
                     dict_to_expand[key] = _repeat_interleave_samples(
                         dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "second_per_grid_ts":
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
                     )
             return dict_to_expand
 
