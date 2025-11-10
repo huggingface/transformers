@@ -2578,6 +2578,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             submodule, target_entity = target_n.rsplit(".", 1)
                             submodule = self.get_submodule(submodule)
                             setattr(submodule, target_entity, source_param_or_module)
+                            self._adjust_bias(submodule, source_param_or_module)
                             if missing_keys:
                                 missing_keys.discard(target_n)  # probably not full match here?
                 else:
@@ -2585,6 +2586,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         submodule, weight = target_name.rsplit(".", 1)
                         submodule = top_level.get_submodule(submodule)
                         setattr(submodule, weight, source_param_or_module)
+                        self._adjust_bias(submodule, source_param_or_module)
                     else:
                         setattr(top_level, target_name, source_param_or_module)
 
@@ -2602,6 +2604,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         missing_keys.discard(target_n)
                 else:
                     missing_keys.discard(target_name)
+
+    def _adjust_bias(self, output_embeddings, input_embeddings):
+        if getattr(output_embeddings, "bias", None) is not None and hasattr(output_embeddings, "weight"):
+            weight_shape = output_embeddings.weight.shape
+            output_embeddings.bias.data = nn.functional.pad(
+                output_embeddings.bias.data,
+                (0, weight_shape[0] - output_embeddings.bias.shape[0]),
+                "constant",
+                0,
+            )
+        if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
+            output_embeddings.out_features = input_embeddings.num_embeddings
 
     def tie_weights(self, missing_keys: Optional[set[str]] = None):
         """

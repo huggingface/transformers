@@ -397,7 +397,6 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
         "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         raise AttributeError("No need to inherit it!")
 
