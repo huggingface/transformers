@@ -90,12 +90,12 @@
 import copy
 from typing import Any, Optional, Union
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
 
 
-class IsaacVisionConfig(PretrainedConfig):
+class IsaacVisionConfig(PreTrainedConfig):
     """Vision configuration for Isaac with Pixel Shuffle support.
 
     Extends Siglip2VisionConfig with additional fields for pixel shuffle.

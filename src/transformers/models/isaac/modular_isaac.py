@@ -86,8 +86,8 @@ import copy
 import math
 import re
 from collections import defaultdict
-from collections.abc import Sequence
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable, Sequence
+from typing import Any, Optional, Union
 
 import PIL.Image
 import torch
@@ -118,7 +118,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
+    ImagesKwargs,
     SizeDict,
     group_images_by_shape,
     reorder_images,
@@ -211,7 +211,7 @@ class IsaacVisionConfig(Siglip2VisionConfig):
             self._attn_implementation = "flash_attention_2"
 
 
-class IsaacImageProcessorKwargs(DefaultFastImageProcessorKwargs, total=False):
+class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
     patch_size: Optional[int]
     max_num_patches: Optional[int]
     min_num_patches: Optional[int]
