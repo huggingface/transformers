@@ -16,7 +16,7 @@
 import inspect
 import math
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 import torch
@@ -260,7 +260,7 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         self._prompt_length_override: Optional[int] = prompt_length
         self._tracked_prompt_length: Optional[int] = prompt_length
 
-    def _thinking_block_state(self, sequence: torch.LongTensor, prompt_length: int) -> Tuple[Optional[int], bool]:
+    def _thinking_block_state(self, sequence: torch.LongTensor, prompt_length: int) -> tuple[Optional[int], bool]:
         """
         Returns the first open `<think>` position (if any) together with a flag indicating whether a thinking block has
         started either in the prompt (and carried over) or in the generated continuation.
