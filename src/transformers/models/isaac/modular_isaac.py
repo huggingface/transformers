@@ -1,20 +1,22 @@
-# Perceptron, Inc. Non-Production License
+# Copyright (c) 2024 Perceptron, Inc.  All rights reserved.
+# Perceptron, Inc. Non-Production License (2024-01-01)
+
 
 ### 1. Scope and acceptance
 
 # **1.1. Scope of the Agreement.**
-# This Agreement applies to any use, modification, or Distribution of any Perceptron Model by You, regardless of the source You obtained a copy of such Perceptron Model.
+# This Agreement applies to any use, modification, or Distribution of any Perceptron Model by You, regardless of the source You obtained a copy of such Perceptron Model. 
 #
-# **1.2. Acceptance.** By accessing, using, modifying, Distributing a Perceptron Model, or by creating, using or distributing a Derivative of the Perceptron Model, You agree to be bound by this Agreement.
+# **1.2. Acceptance.** By accessing, using, modifying, Distributing a Perceptron Model, or by creating, using or distributing a Derivative of the Perceptron Model, You agree to be bound by this Agreement. 
 #
 # **1.3. Acceptance on behalf of a third-party.** If You accept this Agreement on behalf of Your employer or another person or entity, You warrant and represent that You have the authority to act and accept this Agreement on their behalf. In such a case, the word “You” in this Agreement will refer to Your employer or such other person or entity.
 #
-# ## 2. License
-# **2.1. Grant of rights.** Subject to Section 3 below, Perceptron, Inc. hereby grants You a non-exclusive, royalty-free, worldwide, non-sublicensable, non-transferable, limited license to use, copy, modify, and Distribute under the conditions provided in Section 2.2 below, the Perceptron Model and any Derivatives made by or for Perceptron, Inc. and to create Derivatives of the Perceptron Model.
+# ## 2. License 
+# **2.1. Grant of rights.** Subject to Section 3 below, Perceptron, Inc. hereby grants You a non-exclusive, royalty-free, worldwide, non-sublicensable, non-transferable, limited license to use, copy, modify, and Distribute under the conditions provided in Section 2.2 below, the Perceptron Model and any Derivatives made by or for Perceptron, Inc. and to create Derivatives of the Perceptron Model. 
 #
-# **2.2. Distribution of Perceptron Model and Derivatives made by or for Perceptron, Inc..** Subject to Section 3 below, You may Distribute copies of the Perceptron Model and/or Derivatives made by or for Perceptron, Inc., under the following conditions:
-# - You must make available a copy of this Agreement to third-party recipients of the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. you Distribute, it being specified that any rights to use the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. shall be directly granted by Perceptron, Inc. to said third-party recipients pursuant to the Perceptron, Inc. Non-Production License agreement executed between these parties;
-# - You must retain in all copies of the Perceptron Models the following attribution notice within a “Notice” text file distributed as part of such copies: “Licensed by Perceptron, Inc. under the Perceptron, Inc. Non-Production License”.
+# **2.2. Distribution of Perceptron Model and Derivatives made by or for Perceptron, Inc..** Subject to Section 3 below, You may Distribute copies of the Perceptron Model and/or Derivatives made by or for Perceptron, Inc., under the following conditions: 
+# - You must make available a copy of this Agreement to third-party recipients of the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. you Distribute, it being specified that any rights to use the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. shall be directly granted by Perceptron, Inc. to said third-party recipients pursuant to the Perceptron, Inc. Non-Production License agreement executed between these parties;  
+# - You must retain in all copies of the Perceptron Models the following attribution notice within a “Notice” text file distributed as part of such copies: “Licensed by Perceptron, Inc. under the Perceptron, Inc. Non-Production License”.  
 #
 # **2.3. Distribution of Derivatives made by or for You.** Subject to Section 3 below, You may Distribute any Derivatives made by or for You under additional or different terms and conditions, provided that:
 # - In any event, the use and modification of Perceptron Model and/or Derivatives made by or for Perceptron, Inc. shall remain governed by the terms and conditions of this Agreement;
@@ -22,12 +24,12 @@
 # - Any terms and conditions You impose on any third-party recipients relating to Derivatives made by or for You shall neither limit such third-party recipients’ use of the Perceptron Model or any Derivatives made by or for Perceptron, Inc. in accordance with the Perceptron, Inc. Non-Production License nor conflict with any of its terms and conditions.
 #
 # ## 3. Limitations
-# **3.1. Misrepresentation.** You must not misrepresent or imply, through any means, that the Derivatives made by or for You and/or any modified version of the Perceptron Model You Distribute under your name and responsibility is an official product of Perceptron, Inc. or has been endorsed, approved or validated by Perceptron, Inc., unless You are authorized by Us to do so in writing.
+# **3.1. Misrepresentation.** You must not misrepresent or imply, through any means, that the Derivatives made by or for You and/or any modified version of the Perceptron Model You Distribute under your name and responsibility is an official product of Perceptron, Inc. or has been endorsed, approved or validated by Perceptron, Inc., unless You are authorized by Us to do so in writing. 
 #
 # **3.2. Usage Limitation**
-# - You shall only use the Perceptron Models and Derivatives (whether or not created by Perceptron, Inc.) for testing, research, Personal, or evaluation purposes in Non-Production Environments;
+# - You shall only use the Perceptron Models and Derivatives (whether or not created by Perceptron, Inc.) for testing, research, Personal, or evaluation purposes in Non-Production Environments; 
 # - Subject to the foregoing, You shall not supply the Perceptron Models or Derivatives in the course of a commercial activity, whether in return for payment or free of charge, in any medium or form, including but not limited to through a hosted or managed service (e.g. SaaS, cloud instances, etc.), or behind a software layer.
-#
+#  
 # **3.3. Usage not permitted under this Agreement.** If You want to use a Perceptron Model or a Derivative for any purpose that is not expressly authorized under this Agreement, You must request a license from Perceptron, Inc., which Perceptron, Inc. may grant to You in Perceptron, Inc.’s sole discretion. Please contact Perceptron, Inc. at the following e-mail address if You want to discuss such a license: sales@perceptron.inc
 #
 # ## 4. Intellectual Property
@@ -35,10 +37,10 @@
 #
 # **4.2. Outputs.** We claim no ownership rights in and to the Outputs. You are solely responsible for the Outputs You generate and their subsequent uses in accordance with this Agreement.
 #
-# **4.3. Derivatives.** By entering into this Agreement, You accept that any Derivatives that You may create or that may be created for You shall be subject to the restrictions set out in Section 3 of this Agreement.
+# **4.3. Derivatives.** By entering into this Agreement, You accept that any Derivatives that You may create or that may be created for You shall be subject to the restrictions set out in Section 3 of this Agreement.  
 #
 # # 5. Liability
-# **5.1. Limitation of liability.** In no event, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall Perceptron, Inc. be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this Agreement or out of the use or inability to use the Perceptron Models and Derivatives (including but not limited to damages for loss of data, loss of goodwill, loss of expected profit or savings, work stoppage, computer failure or malfunction, or any damage caused by malware or security breaches), even if  Perceptron, Inc. has been advised of the possibility of such damages.
+# **5.1. Limitation of liability.** In no event, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall Perceptron, Inc. be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this Agreement or out of the use or inability to use the Perceptron Models and Derivatives (including but not limited to damages for loss of data, loss of goodwill, loss of expected profit or savings, work stoppage, computer failure or malfunction, or any damage caused by malware or security breaches), even if  Perceptron, Inc. has been advised of the possibility of such damages. 
 #
 # **5.2. Indemnification.** You agree to indemnify and hold harmless Perceptron, Inc. from and against any claims, damages, or losses arising out of or related to Your use or Distribution of the Perceptron Models and Derivatives.
 #
@@ -46,9 +48,9 @@
 # **6.1. Disclaimer.** Unless required by applicable law or agreed to in writing, Perceptron, Inc. provides the Perceptron Models and Derivatives on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. Perceptron, Inc. does not represent nor warrant that the Perceptron Models and Derivatives will be error-free, meet Your or any third party’s requirements, be secure or will allow You or any third party to achieve any kind of result or generate any kind of content. You are solely responsible for determining the appropriateness of using or Distributing the Perceptron Models and Derivatives and assume any risks associated with Your exercise of rights under this Agreement.
 #
 # # 7. Termination
-# **7.1. Term.** This Agreement is effective as of the date of your acceptance of this Agreement or access to the concerned Perceptron Models or Derivatives and will continue until terminated in accordance with the following terms.
+# **7.1. Term.** This Agreement is effective as of the date of your acceptance of this Agreement or access to the concerned Perceptron Models or Derivatives and will continue until terminated in accordance with the following terms. 
 #
-# **7.2. Termination.** Perceptron, Inc. may terminate this Agreement at any time if You are in breach of this Agreement. Upon termination of this Agreement, You must cease to use all Perceptron Models and Derivatives and shall permanently delete any copy thereof. Sections 5, 6, 7 and 8 shall survive the termination of this Agreement.
+# **7.2. Termination.** Perceptron, Inc. may terminate this Agreement at any time if You are in breach of this Agreement. Upon termination of this Agreement, You must cease to use all Perceptron Models and Derivatives and shall permanently delete any copy thereof. Sections 5, 6, 7 and 8 shall survive the termination of this Agreement. 
 #
 # **7.3. Litigation.** If You initiate any legal action or proceedings against Us or any other entity (including a cross-claim or counterclaim in a lawsuit), alleging that the Model or a Derivative, or any part thereof, infringe upon intellectual property or other rights owned or licensable by You, then any licenses granted to You under this Agreement will immediately terminate as of the date such legal action or claim is filed or initiated.
 #
@@ -59,22 +61,22 @@
 #
 # **8.3. Severability.** If any provision of this Agreement is held to be invalid, illegal or unenforceable, the remaining provisions shall be unaffected thereby and remain valid as if such provision had not been set forth herein.
 #
-# # 9. Definitions
-# **“Agreement”**: means this Perceptron, Inc. Non-Production License agreement governing the access, use, and Distribution of the Perceptron Models and Derivatives.
+# # 9. Definitions 
+# **“Agreement”**: means this Perceptron, Inc. Non-Production License agreement governing the access, use, and Distribution of the Perceptron Models and Derivatives. 
 #
-# **“Derivative”**: means any (i) modified version of the Perceptron Model (including but not limited to any customized or fine-tuned version thereof), (ii) work based on the Perceptron Model, or (iii) any other derivative work thereof. For the avoidance of doubt, Outputs are not considered as Derivatives under this Agreement.
+# **“Derivative”**: means any (i) modified version of the Perceptron Model (including but not limited to any customized or fine-tuned version thereof), (ii) work based on the Perceptron Model, or (iii) any other derivative work thereof. For the avoidance of doubt, Outputs are not considered as Derivatives under this Agreement. 
 #
-# **“Distribution”**, **“Distributing”**, **“Distribute”** or **“Distributed”**: means providing or making available, by any means, a copy of the Perceptron Models and/or the Derivatives as the case may be, subject to Section 3 of this Agreement.
+# **“Distribution”**, **“Distributing”**, **“Distribute”** or **“Distributed”**: means providing or making available, by any means, a copy of the Perceptron Models and/or the Derivatives as the case may be, subject to Section 3 of this Agreement. 
 #
 # **“Perceptron, Inc.”**, **“We”** or **“Us”**: means Perceptron, Inc., a Delaware corporation with its principal place of business at 10900 NE 8th St Suite 613, Bellevue, WA 98004.
 #
-# **“Perceptron Model”**: means the foundational large language model(s), and its elements which include algorithms, software, instructed checkpoints, parameters, source code (inference code, evaluation code and, if applicable, fine-tuning code) and any other elements associated thereto made available by Perceptron, Inc. under this Agreement, including, if any, the technical documentation, manuals and instructions for the use and operation thereof.
+# **“Perceptron Model”**: means the foundational large language model(s), and its elements which include algorithms, software, instructed checkpoints, parameters, source code (inference code, evaluation code and, if applicable, fine-tuning code) and any other elements associated thereto made available by Perceptron, Inc. under this Agreement, including, if any, the technical documentation, manuals and instructions for the use and operation thereof. 
 #
-# **“Non-Production Environment”**: means any setting, use case, or application of the Perceptron Models or Derivatives that expressly excludes live, real-world conditions, commercial operations, revenue-generating activities, or direct interactions with or impacts on end users (such as, for instance, Your employees or customers). Non-Production Environment may include, but is not limited to, any setting, use case, or application for research, development, testing, quality assurance, training, internal evaluation (other than any internal usage by employees in the context of the company’s business activities), and demonstration purposes.
+# **“Non-Production Environment”**: means any setting, use case, or application of the Perceptron Models or Derivatives that expressly excludes live, real-world conditions, commercial operations, revenue-generating activities, or direct interactions with or impacts on end users (such as, for instance, Your employees or customers). Non-Production Environment may include, but is not limited to, any setting, use case, or application for research, development, testing, quality assurance, training, internal evaluation (other than any internal usage by employees in the context of the company’s business activities), and demonstration purposes. 
 #
-# **“Outputs”**: means any content generated by the operation of the Perceptron Models or the Derivatives from a prompt (i.e., text instructions) provided by users. For the avoidance of doubt, Outputs do not include any components of a Perceptron Models, such as any fine-tuned versions of the Perceptron Models, the weights, or parameters.
+# **“Outputs”**: means any content generated by the operation of the Perceptron Models or the Derivatives from a prompt (i.e., text instructions) provided by users. For the avoidance of doubt, Outputs do not include any components of a Perceptron Models, such as any fine-tuned versions of the Perceptron Models, the weights, or parameters. 
 #
-# **“Personal”**: means any use of a Perceptron Model or a Derivative that is (i) solely for personal, non-profit and non-commercial purposes and (ii) not directly or indirectly connected to any commercial activities, business operations, or employment responsibilities. For illustration purposes, Personal use of a Model or a Derivative does not include any usage by individuals employed in companies in the context of their daily tasks, any activity that is intended to generate revenue, or that is performed on behalf of a commercial entity.
+# **“Personal”**: means any use of a Perceptron Model or a Derivative that is (i) solely for personal, non-profit and non-commercial purposes and (ii) not directly or indirectly connected to any commercial activities, business operations, or employment responsibilities. For illustration purposes, Personal use of a Model or a Derivative does not include any usage by individuals employed in companies in the context of their daily tasks, any activity that is intended to generate revenue, or that is performed on behalf of a commercial entity. 
 #
 # **“You”**: means the individual or entity entering into this Agreement with Perceptron, Inc..
 
@@ -84,60 +86,81 @@ import copy
 import math
 import re
 from collections import defaultdict
-from collections.abc import Sequence
-from typing import Any, Callable, Optional, TypedDict, Union
+from typing import Any, Callable, Optional, Sequence, Union
 
 import PIL.Image
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from genesis.public.tensorstream.tensor_stream import (
-    Event,
-    Stream,
-    TensorStream,
-    TextType,
-    VisionType,
-    create_stream,
-    group_streams,
-)
-from genesis.public.tensorstream.tensor_stream_utils import (
-    compute_mrope_pos_tensor,
-    modality_mask,
-    reconstruct_tensor_stream_from_compact_dict,
-    tensor_stream_token_view,
-)
-from genesis.public.tensorstream.tensor_stream_utils import (
-    slice as ts_slice,
-)
-
-from ...cache_utils import Cache, SlidingWindowCache, StaticCache
-from ...generation.utils import GenerationMixin
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
+from transformers import (
+    AutoImageProcessor,
+    AutoModel,
+    AutoTokenizer,
     BatchFeature,
+    Cache,
+    Qwen3Config,
+    Qwen3ForCausalLM,
+    Qwen3PreTrainedModel,
+)
+from transformers.cache_utils import SlidingWindowCache, StaticCache
+from transformers.generation.utils import GenerationMixin
+from transformers.image_processing_utils_fast import (
+    BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     SizeDict,
     group_images_by_shape,
     reorder_images,
 )
-from ...image_utils import ChannelDimension, PILImageResampling
-from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ProcessorMixin, Unpack
-from ...utils import TensorType, auto_docstring
+from transformers.image_utils import (
+    ChannelDimension,
+    PILImageResampling,
+)
+from transformers.modeling_attn_mask_utils import AttentionMaskConverter
+from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+from transformers.models.qwen2.tokenization_qwen2 import Qwen2Tokenizer
+from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLRotaryEmbedding
+from transformers.models.siglip2.configuration_siglip2 import Siglip2VisionConfig
+from transformers.models.siglip2.modeling_siglip2 import (
+    Siglip2Attention,
+    Siglip2Encoder as HFSiglip2Encoder,
+    Siglip2EncoderLayer as HFSiglip2EncoderLayer,
+    Siglip2VisionEmbeddings as HFSiglip2VisionEmbeddings,
+)
+from transformers.processing_utils import ProcessorMixin, Unpack
+from transformers.tokenization_utils import TensorType
+from transformers.utils import auto_docstring
+from transformers.utils.generic import can_return_tuple
 
 # Vision preprocessing constants
-from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
-from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.import_utils import is_torchdynamo_compiling
-from ..auto import AutoImageProcessor, AutoModel, AutoTokenizer
-from ..qwen2.tokenization_qwen2 import Qwen2Tokenizer
-from ..qwen3.configuration_qwen3 import Qwen3Config
-from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM, Qwen3PreTrainedModel
-from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
-from ..siglip2.modeling_siglip2 import Siglip2EncoderLayer as HFSiglip2EncoderLayer
+from transformers.utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
+from transformers.utils.constants import IMAGENET_STANDARD_STD as VISION_STD
+from transformers.utils.import_utils import is_torchdynamo_compiling
+
+try:
+    from genesis.public.tensorstream.tensor_stream import (
+        Event,
+        Stream,
+        TensorStream,
+        TextType,
+        VisionType,
+        create_stream,
+        group_streams,
+    )
+    from genesis.public.tensorstream.tensor_stream_utils import (
+        compute_mrope_pos_tensor,
+        modality_mask,
+        reconstruct_tensor_stream_from_compact_dict,
+        tensor_stream_token_view,
+    )
+    from genesis.public.tensorstream.tensor_stream_utils import (
+        slice as ts_slice,
+    )
+except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+    raise ModuleNotFoundError(
+        "genesis.public.tensorstream is required for the Isaac HuggingFace integration. "
+        "Ensure the TensorStream package is installed and on PYTHONPATH."
+    ) from exc
 
 
 _ORIGINAL_ATTENTION_FUNCTIONS: dict[str, Callable[..., tuple[torch.Tensor, Optional[torch.Tensor]]]] = {}
@@ -176,14 +199,6 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 
         if self._attn_implementation is None:
             self._attn_implementation = "flash_attention_2"
-
-    @property
-    def attn_implementation(self) -> str | None:
-        return self._attn_implementation
-
-    @attn_implementation.setter
-    def attn_implementation(self, value: str | None) -> None:
-        self._attn_implementation = value
 
 
 class IsaacImageProcessorKwargs(DefaultFastImageProcessorKwargs, total=False):
@@ -250,7 +265,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     def resize(
         self,
-        image: torch.Tensor,
+        image: "torch.Tensor",
         size: SizeDict,
         interpolation: Optional[Any] = None,
         antialias: bool = True,
@@ -285,7 +300,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: list[torch.Tensor],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: Optional[SizeDict],
         interpolation: Optional[Any],
@@ -463,21 +478,24 @@ def build_document_attention_mask(
     return additive_mask.view(1, 1, total_tokens, total_tokens)
 
 
-def repeat_kv(hidden_states: torch.Tensor, num_key_value_groups: int) -> torch.Tensor:
-    """Repeat key/value heads for grouped-query attention."""
 
-    if num_key_value_groups == 1:
-        return hidden_states
 
-    batch, num_key_value_heads, seq_len, head_dim = hidden_states.shape
-    hidden_states = hidden_states[:, :, None, :, :].expand(
-        batch,
-        num_key_value_heads,
-        num_key_value_groups,
-        seq_len,
-        head_dim,
+def ensure_document_attention_mask(
+    attention_mask: Optional[torch.Tensor],
+    cu_seqlens: Optional[torch.Tensor],
+    total_tokens: int,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> Optional[torch.Tensor]:
+    if attention_mask is not None or cu_seqlens is None:
+        return attention_mask
+
+    return build_document_attention_mask(
+        cu_seqlens=cu_seqlens,
+        total_tokens=total_tokens,
+        dtype=dtype,
+        device=device,
     )
-    return hidden_states.reshape(batch, num_key_value_heads * num_key_value_groups, seq_len, head_dim)
 
 
 def flash_attention_document_mask_forward(
@@ -565,69 +583,72 @@ def sdpa_document_mask_forward(
     return Y.squeeze(0).permute(1, 0, 2)  # Back to (L, H, D)
 
 
-class IsaacVisionEmbeddings(nn.Module):
+class IsaacVisionEmbeddings(HFSiglip2VisionEmbeddings):
+    """Adapter around SigLIP2 vision embeddings that consumes packed patch sequences."""
+
     def __init__(self, config: IsaacVisionConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.patch_size = config.patch_size
+        super().__init__(config)
 
-        self.patch_embedding = nn.Linear(
-            in_features=config.num_channels * self.patch_size * self.patch_size,
-            out_features=self.embed_dim,
-        )
+    def forward(self, seq_patches: torch.Tensor, spatial_shapes: torch.Tensor) -> torch.Tensor:
+        packed_pixel_values, seq_lengths = self._pack_to_batch(seq_patches, spatial_shapes)
+        if packed_pixel_values is None:
+            return seq_patches.new_zeros((0, self.embed_dim))
 
-        self.num_patches = config.num_patches
-        self.position_embedding_size = int(self.num_patches**0.5)
-        self.position_embedding = nn.Embedding(self.num_patches, self.embed_dim)
+        embeddings = super().forward(packed_pixel_values, spatial_shapes)
+        return self._unpack_from_batch(embeddings, seq_lengths)
 
-    def positional_embeddings(self, spatial_shapes: torch.Tensor) -> torch.Tensor:
-        # Prepare positional embeddings grid: (1, embed_dim, h, w)
-        positional_embeddings = (
-            self.position_embedding.weight.reshape(self.position_embedding_size, self.position_embedding_size, -1)
-            .permute(2, 0, 1)
-            .unsqueeze(0)
-        )
+    def _pack_to_batch(
+        self,
+        seq_patches: torch.Tensor,
+        spatial_shapes: torch.Tensor,
+    ) -> tuple[torch.Tensor | None, torch.Tensor]:
+        if seq_patches.ndim != 2:
+            raise ValueError("`seq_patches` is expected to be 2D (total_patches, patch_dim).")
+        if spatial_shapes.ndim != 2 or spatial_shapes.size(-1) != 2:
+            raise ValueError("`spatial_shapes` must have shape (num_images, 2) with (height_tokens, width_tokens).")
 
-        pos_embeds_list = []
-        mode = "bilinear"
-        align_corners = False
-        for spatial_shape in spatial_shapes:
-            height, width = spatial_shape
-            # Guard to ensure height and width are positive for torch.compile
-            if height > 0 and width > 0:
-                resized_pos_embed = F.interpolate(
-                    positional_embeddings,
-                    size=(height, width),
-                    mode=mode,
-                    align_corners=align_corners,
-                    antialias=True,
-                )
-                # Reshape from (1, embed_dim, height, width) to (height*width, embed_dim)
-                resized_pos_embed = resized_pos_embed.reshape(self.embed_dim, height * width).transpose(0, 1)
-            else:
-                # Fallback - should never happen in practice
-                raise RuntimeError(
-                    "Encountered non-positive spatial dimensions while computing positional embeddings."
-                )
-            pos_embeds_list.append(resized_pos_embed)
+        seq_lengths = spatial_shapes.long().prod(dim=-1)
+        total_patches = int(seq_lengths.sum().item())
+        if total_patches != seq_patches.size(0):
+            raise ValueError(
+                "Mismatch between packed patches and spatial shapes: got "
+                f"{seq_patches.size(0)} patches but spatial shapes imply {total_patches}."
+            )
 
-        # Concatenate all positional embeddings along the sequence dimension
-        pos_embeds = torch.cat(pos_embeds_list, dim=0)
-        return pos_embeds
+        batch_size = spatial_shapes.size(0)
+        if batch_size == 0:
+            return None, seq_lengths
 
-    def forward(self, seq_patches: torch.Tensor, spatial_shapes: torch.Tensor):
-        # Apply patch embeddings
-        target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(seq_patches.to(dtype=target_dtype))
-        pos_embeds = self.positional_embeddings(spatial_shapes)
+        max_length = int(seq_lengths.max().item())
+        patch_dim = seq_patches.size(-1)
+        device = seq_patches.device
 
-        # Add positional embeddings to patch embeddings
-        embeddings = patch_embeds + pos_embeds
-        return embeddings
+        packed_pixel_values = seq_patches.new_zeros((batch_size, max_length, patch_dim), device=device)
+
+        start = 0
+        for batch_idx, length in enumerate(seq_lengths.tolist()):
+            if length == 0:
+                continue
+            end = start + length
+            packed_pixel_values[batch_idx, :length] = seq_patches[start:end]
+            start = end
+
+        return packed_pixel_values, seq_lengths
+
+    def _unpack_from_batch(self, embeddings: torch.Tensor, seq_lengths: torch.Tensor) -> torch.Tensor:
+        output_chunks: list[torch.Tensor] = []
+        for batch_idx, length in enumerate(seq_lengths.tolist()):
+            if length == 0:
+                continue
+            output_chunks.append(embeddings[batch_idx, :length])
+
+        if not output_chunks:
+            return embeddings.new_zeros((0, embeddings.size(-1)))
+
+        return torch.cat(output_chunks, dim=0)
 
 
-class IsaacVisionAttention(nn.Module):
+class IsaacVisionAttention(Siglip2Attention):
     """Custom attention that supports variable-length sequences with flash attention."""
 
     ATTENTION_KEY_MAP: dict[str, str] = {
@@ -642,28 +663,34 @@ class IsaacVisionAttention(nn.Module):
     }
 
     def __init__(self, vision_config):
-        super().__init__()
+        super().__init__(vision_config)
         self.vision_config = vision_config
-        self.config = vision_config
-        self.embed_dim = vision_config.hidden_size
-        self.num_heads = vision_config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = vision_config.attention_dropout
-        self.is_causal = False
-        self.num_key_value_groups = 1
+        self._variable_length_metadata = None
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+    def _variable_length_context(self, *, cu_seqlens=None, max_seqlen=None):
+        """Store packed-sequence metadata for the next forward call."""
+        self._variable_length_metadata = (cu_seqlens, max_seqlen)
 
-    def forward(self, hidden_states, cu_seqlens=None, max_seqlen=None):
+    def _consume_variable_length_metadata(self):
+        if self._variable_length_metadata is None:
+            return None, None
+        cu_seqlens, max_seqlen = self._variable_length_metadata
+        self._variable_length_metadata = None
+        return cu_seqlens, max_seqlen
+
+    def forward(self, hidden_states, attention_mask=None, **kwargs):
+        cu_seqlens = kwargs.pop('cu_seqlens', None)
+        max_seqlen = kwargs.pop('max_seqlen', None)
+        kwargs.pop('output_attentions', None)
+        if kwargs:
+            unexpected = ', '.join(sorted(kwargs))
+            raise TypeError(f'Unexpected kwargs for IsaacVisionAttention.forward: {unexpected}')
+        cached_cu, cached_max = self._consume_variable_length_metadata()
+        if cu_seqlens is None:
+            cu_seqlens = cached_cu
+        if max_seqlen is None:
+            max_seqlen = cached_max
+
         # Expect packed sequences with batch_size == 1
         batch_size, L, _ = hidden_states.shape
         if batch_size != 1:
@@ -681,11 +708,12 @@ class IsaacVisionAttention(nn.Module):
 
         attn_impl = getattr(self.vision_config, "_attn_implementation", "flash_attention_3")
 
-        attn_mask = build_document_attention_mask(
-            cu_seqlens=cu_seqlens,
-            total_tokens=L,
-            dtype=q.dtype,
-            device=q.device,
+        attn_mask = ensure_document_attention_mask(
+            attention_mask,
+            cu_seqlens,
+            L,
+            q.dtype,
+            q.device,
         )
 
         resolved_key = self.ATTENTION_KEY_MAP.get(attn_impl)
@@ -735,62 +763,78 @@ class IsaacVisionEncoderLayer(HFSiglip2EncoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor = None,
-        max_seqlen: int = None,
-    ) -> torch.Tensor:
-        residual = hidden_states
+        attention_mask: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        output_attentions: bool = False,
+    ):
+        if cu_seqlens is not None or max_seqlen is not None:
+            self.self_attn._variable_length_context(
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
+            )
 
-        hidden_states = self.layer_norm1(hidden_states)
-
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
+        attention_mask = ensure_document_attention_mask(
+            attention_mask,
+            cu_seqlens,
+            hidden_states.size(1),
+            hidden_states.dtype,
+            hidden_states.device,
         )
 
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
+        return super().forward(
+            hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+        )
 
 
-class IsaacVisionEncoder(nn.Module):
+class IsaacVisionEncoder(HFSiglip2Encoder):
     """Encoder using Isaac encoder layers with variable-length attention support."""
 
     def __init__(self, config: IsaacVisionConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         self.layers = nn.ModuleList([IsaacVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
+    def __variable_length_context(self, cu_seqlens, max_seqlen) -> None:
+        if cu_seqlens is None and max_seqlen is None:
+            return
+
+        for layer in self.layers:
+            if isinstance(layer, IsaacVisionEncoderLayer):
+                layer.self_attn._variable_length_context(
+                    cu_seqlens=cu_seqlens,
+                    max_seqlen=max_seqlen,
+                )
+
+    @can_return_tuple
     def forward(
         self,
         inputs_embeds,
-        cu_seqlens: torch.Tensor | None = None,
-        max_seqlen: int | None = None,
-        output_hidden_states: bool = False,
+        attention_mask: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
-        all_hidden_states = () if output_hidden_states else None
+        self.__variable_length_context(cu_seqlens, max_seqlen)
 
-        hidden_states = inputs_embeds
+        attention_mask = ensure_document_attention_mask(
+            attention_mask,
+            cu_seqlens,
+            inputs_embeds.size(1),
+            inputs_embeds.dtype,
+            inputs_embeds.device,
+        )
 
-        for encoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            hidden_states = encoder_layer(
-                hidden_states,
-                cu_seqlens,
-                max_seqlen,
-            )
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        return hidden_states, all_hidden_states, None
+        return super().forward(
+            inputs_embeds,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
 
 def _isaac_flash_attention_forward(
@@ -1137,11 +1181,13 @@ class IsaacVisionTransformer(nn.Module):
         max_seqlen = int(seq_sizes.max().item()) if seq_sizes.numel() > 0 else 0
 
         # Pass through encoder with variable-length attention parameters
-        hidden_states, _, _ = self.encoder(
+        encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
+            return_dict=True,
         )
+        hidden_states = encoder_outputs.last_hidden_state
 
         # Apply final layer normalization
         hidden_states = self.post_layernorm(hidden_states)
@@ -1272,65 +1318,6 @@ def patchify_vision(image: torch.Tensor, patch_size: int) -> torch.Tensor:
     patches = patches.permute(0, 1, 3, 2, 4, 5)
     patches = patches.reshape(num_images, height // patch_size, width // patch_size, channels * patch_size * patch_size)
     return patches
-
-
-def precompute_cos_sin_3d(
-    position_ids: torch.Tensor,  # shape (3, B, T)
-    inv_freq: torch.Tensor,  # shape (dim//2,)
-    mrope_half_section: list[int],  # sum to dim//2
-) -> tuple[torch.Tensor, torch.Tensor]:
-    r"""Generate 3D rotary embeddings for multi-axis positions.
-
-    Args:
-        position_ids (`torch.Tensor`):
-            Tensor of shape `(3, batch_size, seq_len)` containing positional indices for the x/y/t axes.
-        inv_freq (`torch.Tensor`):
-            Precomputed inverse frequency vector used to derive rotary phases.
-        mrope_half_section (`list[int]`):
-            Sizes the axis-specific frequency blocks.
-
-    Returns:
-        `tuple[torch.Tensor, torch.Tensor]`: Cosine and sine tensors, each of shape `(batch_size, seq_len, dim)`, ready
-        to be passed into rotary attention layers.
-    """
-    B = position_ids.shape[1]
-    T = position_ids.shape[2]
-    dim_half = inv_freq.shape[0]
-    device = position_ids.device
-
-    # Initialize with full dimension (not half) to match LLaMA
-    cos_3d = torch.zeros((B, T, dim_half * 2), dtype=torch.float32, device=device)
-    sin_3d = torch.zeros((B, T, dim_half * 2), dtype=torch.float32, device=device)
-
-    offset = 0
-    for d in range(3):
-        block_size = mrope_half_section[d]
-        freq_slice = inv_freq[offset : offset + block_size]  # shape => (block_size,)
-        # shape => (B, T, block_size)
-        phase = position_ids[d].unsqueeze(-1).float() * freq_slice
-
-        cos_part = phase.cos()
-        sin_part = phase.sin()
-
-        # Duplicate values for both halves of the dimension
-        cos_3d[:, :, offset : offset + block_size] = cos_part
-        cos_3d[:, :, dim_half + offset : dim_half + offset + block_size] = cos_part
-        sin_3d[:, :, offset : offset + block_size] = sin_part
-        sin_3d[:, :, dim_half + offset : dim_half + offset + block_size] = sin_part
-
-        offset += block_size
-
-    return cos_3d, sin_3d
-
-
-class RopeScaling(TypedDict, total=False):
-    rope_type: str
-    factor: float
-    mrope_section: list[int]
-    mrope_interleaved: bool
-    low_freq_factor: float
-    high_freq_factor: float
-    original_max_position_embeddings: int
 
 
 class IsaacConfig(Qwen3Config):
@@ -1469,12 +1456,12 @@ def create_text_event(tokenizer: AutoTokenizer, text: str, time: float = 0.0) ->
 
 class IsaacProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "IsaacImageProcessorFast"
+    image_processor_class = ("IsaacImageProcessorFast",)
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(
         self,
-        image_processor: "IsaacImageProcessorFast | None" = None,
+        image_processor: IsaacImageProcessorFast | None = None,
         tokenizer: Qwen2Tokenizer | None = None,
         *,
         vision_token: str = "<image>",
@@ -1658,36 +1645,19 @@ class IsaacRotaryEmbedding(nn.Module):
     def __init__(self, config: IsaacConfig, device=None):
         super().__init__()
 
-        self.config = config
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
         rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
-        rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", "default"))
-        if rope_type not in ROPE_INIT_FUNCTIONS:
-            raise ValueError(f"Unsupported rope_type '{rope_type}' for IsaacRotaryEmbedding")
-
-        self.rope_type = rope_type
-        rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
 
         sanitized_scaling = {k: v for k, v in rope_scaling.items() if k not in self.EXTRA_ROPE_KEYS}
-        if sanitized_scaling != rope_scaling:
-            config_for_rope = copy.copy(rope_source_cfg)
-            config_for_rope.rope_scaling = sanitized_scaling
-        else:
-            config_for_rope = rope_source_cfg
+        config_for_rope = copy.copy(rope_source_cfg)
+        config_for_rope.rope_scaling = sanitized_scaling if sanitized_scaling else None
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
-        inv_freq, attention_scaling = rope_init_fn(config_for_rope, device=init_device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.attention_scaling = self._normalize_scale(attention_scaling)
+        self._qwen_rotary = Qwen2_5_VLRotaryEmbedding(config_for_rope, device=init_device)
 
-        rotary_half_dim = self.inv_freq.shape[0]
+        rotary_half_dim = self._qwen_rotary.inv_freq.shape[0]
         self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
-
-    @staticmethod
-    def _normalize_scale(scale: torch.Tensor | float) -> torch.Tensor | float:
-        if isinstance(scale, torch.Tensor):
-            return scale.detach().clone()
-        return float(scale)
+        self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
     @staticmethod
     def _resolve_mrope_section(section: list[int] | None, rotary_half_dim: int) -> list[int]:
@@ -1706,27 +1676,54 @@ class IsaacRotaryEmbedding(nn.Module):
             )
         return section
 
-    def forward(self, position_ids: torch.Tensor, modality_tensor: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _combine_axes(self, tensor: torch.Tensor) -> torch.Tensor:
+        split_sections = tuple(self.mrope_section * 2)
+        chunks = tensor.split(split_sections, dim=-1)
+        return torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
+
+    @property
+    def inv_freq(self) -> torch.Tensor:
+        return self._qwen_rotary.inv_freq
+
+    def forward(
+        self,
+        position_ids: torch.Tensor,
+        modality_tensor: torch.Tensor,
+        hidden_states: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if position_ids.ndim != 3 or position_ids.size(-1) != 3:
+            raise ValueError("`position_ids` must have shape (batch, seq_len, 3) for MRoPE")
+        if modality_tensor.shape != position_ids.shape[:2]:
+            raise ValueError("`modality_tensor` must align with the first two dims of `position_ids`")
+
+        if hidden_states is None:
+            batch, seq_len, _ = position_ids.shape
+            hidden_states = torch.zeros(
+                batch,
+                seq_len,
+                self.hidden_size,
+                dtype=torch.float32,
+                device=position_ids.device,
+            )
+
         with torch.no_grad():
-            position_ids = position_ids.clone()
+            pos = position_ids.clone()
             not_spatial = modality_tensor != VisionType.image.value
             if not_spatial.any():
-                data_1d = position_ids[not_spatial][..., 0].unsqueeze(-1)
-                position_ids[not_spatial] = data_1d.expand(-1, position_ids.shape[-1])
+                data_1d = pos[not_spatial][..., 0].unsqueeze(-1)
+                pos[not_spatial] = data_1d.expand(-1, pos.shape[-1])
 
-            position_ids = position_ids.permute(2, 0, 1)
-            cos, sin = precompute_cos_sin_3d(position_ids, self.inv_freq, self.mrope_section)
-            scale = self.attention_scaling
-            if isinstance(scale, torch.Tensor):
-                scale = scale.to(device=cos.device, dtype=cos.dtype)
-            elif scale != 1.0:
-                scale = cos.new_tensor(scale)
-            if isinstance(scale, torch.Tensor) or scale != 1.0:
-                cos = cos * scale
-                sin = sin * scale
+            pos_axes = pos.permute(2, 0, 1).contiguous()
 
-        return cos, sin
+        cos_axes, sin_axes = self._qwen_rotary(hidden_states, pos_axes)
 
+        cos_axes = cos_axes.to(hidden_states.dtype)
+        sin_axes = sin_axes.to(hidden_states.dtype)
+
+        cos_combined = self._combine_axes(cos_axes)
+        sin_combined = self._combine_axes(sin_axes)
+
+        return cos_combined, sin_combined
 
 class IsaacModel(Qwen3PreTrainedModel):
     supports_gradient_checkpointing = True
@@ -1894,7 +1891,11 @@ class IsaacModel(Qwen3PreTrainedModel):
                 position_ids = compute_position_ids_input_ids(input_ids)
 
         # Compute MRoPE position embeddings if we have custom rotary_emb
-        cos, sin = self.rotary_emb(position_ids, modality_tensor)
+        cos, sin = self.rotary_emb(
+            position_ids,
+            modality_tensor,
+            hidden_states=inputs_embeds,
+        )
         cos = cos.to(inputs_embeds.dtype)
         sin = sin.to(inputs_embeds.dtype)
 
@@ -2275,4 +2276,3 @@ def _compute_residual_p_frames(frames: torch.Tensor, is_p_frame: list[bool]) -> 
     p_indices = frame_indices[torch.tensor(is_p_frame, device=frames.device)]
     frames[p_indices] = frames[p_indices] - frames[last_i_indices[p_indices]]
     return frames
-
