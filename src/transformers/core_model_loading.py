@@ -34,6 +34,50 @@ from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLay
 from .utils import logging
 
 
+import itertools
+import os
+import re
+from abc import abstractmethod
+from collections import defaultdict
+from collections.abc import MutableMapping, MutableSet, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from functools import partial
+from types import MethodType
+from typing import Any, Optional, Union
+
+import torch
+
+from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer
+from .quantizers import HfQuantizer
+from .utils import is_torch_greater_or_equal, logging
+from .utils.quantization_config import QuantizationMethod
+
+
+_torch_distributed_available = torch.distributed.is_available()
+_is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
+if _is_dtensor_available:
+    from torch.distributed.tensor import DTensor
+
+
+logger = logging.get_logger(__name__)
+
+str_to_torch_dtype = {
+    "BOOL": torch.bool,
+    "U8": torch.uint8,
+    "I8": torch.int8,
+    "I16": torch.int16,
+    "F16": torch.float16,
+    "BF16": torch.bfloat16,
+    "I32": torch.int32,
+    "F32": torch.float32,
+    "F64": torch.float64,
+    "I64": torch.int64,
+    "F8_E4M3": torch.float8_e4m3fn,
+    "F8_E5M2": torch.float8_e5m2,
+}
+
 
 logger = logging.get_logger(__name__)
 
@@ -279,99 +323,81 @@ class ConversionEntry:
 
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
-
-class LoadedParameter(torch.nn.Parameter):
-    r"""
-    Because `transformers` initialized the missing keys we need to make sure
-    we can skip the ones that are actually loaded. Now we could force something, but
-    we want people to have an intuitive API usage, thus they can keep the well know API, and
-    just define their custom `_init_weight`, as long as they don't use `module.xxx.data`.
-
-    We added a check for this in `make fixup` to force people to use it.
-    After the `missing` weights are initialized, LoadedParameters become just nn.Parameters.
+# Factory function to create LoadedParameter subclasses dynamically
+def get_loaded_parameter_class(base_cls):
     """
+    base_cls: an nn.Parameter subclass (or nn.Parameter) or a Tensor
+    Returns a new class that combines the base_cls with LoadedParameterMixin
 
-    def __new__(cls, data=None, requires_grad=True):
-        inst = super().__new__(cls, data, requires_grad)
-        inst._is_hf_initialized = False
-        return inst
+    """
+    class LoadedParam(base_cls):
+        _inplace_methods = [
+                'add_', 'mul_', 'clamp_', 'zero_', 'fill_', 'normal_', 'uniform_',
+                'copy_', 'erfinv_', 'log_', "__getitem__", "neg_", "exp_", "sub_"
+            ]
+        def __new__(cls, from_existing, **kwargs):
+            if isinstance(from_existing, torch.nn.Parameter):
+                inst = super().__new__(cls, from_existing.data, from_existing.requires_grad, **from_existing.__dict__)
+            else:
+                inst = super().__new__(cls, from_existing)
+            inst._original_type = from_existing
+            # Explicitly override all in-place methods per instance
+            for method_name in inst._inplace_methods:
+                setattr(inst, method_name, MethodType(inst._skip, inst))
 
-    def __repr__(self):
-        return f"LoadedParameter(_is_hf_initialized={self._is_hf_initialized}, data={self.data}"
+            return inst
 
-    # block .data assignment when flagged
-    @property
-    def data(self):
-        return super().data
-
-    @data.setter
-    def data(self, new):
-        if not getattr(self, "_is_hf_initialized", False):
-            super(LoadedParameter, LoadedParameter).data.__set__(self, new)  # delegate to base
-        # else: skip or warn
-
-    # shadow common in-place init methods
-    def _guard(self, fn, *a, **k):
-        if getattr(self, "_is_hf_initialized", False):
+        def _skip(self, *args, **kwargs):
+            """Helper to skip in-place operations."""
             return self
-        return fn(*a, **k)
 
-    def normal_(self, *a, **k):
-        return self
+        def __repr__(self):
+            return f"LoadedParameter(data={self.data})"
 
-    def uniform_(self, *a, **k):
-        return self
+        @property
+        def data(self):
+            return super().data
 
-    def zero_(self):
-        return self
+        @data.setter
+        def data(self, new):
+            pass
+    def __lt__(self, other):  return torch.Tensor.__lt__(self, other)
+    def __le__(self, other):  return torch.Tensor.__le__(self, other)
+    def __gt__(self, other):  return torch.Tensor.__gt__(self, other)
+    def __ge__(self, other):  return torch.Tensor.__ge__(self, other)
+    def __eq__(self, other):  return torch.Tensor.__eq__(self, other)
+    def __ne__(self, other):  return torch.Tensor.__ne__(self, other)
+    def __iadd__(self, *args, **kwargs): return self
+    def __isub__(self, *args, **kwargs): return self
+    def __imul__(self, *args, **kwargs): return self
+    def __imatmul__(self, *args, **kwargs): return self
+    def __itruediv__(self, *args, **kwargs): return self
+    def __ifloordiv__(self, *args, **kwargs): return self
+    def __imod__(self, *args, **kwargs): return self
+    def __ipow__(self, *args, **kwargs): return self
+    def __iand__(self, *args, **kwargs): return self
+    def __ior__(self, *args, **kwargs): return self
+    def __ixor__(self, *args, **kwargs): return self
+    def __ilshift__(self, *args, **kwargs): return self
+    def __irshift__(self, *args, **kwargs): return self
 
-    def fill_(self, *a, **k):
-        return self
+    return LoadedParam
 
-    def copy_(self, *a, **k):
-        return self
-
-    def mul_(self, *a, **k):
-        return self
-
-    def add_(self, *a, **k):
-        return self
-
-    def clamp_(self, *a, **k):
-        return self
-
-    def erfinv_(self, *a, **k):
-        return self
-
-    def log_(self, *a, **k):
-        return self
-
-    def neg_(self, *a, **k):
-        return self
-
-    def exp_(self, *a, **k):
-        return self
-
-    def sub_(self, *a, **k):
-        return self
-
-    def __getitem__(self, *a, **k):
-        return self
+def _materialize_copy(tensor, dtype=None):
+    tensor = tensor[...]
+    if dtype is not None:
+        tensor = tensor.to(dtype)
+    return tensor
 
 
-def _materialize_copy(tensor, dtype):
-    # PyTorch: this runs in C and releases the GIL; good for threads.
-    return tensor[...].to(dtype)
-
-
-def spawn_materialize(thread_pool, tensor, dtype) -> Future:
+def spawn_materialize(thread_pool, tensor, dtype=None) -> Future:
     def _job():
         return _materialize_copy(tensor, dtype)
 
     return thread_pool.submit(_job)
 
 
-def spawn_tp_materialize(thread_pool, tensor, dtype, sharding_method, tensor_idx) -> Future:
+def spawn_tp_materialize(thread_pool, tensor, sharding_method, tensor_idx, dtype=None) -> Future:
     def _job():
         return sharding_method.shard_tensor(tensor, param_casting_dtype=dtype, tensor_idx=tensor_idx)[0]
 
@@ -440,6 +466,10 @@ def set_param_for_module(
     with log_to_misc(layer_name, misc, layer_name):
         module_path, _, param_name = layer_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
+        if isinstance(param_value, list):
+            param_value = param_value[0]
+        elif not isinstance(param_value, torch.nn.Parameter):
+            param_value = param_value[...]
         param_value = param_value[0] if isinstance(param_value, list) else param_value[...]
         ref = meta_model_state_dict.get(layer_name, empty_param)
 
@@ -458,9 +488,9 @@ def set_param_for_module(
                 if not use_dtensor:
                     # we convert to local
                     param_value = param_value.to_local()
-            param_value: LoadedParameter = LoadedParameter(param_value, requires_grad=param_value.is_floating_point())
-        else:
-            param_value: LoadedParameter = LoadedParameter(param_value.data)
+            if param_name not in module_obj._buffers:
+                param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+        param_value = get_loaded_parameter_class(param_value.__class__)(from_existing=param_value)
 
         if ref is not None and ref.shape != param_value.shape:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))

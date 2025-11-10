@@ -2448,12 +2448,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif isinstance(
                 module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)
             ):
-                module.weight.normal_(mean=0.0, std=std)
-                if module.bias is not None:
+                if getattr(module, "weight", None) is not None:
+                    module.weight.normal_(mean=0.0, std=std)
+                if getattr(module, "bias", None) is not None:
                     module.bias.zero_()
             elif isinstance(module, nn.Embedding):
-                module.weight.normal_(mean=0.0, std=std)
-                if module.padding_idx is not None:
+                if getattr(module, "weight", None) is not None:
+                    module.weight.normal_(mean=0.0, std=std)
+                if getattr(module, "padding_idx", None) is not None:
                     module.weight[module.padding_idx].zero_()
             elif isinstance(module, nn.Parameter):
                 module.normal_(mean=0.0, std=std)
@@ -4742,9 +4744,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             self.initialize_weights()
 
-        for p in self.parameters():  # TODO @Cyrilvallez if we are able to do this while we smart apply my be better
-            setattr(p, "__class__", nn.Parameter)
-            setattr(p, "_is_hf_initialized", True)
+        for name, p in list(self.named_parameters()) + list(self.named_buffers()):
+            if hasattr(p, "_original_type"):
+                parts = name.split(".")
+                submod = self
+                for part in parts[:-1]:
+                    submod = getattr(submod, part)
+                setattr(submod, parts[-1], p._original_type)
+                setattr(p, "_is_hf_initialized", True)
 
     def _adjust_missing_and_unexpected_keys(
         self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool, model
