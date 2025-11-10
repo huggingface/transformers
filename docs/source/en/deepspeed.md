@@ -377,7 +377,7 @@ ALST (Arctic Long Sequence Training) uses attention head parallelism to shard in
 > [!TIP]
 > For more detailed information about sequence parallelism, see the Accelerate [Context Parallelism](https://huggingface.co/docs/accelerate/concept_guides/context_parallelism) guide.
 
-To enable ALST/Ulysses sequence parallelism with [`Trainer`], configure `parallelism_config` in [`TrainingArguments`]. Sequence parallelism is configured via Accelerate's `ParallelismConfig` and requires Accelerate version higer than 1.11.0.
+To enable ALST/Ulysses sequence parallelism with [`Trainer`], configure `parallelism_config` in [`TrainingArguments`]. Sequence parallelism is configured via Accelerate's `ParallelismConfig` and requires Accelerate version higher than 1.11.0.
 
 ```py
 from accelerate.utils import ParallelismConfig, DeepSpeedContextParallelConfig
