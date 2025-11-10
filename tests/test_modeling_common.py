@@ -1936,12 +1936,11 @@ class ModelTesterMixin:
                     reloaded_state = model_reloaded.state_dict()
                     for k, v in model_tied.state_dict().items():
                         with self.subTest(f"{model_class.__name__}.{k}"):
-                            self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
                             torch.testing.assert_close(
                                 v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
                             )
 
-                    # Checking the tensor sharing are correct
+                    # Checking the tensor sharing are correct on the new model (weights are properly tied in both cases)
                     ptrs = defaultdict(list)
                     for k, v in model_tied.state_dict().items():
                         ptrs[v.data_ptr()].append(k)
@@ -1953,11 +1952,11 @@ class ModelTesterMixin:
                         self.assertEqual(
                             len(reloaded_ptrs),
                             1,
-                            f"The shared pointers are incorrect, found different pointers for keys {shared_names}",
+                            f"The shared pointers are incorrect, found different pointers for keys {shared_names}. `__init__` and `from_pretrained` end up not tying the weights the same way.",
                         )
 
                     # Checking there was no complain of missing weights
-                    self.assertEqual(infos["missing_keys"], set())
+                    self.assertEqual(infos["missing_keys"], set(), "These keys were removed when serializing, and were not properly loaded by `from_pretrained`.")
 
     def test_load_save_without_tied_weights(self):
         for model_class in self.all_model_classes:
