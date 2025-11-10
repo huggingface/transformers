@@ -13,9 +13,9 @@ if is_torch_available():
 @require_compressed_tensors
 @require_torch
 class CompressedTensorsTest(unittest.TestCase):
-    tinyllama_w8a16 = "nm-testing/tinyllama-w8a16-dense-hf-quantizer"
-    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed-hf-quantizer"
-    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed-hf-quantizer"
+    tinyllama_w8a16 = "nm-testing/tinyllama-w8a16-dense"
+    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed"
+    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed"
     llama3_8b_fp8 = "nm-testing/Meta-Llama-3-8B-Instruct-fp8-hf_compat"
 
     prompt = "Paris is the capital of which country?"
