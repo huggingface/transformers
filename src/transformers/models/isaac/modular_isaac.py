@@ -144,7 +144,7 @@ from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
 from ...utils.generic import can_return_tuple
 from ...utils.import_utils import is_torchdynamo_compiling
-from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLRotaryEmbedding
+from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
     Siglip2Attention,
@@ -1708,7 +1708,7 @@ class IsaacRotaryEmbedding(nn.Module):
         config_for_rope.rope_scaling = sanitized_scaling if sanitized_scaling else None
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
-        self._qwen_rotary = Qwen2_5_VLRotaryEmbedding(config_for_rope, device=init_device)
+        self._qwen_rotary = qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding(config_for_rope, device=init_device)
 
         rotary_half_dim = self._qwen_rotary.inv_freq.shape[0]
         self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)

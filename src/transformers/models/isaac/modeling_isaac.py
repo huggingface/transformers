@@ -118,6 +118,7 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple
 from ...utils.import_utils import is_torchdynamo_compiling
+from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from .configuration_isaac import IsaacConfig, IsaacVisionConfig
 
 
@@ -796,7 +797,7 @@ class IsaacRotaryEmbedding(nn.Module):
         config_for_rope.rope_scaling = sanitized_scaling if sanitized_scaling else None
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
-        self._qwen_rotary = Qwen2_5_VLRotaryEmbedding(config_for_rope, device=init_device)
+        self._qwen_rotary = qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding(config_for_rope, device=init_device)
 
         rotary_half_dim = self._qwen_rotary.inv_freq.shape[0]
         self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
