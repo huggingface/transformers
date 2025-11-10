@@ -93,7 +93,16 @@ import PIL.Image
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from genesis.public.tensorstream.tensor_stream import (
+from perceptron.tensorstream.ops import (
+    compute_mrope_pos_tensor,
+    modality_mask,
+    reconstruct_tensor_stream_from_compact_dict,
+    tensor_stream_token_view,
+)
+from perceptron.tensorstream.ops import (
+    slice as ts_slice,
+)
+from perceptron.tensorstream.tensorstream import (
     Event,
     Stream,
     TensorStream,
@@ -101,15 +110,6 @@ from genesis.public.tensorstream.tensor_stream import (
     VisionType,
     create_stream,
     group_streams,
-)
-from genesis.public.tensorstream.tensor_stream_utils import (
-    compute_mrope_pos_tensor,
-    modality_mask,
-    reconstruct_tensor_stream_from_compact_dict,
-    tensor_stream_token_view,
-)
-from genesis.public.tensorstream.tensor_stream_utils import (
-    slice as ts_slice,
 )
 
 from ...cache_utils import Cache, SlidingWindowCache, StaticCache
