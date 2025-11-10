@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+from copy import deepcopy
 from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from torch import nn
-from copy import deepcopy
 
 from ...activations import ACT2CLS
 from ...configuration_utils import PreTrainedConfig

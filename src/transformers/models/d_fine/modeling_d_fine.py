@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Optional, Union
 
@@ -26,7 +27,6 @@ import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from torch import Tensor, nn
-from copy import deepcopy
 
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
@@ -1549,9 +1549,13 @@ class DFineObjectDetectionOutput(ModelOutput):
 )
 class DFineForObjectDetection(DFinePreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
+    _keys_to_ignore_on_load_missing = [r"model.decoder.bbox_embed.*", r"model.decoder.class_embed.*"]
+    _tied_weights_keys ={
+        "model.decoder.class_embed": "class_embed",
+        "model.decoder.bbox_embed": "bbox_embed"
+    }
 
     def __init__(self, config: DFineConfig):
         super().__init__(config)
@@ -1572,11 +1576,17 @@ class DFineForObjectDetection(DFinePreTrainedModel):
                 for _ in range(config.decoder_layers - self.eval_idx - 1)
             ]
         )
-        # TODO this increases usage but is really the least worst way of doing it for now.
-        self.model.decoder.class_embed = deepcopy(self.class_embed)
-        self.model.decoder.bbox_embed = deepcopy(self.bbox_embed)
         # Initialize weights and apply final processing
         self.post_init()
+
+    def _tie_weights(self, missing_keys=None):
+        r"""
+        One of the only classes were we have to define this because :drum: self.model.decoder.class_embed just
+        does not exist.
+        """
+        self.model.decoder.class_embed = self.class_embed
+        self.model.decoder.bbox_embed = self.bbox_embed
+
 
     def _set_aux_loss(self, outputs_class, outputs_coord):
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
