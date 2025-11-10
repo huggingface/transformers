@@ -654,9 +654,9 @@ class IsaacVisionAttention(Siglip2Attention):
         "isaac_eager": "isaac_eager",
     }
 
-    def __init__(self, vision_config):
-        super().__init__(vision_config)
-        self.vision_config = vision_config
+    def __init__(self, config):
+        super().__init__(config)
+        self.config = config
         self._variable_length_metadata = None
 
     def _variable_length_context(self, *, cu_seqlens=None, max_seqlen=None):
@@ -698,7 +698,7 @@ class IsaacVisionAttention(Siglip2Attention):
         k = self.k_proj(x).view(L, H, D)
         v = self.v_proj(x).view(L, H, D)
 
-        attn_impl = getattr(self.vision_config, "_attn_implementation", "flash_attention_3")
+        attn_impl = getattr(self.config, "_attn_implementation", "flash_attention_3")
 
         attn_mask = ensure_document_attention_mask(
             attention_mask,
