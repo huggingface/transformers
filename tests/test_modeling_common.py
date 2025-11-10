@@ -814,7 +814,7 @@ class ModelTesterMixin:
                 load_result = model.load_state_dict(state_dict_saved, strict=False)
                 keys_to_ignore = set(model._keys_to_ignore_on_save)
 
-                if hasattr(model, "_tied_weights_keys"):
+                if getattr(model, "_tied_weights_keys", None):
                     keys_to_ignore.update(set(model._tied_weights_keys))
 
                 self.assertTrue(len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys_to_ignore)
@@ -1187,7 +1187,7 @@ class ModelTesterMixin:
                                 print(
                                     f"None for {k}, Probaby running a MOE, make sure grad is not NONE on EVERY layer. At LEAST 1 of the expert layer should have grads!"
                                 )
-                            if "shared" in k:
+                            elif "shared" in k:
                                 print(
                                     f"None for {k}, Probaby a model that does not default to tie the encoder and decoder!"
                                 )
@@ -1773,6 +1773,10 @@ class ModelTesterMixin:
 
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         original_config.tie_word_embeddings = False
+        try:
+            original_config.get_text_config().tie_word_embeddings = False
+        except Exception as _:
+            pass
         inputs_dict.pop("labels", None)
 
         # if model cannot untied embeddings -> leave test

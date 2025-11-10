@@ -262,6 +262,8 @@ class WeightConverter:
     - source_keys: str | list[str] (wildcards '*' match digits)
     - target_keys: str | list[str] | None
     - distributed_operation / operations / quantization_operations are ALWAYS lists.
+
+    TODO: for BNB we need to collect model.weight.quant_state_keys
     """
 
     source_keys: Union[str, list[str]]

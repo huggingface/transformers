@@ -4201,6 +4201,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weight_conversions = get_checkpoint_conversion_mapping().get(model_type)
             if weight_conversions is None:
                 weight_conversions = get_checkpoint_conversion_mapping()["legacy"]
+            if key_mapping is not None:
+                weight_conversions.extend([
+                    WeightConverter(k, v) for k,v in key_mapping.items()
+                ])
 
         if gguf_file:
             if hf_quantizer is not None:
