@@ -144,7 +144,6 @@ from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
 from ...utils.generic import can_return_tuple
 from ...utils.import_utils import is_torchdynamo_compiling
-from ..qwen2.tokenization_qwen2 import Qwen2Tokenizer
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLRotaryEmbedding
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
@@ -1519,8 +1518,8 @@ class IsaacProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        image_processor: "IsaacImageProcessorFast | None" = None,  # noqa: UP037
-        tokenizer: "Qwen2Tokenizer | None" = None, # noqa: UP037
+        image_processor,
+        tokenizer,
         *,
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
