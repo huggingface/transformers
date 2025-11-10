@@ -1815,29 +1815,22 @@ class RTDetrModel(RTDetrPreTrainedModel):
 class RTDetrForObjectDetection(RTDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _tied_weights_keys = {"model.decoder.bbox_embed": "bbox_embed", "model.decoder.class_embed": "class_embed"}
+    
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
 
     def __init__(self, config: RTDetrConfig):
         super().__init__(config)
-
-        # RTDETR encoder-decoder model
         self.model = RTDetrModel(config)
-
-        # Detection heads on top
-        self.class_embed = partial(nn.Linear, config.d_model, config.num_labels)
-        self.bbox_embed = partial(RTDetrMLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
+        num_pred = config.decoder_layers
+        self.class_embed = nn.ModuleList([torch.nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)])
+        self.bbox_embed = nn.ModuleList([RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3) for _ in range(num_pred)])
 
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
-        num_pred = config.decoder_layers
         if config.with_box_refine:
-            self.class_embed = _get_clones(self.class_embed, num_pred)
-            self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-        else:
-            self.class_embed = nn.ModuleList([self.class_embed() for _ in range(num_pred)])
-            self.bbox_embed = nn.ModuleList([self.bbox_embed() for _ in range(num_pred)])
-
-        # hack implementation for iterative bounding box refinement
+            self._tied_weights_keys[r"bbox_embed.(?![0])\d+"] = "bbox_embed.0"
+            self._tied_weights_keys[r"class_embed.(?![0])\d+"] = "class_embed.0"
+                # hack implementation for iterative bounding box refinement
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
 

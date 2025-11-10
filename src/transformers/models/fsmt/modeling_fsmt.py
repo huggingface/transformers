@@ -339,13 +339,13 @@ class FSMTEncoder(nn.Module):
         config: FSMTConfig
     """
 
-    def __init__(self, config: FSMTConfig, embed_tokens):
+    def __init__(self, config: FSMTConfig):
         super().__init__()
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-        self.padding_idx = embed_tokens.padding_idx
-        self.embed_tokens = embed_tokens
-        embed_dim = embed_tokens.embedding_dim
+        self.padding_idx = config.pad_token_id
+        self.embed_tokens = nn.Embedding(config.src_vocab_size, config.d_model, config.pad_token_id)
+        embed_dim = self.embed_tokens.embedding_dim
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
@@ -532,31 +532,19 @@ class FSMTDecoder(nn.Module):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: FSMTConfig, embed_tokens: nn.Embedding):
+    def __init__(self, config: FSMTConfig):
         super().__init__()
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = embed_tokens.padding_idx
+        self.padding_idx =  config.pad_token_id
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
-        self.embed_tokens = embed_tokens
-        embed_dim = embed_tokens.embedding_dim
+        self.embed_tokens = nn.Embedding(config.tgt_vocab_size, config.d_model, self.padding_idx)
+        embed_dim = self.embed_tokens.embedding_dim
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList([DecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])  # type: list[DecoderLayer]
-
-        if is_deepspeed_zero3_enabled():
-            import deepspeed
-
-            with deepspeed.zero.GatheredParameters(self.embed_tokens.weight, modifier_rank=None):
-                embed_tokens_weight_shape = self.embed_tokens.weight.shape
-        else:
-            embed_tokens_weight_shape = self.embed_tokens.weight.shape
-        self.output_projection = nn.Linear(embed_tokens_weight_shape[1], embed_tokens_weight_shape[0], bias=False)
-        self.output_projection.weight = self.embed_tokens.weight
-
-    def _tie_weights(self):
-        self.embed_tokens.weight = self.output_projection.weight
+        self.output_projection = nn.Linear(config.d_model, config.tgt_vocab_size, bias=False)
 
     def forward(
         self,
@@ -830,21 +818,14 @@ def _get_shape(t):
 @auto_docstring
 class FSMTModel(PretrainedFSMTModel):
     _tied_weights_keys = {
-        "decoder.output_projection.weight": "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight": "encoder.embed_tokens.weight",
+        "encoder.embed_tokens.weight": "decoder.embed_tokens.weight",
+        "decoder.output_projection.weight": "decoder.embed_tokens.weight",
     }
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
-
-        padding_idx = config.pad_token_id
-        encoder_embed_tokens = nn.Embedding(config.src_vocab_size, config.d_model, padding_idx)
-        decoder_embed_tokens = nn.Embedding(config.tgt_vocab_size, config.d_model, padding_idx)
-
-        self.encoder = FSMTEncoder(config, encoder_embed_tokens)
-        self.decoder = FSMTDecoder(config, decoder_embed_tokens)
-
-        # Initialize weights and apply final processing
+        self.encoder = FSMTEncoder(config)
+        self.decoder = FSMTDecoder(config)
         self.post_init()
 
     def get_encoder(self):

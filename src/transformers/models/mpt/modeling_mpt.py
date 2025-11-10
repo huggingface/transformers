@@ -222,10 +222,6 @@ class MptPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MptBlock"]
-    _keys_to_ignore_on_load_missing = [r"lm_head.*."]
-
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -502,6 +498,9 @@ class MptForSequenceClassification(MptPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def set_output_embeddings(self, new_embeddings: torch.Tensor):
+        self.score = new_embeddings
 
     @auto_docstring
     def forward(

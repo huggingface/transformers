@@ -137,6 +137,7 @@ class MT5Config(PreTrainedConfig):
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
             tokenizer_class=tokenizer_class,
+            tie_encoder_decoder=True, # default
             tie_word_embeddings=tie_word_embeddings,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
