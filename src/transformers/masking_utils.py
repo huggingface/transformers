@@ -248,7 +248,9 @@ def _vmap_expansion_sdpa(mask_function: Callable) -> Callable:
     return mask_function
 
 
-def _non_vmap_expansion_sdpa(batch_size: int, cache_position: torch.Tensor, kv_arange: torch.Tensor):
+def _non_vmap_expansion_sdpa(
+    batch_indices: torch.Tensor, head_indices: torch.Tensor, q_indices: torch.Tensor, kv_indices: torch.Tensor
+):
     """
     Used to broadcast our mask_functions over the all 4 dimensions (b_idx, h_idx, q_idx, kv_idx) of the inputs.
     Allows the usage of any index-based mask function without relying on vmap.
@@ -258,11 +260,10 @@ def _non_vmap_expansion_sdpa(batch_size: int, cache_position: torch.Tensor, kv_a
     Reference:
         - https://github.com/huggingface/optimum-onnx/blob/c123e8f4fab61b54a8e0e31ce74462bcacca576e/optimum/exporters/onnx/model_patcher.py#L362-L365
     """
-    device = cache_position.device
-    batch_indices = torch.arange(batch_size, device=device)[:, None, None, None]
-    head_indices = torch.arange(1, device=device)[None, :, None, None]
-    q_indices = cache_position[None, None, :, None]
-    kv_indices = kv_arange[None, None, None, :]
+    batch_indices = batch_indices[:, None, None, None]
+    head_indices = head_indices[None, :, None, None]
+    q_indices = q_indices[None, None, :, None]
+    kv_indices = kv_indices[None, None, None, :]
     return batch_indices, head_indices, q_indices, kv_indices
 
 
@@ -399,23 +400,22 @@ def sdpa_mask(
     if padding_mask is not None:
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
 
+    batch_arange = torch.arange(batch_size, device=cache_position.device)
+    head_arange = torch.arange(1, device=cache_position.device)
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
     # but without data-dependent slicing (i.e. torch.compile friendly)
-    kv_arange = torch.arange(kv_length, device=cache_position.device)
-    kv_arange += kv_offset
+    kv_arange = torch.arange(kv_length, device=cache_position.device) + kv_offset
 
     # Actual mask creation
     # Option 1: Fast non-vmap mask creation (default)
     if not use_vmap:
         # Apply mask function element-wise through broadcasting
-        attention_mask = mask_function(*_non_vmap_expansion_sdpa(batch_size, cache_position, kv_arange))
+        attention_mask = mask_function(*_non_vmap_expansion_sdpa(batch_arange, head_arange, cache_position, kv_arange))
         # Expand the mask to match batch size and query length if they weren't used in the mask function
         attention_mask = attention_mask.expand(batch_size, -1, q_length, kv_length)
 
     # Option 2: Vmap mask creation (torch>=2.6 and custom patterns)
     elif _is_torch_greater_or_equal_than_2_6:
-        batch_arange = torch.arange(batch_size, device=cache_position.device)
-        head_arange = torch.arange(1, device=cache_position.device)
         # This creates the 4D mask easily. Note that we need this context manager as vmap cannot handle slicing a tensor from
         # scalar tensor (it internally calls `.item()` which vmap does not allow, but this context works around it
         # We don't need to add an offset to the mask_function either, as we vmap directly the correct indices for k and kv indices
