@@ -88,7 +88,7 @@
 
 import math
 from collections.abc import Sequence
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -294,7 +294,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: Optional[Any] = None,
+        interpolation: Any | None = None,
         antialias: bool = True,
         **kwargs,
     ) -> torch.Tensor:
@@ -329,19 +329,19 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list[torch.Tensor],
         do_resize: bool,
-        size: Optional[SizeDict],
-        interpolation: Optional[Any],
+        size: SizeDict | None,
+        interpolation: Any | None,
         do_center_crop: bool,
-        crop_size: Optional[SizeDict],
-        do_rescale: Optional[bool],
-        rescale_factor: Optional[float],
-        do_normalize: Optional[bool],
-        image_mean: Optional[Union[float, Sequence[float]]],
-        image_std: Optional[Union[float, Sequence[float]]],
-        disable_grouping: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        do_pad: Optional[bool] = None,
-        pad_size: Optional[SizeDict] = None,
+        crop_size: SizeDict | None,
+        do_rescale: bool | None,
+        rescale_factor: float | None,
+        do_normalize: bool | None,
+        image_mean: float | Sequence[float] | None,
+        image_std: float | Sequence[float] | None,
+        disable_grouping: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        do_pad: bool | None = None,
+        pad_size: SizeDict | None = None,
         *,
         patch_size: int | None = None,
         max_num_patches: int | None = None,
