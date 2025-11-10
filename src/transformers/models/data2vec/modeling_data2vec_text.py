@@ -861,7 +861,6 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-
     def __init__(self, config):
         super().__init__(config)
 

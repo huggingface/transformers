@@ -1992,7 +1992,8 @@ class ModelTesterMixin:
                 self.assertEqual(
                     infos["missing_keys"],
                     set(),
-                    "Given that the loaded weights are the same, the issue is in `tie_weights`: it tied these keys and removed them from serialization. But because of tiying (hardcoded or not) the previous check is fine.",
+                    "Given that the loaded weights are the same, the issue is in `tie_weights`: it tied these keys and removed them from serialization. But because of tiying (hardcoded or not) the previous check is fine.\
+                        This can happen if `save_pretrained` remove the targets and not the keys from serialiazation",
                 )
 
     def test_tied_weights_keys(self):

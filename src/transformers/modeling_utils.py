@@ -1079,7 +1079,7 @@ def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
             if t is not None and getattr(t, flag_name, False):
                 # mimic init.* return convention (returns the tensor)
                 return t
-            return fn(*args, **kwargs) # TODO we could set is init here.
+            return fn(*args, **kwargs)  # TODO we could set is init here.
 
         return wrapped
 
@@ -2491,7 +2491,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._init_weights(module)
         module._is_hf_initialized = True
 
-
     @torch.no_grad()
     @guard_nn_init_functions()
     def initialize_weights(self):
@@ -2572,14 +2571,27 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 if "d+" in target_name:
                     reg = re.compile(target_name)
-                    for target_n, _ in self.named_parameters():
-                        if reg.search(target_n):
-                            submodule, target_entity = target_n.rsplit(".", 1)
-                            submodule = self.get_submodule(submodule)
-                            setattr(submodule, target_entity, source_param_or_module)
-                            self._adjust_bias(submodule, source_param_or_module)
+                    modules = dict(self.named_modules())
+                    params = dict(self.named_parameters())
+                    for target_n in modules.keys() | params.keys():
+                        if not reg.fullmatch(target_n):
+                            continue
+                        if "." in target_n:
+                            parent_path, last = target_n.rsplit(".", 1)
+                            parent = self.get_submodule(parent_path)
+                        else:
+                            parent_path, last = "", target_n
+                            parent = self  # top-level
+                        if last in parent._modules:
+                            parent._modules[last] = source_param_or_module
                             if missing_keys:
-                                missing_keys.discard(target_n)  # probably not full match here?
+                                for k, _ in parent.named_parameters():
+                                    missing_keys.discard(k)
+                        else:
+                            setattr(parent, last, source_param_or_module)
+                            self._adjust_bias(parent, source_param_or_module)
+                            if missing_keys:
+                                missing_keys.discard(target_n)
                 else:
                     if "." in target_name:
                         submodule, weight = target_name.rsplit(".", 1)
@@ -3528,7 +3540,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 error_names.extend(shared_names)
 
             if len(error_names) > 0:
-                suggested_fix = {v:k for k,v in list(shared_ptrs.values())}
+                suggested_fix = {v: k for k, v in list(shared_ptrs.values())}
                 raise RuntimeError(
                     f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined"
                     f"as being shared in `_tied_weight_keys`. You should probably add: `_tied_weight_keys = {suggested_fix}. If a whole module is shared you can use it directly",
@@ -4465,7 +4477,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # were not part of the loaded weights: do it now
             if loading_task_model_from_base_state_dict:
                 parameters_to_initialize = {
-                    name: param for name, param in model.named_parameters() if not name.startswith(model.base_model_prefix)
+                    name: param
+                    for name, param in model.named_parameters()
+                    if not name.startswith(model.base_model_prefix)
                 }
                 for name, param in parameters_to_initialize.items():
                     # If it is still on meta here, it means that it's a tied weight that will be tied later anyway -> skip it
