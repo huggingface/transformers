@@ -2626,7 +2626,7 @@ class ModelTesterMixin:
                 config.sliding_window = 2
 
                 if torch_device == "xpu" and (
-                    attn_implementation == "kernels-community/flash-attn" or attn_implementation == "flash_attention_2"
+                    attn_implementation == "kernels-community/flash-attn2" or attn_implementation == "flash_attention_2"
                 ):
                     self.skipTest("XPU does not support sliding window attention with Flash-Attention-2 currently.")
 

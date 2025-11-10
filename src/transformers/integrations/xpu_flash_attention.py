@@ -1,7 +1,7 @@
 from kernels import get_kernel
 
 
-flash_attn = get_kernel("kernels-community/flash-attn")
+flash_attn = get_kernel("kernels-community/flash-attn2")
 
 
 def flash_attn_func(

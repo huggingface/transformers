@@ -2158,7 +2158,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 return True
 
             if is_torch_xpu_available():
-                logger.info("Detect using kernels-community/flash-attn on XPU.")
+                logger.info("Detect using kernels-community/flash-attn2 on XPU.")
                 return True
 
             if importlib.util.find_spec("flash_attn") is None:
@@ -2387,17 +2387,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and not is_torch_xpu_available()
         ):
             if attn_implementation.endswith("2"):
-                applicable_attn_implementation = "kernels-community/flash-attn"
+                applicable_attn_implementation = "kernels-community/flash-attn2"
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
 
         if is_kernel(applicable_attn_implementation):
-            # XPU only supports flash-attn kernels
+            # XPU only supports flash-attn2 kernels
             if is_torch_xpu_available() and "flash-attn3" in applicable_attn_implementation:
                 raise ValueError(
                     f"XPU does not support `{applicable_attn_implementation}`. "
                     "Please use `attn_implementation='flash_attention_2'` or "
-                    "`attn_implementation='kernels-community/flash-attn'` instead."
+                    "`attn_implementation='kernels-community/flash-attn2'` instead."
                 )
 
             try:
