@@ -245,7 +245,7 @@ class SinqHfQuantizer(HfQuantizer):
                         use_bias=(child.bias is not None),
                         sinq_quant_dict=sinq_quant_dict,
                         compute_dtype=compute_dtype,
-                        device_str=device_str,
+                        device_str="cpu",
                     )
                     setattr(m, child_name, ph)
                 else:
