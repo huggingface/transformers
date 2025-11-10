@@ -93,6 +93,24 @@ import PIL.Image
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from genesis.public.tensorstream.tensor_stream import (
+    Event,
+    Stream,
+    TensorStream,
+    TextType,
+    VisionType,
+    create_stream,
+    group_streams,
+)
+from genesis.public.tensorstream.tensor_stream_utils import (
+    compute_mrope_pos_tensor,
+    modality_mask,
+    reconstruct_tensor_stream_from_compact_dict,
+    tensor_stream_token_view,
+)
+from genesis.public.tensorstream.tensor_stream_utils import (
+    slice as ts_slice,
+)
 
 from ...cache_utils import Cache, SlidingWindowCache, StaticCache
 from ...feature_extraction_utils import BatchFeature
@@ -138,26 +156,6 @@ from ..siglip2.modeling_siglip2 import (
 )
 from ..siglip2.modeling_siglip2 import (
     Siglip2VisionEmbeddings as HFSiglip2VisionEmbeddings,
-)
-
-
-from genesis.public.tensorstream.tensor_stream import (
-    Event,
-    Stream,
-    TensorStream,
-    TextType,
-    VisionType,
-    create_stream,
-    group_streams,
-)
-from genesis.public.tensorstream.tensor_stream_utils import (
-    compute_mrope_pos_tensor,
-    modality_mask,
-    reconstruct_tensor_stream_from_compact_dict,
-    tensor_stream_token_view,
-)
-from genesis.public.tensorstream.tensor_stream_utils import (
-    slice as ts_slice,
 )
 
 
@@ -1466,7 +1464,7 @@ class IsaacProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        image_processor: Optional["IsaacImageProcessorFast"] = None,
+        image_processor: "IsaacImageProcessorFast | None" = None,
         tokenizer: Qwen2Tokenizer | None = None,
         *,
         vision_token: str = "<image>",

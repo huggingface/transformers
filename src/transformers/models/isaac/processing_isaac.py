@@ -88,7 +88,6 @@
 
 import math
 import re
-from typing import Optional
 
 import PIL.Image
 import torch
@@ -166,7 +165,7 @@ class IsaacProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        image_processor: Optional["IsaacImageProcessorFast"] = None,
+        image_processor: "IsaacImageProcessorFast | None" = None,
         tokenizer: Qwen2Tokenizer | None = None,
         *,
         vision_token: str = "<image>",
