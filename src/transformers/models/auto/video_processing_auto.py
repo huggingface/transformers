@@ -176,9 +176,21 @@ def get_video_processor_config(
     video_processor = get_video_processor_config("video-processor-test")
     ```"""
     # Load with a priority given to the nested processor config, if available in repo
-    resolved_config_files = [
+    resolved_processor_file = cached_file(
+        pretrained_model_name_or_path,
+        filename=PROCESSOR_NAME,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        proxies=proxies,
+        token=token,
+        revision=revision,
+        local_files_only=local_files_only,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
+    )
+    resolved_video_processor_files = [
         resolved_file
-        for filename in [PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME]
+        for filename in [VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME]
         if (
             resolved_file := cached_file(
                 pretrained_model_name_or_path,
@@ -196,16 +208,37 @@ def get_video_processor_config(
         )
         is not None
     ]
-    if resolved_config_files is None:
-        logger.info(
-            "Could not locate the video processor configuration file, will try to use the model config instead."
-        )
+    resolved_video_processor_file = resolved_video_processor_files[0] if resolved_video_processor_files else None
+
+    # An empty list if none of the possible files is found in the repo
+    if not resolved_video_processor_file and not resolved_processor_file:
+        logger.info("Could not locate the video processor configuration file.")
         return {}
 
-    resolved_config_file = resolved_config_files[0]
-    with open(resolved_config_file, encoding="utf-8") as reader:
-        video_processor_dict = json.load(reader)
-    video_processor_dict = video_processor_dict.get("video_processor", video_processor_dict)
+    # Load video_processor dict. Priority goes as (nested config if found -> video processor config -> image processor config)
+    # We are downloading both configs because almost all models have a `processor_config.json` but
+    # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+    video_processor_dict = {}
+    if resolved_processor_file is not None:
+        try:
+            with open(resolved_processor_file, encoding="utf-8") as reader:
+                text = reader.read()
+            processor_dict = json.loads(text)
+        except json.JSONDecodeError:
+            raise OSError(f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file.")
+        if "video_processor" in processor_dict:
+            video_processor_dict = processor_dict["video_processor"]
+
+    if resolved_video_processor_file is not None and video_processor_dict is None:
+        try:
+            with open(resolved_video_processor_file, encoding="utf-8") as reader:
+                text = reader.read()
+            video_processor_dict = json.loads(text)
+        except json.JSONDecodeError:
+            raise OSError(
+                f"It looks like the config file at '{resolved_video_processor_file}' is not a valid JSON file."
+            )
+
     return video_processor_dict
 
 

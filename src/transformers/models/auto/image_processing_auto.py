@@ -307,37 +307,60 @@ def get_image_processor_config(
     image_processor_config = get_image_processor_config("image-processor-test")
     ```"""
     # Load with a priority given to the nested processor config, if available in repo
-    resolved_config_files = [
-        resolved_file
-        for filename in [PROCESSOR_NAME, IMAGE_PROCESSOR_NAME]
-        if (
-            resolved_file := cached_file(
-                pretrained_model_name_or_path,
-                filename=filename,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                token=token,
-                revision=revision,
-                local_files_only=local_files_only,
-                _raise_exceptions_for_gated_repo=False,
-                _raise_exceptions_for_missing_entries=False,
-                _raise_exceptions_for_connection_errors=False,
-            )
-        )
-        is not None
-    ]
+    resolved_processor_file = cached_file(
+        pretrained_model_name_or_path,
+        filename=PROCESSOR_NAME,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        proxies=proxies,
+        token=token,
+        revision=revision,
+        local_files_only=local_files_only,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
+    )
+    resolved_image_processor_file = cached_file(
+        pretrained_model_name_or_path,
+        filename=IMAGE_PROCESSOR_NAME,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        proxies=proxies,
+        token=token,
+        revision=revision,
+        local_files_only=local_files_only,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
+    )
+
     # An empty list if none of the possible files is found in the repo
-    if not resolved_config_files:
-        logger.info(
-            "Could not locate the image processor configuration file, will try to use the model config instead."
-        )
+    if not resolved_image_processor_file and not resolved_processor_file:
+        logger.info("Could not locate the image processor configuration file.")
         return {}
 
-    resolved_config_file = resolved_config_files[0]
-    with open(resolved_config_file, encoding="utf-8") as reader:
-        image_processor_dict = json.load(reader)
-    image_processor_dict = image_processor_dict.get("image_processor", image_processor_dict)
+    # Load image_processor dict. Priority goes as (nested config if found -> image processor config)
+    # We are downloading both configs because almost all models have a `processor_config.json` but
+    # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+    image_processor_dict = {}
+    if resolved_processor_file is not None:
+        try:
+            with open(resolved_processor_file, encoding="utf-8") as reader:
+                text = reader.read()
+            processor_dict = json.loads(text)
+        except json.JSONDecodeError:
+            raise OSError(f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file.")
+        if "image_processor" in processor_dict:
+            image_processor_dict = processor_dict["image_processor"]
+
+    if resolved_image_processor_file is not None and image_processor_dict is None:
+        try:
+            with open(resolved_image_processor_file, encoding="utf-8") as reader:
+                text = reader.read()
+            image_processor_dict = json.loads(text)
+        except json.JSONDecodeError:
+            raise OSError(
+                f"It looks like the config file at '{resolved_image_processor_file}' is not a valid JSON file."
+            )
+
     return image_processor_dict
 
 

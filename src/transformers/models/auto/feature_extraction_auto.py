@@ -168,39 +168,60 @@ def get_feature_extractor_config(
     feature_extractor_config = get_feature_extractor_config("feature-extractor-test")
     ```"""
     # Load with a priority given to the nested processor config, if available in repo
-    resolved_config_files = [
-        resolved_file
-        for filename in [PROCESSOR_NAME, FEATURE_EXTRACTOR_NAME]
-        if (
-            resolved_file := cached_file(
-                pretrained_model_name_or_path,
-                filename=filename,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                token=token,
-                revision=revision,
-                local_files_only=local_files_only,
-                _raise_exceptions_for_gated_repo=False,
-                _raise_exceptions_for_missing_entries=False,
-                _raise_exceptions_for_connection_errors=False,
-            )
-        )
-        is not None
-    ]
-    if resolved_config_files is None:
-        logger.info(
-            "Could not locate the feature extractor configuration file, will try to use the model config instead."
-        )
+    resolved_processor_file = cached_file(
+        pretrained_model_name_or_path,
+        filename=PROCESSOR_NAME,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        proxies=proxies,
+        token=token,
+        revision=revision,
+        local_files_only=local_files_only,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
+    )
+    resolved_feature_extractor_file = cached_file(
+        pretrained_model_name_or_path,
+        filename=FEATURE_EXTRACTOR_NAME,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        proxies=proxies,
+        token=token,
+        revision=revision,
+        local_files_only=local_files_only,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
+    )
+
+    # An empty list if none of the possible files is found in the repo
+    if not resolved_feature_extractor_file and not resolved_processor_file:
+        logger.info("Could not locate the feature extractor configuration file.")
         return {}
 
-    resolved_config_file = resolved_config_files[0]
-    with open(resolved_config_file, encoding="utf-8") as reader:
-        feature_extractor_dict = json.load(reader)
-    if "audio_processor" in feature_extractor_dict:
-        feature_extractor_dict = feature_extractor_dict["audio_processor"]
-    else:
-        feature_extractor_dict = feature_extractor_dict.get("feature_extractor", feature_extractor_dict)
+    # Load feature_extractor dict. Priority goes as (nested config if found -> feature extractor config)
+    # We are downloading both configs because almost all models have a `processor_config.json` but
+    # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+    feature_extractor_dict = {}
+    if resolved_processor_file is not None:
+        try:
+            with open(resolved_processor_file, encoding="utf-8") as reader:
+                text = reader.read()
+            processor_dict = json.loads(text)
+        except json.JSONDecodeError:
+            raise OSError(f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file.")
+        if "feature_extractor" in processor_dict:
+            feature_extractor_dict = processor_dict["feature_extractor"]
+
+    if resolved_feature_extractor_file is not None and feature_extractor_dict is None:
+        try:
+            with open(resolved_feature_extractor_file, encoding="utf-8") as reader:
+                text = reader.read()
+            feature_extractor_dict = json.loads(text)
+        except json.JSONDecodeError:
+            raise OSError(
+                f"It looks like the config file at '{resolved_feature_extractor_file}' is not a valid JSON file."
+            )
+
     return feature_extractor_dict
 
 
