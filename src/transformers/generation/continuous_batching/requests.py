@@ -25,10 +25,8 @@ from ...utils.metrics import traced
 
 # We centralize the logger here to coordinate between logging and progress bar
 logger = logging.getLogger("ContinuousBatchingLogger")
-# logger.setLevel(logging.INFO)
 
 
-@staticmethod
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -84,6 +82,9 @@ class GenerationOutput:
     error: Optional[str] = None
     status: RequestStatus = RequestStatus.PENDING
     created_time: float = field(default_factory=time.time)
+
+    def is_finished(self) -> bool:
+        return self.status == RequestStatus.FINISHED
 
 
 @dataclass

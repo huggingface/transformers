@@ -69,9 +69,6 @@ class BitNetHfQuantizer(HfQuantizer):
                     "This is not supported. Please remove the CPU or disk device from the device_map."
                 )
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
-
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",

@@ -57,6 +57,7 @@ from .generation_configuration_bark import (
 
 
 if is_flash_attn_available():
+    from ...integrations.flash_attention import get_target_dtype
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -78,6 +79,7 @@ class BarkSelfAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_heads
         self.head_dim = self.embed_dim // self.num_heads
+        self.config = config
 
         if config.hidden_size % config.num_heads != 0:
             raise ValueError(
@@ -228,6 +230,8 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
 
+        target_dtype = get_target_dtype(query, self)  # if the query is in float32, this is the dtype to cast to for FA
+
         attn_output = _flash_attention_forward(
             query,
             key,
@@ -237,6 +241,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
             dropout=self.dropout if self.training else 0.0,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
+            target_dtype=target_dtype,
         )
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
@@ -365,6 +370,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 # GPT2-like autoregressive model
 class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkSubModelConfig
+    output_modalities = "audio"
 
     def __init__(self, config):
         super().__init__(config)
@@ -1027,15 +1033,12 @@ class BarkFineModel(BarkPreTrainedModel):
 
             for i in range(self.config.n_codes_total - self.config.n_codes_given):
                 # self.input_embeds_layers[i + 1].weight = self.lm_heads[i].weight
-                self._tie_or_clone_weights(output_embeddings[i], input_embeddings[i + 1])
+                self._tie_embedding_weights(output_embeddings[i], input_embeddings[i + 1])
                 self._tied_weights_keys.append(f"lm_heads.{i}.weight")
 
     def tie_weights(self):
         """
         Tie the weights between the input embeddings list and the output embeddings list.
-
-        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
-        weights instead.
         """
         for module in self.modules():
             if hasattr(module, "_tie_weights"):
@@ -1315,7 +1318,7 @@ class BarkFineModel(BarkPreTrainedModel):
     output sound according to specific predefined voice.
     """
 )
-class BarkModel(BarkPreTrainedModel):
+class BarkModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkConfig
 
     def __init__(self, config):
@@ -1580,9 +1583,6 @@ class BarkModel(BarkPreTrainedModel):
     def tie_weights(self):
         """
         Tie the weights between the input embeddings list and the output embeddings list.
-
-        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
-        weights instead.
         """
         for module in self.modules():
             if hasattr(module, "_tie_weights"):

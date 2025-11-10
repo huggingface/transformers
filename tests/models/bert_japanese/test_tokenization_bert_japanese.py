@@ -14,7 +14,6 @@
 
 
 import os
-import pickle
 import unittest
 
 from transformers import AutoTokenizer
@@ -103,26 +102,6 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, ["こんにちは", "、", "世界", "。", "こん", "##ばんは", "、", "世界", "。"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [3, 12, 10, 14, 4, 9, 12, 10, 14])
 
-    def test_pickle_mecab_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="mecab")
-        self.assertIsNotNone(tokenizer)
-
-        text = "こんにちは、世界。\nこんばんは、世界。"
-        tokens = tokenizer.tokenize(text)
-        self.assertListEqual(tokens, ["こんにちは", "、", "世界", "。", "こん", "##ばんは", "、", "世界", "。"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [3, 12, 10, 14, 4, 9, 12, 10, 14])
-
-        filename = os.path.join(self.tmpdirname, "tokenizer.bin")
-        with open(filename, "wb") as handle:
-            pickle.dump(tokenizer, handle)
-
-        with open(filename, "rb") as handle:
-            tokenizer_new = pickle.load(handle)
-
-        tokens_loaded = tokenizer_new.tokenize(text)
-
-        self.assertListEqual(tokens, tokens_loaded)
-
     def test_mecab_full_tokenizer_with_mecab_kwargs(self):
         tokenizer = self.tokenizer_class(
             self.vocab_file, word_tokenizer_type="mecab", mecab_kwargs={"mecab_dic": "ipadic"}
@@ -199,27 +178,6 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     @require_sudachi_projection
-    def test_pickle_sudachi_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="sudachi")
-        self.assertIsNotNone(tokenizer)
-
-        text = "こんにちは、世界。\nこんばんは、世界。"
-        tokens = tokenizer.tokenize(text)
-        self.assertListEqual(tokens, ["こんにちは", "、", "世界", "。", "こん", "##ばんは", "、", "世界", "。"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [3, 12, 10, 14, 4, 9, 12, 10, 14])
-
-        filename = os.path.join(self.tmpdirname, "tokenizer.bin")
-        with open(filename, "wb") as handle:
-            pickle.dump(tokenizer, handle)
-
-        with open(filename, "rb") as handle:
-            tokenizer_new = pickle.load(handle)
-
-        tokens_loaded = tokenizer_new.tokenize(text)
-
-        self.assertListEqual(tokens, tokens_loaded)
-
-    @require_sudachi_projection
     def test_sudachi_tokenizer_core(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core")
 
@@ -292,27 +250,6 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
             ["アップル", "ストア", "で", "iPhone", "8", "が", "発売", "さ", "れ", "た", "。"],
         )
-
-    @require_jumanpp
-    def test_pickle_jumanpp_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="jumanpp")
-        self.assertIsNotNone(tokenizer)
-
-        text = "こんにちは、世界。\nこんばんは、世界。"
-        tokens = tokenizer.tokenize(text)
-        self.assertListEqual(tokens, ["こんにちは", "、", "世界", "。", "こん", "##ばんは", "、", "世界", "。"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [3, 12, 10, 14, 4, 9, 12, 10, 14])
-
-        filename = os.path.join(self.tmpdirname, "tokenizer.bin")
-        with open(filename, "wb") as handle:
-            pickle.dump(tokenizer, handle)
-
-        with open(filename, "rb") as handle:
-            tokenizer_new = pickle.load(handle)
-
-        tokens_loaded = tokenizer_new.tokenize(text)
-
-        self.assertListEqual(tokens, tokens_loaded)
 
     @require_jumanpp
     def test_jumanpp_tokenizer(self):

@@ -441,6 +441,7 @@ class DFinePreTrainedModel(PreTrainedModel):
     config: DFineConfig
     base_model_prefix = "d_fine"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = [r"DFineHybridEncoder", r"DFineDecoderLayer"]
 
     def _init_weights(self, module):
@@ -1577,11 +1578,7 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
     @auto_docstring
@@ -2174,7 +2171,7 @@ class DFineHybridEncoder(nn.Module):
             new_fpn_feature_map = fpn_block(fused_feature_map)
             fpn_feature_maps.append(new_fpn_feature_map)
 
-        fpn_feature_maps = fpn_feature_maps[::-1]
+        fpn_feature_maps.reverse()
 
         # bottom-up PAN
         pan_feature_maps = [fpn_feature_maps[0]]

@@ -31,9 +31,8 @@ class CwmConfigTest(unittest.TestCase):
 
         # Llama3 defaults
         self.assertEqual(config.vocab_size, 128256)
-        self.assertEqual(config.rope_theta, 1_000_000.0)
-        self.assertIsNotNone(config.rope_scaling)
-        self.assertEqual(config.rope_scaling["rope_type"], "llama3")
+        self.assertIsNotNone(config.rope_parameters)
+        self.assertEqual(config.rope_parameters["rope_type"], "llama3")
 
     def test_custom_sliding_window_config(self):
         config = CwmConfig(sliding_window=4096)
@@ -75,18 +74,19 @@ class CwmConfigTest(unittest.TestCase):
 
         self.assertEqual(config.layer_types, expected_types)
 
-    def test_rope_scaling_config(self):
-        custom_rope_scaling = {
+    def test_rope_parameters_config(self):
+        custom_rope_parameters = {
             "factor": 8.0,
             "high_freq_factor": 2.0,
             "low_freq_factor": 0.5,
             "original_max_position_embeddings": 4096,
             "rope_type": "llama3",
+            "rope_theta": 1_000_000.0,
         }
 
-        config = CwmConfig(rope_scaling=custom_rope_scaling)
+        config = CwmConfig(rope_parameters=custom_rope_parameters)
 
-        self.assertEqual(config.rope_scaling, custom_rope_scaling)
+        self.assertEqual(config.rope_parameters, custom_rope_parameters)
 
     def test_config_serialization(self):
         config = CwmConfig(
@@ -111,7 +111,7 @@ class CwmConfigTest(unittest.TestCase):
         self.assertTrue(hasattr(config, "num_attention_heads"))
         self.assertTrue(hasattr(config, "num_key_value_heads"))
         self.assertTrue(hasattr(config, "intermediate_size"))
-        self.assertTrue(hasattr(config, "rope_theta"))
+        self.assertTrue(hasattr(config, "rope_parameters"))
         self.assertTrue(hasattr(config, "attention_dropout"))
 
 

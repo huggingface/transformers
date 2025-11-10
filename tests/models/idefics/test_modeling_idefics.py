@@ -324,8 +324,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
         else {}
     )
 
-    test_torchscript = False
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
         # XXX: IdeficsForVisionText2TextTest has no MODEL_FOR group yet, but it should be the same

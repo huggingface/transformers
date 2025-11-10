@@ -17,7 +17,6 @@
 import importlib
 import os
 import re
-import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
 from typing import Any, TypeVar, Union
@@ -224,6 +223,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("layoutlm", "LayoutLMConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
         ("layoutlmv3", "LayoutLMv3Config"),
+        ("layoutxlm", "LayoutLMv2Config"),
         ("led", "LEDConfig"),
         ("levit", "LevitConfig"),
         ("lfm2", "Lfm2Config"),
@@ -418,6 +418,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("upernet", "UperNetConfig"),
         ("van", "VanConfig"),
         ("vaultgemma", "VaultGemmaConfig"),
+        ("video_llama_3", "VideoLlama3Config"),
+        ("video_llama_3_vision", "VideoLlama3VisionConfig"),
         ("video_llava", "VideoLlavaConfig"),
         ("videomae", "VideoMAEConfig"),
         ("vilt", "ViltConfig"),
@@ -878,6 +880,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("upernet", "UPerNet"),
         ("van", "VAN"),
         ("vaultgemma", "VaultGemma"),
+        ("video_llama_3", "VideoLlama3"),
+        ("video_llama_3_vision", "VideoLlama3Vision"),
         ("video_llava", "VideoLlava"),
         ("videomae", "VideoMAE"),
         ("vilt", "ViLT"),
@@ -997,6 +1001,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
+        ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
         ("parakeet_ctc", "parakeet"),
     ]
@@ -1310,18 +1315,6 @@ class AutoConfig:
         {'foo': False}
         ```
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", None)

@@ -544,6 +544,8 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
+    _no_split_modules = ["Speech2TextEncoderLayer"]
+
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
 
@@ -1019,6 +1021,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     """
 )
 class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, GenerationMixin):
+    input_modalities = ["audio", "text"]
     base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
 

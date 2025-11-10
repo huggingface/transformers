@@ -37,7 +37,6 @@ We evaluated GLM-4.6 across eight public benchmarks covering agents, reasoning, 
 
 For more eval results, show cases, and technical details, please visit our [technical blog](https://z.ai/blog/glm-4.6).
 
-
 ### GLM-4.5
 
 The [**GLM-4.5**](https://huggingface.co/papers/2508.06471) series models are foundation models designed for intelligent agents, MoE variants are documented here as Glm4Moe.

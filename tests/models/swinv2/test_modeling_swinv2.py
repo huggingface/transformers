@@ -222,8 +222,6 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    fx_compatible = False
-
     test_resize_embeddings = False
     test_torch_exportable = True
 

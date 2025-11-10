@@ -176,7 +176,7 @@ class MgpstrAttention(nn.Module):
             .reshape(batch_size, num, 3, self.num_heads, channel // self.num_heads)
             .permute(2, 0, 3, 1, 4)
         )
-        query, key, value = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
+        query, key, value = qkv[0], qkv[1], qkv[2]
 
         attention_probs = (query @ key.transpose(-2, -1)) * self.scale
         attention_probs = attention_probs.softmax(dim=-1)

@@ -1,0 +1,160 @@
+# coding=utf-8
+# Copyright 2025 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import unittest
+
+import torch
+from PIL import Image
+
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.utils import is_torchvision_available, is_vision_available
+
+from ...test_video_processing_common import VideoProcessingTestMixin, prepare_video_inputs
+
+
+if is_vision_available():
+    if is_torchvision_available():
+        from transformers import VideoMAEImageProcessor, VideoMAEVideoProcessor
+
+
+class VideoMAEVideoProcessingTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=5,
+        num_frames=8,
+        num_channels=3,
+        image_size=18,
+        min_resolution=30,
+        max_resolution=80,
+        do_resize=True,
+        size=None,
+        do_center_crop=True,
+        crop_size=None,
+        do_rescale=True,
+        rescale_factor=1 / 255,
+        do_normalize=True,
+        image_mean=IMAGENET_STANDARD_MEAN,
+        image_std=IMAGENET_STANDARD_STD,
+        do_convert_rgb=True,
+    ):
+        super().__init__()
+        size = size if size is not None else {"shortest_edge": 20}
+        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
+        self.parent = parent
+        self.batch_size = batch_size
+        self.num_frames = num_frames
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.min_resolution = min_resolution
+        self.max_resolution = max_resolution
+        self.do_resize = do_resize
+        self.size = size
+        self.do_center_crop = do_center_crop
+        self.crop_size = crop_size
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean
+        self.image_std = image_std
+        self.do_convert_rgb = do_convert_rgb
+
+    def prepare_video_processor_dict(self):
+        return {
+            "do_resize": self.do_resize,
+            "size": self.size,
+            "do_center_crop": self.do_center_crop,
+            "crop_size": self.crop_size,
+            "do_rescale": self.do_rescale,
+            "rescale_factor": self.rescale_factor,
+            "do_normalize": self.do_normalize,
+            "image_mean": self.image_mean,
+            "image_std": self.image_std,
+            "do_convert_rgb": self.do_convert_rgb,
+        }
+
+    def expected_output_video_shape(self, videos):
+        return self.num_frames, self.num_channels, self.crop_size["height"], self.crop_size["width"]
+
+    def prepare_video_inputs(self, equal_resolution=False, return_tensors="pil"):
+        videos = prepare_video_inputs(
+            batch_size=self.batch_size,
+            num_frames=self.num_frames,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            return_tensors=return_tensors,
+        )
+
+        return videos
+
+
+@require_torch
+@require_vision
+@require_torchvision
+class VideoMAEVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
+    fast_video_processing_class = VideoMAEVideoProcessor if is_torchvision_available() else None
+    input_name = "pixel_values"
+
+    def setUp(self):
+        super().setUp()
+        self.video_processor_tester = VideoMAEVideoProcessingTester(self)
+
+    @property
+    def video_processor_dict(self):
+        return self.video_processor_tester.prepare_video_processor_dict()
+
+    def test_video_processor_properties(self):
+        video_processing = self.fast_video_processing_class(**self.video_processor_dict)
+        self.assertTrue(hasattr(video_processing, "do_resize"))
+        self.assertTrue(hasattr(video_processing, "size"))
+        self.assertTrue(hasattr(video_processing, "do_center_crop"))
+        self.assertTrue(hasattr(video_processing, "center_crop"))
+        self.assertTrue(hasattr(video_processing, "do_normalize"))
+        self.assertTrue(hasattr(video_processing, "image_mean"))
+        self.assertTrue(hasattr(video_processing, "image_std"))
+        self.assertTrue(hasattr(video_processing, "do_convert_rgb"))
+        self.assertTrue(hasattr(video_processing, "model_input_names"))
+        self.assertIn("pixel_values", video_processing.model_input_names)
+
+    def test_pixel_value_identity(self):
+        """
+        Verify that VideoMAEVideoProcessor (TorchCodec-based) produces pixel tensors
+        numerically similar to those from VideoMAEImageProcessor (PIL-based).
+        Minor (<1%) differences are expected due to color conversion and interpolation.
+        """
+        video = self.video_processor_tester.prepare_video_inputs(return_tensors="np")
+        video_processor = VideoMAEVideoProcessor(**self.video_processor_dict)
+        image_processor = VideoMAEImageProcessor(**self.video_processor_dict)
+
+        video_frames_np = video[0]
+        video_frames_pil = [Image.fromarray(frame.astype("uint8")) for frame in video_frames_np]
+        video_out = video_processor(video_frames_pil, return_tensors="pt")
+        image_out = image_processor(video_frames_pil, return_tensors="pt")
+
+        torch.testing.assert_close(
+            video_out["pixel_values"],
+            image_out["pixel_values"],
+            rtol=5e-2,
+            atol=1e-2,
+            msg=(
+                "Pixel values differ slightly between VideoMAEVideoProcessor "
+                "and VideoMAEImageProcessor. "
+                "Differences ≤1% are expected due to YUV→RGB conversion and "
+                "interpolation behavior in different decoders."
+            ),
+        )

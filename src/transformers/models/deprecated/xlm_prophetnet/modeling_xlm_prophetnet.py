@@ -1640,8 +1640,8 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.word_embeddings, self.word_embeddings)
-            self._tie_or_clone_weights(self.decoder.word_embeddings, self.word_embeddings)
+            self._tie_embedding_weights(self.encoder.word_embeddings, self.word_embeddings)
+            self._tie_embedding_weights(self.decoder.word_embeddings, self.word_embeddings)
 
     def get_encoder(self):
         return self.encoder
@@ -1751,7 +1751,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.prophetnet.word_embeddings, self.lm_head)
+            self._tie_embedding_weights(self.prophetnet.word_embeddings, self.lm_head)
 
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
@@ -1964,7 +1964,7 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.prophetnet.decoder.word_embeddings, self.lm_head)
+            self._tie_embedding_weights(self.prophetnet.decoder.word_embeddings, self.lm_head)
 
     def set_decoder(self, decoder):
         self.prophetnet.decoder = decoder
@@ -2173,7 +2173,7 @@ class XLMProphetNetDecoderWrapper(XLMProphetNetPreTrainedModel):
         self.post_init()
 
     def _tie_weights(self):
-        self._tie_or_clone_weights(self.word_embeddings, self.decoder.get_input_embeddings())
+        self._tie_embedding_weights(self.word_embeddings, self.decoder.get_input_embeddings())
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)

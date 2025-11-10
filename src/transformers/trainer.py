@@ -65,7 +65,7 @@ from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
-from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
+from .modeling_utils import PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
@@ -123,6 +123,7 @@ from .trainer_utils import (
     find_executable_batch_size,
     get_last_checkpoint,
     has_length,
+    load_sharded_checkpoint,
     neftune_post_forward_hook,
     number_of_arguments,
     seed_worker,
@@ -208,7 +209,6 @@ if is_peft_available():
 
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
-    from accelerate import __version__ as accelerate_version
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
         DataLoaderConfiguration,
@@ -318,7 +318,7 @@ class Trainer:
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
-        eval_dataset (Union[`torch.utils.data.Dataset`, dict[str, `torch.utils.data.Dataset`, `datasets.Dataset`]), *optional*):
+        eval_dataset (Union[`torch.utils.data.Dataset`, dict[str, `torch.utils.data.Dataset`], `datasets.Dataset`]), *optional*):
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
              dataset prepending the dictionary key to the metric name.
@@ -326,7 +326,6 @@ class Trainer:
             Processing class used to process the data. If provided, will be used to automatically process the inputs
             for the model, and it will be saved along the model to make it easier to rerun an interrupted training or
             reuse the fine-tuned model.
-            This supersedes the `tokenizer` argument, which is now deprecated.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
@@ -737,6 +736,10 @@ class Trainer:
         # Internal variables to help with automatic batch size reduction
         self._train_batch_size = args.train_batch_size
         self._created_lr_scheduler = False
+
+        # Set use_cache for the model
+        if getattr(self.model, "config", None) is not None:
+            self.model.config.use_cache = self.args.use_cache
 
         # very last
         self._memory_tracker.stop_and_update_metrics()
@@ -1845,15 +1848,15 @@ class Trainer:
                     self.callback_handler.on_train_end(self.args, self.state, self.control)
                     raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
-            import ray.train
+            import ray.tune
 
             with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
                 checkpoint = None
                 if self.control.should_save:
                     self._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
-                    checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
+                    checkpoint = ray.tune.Checkpoint.from_directory(temp_checkpoint_dir)
                 metrics["objective"] = self.objective
-                ray.train.report(metrics, checkpoint=checkpoint)
+                ray.tune.report(metrics, checkpoint=checkpoint)
 
     def _tune_save_checkpoint(self, checkpoint_dir: str):
         output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
@@ -2653,9 +2656,9 @@ class Trainer:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
                 run_id = trial.number
             elif self.hp_search_backend == HPSearchBackend.RAY:
-                import ray.train
+                import ray.tune
 
-                run_id = ray.train.get_context().get_trial_id()
+                run_id = ray.tune.get_context().get_trial_id()
             elif self.hp_search_backend == HPSearchBackend.WANDB:
                 import wandb
 
@@ -3537,7 +3540,7 @@ class Trainer:
                 )
                 logs.update(speed_metrics("train", start_time, num_tokens=current_session_num_tokens))
 
-        output = {**logs, **{"step": self.state.global_step}}
+        output = {**logs, "step": self.state.global_step}
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
@@ -4146,7 +4149,7 @@ class Trainer:
         You can also subclass and override this method to inject custom behavior.
 
         Args:
-            eval_dataset (Union[`Dataset`, dict[str, `Dataset`]), *optional*):
+            eval_dataset (Union[`Dataset`, dict[str, `Dataset`]], *optional*):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. If it is a dictionary, it will
                 evaluate on each dataset, prepending the dictionary key to the metric name. Datasets must implement the
@@ -4963,7 +4966,18 @@ class Trainer:
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
-        args = {"deepspeed_plugin": self.args.deepspeed_plugin, "dataloader_config": dataloader_config}
+        fsdp_plugin = None
+        if self.args.fsdp_plugin_args is not None:
+            from accelerate.utils import FullyShardedDataParallelPlugin
+
+            fsdp_plugin = FullyShardedDataParallelPlugin(**self.args.fsdp_plugin_args)
+
+        args = {
+            "mixed_precision": self.args.mixed_precision,
+            "dataloader_config": dataloader_config,
+            "fsdp_plugin": fsdp_plugin,
+            "deepspeed_plugin": self.args.deepspeed_plugin,
+        }
 
         # We defer compatibility checks to accelerator
         if self.args.parallelism_config is not None:
@@ -4977,13 +4991,22 @@ class Trainer:
         if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
             self.is_tp_enabled = True
             if self.args.parallelism_config is not None:
-                if version.parse(accelerate_version) > version.parse("1.10.1"):
+                if is_accelerate_available("1.10.1"):
                     if self.args.parallelism_config is not None:
                         from accelerate import ParallelismConfig
 
                         args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
                 else:
                     raise ValueError("Requires accelerate>1.10.1 to use Tensor Parallelism.")
+
+        if is_accelerate_available("1.2.0"):
+            # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
+            from accelerate.utils import TorchDynamoPlugin
+
+            dynamo_plugin = TorchDynamoPlugin(
+                backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode
+            )
+            args["dynamo_plugin"] = dynamo_plugin
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
@@ -5098,9 +5121,10 @@ class Trainer:
                 pass
 
         if num_items_in_batch is not None:
-            if self.args.average_tokens_across_devices and self.args.world_size >= 1:
-                num_items_in_batch = self.accelerator.gather(num_items_in_batch.to(device)).sum()
-            elif self.args.n_gpu >= 1:
+            if self.args.average_tokens_across_devices:
+                if self.args.world_size > 1:
+                    num_items_in_batch = self.accelerator.gather(num_items_in_batch.to(device)).sum()
+            elif self.args.n_gpu > 1:
                 # In DP case, if we don't average, we need to divide by the number of gpu. This is the simplest approximation.
                 # Otherwise, we would have to scatter labels and calculate num_items_in_batch for each gpu.
                 num_items_in_batch = num_items_in_batch // self.args.n_gpu

@@ -23,7 +23,6 @@ import tempfile
 import unittest
 import warnings
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pytest
@@ -908,7 +907,7 @@ class GenerationTesterMixin:
 
     @pytest.mark.generate
     def test_left_padding_compatibility(
-        self, unpadded_custom_inputs: Optional[dict] = None, padded_custom_inputs: Optional[dict] = None
+        self, unpadded_custom_inputs: dict | None = None, padded_custom_inputs: dict | None = None
     ):
         """
         Tests that adding left-padding yields the same logits as the original input. Exposes arguments for custom
