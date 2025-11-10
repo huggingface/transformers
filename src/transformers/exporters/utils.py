@@ -28,6 +28,10 @@ from ..masking_utils import (
     sdpa_mask,
 )
 from ..utils.import_utils import is_torch_available
+from ..utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 if is_torch_available():
@@ -292,6 +296,47 @@ def generate_masks_with_special_tokens_and_transfer_map(
     return attention_mask, position_ids
 
 
+def range_index_map(batch_shape, num_segments, name="range_index_map"):
+    """
+    Constructs an index map equal to range(num_segments).
+
+    Args:
+        batch_shape (`torch.Size`):
+            Batch shape
+        num_segments (`int`):
+            Number of segments
+        name (`str`, *optional*, defaults to 'range_index_map'):
+            Name for the operation. Currently not used
+
+    Returns:
+        (`IndexMap`): IndexMap of shape batch_shape with elements equal to range(num_segments).
+    """
+    from ..models.tapas.modeling_tapas import IndexMap
+
+    device = num_segments.device if torch.is_tensor(num_segments) else "cpu"
+    batch_shape = torch.as_tensor(batch_shape, dtype=torch.long, device=device)
+    num_segments = torch.as_tensor(num_segments, device=device)
+
+    # handle the no-batch case
+    if batch_shape.numel() == 0:
+        indices = torch.arange(start=0, end=num_segments, device=device)
+        return IndexMap(indices=indices, num_segments=num_segments, batch_dims=0)
+
+    # Create 1D ranges for each batch dimension (these accept tensor scalars)
+    ranges = [torch.arange(0, b, device=device) for b in batch_shape]
+
+    # Build a representative tensor of shape `batch_shape` using meshgrid,
+    # then make a ones tensor of that shape to broadcast the last-dimension arange.
+    grids = torch.meshgrid(*ranges, indexing="ij") if len(ranges) > 1 else (ranges[0],)
+    ones = torch.ones_like(grids[0], dtype=torch.long, device=device)  # shape = batch_shape
+
+    # create the last-dimension arange (num_segments) and broadcast-multiply
+    last = torch.arange(0, num_segments, device=device, dtype=torch.long).unsqueeze(0)  # shape (1, num_segments)
+    indices = ones.unsqueeze(-1) * last  # broadcasts to (*batch_shape, num_segments)
+
+    return IndexMap(indices=indices, num_segments=num_segments, batch_dims=int(batch_shape.size(0)))
+
+
 def batched_experts_forward_with_split_expert_weights(
     self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
 ) -> torch.Tensor:
@@ -311,6 +356,7 @@ def batched_experts_forward_with_split_expert_weights(
     # Gather inputs for all (token, expert) pairs
     x = hidden_states.index_select(0, token_idx)  # (P, H)
 
+    # TODO: instead of stacking here, patch the entire class to have its expert weights pre-stacked
     # Stack per-expert weights once, then gather per pair
     # Linear weight shapes: gate/up: (I, H), down: (H, I)
     if hasattr(self[0], "w1"):
@@ -398,7 +444,93 @@ def batched_experts_forward_with_grouped_expert_weights(
     return next_states
 
 
-def batched_experts_gemm(self, input: torch.Tensor, tokens_per_expert: torch.Tensor) -> torch.Tensor:
+def batched_switch_transformers_experts_forward(
+    self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
+) -> torch.Tensor:
+    """
+    Vectorized, torch.export-friendly version of SwitchTransformersExperts.forward.
+
+    This implementation avoids data-dependent control flow (no early returns or size-varying
+    indexing). All pair computations are kept at a fixed shape (P * top_k) and invalid pairs
+    (where selected_experts is all-zero) are suppressed by zeroing their routing weights so
+    they contribute nothing to the final scatter-add.
+    """
+    P, H = hidden_states.shape
+    device = hidden_states.device
+    dtype = hidden_states.dtype
+
+    # shapes
+    top_k = selected_experts.shape[1]
+    E = selected_experts.shape[-1]
+
+    # Flatten token-topk pairs: length = P * top_k
+    token_idx = torch.arange(P, device=device).unsqueeze(1).expand(-1, top_k).reshape(-1)  # (P*top_k,)
+
+    # Flatten selection and compute a pair mask (no branching on it)
+    sel_flat = selected_experts.reshape(-1, E)  # (P*top_k, E)
+    pair_mask = sel_flat.any(dim=-1)  # (P*top_k,) boolean
+
+    # Use argmax for expert ids (safe even when sel_flat is all-zero: will pick 0)
+    expert_ids = torch.argmax(sel_flat, dim=-1)  # (P*top_k,)
+
+    # Flatten routing weights and zero-out invalid pairs so they have no effect
+    pair_weights = routing_weights.reshape(-1, 1).to(dtype) * pair_mask.to(dtype).unsqueeze(1)  # (P*top_k, 1)
+
+    # Gather inputs for all pairs
+    x = hidden_states.index_select(0, token_idx)  # (P*top_k, H)
+
+    # Stack per-expert weights once, then select per pair
+    W_i = torch.stack([self[f"expert_{i}"].wi.weight for i in range(self.num_experts)], dim=0)  # (E, d_ff, H)
+    W_o = torch.stack([self[f"expert_{i}"].wo.weight for i in range(self.num_experts)], dim=0)  # (E, H, d_ff)
+
+    # Select weights per (flattened) pair
+    W_i_sel = W_i.index_select(0, expert_ids)  # (P*top_k, d_ff, H)
+    W_o_sel = W_o.index_select(0, expert_ids)  # (P*top_k, H, d_ff)
+
+    # Up projection: x (1, H) @ (H, d_ff) -> (1, d_ff)
+    x_ = x.unsqueeze(1)  # (P*top_k, 1, H)
+    s_up = torch.bmm(x_, W_i_sel.transpose(1, 2)).squeeze(1)  # (P*top_k, d_ff)
+
+    # Activation: use any expert's activation (acts are the same across experts in this impl)
+    act_fn = next(iter(self.values())).act
+    inter = act_fn(s_up)  # (P*top_k, d_ff)
+
+    # Align dtype to output weight dtype if needed
+    if inter.dtype != W_o_sel.dtype and W_o_sel.dtype != torch.int8:
+        inter = inter.to(W_o_sel.dtype)
+
+    # Down projection: (1, d_ff) @ (d_ff, H) -> (1, H)
+    y = torch.bmm(inter.unsqueeze(1), W_o_sel.transpose(1, 2)).squeeze(1)  # (P*top_k, H)
+
+    # Apply routing weights (zeros out invalid pairs) and cast back to original dtype
+    y = (y * pair_weights).to(dtype)  # (P*top_k, H)
+
+    # Scatter-add back to final hidden states (fixed-size token_idx)
+    final_hidden_states = torch.zeros_like(hidden_states)
+    final_hidden_states.index_add_(0, token_idx, y)
+
+    return final_hidden_states
+
+
+def axial_position_embedding(self, position_ids):
+    # broadcast weights to correct shape
+    batch_size = position_ids.shape[0]
+    broadcasted_weights = [
+        weight.expand((batch_size,) + self.axial_pos_shape + weight.shape[-1:]) for weight in self.weights
+    ]
+
+    position_encodings = torch.cat(broadcasted_weights, dim=-1)
+    position_encodings = torch.reshape(position_encodings, (batch_size, -1, position_encodings.shape[-1]))
+    position_encodings = torch.gather(
+        position_encodings,
+        1,
+        position_ids.unsqueeze(-1).expand(-1, -1, position_encodings.shape[-1]),
+    )
+
+    return position_encodings
+
+
+def aria_grouped_experts_gemm(self, input: torch.Tensor, tokens_per_expert: torch.Tensor) -> torch.Tensor:
     # Create expert assignment indices [num_tokens]
     expert_indices = torch.repeat_interleave(
         torch.arange(self.groups, device=input.device, dtype=torch.long), tokens_per_expert.to(torch.long)
@@ -414,9 +546,19 @@ def batched_experts_gemm(self, input: torch.Tensor, tokens_per_expert: torch.Ten
     return output
 
 
+def idefics_embedding(self, x, seq_len=None):
+    torch._check(seq_len.item() > 0)
+    torch._check(seq_len.item() <= max(self.cos_cached.shape[0], self.sin_cached.shape[0]))
+    return (
+        self.cos_cached[: seq_len.item()].to(dtype=x.dtype),
+        self.sin_cached[: seq_len.item()].to(dtype=x.dtype),
+    )
+
+
 TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD: dict[str, Callable] = {
     # Expert MLPs with different weight storage schemes
-    "AriaGroupedExpertsGemm": batched_experts_gemm,
+    "AriaGroupedExpertsGemm": aria_grouped_experts_gemm,
+    "AxialPositionEmbeddings": axial_position_embedding,
     "DbrxExperts": batched_experts_forward_with_grouped_expert_weights,
     "DeepseekV2Experts": batched_experts_forward_with_split_expert_weights,
     "DeepseekV3NaiveMoe": batched_experts_forward_with_split_expert_weights,
@@ -426,6 +568,7 @@ TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD: dict[str, Callable] = {
     "Glm4MoeNaiveMoe": batched_experts_forward_with_split_expert_weights,
     "Glm4vMoeTextNaiveMoe": batched_experts_forward_with_split_expert_weights,
     "HunYuanMoEV1Experts": batched_experts_forward_with_split_expert_weights,
+    "IdeficsEmbedding": idefics_embedding,
     "JambaExperts": batched_experts_forward_with_split_expert_weights,
     "Lfm2MoeExperts": batched_experts_forward_with_split_expert_weights,
     "LongcatFlashExperts": batched_experts_forward_with_split_expert_weights,
@@ -437,6 +580,7 @@ TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD: dict[str, Callable] = {
     "Qwen3MoeExperts": batched_experts_forward_with_split_expert_weights,
     "Qwen3NextExperts": batched_experts_forward_with_split_expert_weights,
     "Qwen3OmniMoeThinkerTextExperts": batched_experts_forward_with_split_expert_weights,
+    "SwitchTransformersExperts": batched_switch_transformers_experts_forward,
 }
 
 
@@ -474,6 +618,11 @@ def patch_model_for_export(model: "PreTrainedModel"):
         mm_grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map = (
             generate_masks_with_special_tokens_and_transfer_map
         )
+    elif model.config.model_type == "tapas":
+        import transformers.models.tapas.modeling_tapas as tapas_module
+
+        original_functions["range_index_map"] = tapas_module.range_index_map
+        tapas_module.range_index_map = range_index_map
 
     try:
         yield
@@ -500,6 +649,10 @@ def patch_model_for_export(model: "PreTrainedModel"):
             mm_grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map = original_functions[
                 "generate_masks_with_special_tokens_and_transfer_map"
             ]
+        elif model.config.model_type == "tapas":
+            import transformers.models.tapas.modeling_tapas as tapas_module
+
+            tapas_module.range_index_map = original_functions["range_index_map"]
 
 
 UNSUPPORTED_MODEL_TYPES: set[str] = {
@@ -508,54 +661,39 @@ UNSUPPORTED_MODEL_TYPES: set[str] = {
     "emu3",  # Emu3VQVAE.encode is data-dependent
     "encodec",  # torch.export struggles with torch.nn.functional.pad with "reflect" mode
     "esm",  # uses compute_tm function which data-dependent
-    "falcon_mamba",  # Uses FalconMambaCache which is a custom cache type that's not yet registered as a pytree node
     "fastspeech2_conformer",  # Even after making parts of it exportable, dynamo still struggle with the convolutions in FastSpeech2ConformerMultiLayeredConv1d
     "fastspeech2_conformer_with_hifigan",  # Even after making parts of it exportable, dynamo still struggle with the convolutions in FastSpeech2ConformerMultiLayeredConv1d
     "funnel",  # torch.export struggles with torch.einsum in FunnelRelMultiheadAttention
-    # "glm4v",
-    # "glm4v_moe",
+    "glm4v",  # Glm4vVisionAttention implementation is highly data-dependent
+    "glm4v_moe",  # Glm4vMoeVisionAttention implementation is highly data-dependent
     "hiera",  # torch.export struggles with a reshape operation in HieraEncoder.reroll
-    # "ibert",
-    "jamba",  # Uses HybridMambaAttentionDynamicCache which is a custom cache type that's not yet registered as a pytree node
-    # "led",
-    "lfm2",  # Uses Lfm2HybridConvCach which is a custom cache type that's not yet registered as a pytree node
-    "lfm2_moe",  # Uses Lfm2MoeHybridConvCach which is a custom cache type that's not yet registered as a pytree node
+    "ibert",  # Uses numpy arrays and decimal.Decimal in batch_frexp
     "lfm2_vl",  # Uses siglip2 which is not exportable
-    # "lightglue",
-    # "llava_next",
-    # "llava_next_video",
-    # "llava_onevision",
-    # "longformer",
-    "mamba",  # Uses MambaCache which is a custom cache type that's not yet registered as a pytree node
-    "mamba2",  # Uses Mamba2Cache which is a custom cache type that's not yet registered as a pytree node
-    "minimax",  # Uses MiniMaxCache which is a custom cache type that's not yet registered as a pytree node
-    # "mistral3",
-    # "modernbert",
-    # "nllb-moe",
-    # "omdet-turbo",
+    "lightglue",  # torch.export struggles with sigmoid_log_double_softmax
+    "llava_next",  # All three have the same unexplicable error during export
+    "llava_next_video",  # All three have the same unexplicable error during export
+    "llava_onevision",  # All three have the same unexplicable error during export
+    "longformer",  # torch.export is struggling with the global attention implementation
+    "mistral3",  # PixtralVisionModel uses some data-dependent truncation
+    "modernbert",  # Uses torch.compile directly on some module forward methods
+    "nllb-moe",  # TODO: Moe implementation needs to be patched for export
+    "omdet-turbo",  #
     "oneformer",  # torch.export is failing on multiple torch methods like torch.linspace and torch.meshgrid
     "pixtral",  # PixtralModel.forward does some data-dependent truncation
+    "phi4_multimodal",  # I guess the model is just broken in its current state
     "qwen2_5_omni_thinker",  # already made many parts exportable but still has some non-exportable ops
     "qwen2_5_vl",  # Qwen2_5_VisionTransformerPretrainedModel.get_window_index is data-dependent
     "qwen2_vl",  # Qwen2VLModel.get_rope_index is data-dependent
-    "qwen3_next",  # Uses Qwen3NextDynamicCache which is a custom cache type that's not yet registered as a pytree node
     "qwen3_omni_moe_thinker",  # Qwen3OmniMoeAudioEncoder.forward does data-dependent chunking
     "qwen3_vl",  # fast_pos_embed_interpolate is data-dependent
-    # "qwen3_vl_moe",
-    # "reformer",
+    "qwen3_vl_moe",  # fast_pos_embed_interpolate is highly data-dependent
     "siglip2",  # torch.export is failing on torch.nn.functional.interpolate
     "siglip2_vision_model",  # torch.export is failing on torch.nn.functional.interpolate
     "superpoint",  # torch.export is failing on torch.nn.functional.grid_sample
-    # "switch_transformers",
-    # "tapas",
-    # "video_llama_3",
-    # "video_llama_3_vision",
-    # "video_llava",
-    # "videomae",
+    "video_llama_3",  # VideoLlama3VisionAttention implementation is highly data-dependent
+    "video_llama_3_vision",  # VideoLlama3VisionAttention implementation is highly data-dependent
     "vilt",  # torch.export is failing on torch.nn.functional.interpolate
-    "xlstm",  # Uses xLSTMCache which is a custom cache type that's not yet registered as a pytree node
     "xmod",  # XmodOutput.lang_adapter is data-dependent
-    "zamba2",  # Uses Zamba2HybridDynamicCache which is a custom cache type that's not yet registered as a pytree node
 }
 
 
@@ -564,3 +702,27 @@ def raise_on_unsupported_model(model: "PreTrainedModel"):
         raise NotImplementedError(
             f"Dynamo export is not supported for model class '{model.__class__.__name__}' with model_type '{model.config.model_type}'."
         )
+
+
+UNSUPPORTED_CACHE_CLASS_MODEL_TYPES: set[str] = {
+    "falcon_mamba",
+    "jamba",
+    "lfm2",
+    "lfm2_moe",
+    "mamba",
+    "mamba2",
+    "minimax",
+    "qwen3_next",
+    "reformer",
+    "xlstm",
+    "zamba2",
+}
+
+
+def warn_on_unsupported_cache_class(model: "PreTrainedModel"):
+    if model.config.model_type in UNSUPPORTED_CACHE_CLASS_MODEL_TYPES:
+        logger.warning(
+            f"Model class '{model.__class__.__name__}' with model_type '{model.config.model_type}' uses a cache class that is not yet fully supported for export. "
+            "We will set 'use_cache=False' during export, but some functionalities may be limited."
+        )
+        model.config.use_cache = False

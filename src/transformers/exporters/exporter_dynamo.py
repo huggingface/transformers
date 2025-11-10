@@ -24,11 +24,13 @@ from ..utils.export_config import DynamoConfig
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 from .base import HfExporter
 from .utils import (
+    UNSUPPORTED_CACHE_CLASS_MODEL_TYPES,
     get_auto_dynamic_shapes,
     patch_model_for_export,
     raise_on_unsupported_model,
     register_dynamic_cache_for_export,
     register_encoder_decoder_cache_for_export,
+    warn_on_unsupported_cache_class,
 )
 
 
@@ -58,6 +60,7 @@ class DynamoExporter(HfExporter):
 
     def export(self, model: "PreTrainedModel"):
         raise_on_unsupported_model(model)
+        warn_on_unsupported_cache_class(model)
 
         if self.export_config.sample_inputs is None:
             raise NotImplementedError(
@@ -69,25 +72,27 @@ class DynamoExporter(HfExporter):
 
         sample_inputs = copy.deepcopy(self.export_config.sample_inputs)
 
-        register_dynamic_cache_for_export()
-        register_encoder_decoder_cache_for_export()
         if (
             isinstance(model, GenerationMixin)
             and getattr(model.config, "use_cache", False)
             and "past_key_values" in inspect.signature(model.forward).parameters
+            and model.config.model_type not in UNSUPPORTED_CACHE_CLASS_MODEL_TYPES
+            and "past_key_values" not in sample_inputs
         ):
-            if "past_key_values" not in sample_inputs:
-                logger.info(
-                    f"{self.__class__.__name__} detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
-                    "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
-                    "You can also provide past_key_values in sample_inputs to avoid this step."
-                )
-                self.prepare_cache_inputs_for_export(model, sample_inputs)
+            logger.info(
+                f"{self.__class__.__name__} detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
+                "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
+                "You can also provide past_key_values in sample_inputs to avoid this step."
+            )
+            self.prepare_cache_inputs_for_export(model, sample_inputs)
 
         dynamic_shapes = self.export_config.dynamic_shapes
         if self.export_config.dynamic and dynamic_shapes is None:
             # assigns AUTO to all axes to let torch.onnx decide
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
+
+        register_dynamic_cache_for_export()
+        register_encoder_decoder_cache_for_export()
 
         with patch_model_for_export(model):
             exported_program: ExportedProgram = torch.export.export(
