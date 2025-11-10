@@ -196,10 +196,6 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
 
         for shape, stacked_videos in grouped_videos.items():
             if do_resize:
-                T = stacked_videos.shape[1]
-                if pad := -T % temporal_patch_size:
-                    repeats = stacked_videos[:, -1:].expand(-1, pad, -1, -1, -1)
-                    stacked_videos = torch.cat((stacked_videos, repeats), dim=1)
                 B, T, C, H, W = stacked_videos.shape
                 num_frames, height, width = T, H, W
                 resized_height, resized_width = smart_resize(

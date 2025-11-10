@@ -329,24 +329,6 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             if prev_max_resolution is not None:
                 self.video_processor_tester.max_resolution = prev_max_resolution
 
-    def test_only_one_image_input(self):
-        for video_processing_class in self.video_processor_list:
-            video_processor_dict = self.video_processor_dict.copy()
-            video_processor_dict["size"] = {"longest_edge": 1 * 32 * 32, "shortest_edge": 32 * 32}
-            video_processor_dict["do_sample_frames"] = False
-            video_processor_dict["temporal_patch_size"] = 3
-            video_processing = video_processing_class(**video_processor_dict)
-
-            n, w, h = 1, 32, 32
-            video_inputs = [(np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)) for _ in range(n)]
-
-            video_processed = video_processing(video_inputs, return_tensors="pt")
-            encoded_videos = video_processed[self.input_name]
-            self.assertEqual(list(encoded_videos.shape), [4, 2304])
-
-            video_grid_thw = video_processed["video_grid_thw"]
-            self.assertEqual(video_grid_thw.tolist(), [[1, 2, 2]])
-
     def test_num_frames_equal_temporal_patch_size_plus_two(self):
         for video_processing_class in self.video_processor_list:
             video_processor_dict = self.video_processor_dict.copy()
