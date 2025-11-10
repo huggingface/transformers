@@ -242,7 +242,6 @@ Before you start training your model, create a map of the expected ids to their 
 ... }
 ```
 
-
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -297,7 +296,6 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-
 
 <Tip>
 

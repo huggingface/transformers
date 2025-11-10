@@ -241,7 +241,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
             self.skipTest("FlashAttention2 is required for this test.")
 
         if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support falsh_attention_2 as of now.")
+            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         EXPECTED_COMPLETIONS = [

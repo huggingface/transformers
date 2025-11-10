@@ -47,7 +47,6 @@ However, this is not always the case. Some models apply normalization or subsequ
 
 </Tip>
 
-
 You can access each attribute as you would usually do, and if that attribute has not been returned by the model, you
 will get `None`. Here for instance `outputs.loss` is the loss computed by the model, and `outputs.attentions` is
 `None`.

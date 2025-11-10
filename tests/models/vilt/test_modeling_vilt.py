@@ -229,9 +229,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_headmasking = False
-    test_torchscript = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     # ViltForMaskedLM, ViltForQuestionAnswering and ViltForImagesAndTextClassification require special treatment

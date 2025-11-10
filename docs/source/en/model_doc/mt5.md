@@ -133,7 +133,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 See [`T5Tokenizer`] for all details.
 
-
 ## MT5TokenizerFast
 
 [[autodoc]] MT5TokenizerFast

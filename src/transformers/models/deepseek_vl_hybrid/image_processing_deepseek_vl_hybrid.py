@@ -39,12 +39,8 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import (
-    TensorType,
-    filter_out_non_signature_kwargs,
-    is_vision_available,
-    logging,
-)
+from ...processing_utils import ImagesKwargs
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_vision_available():
@@ -52,6 +48,32 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    min_size (`int`, *optional*, defaults to 14):
+        The minimum allowed size for the resized image. Ensures that neither the height nor width
+        falls below this value after resizing.
+     high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
+        Size of the high resolution output image after resizing. Can be overridden by the `high_res_size` parameter in the `preprocess`
+        method.
+    high_res_resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+        Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
+        overridden by the `high_res_resample` parameter in the `preprocess` method.
+    high_res_image_mean (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
+        Mean to use if normalizing the high resolution image. This is a float or list of floats the length of the number of
+        channels in the image. Can be overridden by the `high_res_image_mean` parameter in the `preprocess` method.
+    high_res_image_std (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
+        Standard deviation to use if normalizing the high resolution image. This is a float or list of floats the length of the
+        number of channels in the image. Can be overridden by the `high_res_image_std` parameter in the `preprocess` method.
+    """
+
+    min_size: int
+    high_res_size: dict
+    high_res_resample: Union["PILImageResampling", int]
+    high_res_image_mean: Union[float, list[float], tuple[float, ...]]
+    high_res_image_std: Union[float, list[float], tuple[float, ...]]
 
 
 class DeepseekVLHybridImageProcessor(BaseImageProcessor):
@@ -107,6 +129,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "high_res_pixel_values"]
+    valid_kwargs = DeepseekVLHybridImageProcessorKwargs
 
     def __init__(
         self,
@@ -288,10 +311,8 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -333,10 +354,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
@@ -431,7 +449,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         background_color: Union[int, tuple[int, int, int]] = 0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Pads an image to a square based on the longest edge.
 

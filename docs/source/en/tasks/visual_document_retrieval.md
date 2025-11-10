@@ -38,9 +38,10 @@ from datasets import load_dataset
 dataset = load_dataset("davanstrien/ufo-ColPali")
 dataset = dataset["train"]
 dataset = dataset.filter(lambda example: example["specific_detail_query"] is not None)
-dataset
+print(dataset)
 ```
-```
+
+```text
 Dataset({
     features: ['image', 'raw_queries', 'broad_topical_query', 'broad_topical_explanation', 'specific_detail_query', 'specific_detail_explanation', 'visual_element_query', 'visual_element_explanation', 'parsed_into_json'],
     num_rows: 2172
@@ -51,9 +52,10 @@ Let's load the model and the tokenizer.
 
 ```python
 import torch
-from transformers import ColPaliForRetrieval, ColPaliProcessor, infer_device
+from transformers import ColPaliForRetrieval, ColPaliProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 model_name = "vidore/colpali-v1.2-hf"
 
@@ -119,7 +121,7 @@ indices, scores = find_top_k_indices_batched(ds_with_embeddings, text_embeds, pr
 print(indices, scores)
 ```
 
-```
+```text
 ([440, 442, 443],
  [14.370786666870117,
   13.675487518310547,
@@ -134,13 +136,13 @@ for i in indices:
 ```
 
 <div style="display: flex; align-items: center;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_1.png" 
-         alt="Document 1" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_1.png"
+         alt="Document 1"
          style="height: 200px; object-fit: contain; margin-right: 10px;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_2.png" 
-         alt="Document 2" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_2.png"
+         alt="Document 2"
          style="height: 200px; object-fit: contain;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_3.png" 
-         alt="Document 3" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_3.png"
+         alt="Document 3"
          style="height: 200px; object-fit: contain;">
 </div>

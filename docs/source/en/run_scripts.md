@@ -52,6 +52,7 @@ Start with a smaller dataset by including the `max_train_samples`, `max_eval_sam
 
 > [!WARNING]
 > Not all example scripts support the `max_predict_samples` parameter. Run the command below to check whether a script supports it or not.
+>
 > ```bash
 > examples/pytorch/summarization/run_summarization.py -h
 > ```
@@ -60,9 +61,8 @@ The example below fine-tunes [T5-small](https://huggingface.co/google-t5/t5-smal
 
 The example script downloads and preprocesses a dataset, and then fine-tunes it with [`Trainer`] with a supported model architecture.
 
-Resuming training from a checkpoint is very useful if training is interrupted because you don't have to start over again. There are two ways to resume training from a checkpoint.
+Resuming training from a checkpoint is very useful if training is interrupted because you don't have to start over again:
 
-* `--output dir previous_output_dir` resumes training from the latest checkpoint stored in `output_dir`. Remove the `--overwrite_output_dir` parameter if you're using this method.
 * `--resume_from_checkpoint path_to_specific_checkpoint` resumes training from a specific checkpoint folder.
 
 Share your model on the [Hub](https://huggingface.co/) with the `--push_to_hub` parameter. It creates a repository and uploads the model to the folder name specified in `--output_dir`. You could also use the `--push_to_hub_model_id` parameter to specify the repository name.
@@ -84,9 +84,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --per_device_eval_batch_size=4 \
     --push_to_hub \
     --push_to_hub_model_id finetuned-t5-cnn_dailymail \
-    # remove if using `output_dir previous_output_dir`
-    # --overwrite_output_dir \
-    --output_dir previous_output_dir \
     # --resume_from_checkpoint path_to_specific_checkpoint \
     --predict_with_generate \
 ```
@@ -104,7 +101,7 @@ torchrun \
     ...
 ```
 
-PyTorch supports TPUs, hardware designed to accelerate performance, through the [PyTorch/XLA](https://github.com/pytorch/xla/blob/master/README.md) package. Launch the `xla_spawn.py` script and use `num _cores` to set the number of TPU cores to train with.
+PyTorch supports TPUs, hardware designed to accelerate performance, through the [PyTorch/XLA](https://github.com/pytorch/xla/blob/master/README.md) package. Launch the `xla_spawn.py` script and use `num_cores` to set the number of TPU cores to train with.
 
 ```bash
 python xla_spawn.py --num_cores 8 pytorch/summarization/run_summarization.py \
@@ -167,7 +164,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --summary_column summary_column_name \
     --source_prefix "summarize: " \
     --output_dir /tmp/tst-summarization \
-    --overwrite_output_dir \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
     --predict_with_generate \

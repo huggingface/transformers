@@ -64,12 +64,12 @@ def smart_resize(
     return h_bar, w_bar
 
 
-class Qwen3VLVideoProcessorInitKwargs(VideosKwargs):
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-    min_frames: Optional[int]
-    max_frames: Optional[int]
+class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
 
 
 @add_start_docstrings(
@@ -164,7 +164,7 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
                     "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
                 )
             num_frames = int(total_num_frames / metadata.fps * fps)
-            num_frames = min(min(max(num_frames, self.min_frames), self.max_frames), total_num_frames)
+            num_frames = min(max(num_frames, self.min_frames), self.max_frames, total_num_frames)
 
         if num_frames is None:
             num_frames = min(max(total_num_frames, self.min_frames), self.max_frames)

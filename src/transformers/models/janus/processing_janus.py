@@ -64,10 +64,6 @@ class JanusProcessor(ProcessorMixin):
             Use default system prompt for Text Generation.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "JanusImageProcessor"
-    tokenizer_class = "LlamaTokenizerFast"
-
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=False, **kwargs):
         self.num_image_tokens = 576
         self.image_token = tokenizer.image_token
@@ -81,8 +77,6 @@ class JanusProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         images: Optional[ImageInput] = None,
-        videos=None,
-        audio=None,
         **kwargs: Unpack[JanusProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -102,10 +96,8 @@ class JanusProcessor(ProcessorMixin):
                 tensor. Both channels-first and channels-last formats are supported.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

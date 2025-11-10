@@ -17,11 +17,11 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature, ChannelDimension, get_image_size
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -30,28 +30,13 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
+from .image_processing_swin2sr import Swin2SRImageProcessorKwargs
 
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
-
-
-class Swin2SRFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    size_divisor (`int`, *optional*, defaults to `8`):
-        The size of the sliding window for the local attention. It will be used to pad the image
-        to the size divisible by `size_divisor`
-    """
-
-    size_divisor: Optional[int]
 
 
 @auto_docstring
@@ -60,9 +45,9 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     rescale_factor = 1 / 255
     do_pad = True
     size_divisor = 8
-    valid_kwargs = Swin2SRFastImageProcessorKwargs
+    valid_kwargs = Swin2SRImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[Swin2SRFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Swin2SRImageProcessorKwargs]):
         pad_size = kwargs.pop("pad_size", None)
         kwargs.setdefault("size_divisor", pad_size)
         super().__init__(**kwargs)
@@ -81,7 +66,7 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
         )
         self.size_divisor = value
 
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Swin2SRFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Swin2SRImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     @deprecate_kwarg("size", version="v5", new_name="size_divisor")

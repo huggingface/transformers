@@ -29,7 +29,6 @@ encoder-decoder transformer pre-trained in a text-to-text denoising generative s
 T5 model, and it enables using one of the two different efficient attention mechanisms - (1) Local attention, or (2)
 Transient-Global attention.
 
-
 The abstract from the paper is the following:
 
 *Recent work has shown that either (1) increasing the input length or (2) increasing model size can improve the
@@ -94,7 +93,6 @@ The complexity of this mechanism is `O(l(r + l/k))`.
 >>> rouge = evaluate.load("rouge")
 >>> rouge.compute(predictions=result["predicted_abstract"], references=result["abstract"])
 ```
-
 
 ## Resources
 

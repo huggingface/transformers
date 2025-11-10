@@ -53,7 +53,7 @@ Lassen Sie uns daher ein wenig tiefer in das allgemeine Design der Bibliothek ei
 ### Überblick über die Modelle
 
 Um ein Modell erfolgreich hinzuzufügen, ist es wichtig, die Interaktion zwischen Ihrem Modell und seiner Konfiguration zu verstehen,
-[`PreTrainedModel`] und [`PretrainedConfig`]. Als Beispiel werden wir
+[`PreTrainedModel`] und [`PreTrainedConfig`]. Als Beispiel werden wir
 das Modell, das zu 🤗 Transformers hinzugefügt werden soll, `BrandNewBert` nennen.
 
 Schauen wir uns das mal an:
@@ -81,10 +81,10 @@ model.config  # model has access to its config
 ```
 
 Ähnlich wie das Modell erbt die Konfiguration grundlegende Serialisierungs- und Deserialisierungsfunktionalitäten von
-[`PretrainedConfig`]. Beachten Sie, dass die Konfiguration und das Modell immer in zwei verschiedene Formate serialisiert werden
+[`PreTrainedConfig`]. Beachten Sie, dass die Konfiguration und das Modell immer in zwei verschiedene Formate serialisiert werden
 unterschiedliche Formate serialisiert werden - das Modell in eine *pytorch_model.bin* Datei und die Konfiguration in eine *config.json* Datei. Aufruf von
 [`~PreTrainedModel.save_pretrained`] wird automatisch
-[`~PretrainedConfig.save_pretrained`] auf, so dass sowohl das Modell als auch die Konfiguration gespeichert werden.
+[`~PreTrainedConfig.save_pretrained`] auf, so dass sowohl das Modell als auch die Konfiguration gespeichert werden.
 
 
 ### Code-Stil

@@ -67,7 +67,6 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
 - [Masked language modeling task guide](../tasks/masked_language_modeling)
 - [Multiple choice task guide](../tasks/multiple_choice)
 
-
 ## FunnelConfig
 
 [[autodoc]] FunnelConfig

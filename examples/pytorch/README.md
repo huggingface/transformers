@@ -72,8 +72,7 @@ token-classification/run_ner.py -h
 
 You can resume training from a previous checkpoint like this:
 
-1. Pass `--output_dir previous_output_dir` without `--overwrite_output_dir` to resume training from the latest checkpoint in `output_dir` (what you would use if the training was interrupted, for instance).
-2. Pass `--resume_from_checkpoint path_to_a_specific_checkpoint` to resume training from that checkpoint folder.
+1. Pass `--resume_from_checkpoint path_to_a_specific_checkpoint` to resume training from that checkpoint folder.
 
 Should you want to turn an example into a notebook where you'd no longer have access to the command
 line, 🤗 Trainer supports resuming from a checkpoint via `trainer.train(resume_from_checkpoint)`.
@@ -123,8 +122,7 @@ torchrun \
 ```
 
 If you have a GPU with mixed precision capabilities (architecture Pascal or more recent), you can use mixed precision
-training with PyTorch 1.6.0 or latest, or by installing the [Apex](https://github.com/NVIDIA/apex) library for previous
-versions. Just add the flag `--fp16` to your command launching one of the scripts mentioned above!
+training with PyTorch 1.6.0 or latest. Just add the flag `--fp16` to your command launching one of the scripts mentioned above!
 
 Using mixed precision training usually results in 2x-speedup for training with the same final results (as shown in
 [this table](https://github.com/huggingface/transformers/tree/main/examples/text-classification#mixed-precision-training)

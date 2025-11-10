@@ -71,54 +71,6 @@ TEST_CACHE_IMPLEMENTATIONS = [
 class CacheTest(unittest.TestCase):
     """Cache tests that don't require loading models"""
 
-    def test_dynamic_cache_retrocompatibility(self):
-        """Tests that we can convert back and forth between the legacy cache format and DynamicCache"""
-        legacy_cache = ()
-        new_cache = DynamicCache()
-
-        # Creates a new cache with 10 layers in both formats
-        for layer_idx in range(10):
-            new_key = torch.rand((2, 4, 8, 16))
-            new_value = torch.rand((2, 4, 8, 16))
-            new_cache.update(new_key, new_value, layer_idx)
-            legacy_cache += ((new_key, new_value),)
-
-        # Sanity check 1: they must have the same shapes
-        self.assertTrue(len(legacy_cache), len(new_cache))
-        for layer_idx in range(10):
-            self.assertTrue(len(legacy_cache[layer_idx]), len(legacy_cache[layer_idx]))
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    legacy_cache[layer_idx][key_value_idx].shape == new_cache[layer_idx][key_value_idx].shape
-                )
-
-        # Sanity check 2: we can get the sequence length in multiple ways with DynamicCache, and they return the
-        # expected value
-        self.assertTrue(legacy_cache[0][0].shape[-2] == new_cache[0][0].shape[-2] == new_cache.get_seq_length() == 8)
-
-        # Sanity check 3: they must be equal, and both support indexing
-        for layer_idx in range(10):
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    torch.allclose(new_cache[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
-                )
-
-        # Test 1: We can convert from legacy to new with no changes
-        from_legacy = DynamicCache.from_legacy_cache(legacy_cache)
-        for layer_idx in range(10):
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    torch.allclose(from_legacy[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
-                )
-
-        # Test 2: We can convert from new to legacy with no changes
-        to_legacy = new_cache.to_legacy_cache()
-        for layer_idx in range(10):
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    torch.allclose(to_legacy[layer_idx][key_value_idx], new_cache[layer_idx][key_value_idx])
-                )
-
     def test_static_cache_mha_mqa_gqa(self):
         """
         Tests that static cache works with multi-head attention (MHA), grouped query attention (GQA), and multi-query
@@ -352,9 +304,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
         # sum of the scores for the generated tokens
         input_length = inputs.input_ids.shape[1]
-        score_sum = sum(
-            [score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores)]
-        )
+        score_sum = sum(score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores))
 
         EXPECTED_GENERATION = (
             "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "

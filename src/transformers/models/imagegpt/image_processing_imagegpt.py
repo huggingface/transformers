@@ -31,15 +31,32 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...processing_utils import ImagesKwargs
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_torch_available, is_vision_available, logging
 from ...utils.import_utils import requires
 
 
 if is_vision_available():
     import PIL
 
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
+
+
+class ImageGPTImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    clusters (`np.ndarray` or `list[list[int]]` or `torch.Tensor`, *optional*):
+        The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`
+        in `preprocess`.
+    do_color_quantize (`bool`, *optional*, defaults to `True`):
+        Controls whether to apply color quantization to convert continuous pixel values to discrete cluster indices.
+        When True, each pixel is assigned to its nearest color cluster, enabling ImageGPT's discrete token modeling.
+    """
+
+    clusters: Optional[Union[np.ndarray, list[list[int]], "torch.Tensor"]]
+    do_color_quantize: bool
 
 
 def squared_euclidean_distance(a, b):
@@ -83,6 +100,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = ImageGPTImageProcessorKwargs
 
     def __init__(
         self,
@@ -213,10 +231,8 @@ class ImageGPTImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -241,13 +257,10 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         images = make_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         # Here, normalize() is using a constant factor to divide pixel values.
-        # hence, the method does not need iamge_mean and image_std.
+        # hence, the method does not need image_mean and image_std.
         validate_preprocess_arguments(
             do_resize=do_resize,
             size=size,

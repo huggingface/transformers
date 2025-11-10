@@ -113,24 +113,12 @@ pip install transformers datasets evaluate sacrebleu
 
 الآن أنشئ دفعة من الأمثلة باستخدام [`DataCollatorForSeq2Seq`]. من الأكثر كفاءة *الحشو الديناميكي* للجمل إلى أطول طول في دفعة أثناء التجميع، بدلاً من حشو مجموعة البيانات بأكملها إلى الحد الأقصى للطول.
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
-</pt>
-<tf>
-
-```py
->>> from transformers import DataCollatorForSeq2Seq
-
->>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## التقييم (Evaluate)
 
@@ -177,8 +165,6 @@ pip install transformers datasets evaluate sacrebleu
 
 ## التدريب (Train)
 
-<frameworkcontent>
-<pt>
 
 <Tip>
 
@@ -233,91 +219,6 @@ pip install transformers datasets evaluate sacrebleu
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-إذا لم تكن معتادًا على ضبط نموذج باستخدام Keras، فألق نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-لضبط نموذج في TensorFlow، ابدأ بإعداد دالة مُحسِّن وجدول معدل تعلم وبعض المعلمات الفائقة للتدريب:
-
-```py
->>> from transformers import AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-ثم يمكنك تحميل T5 باستخدام [`TFAutoModelForSeq2SeqLM`]:
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained(checkpoint)
-```
-
-حوّل مجموعات البيانات الخاصة بك إلى تنسيق `tf.data.Dataset` باستخدام [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_books["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     tokenized_books["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-قم بتكوين النموذج للتدريب باستخدام [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). لاحظ أن جميع نماذج Transformers تحتوي على دالة خسارة ذات صلة بالمهمة بشكل افتراضي، لذلك لا تحتاج إلى تحديد واحدة إلا إذا كنت ترغب في ذلك:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-آخر شيئين يجب إعدادهما قبل بدء التدريب هما حساب مقياس SacreBLEU من التوقعات، وتوفير طريقة لدفع نموذجك إلى Hub. يتم كلاهما باستخدام [استدعاءات Keras](../main_classes/keras_callbacks).
-
-مرر دالة `compute_metrics` الخاصة بك إلى [`~transformers.KerasMetricCallback`]:
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_test_set)
-```
-
-حدد مكان دفع نموذجك ومعالجك اللغوي في [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_opus_books_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-ثم اجمع استدعاءاتك معًا:
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-أخيرًا، أنت جاهز لبدء تدريب نموذجك! اتصل بـ [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) مع مجموعات بيانات التدريب والتحقق من الصحة وعدد الحقب واستدعاءاتك لضبط النموذج:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=callbacks)
-```
-
-بمجرد اكتمال التدريب، يتم تحميل نموذجك تلقائيًا إلى Hub حتى يتمكن الجميع من استخدامه!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -351,8 +252,6 @@ pip install transformers datasets evaluate sacrebleu
 
 يمكنك أيضًا تكرار نتائج `pipeline` يدويًا إذا أردت:
 
-<frameworkcontent>
-<pt>
 قم بتحويل النص إلى رموز وإرجاع `input_ids` كموترات PyTorch:
 
 ```py
@@ -377,31 +276,3 @@ pip install transformers datasets evaluate sacrebleu
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'Les lignées partagent des ressources avec des bactéries enfixant l'azote.'
 ```
-</pt>
-<tf>
-قم بتحويل النص إلى رموز وإرجاع `input_ids` كموترات TensorFlow:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_opus_books_model")
->>> inputs = tokenizer(text, return_tensors="tf").input_ids
-```
-
-استخدم طريقة [`~transformers.generation_tf_utils.TFGenerationMixin.generate`] لإنشاء الترجمة. لمزيد من التفاصيل حول استراتيجيات توليد النصوص المختلفة والمعلمات للتحكم في التوليد، تحقق من واجهة برمجة تطبيقات [توليد النصوص](../main_classes/text_generation).
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained("username/my_awesome_opus_books_model")
->>> outputs = model.generate(inputs, max_new_tokens=40, do_sample=True, top_k=30, top_p=0.95)
-```
-
-فك تشفير معرفات الرموز المولدة مرة أخرى إلى نص:
-
-```py
->>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'Les lugumes partagent les ressources avec des bactéries fixatrices d'azote.'
-```
-</tf>
-</frameworkcontent>

@@ -45,7 +45,6 @@ models.*
 This model was contributed by [rmroczkowski](https://huggingface.co/rmroczkowski). The original code can be found
 [here](https://github.com/allegro/HerBERT).
 
-
 ## Usage example
 
 ```python

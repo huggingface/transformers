@@ -73,7 +73,7 @@ Each pretrained model inherits from three base classes.
 
 | **Class** | **Description** |
 |---|---|
-| [`PretrainedConfig`] | A file that specifies a models attributes such as the number of attention heads or vocabulary size. |
+| [`PreTrainedConfig`] | A file that specifies a models attributes such as the number of attention heads or vocabulary size. |
 | [`PreTrainedModel`] | A model (or architecture) defined by the model attributes from the configuration file. A pretrained model only returns the raw hidden states. For a specific task, use the appropriate model head to convert the raw hidden states into a meaningful result (for example, [`LlamaModel`] versus [`LlamaForCausalLM`]). |
 | Preprocessor | A class for converting raw inputs (text, images, audio, multimodal) into numerical inputs to the model. For example, [`PreTrainedTokenizer`] converts text into tensors and [`ImageProcessingMixin`] converts pixels into tensors. |
 
@@ -124,12 +124,13 @@ Create a [`Pipeline`] object and select a task. By default, [`Pipeline`] downloa
 <hfoptions id="pipeline-tasks">
 <hfoption id="text generation">
 
-Use [`infer_device`] to automatically detect an available accelerator for inference.
+Use [`Accelerator`] to automatically detect an available accelerator for inference.
 
 ```py
-from transformers import pipeline, infer_device
+from transformers import pipeline
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 pipeline = pipeline("text-generation", model="meta-llama/Llama-2-7b-hf", device=device)
 ```
@@ -144,12 +145,13 @@ pipeline("The secret to baking a good cake is ", max_length=50)
 </hfoption>
 <hfoption id="image segmentation">
 
-Use [`infer_device`] to automatically detect an available accelerator for inference.
+Use [`Accelerator`] to automatically detect an available accelerator for inference.
 
 ```py
-from transformers import pipeline, infer_device
+from transformers import pipeline
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 pipeline = pipeline("image-segmentation", model="facebook/detr-resnet-50-panoptic", device=device)
 ```
@@ -171,12 +173,13 @@ segments[1]["label"]
 </hfoption>
 <hfoption id="automatic speech recognition">
 
-Use [`infer_device`] to automatically detect an available accelerator for inference.
+Use [`Accelerator`] to automatically detect an available accelerator for inference.
 
 ```py
-from transformers import pipeline, infer_device
+from transformers import pipeline
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 pipeline = pipeline("automatic-speech-recognition", model="openai/whisper-large-v3", device=device)
 ```

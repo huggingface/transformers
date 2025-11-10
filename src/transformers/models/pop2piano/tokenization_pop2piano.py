@@ -265,7 +265,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
         current_idx = start_idx
         current_velocity = 0
-        note_onsets_ready = [None for i in range(sum([k.endswith("NOTE") for k in self.encoder]) + 1)]
+        note_onsets_ready = [None for i in range(sum(k.endswith("NOTE") for k in self.encoder) + 1)]
         notes = []
         for token_type, number in words:
             if token_type == "TOKEN_SPECIAL":
@@ -542,7 +542,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             verbose (`bool`, *optional*, defaults to `True`):
@@ -609,7 +608,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         transformer to midi_notes and returns them.
 
         Args:
-            token_ids (`Union[np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[np.ndarray, torch.Tensor]`):
                 Output token_ids of `Pop2PianoConditionalGeneration` model.
             feature_extractor_output (`BatchFeature`):
                 Denotes the output of `Pop2PianoFeatureExtractor.__call__`. It must contain `"beatstep"` and

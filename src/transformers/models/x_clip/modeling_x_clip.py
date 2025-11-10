@@ -15,8 +15,9 @@
 """PyTorch X-CLIP model."""
 
 import copy
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 from torch import nn
@@ -390,11 +391,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -505,6 +501,7 @@ class XCLIPVisionEncoderLayer(GradientCheckpointingLayer):
 class XCLIPPreTrainedModel(PreTrainedModel):
     config: XCLIPConfig
     base_model_prefix = "x_clip"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -715,6 +712,7 @@ class XCLIPTextTransformer(nn.Module):
 
 class XCLIPTextModel(XCLIPPreTrainedModel):
     config: XCLIPTextConfig
+    input_modalities = "text"
 
     def __init__(self, config: XCLIPTextConfig):
         super().__init__(config)
@@ -909,6 +907,7 @@ class XCLIPVisionTransformer(nn.Module):
 class XCLIPVisionModel(XCLIPPreTrainedModel):
     config: XCLIPVisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: XCLIPVisionConfig):
         super().__init__(config)

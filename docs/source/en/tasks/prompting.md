@@ -80,7 +80,7 @@ This section covers a few prompting techniques.
 
 ### Few-shot prompting
 
-Few-shot prompting improves accuracy and performance by including specific examples of what a model should generate given an input. The explicit examples give the model a better understanding of the task and the output format you’re looking for. Try experimenting with different numbers of examples (2, 4, 8, etc.) to see how it affects performance. The example below provides the model with 1 example (1-shot) of the output format (a date in MM/DD/YYYY format) it should return.
+Few-shot prompting improves accuracy and performance by including specific examples of what a model should generate given an input. The explicit examples give the model a better understanding of the task and the output format you're looking for. Try experimenting with different numbers of examples (2, 4, 8, etc.) to see how it affects performance. The example below provides the model with 1 example (1-shot) of the output format (a date in MM/DD/YYYY format) it should return.
 
 ```python
 from transformers import pipeline
@@ -126,7 +126,6 @@ outputs = pipeline(prompt, max_new_tokens=12, do_sample=True, top_k=10)
 for output in outputs:
     print(f"Result: {output['generated_text']}")
 ```
-
 
 While the basic few-shot prompting approach embedded examples within a single text string, the chat template format offers the following benefits.
 

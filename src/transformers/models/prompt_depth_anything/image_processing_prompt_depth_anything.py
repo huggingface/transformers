@@ -38,6 +38,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -51,6 +52,22 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class PromptDepthAnythingImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    keep_aspect_ratio (`bool`, *optional*):
+        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
+    ensure_multiple_of (`int`, *optional*):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value.
+    prompt_scale_to_meter (`float`, *optional*):
+        Scale factor to convert the prompt depth to meters.
+    """
+
+    keep_aspect_ratio: bool
+    ensure_multiple_of: int
+    size_divisor: int
+    prompt_scale_to_meter: float
 
 
 def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
@@ -136,6 +153,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "prompt_depth"]
+    valid_kwargs = PromptDepthAnythingImageProcessorKwargs
 
     def __init__(
         self,
@@ -336,10 +354,8 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -368,10 +384,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,

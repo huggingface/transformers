@@ -141,10 +141,8 @@ class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {"feature-extraction": CpmAntModel, "text-generation": CpmAntForCausalLM} if is_torch_available() else {}
     )
 
-    test_pruning = False
     test_missing_keys = False
     test_mismatched_shapes = False
-    test_head_masking = False
     test_resize_embeddings = False
 
     def setUp(self):

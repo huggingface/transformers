@@ -105,8 +105,6 @@ pip install -q datasets transformers evaluate
 >>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, do_reduce_labels=True)
 ```
 
-<frameworkcontent>
-<pt>
 
 モデルを過学習に対してより堅牢にするために、画像データセットにいくつかのデータ拡張を適用するのが一般的です。このガイドでは、[torchvision](https://pytorch.org/vision/stable/index.html) の [`ColorJitter`](https://pytorch.org/vision/stable/generated/torchvision.transforms.ColorJitter.html) 関数を使用します。 ) を使用して画像の色のプロパティをランダムに変更しますが、任意の画像ライブラリを使用することもできます。
 
@@ -140,67 +138,6 @@ pip install -q datasets transformers evaluate
 >>> test_ds.set_transform(val_transforms)
 ```
 
-</pt>
-</frameworkcontent>
-
-<frameworkcontent>
-<tf>
-
-モデルを過学習に対してより堅牢にするために、画像データセットにいくつかのデータ拡張を適用するのが一般的です。
-このガイドでは、[`tf.image`](https://www.tensorflow.org/api_docs/python/tf/image) を使用して画像の色のプロパティをランダムに変更しますが、任意のプロパティを使用することもできます。画像
-好きな図書館。
-2 つの別々の変換関数を定義します。
-- 画像拡張を含むトレーニング データ変換
-- 🤗 Transformers のコンピューター ビジョン モデルはチャネル優先のレイアウトを想定しているため、画像を転置するだけの検証データ変換
-
-```py
->>> import tensorflow as tf
-
-
->>> def aug_transforms(image):
-...     image = tf.keras.utils.img_to_array(image)
-...     image = tf.image.random_brightness(image, 0.25)
-...     image = tf.image.random_contrast(image, 0.5, 2.0)
-...     image = tf.image.random_saturation(image, 0.75, 1.25)
-...     image = tf.image.random_hue(image, 0.1)
-...     image = tf.transpose(image, (2, 0, 1))
-...     return image
-
-
->>> def transforms(image):
-...     image = tf.keras.utils.img_to_array(image)
-...     image = tf.transpose(image, (2, 0, 1))
-...     return image
-```
-
-次に、モデルの画像と注釈のバッチを準備する 2 つの前処理関数を作成します。これらの機能が適用されます
-画像変換を行い、以前にロードされた `image_processor` を使用して画像を `pixel_values` に変換し、
-`labels`への注釈。 `ImageProcessor` は、画像のサイズ変更と正規化も処理します。
-
-```py
->>> def train_transforms(example_batch):
-...     images = [aug_transforms(x.convert("RGB")) for x in example_batch["image"]]
-...     labels = [x for x in example_batch["annotation"]]
-...     inputs = image_processor(images, labels)
-...     return inputs
-
-
->>> def val_transforms(example_batch):
-...     images = [transforms(x.convert("RGB")) for x in example_batch["image"]]
-...     labels = [x for x in example_batch["annotation"]]
-...     inputs = image_processor(images, labels)
-...     return inputs
-```
-
-データセット全体に前処理変換を適用するには、🤗 Datasets [`~datasets.Dataset.set_transform`] 関数を使用します。
-変換はオンザフライで適用されるため、高速で消費するディスク容量が少なくなります。
-
-```py
->>> train_ds.set_transform(train_transforms)
->>> test_ds.set_transform(val_transforms)
-```
-</tf>
-</frameworkcontent>
 
 ## Evaluate
 
@@ -215,8 +152,6 @@ pip install -q datasets transformers evaluate
 次に、メトリクスを [`~evaluate.EvaluationModule.compute`] する関数を作成します。予測を次のように変換する必要があります
 最初にロジットを作成し、次に [`~evaluate.EvaluationModule.compute`] を呼び出す前にラベルのサイズに一致するように再形成します。
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> import numpy as np
@@ -248,48 +183,11 @@ pip install -q datasets transformers evaluate
 ...         return metrics
 ```
 
-</pt>
-</frameworkcontent>
 
-
-<frameworkcontent>
-<tf>
-
-```py
->>> def compute_metrics(eval_pred):
-...     logits, labels = eval_pred
-...     logits = tf.transpose(logits, perm=[0, 2, 3, 1])
-...     logits_resized = tf.image.resize(
-...         logits,
-...         size=tf.shape(labels)[1:],
-...         method="bilinear",
-...     )
-
-...     pred_labels = tf.argmax(logits_resized, axis=-1)
-...     metrics = metric.compute(
-...         predictions=pred_labels,
-...         references=labels,
-...         num_labels=num_labels,
-...         ignore_index=-1,
-...         reduce_labels=image_processor.do_reduce_labels,
-...     )
-
-...     per_category_accuracy = metrics.pop("per_category_accuracy").tolist()
-...     per_category_iou = metrics.pop("per_category_iou").tolist()
-
-...     metrics.update({f"accuracy_{id2label[i]}": v for i, v in enumerate(per_category_accuracy)})
-...     metrics.update({f"iou_{id2label[i]}": v for i, v in enumerate(per_category_iou)})
-...     return {"val_" + k: v for k, v in metrics.items()}
-```
-
-</tf>
-</frameworkcontent>
 
 これで`compute_metrics`関数の準備が整いました。トレーニングをセットアップするときにこの関数に戻ります。
 
 ## Train
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#finetune-with-trainer) の基本的なチュートリアルをご覧ください。
@@ -344,112 +242,6 @@ pip install -q datasets transformers evaluate
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
-
-<frameworkcontent>
-<tf>
-<Tip>
-
-Keras を使用したモデルの微調整に慣れていない場合は、まず [基本チュートリアル](./training#train-a-tensorflow-model-with-keras) を確認してください。
-
-</Tip>
-
-TensorFlow でモデルを微調整するには、次の手順に従います。
-1. トレーニングのハイパーパラメータを定義し、オプティマイザーと学習率スケジュールを設定します。
-2. 事前トレーニングされたモデルをインスタンス化します。
-3. 🤗 データセットを `tf.data.Dataset` に変換します。
-4. モデルをコンパイルします。
-5. コールバックを追加してメトリクスを計算し、モデルを 🤗 Hub にアップロードします
-6. `fit()` メソッドを使用してトレーニングを実行します。
-
-まず、ハイパーパラメーター、オプティマイザー、学習率スケジュールを定義します。
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 2
->>> num_epochs = 50
->>> num_train_steps = len(train_ds) * num_epochs
->>> learning_rate = 6e-5
->>> weight_decay_rate = 0.01
-
->>> optimizer, lr_schedule = create_optimizer(
-...     init_lr=learning_rate,
-...     num_train_steps=num_train_steps,
-...     weight_decay_rate=weight_decay_rate,
-...     num_warmup_steps=0,
-... )
-```
-
-次に、ラベル マッピングとともに [`TFAutoModelForSemanticSegmentation`] を使用して SegFormer をロードし、それをコンパイルします。
-オプティマイザ。 Transformers モデルにはすべてデフォルトのタスク関連の損失関数があるため、次の場合を除き、損失関数を指定する必要はないことに注意してください。
-
-```py
->>> from transformers import TFAutoModelForSemanticSegmentation
-
->>> model = TFAutoModelForSemanticSegmentation.from_pretrained(
-...     checkpoint,
-...     id2label=id2label,
-...     label2id=label2id,
-... )
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-[`~datasets.Dataset.to_tf_dataset`] と [`DefaultDataCollat​​or`] を使用して、データセットを `tf.data.Dataset` 形式に変換します。
-
-```py
->>> from transformers import DefaultDataCollator
-
->>> data_collator = DefaultDataCollator(return_tensors="tf")
-
->>> tf_train_dataset = train_ds.to_tf_dataset(
-...     columns=["pixel_values", "label"],
-...     shuffle=True,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-
->>> tf_eval_dataset = test_ds.to_tf_dataset(
-...     columns=["pixel_values", "label"],
-...     shuffle=True,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-```
-
-予測から精度を計算し、モデルを 🤗 ハブにプッシュするには、[Keras callbacks](../main_classes/keras_callbacks) を使用します。
-`compute_metrics` 関数を [`KerasMetricCallback`] に渡します。
-そして [`PushToHubCallback`] を使用してモデルをアップロードします。
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback, PushToHubCallback
-
->>> metric_callback = KerasMetricCallback(
-...     metric_fn=compute_metrics, eval_dataset=tf_eval_dataset, batch_size=batch_size, label_cols=["labels"]
-... )
-
->>> push_to_hub_callback = PushToHubCallback(output_dir="scene_segmentation", tokenizer=image_processor)
-
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-ついに、モデルをトレーニングする準備が整いました。トレーニングおよび検証データセット、エポック数、
-モデルを微調整するためのコールバック:
-
-
-```py
->>> model.fit(
-...     tf_train_dataset,
-...     validation_data=tf_eval_dataset,
-...     callbacks=callbacks,
-...     epochs=num_epochs,
-... )
-```
-
-おめでとう！モデルを微調整し、🤗 Hub で共有しました。これで推論に使用できるようになりました。
-</tf>
-</frameworkcontent>
 
 ## Inference
 
@@ -466,8 +258,6 @@ TensorFlow でモデルを微調整するには、次の手順に従います。
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/semantic-seg-image.png" alt="Image of bedroom"/>
 </div>
 
-<frameworkcontent>
-<pt>
 
 推論用に微調整されたモデルを試す最も簡単な方法は、それを [`pipeline`] で使用することです。モデルを使用して画像セグメンテーション用の `pipeline`をインスタンス化し、それに画像を渡します。
 
@@ -534,46 +324,6 @@ TensorFlow でモデルを微調整するには、次の手順に従います。
 >>> pred_seg = upsampled_logits.argmax(dim=1)[0]
 ```
 
-</pt>
-</frameworkcontent>
-
-<frameworkcontent>
-<tf>
-
-画像プロセッサをロードして画像を前処理し、入力を TensorFlow テンソルとして返します。
-
-```py
->>> from transformers import AutoImageProcessor
-
->>> image_processor = AutoImageProcessor.from_pretrained("MariaK/scene_segmentation")
->>> inputs = image_processor(image, return_tensors="tf")
-```
-
-入力をモデルに渡し、`logits`を返します。
-
-```py
->>> from transformers import TFAutoModelForSemanticSegmentation
-
->>> model = TFAutoModelForSemanticSegmentation.from_pretrained("MariaK/scene_segmentation")
->>> logits = model(**inputs).logits
-```
-
-次に、ロジットを元の画像サイズに再スケールし、クラス次元に argmax を適用します。
-
-```py
->>> logits = tf.transpose(logits, [0, 2, 3, 1])
-
->>> upsampled_logits = tf.image.resize(
-...     logits,
-...     # We reverse the shape of `image` because `image.size` returns width and height.
-...     image.size[::-1],
-... )
-
->>> pred_seg = tf.math.argmax(upsampled_logits, axis=-1)[0]
-```
-
-</tf>
-</frameworkcontent>
 
 結果を視覚化するには、[データセット カラー パレット](https://github.com/tensorflow/models/blob/3f1ca33afe3c1631b733ea7e40c294273b9e406d/research/deeplab/utils/get_dataset_colormap.py#L51) を、それぞれをマップする `ade_palette()` としてロードします。クラスを RGB 値に変換します。次に、画像と予測されたセグメンテーション マップを組み合わせてプロットできます。
 

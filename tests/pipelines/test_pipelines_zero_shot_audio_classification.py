@@ -46,10 +46,6 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
     def test_small_model_pt_fp16(self):
         self.test_small_model_pt(dtype="float16")
 
-    @unittest.skip(reason="No models are available in TF")
-    def test_small_model_tf(self):
-        pass
-
     @slow
     @require_torch
     def test_large_model_pt(self):
@@ -94,7 +90,3 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
             ]
             * 5,
         )
-
-    @unittest.skip(reason="No models are available in TF")
-    def test_large_model_tf(self):
-        pass

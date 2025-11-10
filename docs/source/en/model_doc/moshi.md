@@ -35,9 +35,10 @@ Moshi is a speech-text foundation model that casts spoken dialogue as speech-to-
 
 The abstract from the paper is the following:
 
-*We introduce Moshi, a speech-text foundation model and full-duplex spoken dialogue framework. Current systems for spoken dialogue rely on pipelines of independent components, namely voice activity detection, speech recognition, textual dialogue and text-to-speech. Such frameworks cannot emulate the experience of real conversations. First, their complexity induces a latency of several seconds between interactions. Second, text being the intermediate modality for dialogue, non-linguistic information that modifies meaning— such as emotion or non-speech sounds— is lost in the interaction. Finally, they rely on a segmentation into speaker turns, which does not take into account overlapping speech, interruptions and interjections. Moshi solves these independent issues altogether by casting spoken dialogue as speech-to-speech generation. Starting from a text language model backbone, Moshi generates speech as tokens from the residual quantizer of a neural audio codec, while modeling separately its own speech and that of the user into parallel streams. This allows for the removal of explicit speaker turns, and the modeling of arbitrary conversational dynamics. We moreover extend the hierarchical semantic-to-acoustic token generation of previous work to first predict time-aligned text tokens as a prefix to audio tokens. Not only this “Inner Monologue” method significantly improves the linguistic quality of generated speech, but we also illustrate how it can provide streaming speech recognition and text-to-speech. Our resulting model is the first real-time full-duplex spoken large language model, with a theoretical latency of 160ms, 200ms in practice, and is available at github.com/kyutai-labs/moshi.* 
+*We introduce Moshi, a speech-text foundation model and full-duplex spoken dialogue framework. Current systems for spoken dialogue rely on pipelines of independent components, namely voice activity detection, speech recognition, textual dialogue and text-to-speech. Such frameworks cannot emulate the experience of real conversations. First, their complexity induces a latency of several seconds between interactions. Second, text being the intermediate modality for dialogue, non-linguistic information that modifies meaning— such as emotion or non-speech sounds— is lost in the interaction. Finally, they rely on a segmentation into speaker turns, which does not take into account overlapping speech, interruptions and interjections. Moshi solves these independent issues altogether by casting spoken dialogue as speech-to-speech generation. Starting from a text language model backbone, Moshi generates speech as tokens from the residual quantizer of a neural audio codec, while modeling separately its own speech and that of the user into parallel streams. This allows for the removal of explicit speaker turns, and the modeling of arbitrary conversational dynamics. We moreover extend the hierarchical semantic-to-acoustic token generation of previous work to first predict time-aligned text tokens as a prefix to audio tokens. Not only this “Inner Monologue” method significantly improves the linguistic quality of generated speech, but we also illustrate how it can provide streaming speech recognition and text-to-speech. Our resulting model is the first real-time full-duplex spoken large language model, with a theoretical latency of 160ms, 200ms in practice, and is available at github.com/kyutai-labs/moshi.*
 
 Moshi deals with 3 streams of information:
+
 1. The user's audio
 2. Moshi's audio
 3. Moshi's textual output
@@ -49,7 +50,7 @@ Moshi's made of 3 components:
 
 **1. The main decoder (Helium in the paper)**
 
-It corresponds to [`MoshiForCausalLM`]. It is strictly a classic text LLM, that uses an architecture similar to [` ~GemmaForCausalLM`]. In other words, it takes text tokens, embeds them, pass them through the decoder and a language head, to get text logits.
+It corresponds to [`MoshiForCausalLM`]. It is strictly a classic text LLM, that uses an architecture similar to [`~GemmaForCausalLM`]. In other words, it takes text tokens, embeds them, pass them through the decoder and a language head, to get text logits.
 
 **2. The depth decoder**
 
@@ -63,15 +64,14 @@ Note that each timestamp - i.e each codebook - gets its own set of Linear Layers
 
 It's the audio encoder from Kyutai, that has recently been integrated to transformers, which is used to "tokenize" audio. It has the same use that [`~EncodecModel`] has in [`~MusicgenModel`].
 
+## Tips
 
-## Tips:
+The original checkpoints can be converted using the conversion script `src/transformers/models/moshi/convert_moshi_transformers.py`
 
-The original checkpoints can be converted using the conversion script `src/transformers/models/moshi/convert_moshi_transformers.py` 
-
-
-### How to use the model:
+### How to use the model
 
 This implementation has two main aims:
+
 1. quickly test model generation by simplifying the original API
 2. simplify training. A training guide will come soon, but user contributions are welcomed!
 
@@ -86,6 +86,7 @@ It is designed for intermediate use. We strongly recommend using the original [i
 Moshi is a streaming auto-regressive model with two streams of audio. To put it differently, one audio stream corresponds to what the model said/will say and the other audio stream corresponds to what the user said/will say.
 
 [`MoshiForConditionalGeneration.generate`] thus needs 3 inputs:
+
 1. `input_ids` - corresponding to the text token history
 2. `moshi_input_values` or `moshi_audio_codes`- corresponding to the model audio history
 3. `user_input_values` or `user_audio_codes` - corresponding to the user audio history
@@ -93,6 +94,7 @@ Moshi is a streaming auto-regressive model with two streams of audio. To put it 
 These three inputs must be synchronized. Meaning that their lengths must correspond to the same number of tokens.
 
 You can dynamically use the 3 inputs depending on what you want to test:
+
 1. Simply check the model response to an user prompt - in that case, `input_ids` can be filled with pad tokens and `user_input_values` can be a zero tensor of the same shape than the user prompt.
 2. Test more complex behaviour - in that case, you must be careful about how the input tokens are synchronized with the audios.
 
@@ -108,21 +110,19 @@ To follow the example of the following image, `"Hello, I'm Moshi"` could be tran
 <img src="https://huggingface.co/datasets/ylacombe/benchmark-comparison/resolve/main/moshi_text_sync.png">
 </div>
 
-
 [`MoshiForConditionalGeneration.generate`] then auto-regressively feeds to itself its own audio stream, but since it doesn't have access to the user input stream while using `transformers`, it will thus **assume that the user is producing blank audio**.
 
-
-
-```python 
+```python
 >>> from datasets import load_dataset, Audio
 >>> import torch, math
->>> from transformers import MoshiForConditionalGeneration, AutoFeatureExtractor, AutoTokenizer, infer_device
+>>> from transformers import MoshiForConditionalGeneration, AutoFeatureExtractor, AutoTokenizer
+from accelerate import Accelerator
 
 
 >>> librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("kyutai/moshiko-pytorch-bf16")
 >>> tokenizer = AutoTokenizer.from_pretrained("kyutai/moshiko-pytorch-bf16")
->>> device = infer_device()
+>>> device = Accelerator().device
 >>> dtype = torch.bfloat16
 
 >>> # prepare user input audio 
@@ -149,10 +149,10 @@ To follow the example of the following image, `"Hello, I'm Moshi"` could be tran
 Most of the work has to be done during data creation/pre-processing, because of the need to align/synchronize streams.
 
 Once it's done, you can simply forward `text_labels` and `audio_labels` to [`MoshiForConditionalGeneration.forward`], alongside the usual inputs, to get the model loss.
- 
+
 A training guide will come soon, but user contributions are welcomed!
 
-### How does the model forward the inputs / generate:
+### How does the model forward the inputs / generate
 
 1. The input streams are embedded and combined into `inputs_embeds`.
 
@@ -162,12 +162,9 @@ A training guide will come soon, but user contributions are welcomed!
 
 3. The depth decoder switches the dimension on which we forward / generate (codebooks instead of time). It uses the token generated from `text logits`  and the `temporal context` to auto-regressively generate audio codebooks.
 
-
 This model was contributed by [Yoach Lacombe (ylacombe)](https://huggingface.co/ylacombe).
 
 The original code can be found [here](https://github.com/kyutai-labs/moshi).
-
-
 
 ## MoshiConfig
 

@@ -428,8 +428,6 @@ class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
         output_attentions: bool = False,
         conv_attention_mask: Optional[torch.Tensor] = None,
     ):
-        hidden_states = hidden_states
-
         # 1. Feed-Forward 1 layer
         residual = hidden_states
         hidden_states = self.ffn1_layer_norm(hidden_states)
@@ -710,6 +708,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     config: Wav2Vec2BertConfig
     base_model_prefix = "wav2vec2_bert"
     main_input_name = "input_features"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):

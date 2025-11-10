@@ -202,7 +202,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         # Create audio attention mask
         max_patch_len = max(
-            [ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len for feature in audio_features]
+            ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len for feature in audio_features
         )  # The maximum number of audio patches in a batch
         if return_attention_mask:
             audio_mask = [
