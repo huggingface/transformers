@@ -624,8 +624,15 @@ class RealmLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -787,20 +794,19 @@ class RealmPreTrainedModel(PreTrainedModel):
     config: RealmConfig
     base_model_prefix = "realm"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
     def _flatten_inputs(self, *inputs):
         """Flatten inputs' shape to (-1, input_shape[-1])"""
@@ -955,10 +961,7 @@ class RealmBertModel(RealmPreTrainedModel):
     REALM_START_DOCSTRING,
 )
 class RealmEmbedder(RealmPreTrainedModel):
-    _tied_weights_keys = {
-        "cls.predictions.decoder.weight": "realm.embeddings.word_embeddings.weight",
-        "cls.predictions.decoder.bias": "cls.predictions.bias",
-    }
+    _tied_weights_keys = ["cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1183,10 +1186,7 @@ class RealmScorer(RealmPreTrainedModel):
     REALM_START_DOCSTRING,
 )
 class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
-    _tied_weights_keys = {
-        "cls.predictions.decoder.weight": "realm.embeddings.word_embeddings.weight",
-        "cls.predictions.decoder.bias": "cls.predictions.bias",
-    }
+    _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config):
         super().__init__(config)

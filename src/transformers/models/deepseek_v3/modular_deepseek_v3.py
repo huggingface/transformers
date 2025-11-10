@@ -102,10 +102,12 @@ class DeepseekV3TopkRouter(nn.Module):
         return router_logits
 
 
-class DeepseekV3NaiveMoe(MixtralExperts):
+class DeepseekV3NaiveMoe(MixtralExperts, nn.ModuleList):
     def __init__(self, config):
-        super().__init__(config)
+        nn.ModuleList.__init__(self)
         self.num_experts = config.num_local_experts
+        for _ in range(self.num_experts):
+            self.append(DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size))
 
 
 class DeepseekV3MoE(nn.Module):
@@ -304,11 +306,10 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer):
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV3TopkRouter):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV3Model(LlamaModel):

@@ -248,7 +248,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], set())
+            self.assertEqual(info["missing_keys"], [])
 
     def test_ensure_weights_are_shared(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()

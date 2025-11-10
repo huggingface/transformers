@@ -555,7 +555,6 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
     input_modalities = "time"
     supports_gradient_checkpointing = False
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """
         Initialize weights
@@ -572,15 +571,15 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
             # initialize positional encoding
             module.position_enc = module._init_pe(self.config, num_patches)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, PatchTSTBatchNorm):
-            module.batchnorm.bias.zero_()
-            module.batchnorm.weight.fill_(1.0)
+            module.batchnorm.bias.data.zero_()
+            module.batchnorm.weight.data.fill_(1.0)
         elif isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.init_std)
+            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (PatchTSTEncoder)):

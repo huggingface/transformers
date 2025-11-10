@@ -1176,45 +1176,75 @@ class LongT5PreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
-    @torch.no_grad()
+    def _try_load_missing_tied_module(self, key):
+        module = self
+        key = key.removesuffix(".weight")
+        for sub_key in key.split("."):
+            if not hasattr(module, sub_key):
+                return
+            module = getattr(module, sub_key)
+
+        self._tie_embedding_weights(module, self.shared)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requested_loading_info = kwargs.get("output_loading_info", False)
+        kwargs["output_loading_info"] = True
+        model, loading_info = super().from_pretrained(*args, **kwargs)
+        missing_keys = loading_info.get("missing_keys", [])
+
+        if hasattr(model, "shared") and hasattr(model, "_tied_weights_keys"):
+            for missing_key in missing_keys:
+                logger.warning(
+                    f"Recovering a missing tied weight {missing_key} from a legacy LongT5 checkpoint. "
+                    f"Consider saving {missing_key} in your checkpoint or updating the config (tie_word_embeddings=true)."
+                )
+                model._try_load_missing_tied_module(missing_key)
+
+        if requested_loading_info:
+            return model, loading_info
+        return model
+
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, LongT5LayerNorm):
-            module.weight.fill_(factor * 1.0)
+            module.weight.data.fill_(factor * 1.0)
         elif isinstance(module, (LongT5Model, LongT5ForConditionalGeneration, LongT5EncoderModel)):
-            module.shared.weight.normal_(mean=0.0, std=factor * 1.0)
+            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.normal_(mean=0.0, std=factor * 1.0)
+                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, LongT5DenseActDense):
-            module.wi.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.zero_()
-            module.wo.weight.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                module.wi.bias.data.zero_()
+            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.zero_()
+                module.wo.bias.data.zero_()
         elif isinstance(module, LongT5DenseGatedActDense):
-            module.wi_0.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                module.wi_0.bias.zero_()
-            module.wi_1.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+                module.wi_0.bias.data.zero_()
+            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                module.wi_1.bias.zero_()
-            module.wo.weight.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                module.wi_1.bias.data.zero_()
+            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.zero_()
+                module.wo.bias.data.zero_()
         elif isinstance(module, (LongT5Attention, LongT5LocalAttention, LongT5TransientGlobalAttention)):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.q.weight.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.o.weight.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
                 if isinstance(module, LongT5TransientGlobalAttention):
-                    module.global_relative_attention_bias.weight.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+                    module.global_relative_attention_bias.weight.data.normal_(
+                        mean=0.0, std=factor * ((d_model) ** -0.5)
+                    )
 
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right with T5->LongT5
     def _shift_right(self, input_ids):
@@ -1240,10 +1270,12 @@ class LongT5PreTrainedModel(PreTrainedModel):
 
 
 class LongT5Stack(LongT5PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, embed_tokens=None):
         super().__init__(config)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
+        if embed_tokens is not None:
+            self.embed_tokens.weight = embed_tokens.weight
         self.is_decoder = config.is_decoder
 
         self.local_radius = config.local_radius
@@ -1567,10 +1599,7 @@ class LongT5Model(LongT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
-    _tied_weights_keys = {
-        "encoder.embed_tokens.weight": "shared.weight",
-        "decoder.embed_tokens.weight": "shared.weight",
-    }
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: LongT5Config):
         super().__init__(config)
@@ -1580,13 +1609,13 @@ class LongT5Model(LongT5PreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = LongT5Stack(encoder_config)
+        self.encoder = LongT5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = LongT5Stack(decoder_config)
+        self.decoder = LongT5Stack(decoder_config, self.shared)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1598,6 +1627,11 @@ class LongT5Model(LongT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder
@@ -1729,11 +1763,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
-    _tied_weights_keys = {
-        "encoder.embed_tokens.weight": "shared.weight",
-        "decoder.embed_tokens.weight": "shared.weight",
-        "lm_head.weight": "shared.weight",
-    }
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: LongT5Config):
         super().__init__(config)
@@ -1745,13 +1775,13 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = LongT5Stack(encoder_config)
+        self.encoder = LongT5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = LongT5Stack(decoder_config)
+        self.decoder = LongT5Stack(decoder_config, self.shared)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -1765,6 +1795,11 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder
@@ -1917,9 +1952,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class LongT5EncoderModel(LongT5PreTrainedModel):
-    _tied_weights_keys = {
-        "encoder.embed_tokens.weight": "shared.weight",
-    }
+    _tied_weights_keys = ["encoder.embed_tokens.weight"]
     _keys_to_ignore_on_load_unexpected = [r"decoder"]
 
     def __init__(self, config: LongT5Config):
@@ -1928,7 +1961,8 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
-        self.encoder = LongT5Stack(encoder_config)
+        encoder_config.tie_encoder_decoder = False
+        self.encoder = LongT5Stack(encoder_config, self.shared)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1939,6 +1973,10 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder

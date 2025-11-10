@@ -226,16 +226,15 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         # important: this ported version of PaliGemmaisn't meant for training from scratch - only
         # inference and fine-tuning
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
 
 
 @auto_docstring(
@@ -448,7 +447,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)

@@ -359,7 +359,6 @@ class VanPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -372,9 +371,9 @@ class VanPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Conv2d):
             fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
             fan_out //= module.groups
-            module.weight.normal_(0, math.sqrt(2.0 / fan_out))
+            module.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
 
 
 VAN_START_DOCSTRING = r"""

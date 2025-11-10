@@ -76,6 +76,9 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
     def get_decoder(self):
         return self.model.language_model.get_decoder()
 
+    def tie_weights(self):
+        return self.model.language_model.tie_weights()
+
     @auto_docstring
     def forward(
         self,

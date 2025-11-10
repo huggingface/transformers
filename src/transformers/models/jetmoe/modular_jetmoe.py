@@ -435,23 +435,22 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, JetMoeRMSNorm):
-            module.weight.fill_(1.0)
+            module.weight.data.fill_(1.0)
         elif isinstance(module, JetMoeParallelExperts):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, JetMoeMoA | JetMoeMoE):
-            module.bias.zero_()
+            module.bias.data.zero_()
 
 
 @auto_docstring
@@ -533,7 +532,7 @@ class JetMoeModel(MixtralModel):
 
 
 class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)

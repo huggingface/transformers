@@ -815,7 +815,6 @@ class DabDetrPreTrainedModel(PreTrainedModel):
     input_modalities = "image"
     _no_split_modules = [r"DabDetrConvEncoder", r"DabDetrEncoderLayer", r"DabDetrDecoderLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
         xavier_std = self.config.init_xavier_std
@@ -826,24 +825,24 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
             nn.init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, DabDetrForObjectDetection):
-            nn.init.constant_(module.bbox_predictor.layers[-1].weight, 0)
-            nn.init.constant_(module.bbox_predictor.layers[-1].bias, 0)
+            nn.init.constant_(module.bbox_predictor.layers[-1].weight.data, 0)
+            nn.init.constant_(module.bbox_predictor.layers[-1].bias.data, 0)
 
             # init prior_prob setting for focal loss
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias_value = -math.log((1 - prior_prob) / prior_prob)
-            module.class_embed.bias.fill_(bias_value)
+            module.class_embed.bias.data.fill_(bias_value)
         elif isinstance(module, nn.PReLU):
             module.reset_parameters()
 
@@ -1430,7 +1429,10 @@ class DabDetrMHAttentionMap(nn.Module):
 )
 class DabDetrForObjectDetection(DabDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = {"model.decoder.bbox_embed": "bbox_predictor"}
+    _tied_weights_keys = [
+        r"bbox_predictor\.layers\.\d+\.(weight|bias)",
+        r"model\.decoder\.bbox_embed\.layers\.\d+\.(weight|bias)",
+    ]
 
     def __init__(self, config: DabDetrConfig):
         super().__init__(config)

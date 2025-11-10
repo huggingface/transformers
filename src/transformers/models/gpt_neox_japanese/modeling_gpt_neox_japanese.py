@@ -50,23 +50,22 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, GPTNeoXJapaneseAttention):
             if module.dense_bias is not None:
-                module.dense_bias.zero_()
+                module.dense_bias.data.zero_()
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->GPTNeoXJapanese
@@ -657,7 +656,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
     """
 )
 class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"embed_out.weight": "gpt_neox_japanese.embed_in.weight"}
+    _tied_weights_keys = ["embed_out.weight"]
 
     def __init__(self, config):
         super().__init__(config)

@@ -220,22 +220,21 @@ class PretrainedFSMTModel(PreTrainedModel):
     config: FSMTConfig
     base_model_prefix = "model"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, SinusoidalPositionalEmbedding):
             weight = module.get_embedding(*module.weight.shape, module.padding_idx)
             weight = nn.Parameter(weight, requires_grad=False)
             weight.detach_()
             module.weight = weight
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
 
     @property
     def dummy_inputs(self):
@@ -829,10 +828,7 @@ def _get_shape(t):
 
 @auto_docstring
 class FSMTModel(PretrainedFSMTModel):
-    _tied_weights_keys = {
-        "decoder.output_projection.weight": "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight": "encoder.embed_tokens.weight",
-    }
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
@@ -849,6 +845,11 @@ class FSMTModel(PretrainedFSMTModel):
 
     def get_encoder(self):
         return self.encoder
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.get_input_embeddings())
+            self._tie_embedding_weights(self.decoder.output_projection, self.get_input_embeddings())
 
     @auto_docstring
     def forward(
@@ -977,6 +978,7 @@ class FSMTModel(PretrainedFSMTModel):
 )
 class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
     base_model_prefix = "model"
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)

@@ -411,19 +411,18 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
         "attentions": InternVLVisionAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, InternVLVisionEmbeddings):
-            module.cls_token.zero_()
+            module.cls_token.data.zero_()
             if module.mask_token is not None:
-                module.mask_token.zero_()
+                module.mask_token.data.zero_()
             if module.position_embeddings is not None:
-                module.position_embeddings.zero_()
+                module.position_embeddings.data.zero_()
         elif isinstance(module, InternVLVisionLayer):
-            module.lambda_1.fill_(self.config.layer_scale_init_value)
-            module.lambda_2.fill_(self.config.layer_scale_init_value)
+            module.lambda_1.data.fill_(self.config.layer_scale_init_value)
+            module.lambda_2.data.fill_(self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -767,7 +766,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: InternVLConfig):
         super().__init__(config)

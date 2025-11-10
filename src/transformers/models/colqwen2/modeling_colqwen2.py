@@ -46,7 +46,6 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         std = (
             self.config.initializer_range
@@ -55,13 +54,13 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
         )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
 
 
 @dataclass
@@ -119,6 +118,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             self.config.vlm_config.text_config.hidden_size,
             self.embedding_dim,
         )
+        self._tied_weights_keys = [f"vlm.{k}" for k in (self.vlm._tied_weights_keys or [])]
 
         self.post_init()
 
@@ -221,6 +221,9 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
+
+    def tie_weights(self):
+        return self.vlm.tie_weights()
 
     def resize_token_embeddings(
         self,

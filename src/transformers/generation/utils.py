@@ -1635,12 +1635,7 @@ class GenerationMixin(ContinuousMixin):
 
         # TransformersKwargs are model-agnostic attention and generation arguments such as 'output_attentions'
         for key, value in model_kwargs.items():
-            if (
-                value is not None
-                and key not in model_args
-                and key not in TransformersKwargs.__optional_keys__
-                and key != "debug_io"
-            ):
+            if value is not None and key not in model_args and key not in TransformersKwargs.__optional_keys__:
                 unused_model_args.append(key)
 
         if unused_model_args:

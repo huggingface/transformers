@@ -186,7 +186,7 @@ class ViTMAEEmbeddings(nn.Module):
         pos_embed = get_2d_sincos_pos_embed(
             self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches**0.5), add_cls_token=True
         )
-        self.position_embeddings.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+        self.position_embeddings.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
         # initialize patch_embeddings like nn.Linear (instead of nn.Conv2d)
         w = self.patch_embeddings.projection.weight.data
@@ -530,21 +530,20 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
         "attentions": ViTMAESelfAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, ViTMAEEmbeddings):
             module.initialize_weights()
         elif isinstance(module, ViTMAEDecoder):
-            module.mask_token.zero_()
-            module.decoder_pos_embed.zero_()
+            module.mask_token.data.zero_()
+            module.decoder_pos_embed.data.zero_()
 
 
 @auto_docstring
@@ -683,7 +682,7 @@ class ViTMAEDecoder(nn.Module):
         decoder_pos_embed = get_2d_sincos_pos_embed(
             self.decoder_pos_embed.shape[-1], int(num_patches**0.5), add_cls_token=True
         )
-        self.decoder_pos_embed.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
+        self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
 
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
         torch.nn.init.normal_(self.mask_token, std=self.config.initializer_range)

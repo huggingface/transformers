@@ -388,7 +388,6 @@ class GitPreTrainedModel(PreTrainedModel):
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, GitVisionEmbeddings):
@@ -396,16 +395,16 @@ class GitPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.patch_embedding.weight, std=self.config.initializer_range)
             nn.init.normal_(module.position_embedding.weight, std=self.config.initializer_range)
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Git
@@ -1120,7 +1119,7 @@ class GitModel(GitPreTrainedModel):
     """
 )
 class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"output.weight": "git.embeddings.word_embeddings.weight"}
+    _tied_weights_keys = ["output.weight"]
 
     def __init__(self, config):
         super().__init__(config)

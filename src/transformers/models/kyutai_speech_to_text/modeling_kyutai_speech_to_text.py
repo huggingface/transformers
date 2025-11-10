@@ -124,22 +124,21 @@ class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
 
     main_input_name = "input_ids"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
 
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, KyutaiSpeechToTextFlexibleLinear):
-            module.weight.normal_()
+            module.weight.data.normal_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, KyutaiSpeechToTextRMSNorm):
-            module.weight.fill_(1.0)
+            module.weight.data.fill_(1.0)
 
 
 class KyutaiSpeechToTextConv1dPaddingCache:
@@ -1091,7 +1090,7 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
 
 @auto_docstring
 class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["codec_model"]

@@ -1241,7 +1241,6 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                 return name
         return ""
 
-    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):
             small_init_method(self.config.hidden_size)(self.embeddings.weight)

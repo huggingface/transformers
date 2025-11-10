@@ -368,24 +368,23 @@ class PvtV2PreTrainedModel(PreTrainedModel):
     input_modalities = "image"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.copy_(nn.init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range))
+            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv2d):
             fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
             fan_out //= module.groups
-            module.weight.normal_(0, math.sqrt(2.0 / fan_out))
+            module.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
 
 
 @auto_docstring

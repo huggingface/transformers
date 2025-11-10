@@ -706,32 +706,31 @@ class Data2VecVisionPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
     _supports_sdpa = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, Data2VecVisionEmbeddings):
-            module.cls_token.zero_()
+            module.cls_token.data.zero_()
             if module.mask_token is not None:
-                module.mask_token.zero_()
+                module.mask_token.data.zero_()
             if module.position_embeddings is not None:
-                module.position_embeddings.zero_()
+                module.position_embeddings.data.zero_()
         elif isinstance(module, Data2VecVisionRelativePositionBias):
-            module.relative_position_bias_table.zero_()
+            module.relative_position_bias_table.data.zero_()
         elif isinstance(module, Data2VecVisionLayer):
             if module.lambda_1 is not None:
-                module.lambda_1.fill_(self.config.layer_scale_init_value)
-                module.lambda_2.fill_(self.config.layer_scale_init_value)
+                module.lambda_1.data.fill_(self.config.layer_scale_init_value)
+                module.lambda_2.data.fill_(self.config.layer_scale_init_value)
 
 
 @auto_docstring

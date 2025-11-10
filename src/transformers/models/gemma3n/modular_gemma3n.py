@@ -1876,15 +1876,14 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     input_modalities = ["image", "text", "audio"]
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
-            module.weight.fill_(1.0)
+            module.weight.data.fill_(1.0)
         elif isinstance(module, Gemma3nAudioAttention):
-            module.per_dim_scale.zero_()
+            module.per_dim_scale.data.zero_()
         elif isinstance(module, Gemma3nTextAltUp):
-            module.correct_output_scale.zero_()
+            module.correct_output_scale.data.zero_()
 
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")

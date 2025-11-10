@@ -694,7 +694,6 @@ class TableTransformerPreTrainedModel(PreTrainedModel):
         r"TableTransformerDecoderLayer",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
 
@@ -702,13 +701,13 @@ class TableTransformerPreTrainedModel(PreTrainedModel):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
 
 
 class TableTransformerEncoder(TableTransformerPreTrainedModel):

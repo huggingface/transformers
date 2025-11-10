@@ -394,13 +394,12 @@ class GemmaAttention(LlamaAttention):
 
 
 class GemmaPreTrainedModel(LlamaPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
 
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         if "RMSNorm" in module.__class__.__name__:
-            module.weight.zero_()
+            module.weight.data.zero_()
 
 
 class GemmaModel(LlamaModel):

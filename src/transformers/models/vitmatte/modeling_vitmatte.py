@@ -58,12 +58,11 @@ class VitMattePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         if isinstance(module, (nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
 
 
 class VitMatteBasicConv3x3(nn.Module):

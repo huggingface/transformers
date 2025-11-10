@@ -441,15 +441,14 @@ class PixtralPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _no_split_modules = ["PixtralAttentionLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, PixtralRMSNorm):
-            module.weight.fill_(1.0)
+            module.weight.data.fill_(1.0)
 
 
 def generate_block_attention_mask(patch_embeds_list, tensor):

@@ -318,7 +318,6 @@ class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
 
 
 class MMGroundingDinoPreTrainedModel(GroundingDinoPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MMGroundingDinoContrastiveEmbedding):
@@ -398,13 +397,12 @@ class MMGroundingDinoMLPPredictionHead(GroundingDinoMLPPredictionHead):
 
 
 class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroundingDinoPreTrainedModel):
-    _tied_weights_keys = {
-        r"bbox_embed\.[1-9]\d*": [
-            r"model\.decoder\.bbox_embed\.[0-9]\d*",
-            r"class_embed\.[1-9]\d*",
-            r"model\.decoder\.class_embed\.[0-9]\d*",
-        ]
-    }
+    _tied_weights_keys = [
+        r"bbox_embed\.[1-9]\d*",
+        r"model\.decoder\.bbox_embed\.[0-9]\d*",
+        r"class_embed\.[1-9]\d*",
+        r"model\.decoder\.class_embed\.[0-9]\d*",
+    ]
 
     def __init__(self, config: MMGroundingDinoConfig):
         MMGroundingDinoPreTrainedModel.__init__(self, config)

@@ -532,20 +532,19 @@ class ElectraPreTrainedModel(PreTrainedModel):
         "cross_attentions": ElectraCrossAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 
 @dataclass
@@ -1005,7 +1004,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
     """
 )
 class ElectraForMaskedLM(ElectraPreTrainedModel):
-    _tied_weights_keys = {"generator_lm_head.weight": "electra.embeddings.word_embeddings.weight"}
+    _tied_weights_keys = ["generator_lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1305,7 +1304,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
     """
 )
 class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"generator_lm_head.weight": "electra.embeddings.word_embeddings.weight"}
+    _tied_weights_keys = ["generator_lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)

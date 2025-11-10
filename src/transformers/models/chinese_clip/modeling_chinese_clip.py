@@ -562,7 +562,6 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
@@ -577,7 +576,7 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.token_type_embeddings.weight, mean=0.0, std=self.config.initializer_range)
             for embedding in [module.word_embeddings, module.position_embeddings, module.token_type_embeddings]:
                 if embedding.padding_idx is not None:
-                    embedding.weight[embedding.padding_idx].zero_()
+                    embedding.weight.data[embedding.padding_idx].zero_()
         elif isinstance(module, ChineseCLIPVisionAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -603,12 +602,12 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
             )
 
         if isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
 
 
 # Copied from transformers.models.align.modeling_align.AlignTextEncoder with Align->ChineseCLIP

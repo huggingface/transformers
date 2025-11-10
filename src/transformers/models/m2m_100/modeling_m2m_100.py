@@ -516,20 +516,19 @@ class M2M100PreTrainedModel(PreTrainedModel):
     # Doesn't support `compile` (dynamic control flow). Can be fixed but low usage model
     _can_compile_fullgraph = False
 
-    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 class M2M100Encoder(M2M100PreTrainedModel):
@@ -542,7 +541,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: M2M100Config):
+    def __init__(self, config: M2M100Config, embed_tokens: Optional[nn.Embedding] = None):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -556,6 +555,9 @@ class M2M100Encoder(M2M100PreTrainedModel):
         self.embed_tokens = M2M100ScaledWordEmbedding(
             config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
         )
+
+        if embed_tokens is not None:
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -692,7 +694,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: M2M100Config):
+    def __init__(self, config: M2M100Config, embed_tokens: Optional[nn.Embedding] = None):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -703,6 +705,9 @@ class M2M100Decoder(M2M100PreTrainedModel):
         self.embed_tokens = M2M100ScaledWordEmbedding(
             config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
         )
+
+        if embed_tokens is not None:
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -915,10 +920,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
 @auto_docstring
 class M2M100Model(M2M100PreTrainedModel):
-    _tied_weights_keys = {
-        "decoder.embed_tokens.weight": "shared.weight",
-        "encoder.embed_tokens.weight": "shared.weight",
-    }
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: M2M100Config):
         super().__init__(config)
@@ -927,8 +929,8 @@ class M2M100Model(M2M100PreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = M2M100ScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
 
-        self.encoder = M2M100Encoder(config)
-        self.decoder = M2M100Decoder(config)
+        self.encoder = M2M100Encoder(config, self.shared)
+        self.decoder = M2M100Decoder(config, self.shared)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -940,6 +942,11 @@ class M2M100Model(M2M100PreTrainedModel):
         self.shared = value
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder
@@ -1038,7 +1045,7 @@ class M2M100Model(M2M100PreTrainedModel):
 )
 class M2M100ForConditionalGeneration(M2M100PreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
-    _tied_weights_keys = {"lm_head.weight": "model.shared.weight"}
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: M2M100Config):
         super().__init__(config)

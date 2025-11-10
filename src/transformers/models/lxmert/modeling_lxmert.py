@@ -682,22 +682,21 @@ class LxmertPreTrainedModel(PreTrainedModel):
     input_modalities = ["image", "text"]
     _supports_param_buffer_assignment = False
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, LxmertLMPredictionHead):
-            module.bias.zero_()
+            module.bias.data.zero_()
 
 
 @auto_docstring
@@ -852,7 +851,7 @@ class LxmertModel(LxmertPreTrainedModel):
 
 @auto_docstring
 class LxmertForPreTraining(LxmertPreTrainedModel):
-    _tied_weights_keys = {"cls.predictions.decoder.weight": "lxmert.embeddings.word_embeddings.weight"}
+    _tied_weights_keys = ["cls.predictions.decoder.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -908,6 +907,9 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
                 "loss": "l2",
             }
         self.visual_losses = visual_losses
+
+    def _tie_weights(self):
+        self.cls.predictions.decoder.weight = self.lxmert.embeddings.word_embeddings.weight
 
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
