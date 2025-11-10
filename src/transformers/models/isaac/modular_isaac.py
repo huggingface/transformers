@@ -1351,7 +1351,11 @@ def patchify_vision(image: torch.Tensor, patch_size: int) -> torch.Tensor:
 
 
 class IsaacConfig(PretrainedConfig):
-    """Configuration class for Isaac multimodal model."""
+    """Configuration class for Isaac multimodal model.
+
+    This configuration corresponds to checkpoints such as
+    [Perceptron/isaac-base](https://huggingface.co/Perceptron/isaac-base).
+    """
 
     model_type = "isaac"
     sub_configs = {"vision_config": IsaacVisionConfig, "text_config": Qwen3Config}
@@ -2338,6 +2342,7 @@ def _compute_residual_p_frames(frames: torch.Tensor, is_p_frame: list[bool]) -> 
 __all__ = [
     "IsaacConfig",
     "IsaacModel",
+    "IsaacPreTrainedModel",  # noqa: F822
     "IsaacForConditionalGeneration",
     "IsaacImageProcessorFast",
     "IsaacProcessor",

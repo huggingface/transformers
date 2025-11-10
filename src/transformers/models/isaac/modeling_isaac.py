@@ -1632,4 +1632,4 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         return True
 
 
-__all__ = ["IsaacModel", "IsaacForConditionalGeneration"]
+__all__ = ["IsaacModel", "IsaacPreTrainedModel", "IsaacForConditionalGeneration"]
