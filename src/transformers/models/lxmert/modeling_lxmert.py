@@ -597,19 +597,11 @@ class LxmertPredictionHeadTransform(nn.Module):
 
 
 class LxmertLMPredictionHead(nn.Module):
-    def __init__(self, config, lxmert_model_embedding_weights):
+    def __init__(self, config):
         super().__init__()
         self.transform = LxmertPredictionHeadTransform(config)
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(
-            lxmert_model_embedding_weights.size(1),
-            lxmert_model_embedding_weights.size(0),
-            bias=False,
-        )
-        self.decoder.weight = lxmert_model_embedding_weights
-        self.bias = nn.Parameter(torch.zeros(lxmert_model_embedding_weights.size(0)))
+        self.decoder = nn.Linear( config.hidden_size,config.vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -664,9 +656,9 @@ class LxmertVisualObjHead(nn.Module):
 
 
 class LxmertPreTrainingHeads(nn.Module):
-    def __init__(self, config, lxmert_model_embedding_weights):
+    def __init__(self, config):
         super().__init__()
-        self.predictions = LxmertLMPredictionHead(config, lxmert_model_embedding_weights)
+        self.predictions = LxmertLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
     def forward(self, sequence_output, pooled_output):
@@ -852,8 +844,10 @@ class LxmertModel(LxmertPreTrainedModel):
 
 @auto_docstring
 class LxmertForPreTraining(LxmertPreTrainedModel):
-    _tied_weights_keys = {"cls.predictions.decoder.weight": "lxmert.embeddings.word_embeddings.weight"}
-
+    # help saving them
+    _tied_weights_keys = {
+        "cls.predictions.decoder.weight": "lxmert.embeddings.word_embeddings.weight",
+    }
     def __init__(self, config):
         super().__init__(config)
         # Configuration
@@ -871,7 +865,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         self.lxmert = LxmertModel(config)
 
         # Pre-training heads
-        self.cls = LxmertPreTrainingHeads(config, self.lxmert.embeddings.word_embeddings.weight)
+        self.cls = LxmertPreTrainingHeads(config)
         if self.task_obj_predict:
             self.obj_predict_head = LxmertVisualObjHead(config)
         if self.task_qa:
