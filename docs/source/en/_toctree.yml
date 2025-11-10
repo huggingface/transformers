@@ -217,6 +217,8 @@
     title: SpQR
   - local: quantization/vptq
     title: VPTQ
+  - local: quantization/sinq
+    title: SINQ
   - local: quantization/contribute
     title: Contribute
   title: Quantization
