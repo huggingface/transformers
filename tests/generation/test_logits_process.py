@@ -221,8 +221,11 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
 
         processed_scores = processor(input_ids, scores)
-        # All thinking blocks are closed, so logits should not be altered.
-        torch.testing.assert_close(processed_scores, scores)
+        # All thinking blocks are closed, so only </think> should remain blocked.
+        vocab_positions = torch.arange(vocab_size, device=torch_device)
+        not_end_mask = vocab_positions != end_token_id
+        torch.testing.assert_close(processed_scores[:, not_end_mask], scores[:, not_end_mask])
+        self.assertTrue(torch.all(torch.isinf(processed_scores[:, end_token_id])))
 
     def test_max_thinking_tokens_processor_prompt_length_reset(self):
         begin_token_id = 45
@@ -304,7 +307,7 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertTrue(torch.all(torch.isinf(processed_scores[:, not_end_mask])))
         self.assertTrue(torch.isfinite(processed_scores[:, end_token_id]).all())
 
-        # After emitting </think>, only the repeated-close protection should apply.
+        # After emitting </think>, the close token should remain disallowed until a new block opens.
         closed_sequence = torch.cat(
             [thinking_sequence, torch.tensor([[end_token_id]], device=torch_device, dtype=torch.long)],
             dim=1,
@@ -314,14 +317,78 @@ class LogitsProcessorTest(unittest.TestCase):
         torch.testing.assert_close(processed_scores[:, not_end_mask], scores[:, not_end_mask])
         self.assertTrue(torch.all(torch.isinf(processed_scores[:, end_token_id])))
 
-        # A subsequent answer token should not trigger another forced close.
+        # A subsequent answer token should keep </think> disabled while leaving other logits untouched.
         answer_sequence = torch.cat(
             [closed_sequence, torch.tensor([[102]], device=torch_device, dtype=torch.long)],
             dim=1,
         )
         scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
         processed_scores = processor(answer_sequence, scores)
+        torch.testing.assert_close(processed_scores[:, not_end_mask], scores[:, not_end_mask])
+        self.assertTrue(torch.all(torch.isinf(processed_scores[:, end_token_id])))
+
+        # Opening a brand new thinking block should re-enable the closing token.
+        reopened_sequence = torch.cat(
+            [answer_sequence, torch.tensor([[begin_token_id]], device=torch_device, dtype=torch.long)],
+            dim=1,
+        )
+        scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        processed_scores = processor(reopened_sequence, scores)
         torch.testing.assert_close(processed_scores, scores)
+
+    def test_max_thinking_tokens_processor_ignores_prompt_markup(self):
+        begin_token_id = 51
+        end_token_id = 52
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=3,
+            begin_thinking_token_id=begin_token_id,
+            end_thinking_token_id=end_token_id,
+        )
+
+        vocab_size = 80
+        warmup_scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+
+        prompt_input_ids = torch.tensor(
+            [[11, begin_token_id, 12, end_token_id, 13, begin_token_id, 14, end_token_id, 15]],
+            device=torch_device,
+            dtype=torch.long,
+        )
+        processor(prompt_input_ids, warmup_scores)
+
+        generated_suffix = torch.tensor([[101, 102, 103]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        processed_scores = processor(torch.cat([prompt_input_ids, generated_suffix], dim=1), scores)
+        torch.testing.assert_close(processed_scores, scores)
+
+    def test_max_thinking_tokens_processor_enforces_prefilled_block(self):
+        begin_token_id = 53
+        end_token_id = 54
+        newline_token_id = 55
+        processor = MaxThinkingTokensLogitsProcessor(
+            max_thinking_tokens=2,
+            begin_thinking_token_id=begin_token_id,
+            end_thinking_token_id=end_token_id,
+        )
+
+        vocab_size = 90
+        warmup_scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+
+        # Mimic `enable_thinking=True` templates that append "<think>\n" before generation.
+        prompt_input_ids = torch.tensor(
+            [[21, 22, begin_token_id, newline_token_id]],
+            device=torch_device,
+            dtype=torch.long,
+        )
+        processor(prompt_input_ids, warmup_scores)
+
+        generated_suffix = torch.tensor([[301, 302, 303]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        processed_scores = processor(torch.cat([prompt_input_ids, generated_suffix], dim=1), scores)
+
+        vocab_positions = torch.arange(vocab_size, device=torch_device)
+        not_end_mask = vocab_positions != end_token_id
+        self.assertTrue(torch.all(torch.isinf(processed_scores[:, not_end_mask])))
+        self.assertTrue(torch.isfinite(processed_scores[:, end_token_id]).all())
 
     def test_temperature_dist_warper(self):
         input_ids = None

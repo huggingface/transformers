@@ -16,7 +16,7 @@
 import inspect
 import math
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -260,35 +260,56 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         self._prompt_length_override: Optional[int] = prompt_length
         self._tracked_prompt_length: Optional[int] = prompt_length
 
-    def _first_open_thinking_position(self, sequence: torch.LongTensor, prompt_length: int) -> Optional[int]:
-        """Returns the first unmatched `begin_thinking_token_id` that starts at or after the prompt boundary."""
+    def _thinking_block_state(self, sequence: torch.LongTensor, prompt_length: int) -> Tuple[Optional[int], bool]:
+        """
+        Returns the first open `<think>` position (if any) together with a flag indicating whether a thinking block has
+        started either in the prompt (and carried over) or in the generated continuation.
+        """
         sequence_length = sequence.shape[-1]
-        if sequence_length == 0 or prompt_length >= sequence_length:
-            return None
+        if sequence_length == 0:
+            return None, False
 
-        prompt_open_depth = 0
         open_stack: list[int] = []
-        first_open_position: Optional[int] = None
+        prompt_open_depth = 0
+        prompt_open_depth_at_boundary = 0
+        boundary_recorded = prompt_length <= 0
+        seen_begin_after_prompt = False
 
         for position in range(sequence_length):
             token_id = int(sequence[position])
 
             if token_id == self.begin_thinking_token_id:
-                if position >= prompt_length:
-                    if not open_stack:
-                        first_open_position = position
-                    open_stack.append(position)
-                else:
+                if position < prompt_length:
                     prompt_open_depth += 1
+                else:
+                    open_stack.append(position)
+                    seen_begin_after_prompt = True
             elif token_id == self.end_thinking_token_id:
-                if open_stack:
-                    open_stack.pop()
-                    if not open_stack:
-                        first_open_position = None
-                elif prompt_open_depth > 0:
-                    prompt_open_depth -= 1
+                if position < prompt_length:
+                    if prompt_open_depth > 0:
+                        prompt_open_depth -= 1
+                else:
+                    if open_stack:
+                        open_stack.pop()
+                    elif prompt_open_depth > 0:
+                        prompt_open_depth -= 1
 
-        return first_open_position
+            if not boundary_recorded and position >= prompt_length - 1:
+                prompt_open_depth_at_boundary = prompt_open_depth
+                boundary_recorded = True
+
+        if not boundary_recorded:
+            prompt_open_depth_at_boundary = prompt_open_depth
+
+        first_open_position: Optional[int] = None
+        if prompt_open_depth > 0:
+            first_open_position = max(prompt_length - 1, 0)
+        elif open_stack:
+            first_open_position = open_stack[0]
+
+        block_started = prompt_open_depth_at_boundary > 0 or seen_begin_after_prompt or first_open_position is not None
+
+        return first_open_position, block_started
 
     def set_prompt_length(self, prompt_length: Optional[int]) -> None:
         """
@@ -322,17 +343,14 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             self._tracked_prompt_length = prompt_length
 
         force_end_indices: list[int] = []
-        disallow_repeated_close_indices: list[int] = []
+        disallow_close_indices: list[int] = []
 
         for batch_index in range(batch_size):
-            first_open_position = self._first_open_thinking_position(input_ids[batch_index], prompt_length)
+            first_open_position, block_started = self._thinking_block_state(input_ids[batch_index], prompt_length)
 
             if first_open_position is None:
-                if (
-                    sequence_length > 0
-                    and int(input_ids[batch_index, sequence_length - 1]) == self.end_thinking_token_id
-                ):
-                    disallow_repeated_close_indices.append(batch_index)
+                if block_started:
+                    disallow_close_indices.append(batch_index)
                 continue
 
             count_start = max(first_open_position + 1, prompt_length)
@@ -343,12 +361,12 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             if tokens_inside_block >= self.max_thinking_tokens:
                 force_end_indices.append(batch_index)
 
-        if not force_end_indices and not disallow_repeated_close_indices:
+        if not force_end_indices and not disallow_close_indices:
             return scores
 
         scores_processed = scores.clone()
-        if disallow_repeated_close_indices:
-            scores_processed[disallow_repeated_close_indices, self.end_thinking_token_id] = -math.inf
+        if disallow_close_indices:
+            scores_processed[disallow_close_indices, self.end_thinking_token_id] = -math.inf
 
         if force_end_indices:
             scores_processed[force_end_indices] = -math.inf
