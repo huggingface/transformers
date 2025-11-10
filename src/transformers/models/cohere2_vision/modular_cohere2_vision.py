@@ -345,7 +345,7 @@ class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
 
 __all__ = [
     "Cohere2VisionForConditionalGeneration",
-    "Cohere2VisionPreTrainedModel",  # noqa: F822
+    "Cohere2VisionPreTrainedModel",
     "Cohere2VisionModel",
     "Cohere2VisionImageProcessorFast",
 ]
