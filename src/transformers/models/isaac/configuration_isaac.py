@@ -88,7 +88,7 @@
 
 
 import copy
-from typing import Any
+from typing import Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
@@ -109,7 +109,7 @@ class IsaacVisionConfig(PretrainedConfig):
 
     model_type = "isaac_vision"
     base_config_key = "vision_config"
-    _attn_implementation: str | None = None
+    _attn_implementation: Optional[str] = None
 
     def __init__(
         self,
@@ -155,14 +155,14 @@ class IsaacConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vision_config: IsaacVisionConfig | None = None,
-        text_config: Qwen3Config | dict | None = None,
+        vision_config: Optional[IsaacVisionConfig] = None,
+        text_config: Optional[Union[Qwen3Config, dict]] = None,
         vision_rescale_factor: float = 1 / 255,
         max_sequence_length: int = 16384,
         vision_token: str = "<image>",
         **kwargs,
     ):
-        self._rope_scaling: dict[str, Any] | None = None
+        self._rope_scaling: Optional[dict[str, Any]] = None
         resolved_text_config = kwargs.pop("text_config", text_config)
         if isinstance(resolved_text_config, Qwen3Config):
             text_config_kwargs = copy.deepcopy(resolved_text_config.to_dict())
@@ -255,14 +255,14 @@ class IsaacConfig(PretrainedConfig):
             self.text_config.rope_scaling = value
 
     @property
-    def vision_attn_implementation(self) -> str | None:
+    def vision_attn_implementation(self) -> Optional[str]:
         value = getattr(self.vision_config, "_attn_implementation", None)
         if value is None:
             value = getattr(self.vision_config, "attn_implementation", None)
         return value
 
     @vision_attn_implementation.setter
-    def vision_attn_implementation(self, value: str | None) -> None:
+    def vision_attn_implementation(self, value: Optional[str]) -> None:
         self.vision_config._attn_implementation = value
         if value is not None:
             self.vision_config.attn_implementation = value

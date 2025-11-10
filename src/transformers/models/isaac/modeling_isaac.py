@@ -218,7 +218,7 @@ class IsaacVisionEmbeddings(nn.Module):
         self,
         seq_patches: torch.Tensor,
         spatial_shapes: torch.Tensor,
-    ) -> tuple[torch.Tensor | None, torch.Tensor]:
+    ) -> tuple[Optional[torch.Tensor], torch.Tensor]:
         if seq_patches.ndim != 2:
             raise ValueError("`seq_patches` is expected to be 2D (total_patches, patch_dim).")
         if spatial_shapes.ndim != 2 or spatial_shapes.size(-1) != 2:
@@ -266,11 +266,11 @@ class IsaacVisionEmbeddings(nn.Module):
 
 
 def build_document_attention_mask(
-    cu_seqlens: torch.Tensor | None,
+    cu_seqlens: Optional[torch.Tensor],
     total_tokens: int,
     dtype: torch.dtype,
     device: torch.device,
-) -> torch.Tensor | None:
+) -> Optional[torch.Tensor]:
     """Creates an additive attention mask that blocks cross-document attention."""
 
     if cu_seqlens is None:
@@ -291,12 +291,12 @@ def build_document_attention_mask(
 
 
 def ensure_document_attention_mask(
-    attention_mask: torch.Tensor | None,
-    cu_seqlens: torch.Tensor | None,
+    attention_mask: Optional[torch.Tensor],
+    cu_seqlens: Optional[torch.Tensor],
     total_tokens: int,
     dtype: torch.dtype,
     device: torch.device,
-) -> torch.Tensor | None:
+) -> Optional[torch.Tensor]:
     if attention_mask is not None or cu_seqlens is None:
         return attention_mask
 
@@ -460,9 +460,9 @@ class IsaacVisionEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
-        max_seqlen: int | None = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
         output_attentions: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
@@ -519,12 +519,12 @@ class IsaacVisionEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: torch.Tensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
-        max_seqlen: int | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         self.__variable_length_context(cu_seqlens, max_seqlen)
@@ -562,7 +562,7 @@ def create_pixel_shuffle_index_map(
     seq_sizes: torch.Tensor,
     token_grids: torch.Tensor,
     scale_factor: int = 1,
-    device: torch.device | None = None,
+    device: Optional[torch.device] = None,
 ) -> torch.Tensor:
     """
     Build a gather-index map that tells us, for every *output* token after
@@ -755,7 +755,7 @@ class IsaacRotaryEmbedding(nn.Module):
         self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
     @staticmethod
-    def _resolve_mrope_section(section: list[int] | None, rotary_half_dim: int) -> list[int]:
+    def _resolve_mrope_section(section: Optional[list[int]], rotary_half_dim: int) -> list[int]:
         if section is None:
             weights = (2, 1, 1)
             base = [rotary_half_dim * w // sum(weights) for w in weights]
@@ -784,7 +784,7 @@ class IsaacRotaryEmbedding(nn.Module):
         self,
         position_ids: torch.Tensor,
         modality_tensor: torch.Tensor,
-        hidden_states: torch.Tensor | None = None,
+        hidden_states: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if position_ids.ndim != 3 or position_ids.size(-1) != 3:
             raise ValueError("`position_ids` must have shape (batch, seq_len, 3) for MRoPE")
@@ -1186,17 +1186,17 @@ class IsaacModel(PreTrainedModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
-        tensor_stream: TensorStream | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        modality_tensor: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        tensor_stream: Optional[TensorStream] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        modality_tensor: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
         """
@@ -1476,22 +1476,20 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
-        tensor_stream: TensorStream | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        tensor_stream: Optional[TensorStream] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        Forward pass for conditional generation supporting both standard inputs and TensorStream.
-
         tensor_stream (`TensorStream`, *optional*):
             Packed multimodal stream (text, vision, audio tokens) that already encodes spatial metadata. When provided,
             the model derives embeddings, modality masks, and 3D rotary coordinates directly from the stream instead of
@@ -1561,9 +1559,9 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
 
     def get_rope_index(
         self,
-        input_ids: torch.Tensor | None,
-        tensor_stream: TensorStream | None,
-        attention_mask: torch.Tensor | None,
+        input_ids: Optional[torch.Tensor],
+        tensor_stream: Optional[TensorStream],
+        attention_mask: Optional[torch.Tensor],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute MRoPE position ids from a TensorStream (or 1D fallback).
 
@@ -1595,12 +1593,12 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        tensor_stream: TensorStream | None = None,
-        cache_position: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        tensor_stream: Optional[TensorStream] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         use_cache: bool = True,
         **kwargs,
     ) -> dict[str, Any]:

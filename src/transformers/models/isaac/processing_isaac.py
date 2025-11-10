@@ -88,6 +88,7 @@
 
 import math
 import re
+from typing import Optional, Union
 
 import PIL.Image
 import torch
@@ -104,10 +105,10 @@ from .configuration_isaac import IsaacConfig
 
 
 class IsaacImageProcessorKwargs(DefaultFastImageProcessorKwargs, total=False):
-    patch_size: int | None
-    max_num_patches: int | None
-    min_num_patches: int | None
-    pixel_shuffle_scale: int | None
+    patch_size: Optional[int]
+    max_num_patches: Optional[int]
+    min_num_patches: Optional[int]
+    pixel_shuffle_scale: Optional[int]
 
 
 # ============================================================================
@@ -170,8 +171,8 @@ class IsaacProcessor(ProcessorMixin):
         *,
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
-        rescale_factor: float | None = None,
-        config: IsaacConfig | dict | None = None,
+        rescale_factor: Optional[float] = None,
+        config: Optional[Union[IsaacConfig, dict]] = None,
     ) -> None:
         if tokenizer is None:
             raise ValueError("`tokenizer` must be provided to initialize IsaacProcessor.")
@@ -204,7 +205,7 @@ class IsaacProcessor(ProcessorMixin):
     def build_event_stream_simple(
         self,
         text: str,
-        images: list[PIL.Image.Image] | None = None,
+        images: Optional[list[PIL.Image.Image]] = None,
     ) -> Stream:
         events = []
         # Process text and images
@@ -249,9 +250,9 @@ class IsaacProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: str | list[str],
-        images: PIL.Image.Image | list[PIL.Image.Image] | None = None,
-        return_tensors: str | TensorType | None = TensorType.PYTORCH,
+        text: Union[str, list[str]],
+        images: Optional[Union[PIL.Image.Image, list[PIL.Image.Image]]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
         **kwargs,
     ) -> BatchFeature:
         """

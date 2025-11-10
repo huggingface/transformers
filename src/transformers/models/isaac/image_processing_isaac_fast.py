@@ -88,7 +88,7 @@
 
 import math
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -124,7 +124,7 @@ def get_image_size_for_max_num_patches(
     image_width: int,
     patch_size: int,
     max_num_patches: int,
-    min_num_patches: int | None = None,
+    min_num_patches: Optional[int] = None,
     eps: float = 1e-5,
     pixel_shuffle_scale: int = 1,
 ) -> tuple[int, int]:
@@ -247,16 +247,16 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
     do_resize = True
-    size: SizeDict | None = None
-    default_to_square: bool | None = None
+    size: Optional[SizeDict] = None
+    default_to_square: Optional[bool] = None
     do_center_crop = False
-    crop_size: SizeDict | None = None
-    patch_size: int | None = 16
-    max_num_patches: int | None = 256
-    min_num_patches: int | None = None
-    pixel_shuffle_scale: int | None = 1
+    crop_size: Optional[SizeDict] = None
+    patch_size: Optional[int] = 16
+    max_num_patches: Optional[int] = 256
+    min_num_patches: Optional[int] = None
+    pixel_shuffle_scale: Optional[int] = 1
     do_pad = False
-    pad_size: SizeDict | None = None
+    pad_size: Optional[SizeDict] = None
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = True
@@ -268,7 +268,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     input_data_format = None
     device = None
     disable_grouping = False
-    size_divisor: int | None = None
+    size_divisor: Optional[int] = None
 
     def __init__(
         self,
@@ -294,7 +294,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: Any | None = None,
+        interpolation: Optional[Any] = None,
         antialias: bool = True,
         **kwargs,
     ) -> torch.Tensor:
@@ -329,24 +329,24 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list[torch.Tensor],
         do_resize: bool,
-        size: SizeDict | None,
-        interpolation: Any | None,
+        size: Optional[SizeDict],
+        interpolation: Optional[Any],
         do_center_crop: bool,
-        crop_size: SizeDict | None,
-        do_rescale: bool | None,
-        rescale_factor: float | None,
-        do_normalize: bool | None,
-        image_mean: float | Sequence[float] | None,
-        image_std: float | Sequence[float] | None,
-        disable_grouping: bool | None = None,
-        return_tensors: str | TensorType | None = None,
-        do_pad: bool | None = None,
-        pad_size: SizeDict | None = None,
+        crop_size: Optional[SizeDict],
+        do_rescale: Optional[bool],
+        rescale_factor: Optional[float],
+        do_normalize: Optional[bool],
+        image_mean: Optional[Union[float, Sequence[float]]],
+        image_std: Optional[Union[float, Sequence[float]]],
+        disable_grouping: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_pad: Optional[bool] = None,
+        pad_size: Optional[SizeDict] = None,
         *,
-        patch_size: int | None = None,
-        max_num_patches: int | None = None,
-        min_num_patches: int | None = None,
-        pixel_shuffle_scale: int | None = None,
+        patch_size: Optional[int] = None,
+        max_num_patches: Optional[int] = None,
+        min_num_patches: Optional[int] = None,
+        pixel_shuffle_scale: Optional[int] = None,
         **kwargs,
     ) -> BatchFeature:
         if do_center_crop:
