@@ -195,9 +195,9 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
         resized_videos_grouped = {}
 
         for shape, stacked_videos in grouped_videos.items():
+            B, T, C, H, W = stacked_videos.shape
+            num_frames, height, width = T, H, W
             if do_resize:
-                B, T, C, H, W = stacked_videos.shape
-                num_frames, height, width = T, H, W
                 resized_height, resized_width = smart_resize(
                     num_frames=num_frames,
                     height=height,
