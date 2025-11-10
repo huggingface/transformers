@@ -455,7 +455,7 @@ parallelism_config = ParallelismConfig(
 
 [`Trainer`] automatically handles the special requirements for sequence parallelism including:
 
-* Adapting the data loader via `UlyssesSPDataLoaderAdapter` to shard sequences across GPUs
+* Adapting the data loader via DeepSpeed's [`UlyssesSPDataLoaderAdapter`](https://github.com/deepspeedai/DeepSpeed/blob/master/deepspeed/runtime/sequence_parallel/ulysses_sp.py) to shard sequences across GPUs
 * Generating `position_ids` when not provided
 * Creating `shift_labels` for causal language modeling
 * Aggregating loss across sequence parallel ranks with proper masking for `-100` labels
