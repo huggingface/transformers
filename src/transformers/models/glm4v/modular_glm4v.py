@@ -257,7 +257,7 @@ class Glm4vTextConfig(PreTrainedConfig):
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         image_token_id: Optional[int] = None,
         video_token_id: Optional[int] = None,
         **kwargs,
@@ -1544,8 +1544,6 @@ class Glm4vProcessor(Qwen2VLProcessor):
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
-
-    tokenizer_class = ("PreTrainedTokenizer", "PreTrainedTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
