@@ -306,7 +306,7 @@ GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 # Factory function to create LoadedParameter subclasses dynamically
 def get_loaded_parameter_class(base_cls):
     """
-    base_cls: an nn.Parameter subclass (or nn.Parameter)
+    base_cls: an nn.Parameter subclass (or nn.Parameter) or a Tensor
     Returns a new class that combines the base_cls with LoadedParameterMixin
     """
     class LoadedParam(base_cls):
@@ -315,8 +315,11 @@ def get_loaded_parameter_class(base_cls):
                 'copy_', 'erfinv_', 'log_'
             ]
         def __new__(cls, from_existing, **kwargs):
-            inst = super().__new__(cls, from_existing.data, from_existing.requires_grad, **from_existing.__dict__)
-            inst._original_param = from_existing
+            if isinstance(from_existing, torch.nn.Parameter):
+                inst = super().__new__(cls, from_existing.data, from_existing.requires_grad, **from_existing.__dict__)
+            else:
+                inst = super().__new__(cls, from_existing)
+            inst._original = from_existing
             # Explicitly override all in-place methods per instance
             for method_name in inst._inplace_methods:
                 setattr(inst, method_name, MethodType(inst._skip, inst))
@@ -445,7 +448,9 @@ def set_param_for_module(
                 )
             else:
                 pass  # TODO for "local" stuff, it will trigger missmatched no?
-            param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+            
+            if param_name not in module_obj._buffers:
+                param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
         # to skip any inplace method that modifies the param data
         param_value = get_loaded_parameter_class(param_value.__class__)(from_existing=param_value)
