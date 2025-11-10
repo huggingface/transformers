@@ -3911,8 +3911,9 @@ class ModelTesterMixin:
             tp_plan = model.tp_plan
             pattern_usage = {}
             for pattern in tp_plan:
+                # Check if this given pattern matches any param (the value attributed to the pattern does not matter)
                 pattern_usage[pattern] = any(
-                    _get_parameter_tp_plan(param, tp_plan) is not None for param in param_names
+                    _get_parameter_tp_plan(param, {pattern: ""}) is not None for param in param_names
                 )
 
             unused_entries = {k for k, v in pattern_usage.items() if not v}
