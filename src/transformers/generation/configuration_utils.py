@@ -115,6 +115,10 @@ class GenerationConfig(PushToHubMixin):
             `max_new_tokens` to be set and is ignored for models that do not expose such a segment. Because emitting
             `end_thinking_token_id` also consumes one generation step, at most `max_new_tokens - max_thinking_tokens - 1`
             tokens remain for the final response.
+        prompt_prefilled_suffix_length (`int`, *optional*, defaults to 3):
+            Number of prompt tokens (counting back from the prompt boundary) that should be treated as potentially
+            containing unfinished `<think>` markup when `max_thinking_tokens` is enabled. Only unmatched blocks within
+            this suffix are assumed to stay open when generation starts.
         min_length (`int`, *optional*, defaults to 0):
             The minimum length of the sequence to be generated. Corresponds to the length of the input prompt +
             `min_new_tokens`. Its effect is overridden by `min_new_tokens`, if also set.
@@ -350,6 +354,7 @@ class GenerationConfig(PushToHubMixin):
         self.max_length = kwargs.pop("max_length", 20)
         self.max_new_tokens = kwargs.pop("max_new_tokens", None)
         self.max_thinking_tokens = kwargs.pop("max_thinking_tokens", None)
+        self.prompt_prefilled_suffix_length = kwargs.pop("prompt_prefilled_suffix_length", 3)
         self.min_length = kwargs.pop("min_length", 0)
         self.min_new_tokens = kwargs.pop("min_new_tokens", None)
         self.early_stopping = kwargs.pop("early_stopping", False)
@@ -582,6 +587,17 @@ class GenerationConfig(PushToHubMixin):
                         f"token and at least one response token (got {self.max_thinking_tokens} vs "
                         f"{self.max_new_tokens})."
                     )
+        if self.prompt_prefilled_suffix_length is None:
+            if self.max_thinking_tokens is not None:
+                raise ValueError(
+                    "Using `max_thinking_tokens` requires `prompt_prefilled_suffix_length` to be set to a non-negative "
+                    "integer."
+                )
+        elif self.prompt_prefilled_suffix_length < 0:
+            raise ValueError(
+                "`prompt_prefilled_suffix_length` must be greater than or equal to 0, but is "
+                f"{self.prompt_prefilled_suffix_length}."
+            )
         if self.pad_token_id is not None and self.pad_token_id < 0:
             minor_issues["pad_token_id"] = (
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "

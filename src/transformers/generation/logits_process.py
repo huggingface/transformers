@@ -245,7 +245,7 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         prompt_length (`int`):
             Length of the prompt sequence before any new tokens are generated. Typically set to the length of the input
             prompt (`input_ids.shape[-1]`) when the processor is instantiated.
-        prompt_prefilled_suffix_length (`int`, *optional*, defaults to 8):
+        prompt_prefilled_suffix_length (`int`, *optional*, defaults to 3):
             Number of prompt tokens (counting back from the prompt boundary) that should be treated as potentially
             containing prefilled `<think>` markup. Any unmatched `<think>` in this suffix is treated as an active block
             when generation starts. Only the first unmatched block inside this suffix is replayed, so nested `<think>`
@@ -258,7 +258,7 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         begin_thinking_token_id: int,
         end_thinking_token_id: int,
         prompt_length: int,
-        prompt_prefilled_suffix_length: int = 8,
+        prompt_prefilled_suffix_length: int = 3,
     ):
         self.max_thinking_tokens = max_thinking_tokens
         self.begin_thinking_token_id = begin_thinking_token_id
@@ -338,6 +338,7 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
         # `active_start` indicates we are still inside the first block; `first_block_closed` tells `__call__`
         # to suppress any new `<think>` tokens even if `active_start` is None (i.e. the block completed earlier).
         active_start = first_block_start if first_block_started and not first_block_closed else None
+
         return active_start, first_block_closed
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)

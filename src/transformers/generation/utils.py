@@ -1245,6 +1245,7 @@ class GenerationMixin(ContinuousMixin):
                     generation_config.begin_thinking_token_id,
                     generation_config.end_thinking_token_id,
                     prompt_length=input_ids_seq_length,
+                    prompt_prefilled_suffix_length=generation_config.prompt_prefilled_suffix_length,
                 )
             )
         if prefix_allowed_tokens_fn is not None:
