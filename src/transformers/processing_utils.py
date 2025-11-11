@@ -1226,6 +1226,9 @@ class ProcessorMixin(PushToHubMixin):
                 Dictionary of per-modality kwargs to be passed to each modality-specific processor.
 
         """
+        # holding a copy to avoid mutating user-provided arguments
+        kwargs = kwargs.copy()
+
         # Initialize dictionaries
         output_kwargs = {
             "text_kwargs": {},
