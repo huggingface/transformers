@@ -1729,9 +1729,9 @@ def auto_method_docstring(
     model_name_lowercase, class_name, config_class = _get_model_info(func, parent_class)
     func_documentation = func.__doc__
     if custom_args is not None and func_documentation is not None:
-        func_documentation = set_min_indent(custom_args, indent_level + 4) + "\n" + func_documentation
+        func_documentation = "\n" + set_min_indent(custom_args.strip("\n"), 0) + "\n" + func_documentation
     elif custom_args is not None:
-        func_documentation = custom_args
+        func_documentation = "\n" + set_min_indent(custom_args.strip("\n"), 0)
 
     # Add intro to the docstring before args description if needed
     if custom_intro is not None:
