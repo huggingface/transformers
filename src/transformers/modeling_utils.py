@@ -2588,7 +2588,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         top_level_params =  dict(top_level.named_parameters(remove_duplicate=False))
 
         for target_name, source_name in mapping.items():
-            source_name = f"{module_prefix}.{source_name}" if module_prefix else source_name
+            source_name = f"^{module_prefix}.{source_name}" if module_prefix else "^" + source_name
 
             # if there are missing keys but the source is also missing, we are out, _init_weights will init later and tie later.
             # maybe we still need ot remove tied from missing just because you tie
@@ -2606,7 +2606,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
                 source_params = sorted(filter(lambda x: re.search(source_name, x), top_level_params.keys()))
                 target_params = sorted(filter(lambda x: re.search(target_name, x), top_level_params.keys()))
-
+                if len(source_params) != len(target_params):
+                    raise ValueError(
+                        f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. We found {source_params} to tie into {target_params}"
+                    )
                 if len(target_params) > 0:
                     for target_n, source_n in zip(target_params, source_params):
                         if "." in target_n:

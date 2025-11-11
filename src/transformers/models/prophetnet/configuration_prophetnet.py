@@ -165,6 +165,7 @@ class ProphetNetConfig(PreTrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+        self.tie_encoder_decoder = True
 
     @property
     def num_hidden_layers(self) -> int:
