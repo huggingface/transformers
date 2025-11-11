@@ -37,106 +37,10 @@ from .configuration_dinat import DinatConfig
 
 
 if is_natten_available():
-    def natten2dqkrpb(query, key, rpb, kernel_size, dilation):
-        """
-        Compute neighborhood attention scores with relative position bias.
-        This mimics the old natten API behavior.
-
-        Args:
-            query: [batch, heads, height, width, head_dim]
-            key: [batch, heads, height, width, head_dim]
-            rpb: [heads, 2*kernel_size-1, 2*kernel_size-1] - relative position bias
-            kernel_size: int
-            dilation: int
-
-        Returns:
-            attention_scores: [batch, heads, height, width, kernel_size*kernel_size]
-        """
-        batch, heads, height, width, head_dim = query.shape
-
-        # Compute QK^T for each spatial position with its neighborhood
-        # This is a simplified version - for full compatibility we'd need to implement
-        # the exact neighborhood attention pattern
-
-        # For now, we'll compute attention scores manually
-        # Reshape query and key for neighborhood gathering
-        query_flat = query.reshape(batch * heads, height, width, head_dim)
-        key_flat = key.reshape(batch * heads, height, width, head_dim)
-
-        # Compute attention scores using unfold-like operation
-        kernel_size_sq = kernel_size * kernel_size
-        attention_scores = torch.zeros(
-            batch, heads, height, width, kernel_size_sq, dtype=query.dtype, device=query.device
-        )
-
-        half_kernel = kernel_size // 2
-
-        for i in range(height):
-            for j in range(width):
-                idx = 0
-                for di in range(-half_kernel * dilation, (half_kernel + 1) * dilation, dilation):
-                    for dj in range(-half_kernel * dilation, (half_kernel + 1) * dilation, dilation):
-                        ni, nj = i + di, j + dj
-                        if 0 <= ni < height and 0 <= nj < width:
-                            # Compute dot product
-                            q = query[:, :, i, j, :]  # [batch, heads, head_dim]
-                            k = key[:, :, ni, nj, :]  # [batch, heads, head_dim]
-                            score = (q * k).sum(dim=-1)  # [batch, heads]
-
-                            # Add relative position bias
-                            rpb_i = half_kernel + di // dilation if dilation > 0 else half_kernel + di
-                            rpb_j = half_kernel + dj // dilation if dilation > 0 else half_kernel + dj
-                            bias = rpb[:, rpb_i, rpb_j]  # [heads]
-                            score = score + bias.unsqueeze(0)  # [batch, heads]
-
-                            attention_scores[:, :, i, j, idx] = score
-                        else:
-                            attention_scores[:, :, i, j, idx] = float("-inf")
-                        idx += 1
-
-        return attention_scores
-
-    def natten2dav(attention_probs, value, kernel_size, dilation):
-        """
-        Apply attention probabilities to values in neighborhood attention pattern.
-
-        Args:
-            attention_probs: [batch, heads, height, width, kernel_size*kernel_size]
-            value: [batch, heads, height, width, head_dim]
-            kernel_size: int
-            dilation: int
-
-        Returns:
-            context: [batch, heads, height, width, head_dim]
-        """
-        batch, heads, height, width, head_dim = value.shape
-        context = torch.zeros_like(value)
-
-        half_kernel = kernel_size // 2
-        kernel_size_sq = kernel_size * kernel_size
-
-        for i in range(height):
-            for j in range(width):
-                idx = 0
-                output = torch.zeros(batch, heads, head_dim, dtype=value.dtype, device=value.device)
-                for di in range(-half_kernel * dilation, (half_kernel + 1) * dilation, dilation):
-                    for dj in range(-half_kernel * dilation, (half_kernel + 1) * dilation, dilation):
-                        ni, nj = i + di, j + dj
-                        if 0 <= ni < height and 0 <= nj < width:
-                            v = value[:, :, ni, nj, :]  # [batch, heads, head_dim]
-                            attn = attention_probs[:, :, i, j, idx]  # [batch, heads]
-                            output = output + attn.unsqueeze(-1) * v
-                        idx += 1
-                context[:, :, i, j, :] = output
-
-        return context
-
+    from natten.functional import na2d
 else:
 
-    def natten2dqkrpb(*args, **kwargs):
-        raise OptionalDependencyNotAvailable()
-
-    def natten2dav(*args, **kwargs):
+    def na2d(*args, **kwargs):
         raise OptionalDependencyNotAvailable()
 
 
@@ -346,7 +250,8 @@ class NeighborhoodAttention(nn.Module):
         self.kernel_size = kernel_size
         self.dilation = dilation
 
-        # rpb is learnable relative positional biases; same concept is used Swin.
+        # Note: rpb (relative positional bias) is no longer used with the new natten API
+        # It's kept here for backward compatibility with model checkpoints
         self.rpb = nn.Parameter(torch.zeros(num_heads, (2 * self.kernel_size - 1), (2 * self.kernel_size - 1)))
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -362,44 +267,37 @@ class NeighborhoodAttention(nn.Module):
     ) -> tuple[torch.Tensor]:
         batch_size, height, width, _ = hidden_states.shape
 
-        # Project to Q, K, V and reshape to [batch, heads, height, width, head_dim]
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, height, width, self.num_attention_heads, self.attention_head_size)
-            .permute(0, 3, 1, 2, 4)
+        # Project to Q, K, V and reshape to [batch, height, width, heads, head_dim]
+        query_layer = self.query(hidden_states).view(
+            batch_size, height, width, self.num_attention_heads, self.attention_head_size
         )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, height, width, self.num_attention_heads, self.attention_head_size)
-            .permute(0, 3, 1, 2, 4)
+        key_layer = self.key(hidden_states).view(
+            batch_size, height, width, self.num_attention_heads, self.attention_head_size
         )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, height, width, self.num_attention_heads, self.attention_head_size)
-            .permute(0, 3, 1, 2, 4)
+        value_layer = self.value(hidden_states).view(
+            batch_size, height, width, self.num_attention_heads, self.attention_head_size
         )
 
-        # Apply the scale factor before computing attention weights. It's usually more efficient because
-        # attention weights are typically a bigger tensor compared to query.
-        # It gives identical results because scalars are commutable in matrix multiplication.
-        query_layer = query_layer / math.sqrt(self.attention_head_size)
+        context_layer = na2d(
+            query=query_layer,
+            key=key_layer,
+            value=value_layer,
+            kernel_size=self.kernel_size,
+            dilation=self.dilation,
+            is_causal=False,
+            scale=1.0 / math.sqrt(self.attention_head_size),
+        )
 
-        # Compute NA between "query" and "key" to get the raw attention scores, and add relative positional biases.
-        attention_scores = natten2dqkrpb(query_layer, key_layer, self.rpb, self.kernel_size, self.dilation)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = natten2dav(attention_probs, value_layer, self.kernel_size, self.dilation)
-        context_layer = context_layer.permute(0, 2, 3, 1, 4).contiguous()
+        # Reshape output to [batch, height, width, all_head_size]
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        # Apply dropout
+        context_layer = self.dropout(context_layer)
+
+        # Note: The new na2d interface doesn't support returning attention weights
+        # If output_attentions is True, we return None for attention weights
+        outputs = (context_layer, None) if output_attentions else (context_layer,)
 
         return outputs
 
@@ -428,6 +326,9 @@ class NeighborhoodAttentionModule(nn.Module):
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
+        import pdb
+
+        pdb.set_trace()
         self_outputs = self.self(hidden_states, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
