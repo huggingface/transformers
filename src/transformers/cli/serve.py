@@ -15,7 +15,6 @@ import asyncio
 import base64
 import copy
 import enum
-import functools
 import gc
 import io
 import json
@@ -718,14 +717,14 @@ class Serve:
         """
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
-    @functools.cache
-    def get_gen_models(self) -> list[dict[str, any]]:
+    @staticmethod
+    def get_gen_models(cache_dir: Optional[str] = None) -> list[dict[str, any]]:
         """
         List generative models in the cache.
         """
         generative_models = []
 
-        for repo in scan_cache_dir().repos:
+        for repo in scan_cache_dir(cache_dir).repos:
             if repo.repo_type != "model":
                 continue
 
