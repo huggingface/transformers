@@ -231,7 +231,8 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
 class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces a thinking budget by forcing the model to emit `end_thinking_token_id` once
-    `max_thinking_tokens` tokens have been generated inside the most recent thinking block.
+    `max_thinking_tokens` tokens have been generated inside the very first `<think>` block that crosses the prompt
+    boundary. After that block closes, new `<think>` tokens are suppressed instead of starting a fresh budget window.
 
     Args:
         max_thinking_tokens (`int`):
@@ -286,42 +287,75 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             elif token_id == self.end_thinking_token_id and stack:
                 stack.pop()
 
-    def _active_block_start(self, sequence: torch.LongTensor, prompt_length: int) -> Optional[int]:
+    def _first_block_state(self, sequence: torch.LongTensor, prompt_length: int) -> tuple[Optional[int], bool]:
         """
-        Returns the position of the earliest open `<think>` block. Only the final `prompt_prefilled_suffix_length`
-        prompt tokens are inspected; if they contain an unmatched `<think>`, that position is treated as the start of an
-        active block so prompt templates that prefill `<think>` remain compatible with the thinking budget. Generated
-        tokens are then scanned left-to-right and extend or close the block using the same stack bookkeeping.
+        Returns a tuple `(active_start, first_block_closed)` describing the very first `<think>` block that spans the
+        prompt boundary. Only the final `prompt_prefilled_suffix_length` prompt tokens are inspected when looking for a
+        prefilled `<think>` so earlier markup never affects the budget. Generated tokens are then scanned left-to-right
+        to keep extending that first block. Once the matching `</think>` is seen, `first_block_closed` flips to `True`
+        and the processor permanently ignores (and later blocks) new `<think>` tokens.
         """
         sequence_length = sequence.shape[-1]
         prompt_length = min(prompt_length, sequence_length)
 
-        # Track only the prompt suffix so `<think>` tags further up the prompt do not count toward the budget.
-        open_stack: list[int] = []
+        suffix_start = max(0, prompt_length - self._prompt_prefilled_suffix_length)
+        # Historical `<think>` tokens outside the suffix are ignored on purpose so the budget only
+        # reacts to reasoning that touches the current prompt boundary.
+        # The suffix replay captures at most one unmatched `<think>` (the earliest) which becomes the candidate block.
+        prompt_stack: list[int] = []
         if prompt_length:
-            suffix_start = max(0, prompt_length - self._prompt_prefilled_suffix_length)
-            prompt_stack: list[int] = []
             self._replay_range(sequence, suffix_start, prompt_length, prompt_stack)
 
-            # Any unmatched `<think>` in the suffix seeds the stack; generation continues inside that block.
-            if prompt_stack:
-                open_stack.append(prompt_stack[0])
+        # State describing the first block that either starts in the prompt suffix or during generation.
+        first_block_started = False
+        first_block_start: Optional[int] = None
+        first_block_closed = False
 
-        # Replay generated tokens in order. Whatever remains on the stack marks currently active thinking blocks.
-        self._replay_range(sequence, prompt_length, sequence_length, open_stack)
+        open_stack: list[int] = []
+        if prompt_stack:
+            first_block_start = prompt_stack[0]
+            first_block_started = True
+            open_stack.append(first_block_start)
 
-        return open_stack[0] if open_stack else None
+        # Only tokens generated after the prompt boundary are examined below; we treat them as a continuation
+        # of the suffix block (if any) or as candidates for the first newly-created block.
+        for position in range(prompt_length, sequence_length):
+            token_id = int(sequence[position])
+            if token_id == self.begin_thinking_token_id:
+                # Track nested `<think>` blocks so we can detect when the very first one closes.
+                open_stack.append(position)
+                if not first_block_started:
+                    first_block_started = True
+                    first_block_start = position
+            elif token_id == self.end_thinking_token_id and open_stack:
+                block_start = open_stack.pop()
+                if first_block_started and block_start == first_block_start and not first_block_closed:
+                    # Once the first block closes we never allow reopening, even if nested blocks remain.
+                    first_block_closed = True
+                # Other `<think>` / `</think>` pairs behave normally and may keep the stack non-empty, but they never
+                # reset `first_block_start`, so no subsequent block can steal the budget.
+
+        # `active_start` indicates we are still inside the first block; `first_block_closed` tells `__call__`
+        # to suppress any new `<think>` tokens even if `active_start` is None (i.e. the block completed earlier).
+        active_start = first_block_start if first_block_started and not first_block_closed else None
+        return active_start, first_block_closed
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         batch_size = input_ids.shape[0]
 
         force_end_indices: list[int] = []  # batch entries that exhausted their thinking budget
+        force_begin_indices: list[int] = []  # batch entries that already consumed their sole thinking block
 
         for batch_index in range(batch_size):
             sequence = input_ids[batch_index]
             batch_prompt_length = min(self.prompt_length, sequence.shape[-1])
-            first_open_position = self._active_block_start(sequence, batch_prompt_length)
+            # Figure out whether the very first `<think>` block (possibly seeded by the prompt suffix) is still open
+            # or has already been closed earlier in the sequence.
+            first_open_position, first_block_closed = self._first_block_state(sequence, batch_prompt_length)
+            if first_block_closed:
+                # Mask the begin token forever so the model cannot start a second reasoning block.
+                force_begin_indices.append(batch_index)
             if first_open_position is None:
                 continue
 
@@ -330,14 +364,18 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
 
             tokens_inside_block = sequence.shape[-1] - count_start
             if tokens_inside_block >= self.max_thinking_tokens:
+                # Budget exhausted inside the first block: force a single `</think>` next.
                 force_end_indices.append(batch_index)
 
-        if not force_end_indices:
+        if not force_end_indices and not force_begin_indices:
             return scores
 
         scores_processed = scores.clone()
-        scores_processed[force_end_indices] = -math.inf
-        scores_processed[force_end_indices, self.end_thinking_token_id] = 0.0
+        if force_end_indices:
+            scores_processed[force_end_indices] = -math.inf
+            scores_processed[force_end_indices, self.end_thinking_token_id] = 0.0
+        if force_begin_indices:
+            scores_processed[force_begin_indices, self.begin_thinking_token_id] = -math.inf
 
         return scores_processed
 
