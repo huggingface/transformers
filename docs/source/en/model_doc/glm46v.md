@@ -62,12 +62,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] Glm46VPreTrainedModel
     - forward
 
-## Glm46VTextModel
-
-[[autodoc]] Glm46VTextModel
-    - forward
-
-## Glm4vVideoProcessor
+## Glm46vVideoProcessor
 
 [[autodoc]] Glm46vVideoProcessor
     - preprocess
@@ -75,3 +70,13 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## Glm46vProcessor
 
 [[autodoc]] Glm46vProcessor
+
+## Glm46VTextModel
+
+[[autodoc]] Glm46VTextModel
+    - forward
+
+## Glm46VForConditionalGeneration
+
+[[autodoc]] Glm46VForConditionalGeneration
+    - forward
