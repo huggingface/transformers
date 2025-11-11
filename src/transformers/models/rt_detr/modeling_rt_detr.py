@@ -1815,7 +1815,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
-    _tied_weights_keys ={
+    _tied_weights_keys = {
         "model.decoder.class_embed": "class_embed",
         "model.decoder.bbox_embed": "bbox_embed",
     }

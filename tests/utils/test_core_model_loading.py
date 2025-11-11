@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import re
 import unittest
 
 import torch
@@ -137,7 +136,6 @@ class TestGlobRegexHelpers(unittest.TestCase):
         self.assertEqual(pattern, r"model\.layers\.(.+)\.mlp\.weight")
 
 
-
 class DummyParamModule(nn.Module):
     def __init__(self, shape):
         super().__init__()
@@ -180,6 +178,7 @@ class DummyMLP(nn.Module):
 
 class DummyRoot(nn.Module):
     base_model_prefix = "model"
+
     def __init__(self):
         super().__init__()
         self.model = DummyTopModel()

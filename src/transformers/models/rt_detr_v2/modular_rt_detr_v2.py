@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from copy import deepcopy
-from functools import partial
 from typing import Optional
 
 import torch
@@ -597,9 +595,14 @@ class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedMod
         RTDetrV2PreTrainedModel.__init__(self, config)
         # RTDETR encoder-decoder model
         self.model = RTDetrV2Model(config)
-        self.class_embed = nn.ModuleList([torch.nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)])
+        self.class_embed = nn.ModuleList(
+            [torch.nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
+        )
         self.bbox_embed = nn.ModuleList(
-            [RTDetrV2MLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3) for _ in range(config.decoder_layers)]
+            [
+                RTDetrV2MLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+                for _ in range(config.decoder_layers)
+            ]
         )
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed

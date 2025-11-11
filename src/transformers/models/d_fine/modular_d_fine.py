@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from copy import deepcopy
 from typing import Any, Optional
 
 import torch
@@ -880,7 +879,7 @@ class DFineForObjectDetection(RTDetrForObjectDetection):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
-    _tied_weights_keys ={
+    _tied_weights_keys = {
         r"bbox_embed.(?![0])\d+": "bbox_embed.0",
         r"class_embed.(?![0])\d+": "class_embed.0",
         "model.decoder.class_embed": "class_embed",
@@ -911,7 +910,6 @@ class DFineForObjectDetection(RTDetrForObjectDetection):
         self.model.decoder.bbox_embed = self.bbox_embed
         # Initialize weights and apply final processing
         self.post_init()
-
 
     def forward(**super_kwargs):
         r"""

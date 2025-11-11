@@ -2587,7 +2587,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         # TODO let's pray this is not too slow :)
-        top_level_params = dict(top_level.named_parameters(remove_duplicate=False)) | dict(top_level.named_buffers(remove_duplicate=False))
+        top_level_params = dict(top_level.named_parameters(remove_duplicate=False)) | dict(
+            top_level.named_buffers(remove_duplicate=False)
+        )
         for target_name, source_name in mapping.items():
             source_name = f"^{module_prefix}.{source_name}" if module_prefix else "^" + source_name
 
@@ -2621,7 +2623,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             parent = top_level  # top-level
                         setattr(parent, last, top_level_params[source_n])
                         self._adjust_bias(parent, top_level_params[source_n])
-                        if missing_keys and source_is_there: # test_model_weights_reload_no_missing_tied_weights
+                        if missing_keys and source_is_there:  # test_model_weights_reload_no_missing_tied_weights
                             missing_keys.discard(target_n)
             # source and target are missing, but we don't need to warn about target missing if we do tie.
             elif (
@@ -2663,7 +2665,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
                 if isinstance(module, PreTrainedModel):
                     module.tie_weight_source_and_target(self, missing_keys, module_prefix)
-
 
     def _get_no_split_modules(self, device_map: str):
         """
@@ -4220,9 +4221,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if weight_conversions is None:
                 weight_conversions = get_checkpoint_conversion_mapping()["legacy"]
             if key_mapping is not None:
-                weight_conversions.extend([
-                    WeightConverter(k, v) for k,v in key_mapping.items()
-                ])
+                weight_conversions.extend([WeightConverter(k, v) for k, v in key_mapping.items()])
 
         if gguf_file:
             if hf_quantizer is not None:

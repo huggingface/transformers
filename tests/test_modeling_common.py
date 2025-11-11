@@ -2519,7 +2519,6 @@ class ModelTesterMixin:
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     model = model_class(config)
                     model.save_pretrained(tmp_dir)
-                    num_labels = config.num_labels
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(RuntimeError):
                         new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)

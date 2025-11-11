@@ -137,7 +137,7 @@ class T5Config(PreTrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
-        self.tie_encoder_decoder = True # T5 is always tied, has always been like that.
+        self.tie_encoder_decoder = True  # T5 is always tied, has always been like that.
 
 
 __all__ = ["T5Config"]

@@ -16,7 +16,6 @@
 
 import math
 import warnings
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -2414,7 +2413,7 @@ def build_text_mask(logits, attention_mask):
 class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # the bbox_embed in the decoder are all clones though
-    _tied_weights_keys ={
+    _tied_weights_keys = {
         r"bbox_embed.(?![0])\d+": "bbox_embed.0",
         "model.decoder.bbox_embed": "bbox_embed",
     }
@@ -2442,7 +2441,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             [GroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
         )
         # hack for box-refinement
-        self.model.decoder.class_embed = self.class_embed # class embed has no weights so nothing to tie
+        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
         self.model.decoder.bbox_embed = self.bbox_embed
         self.post_init()
 

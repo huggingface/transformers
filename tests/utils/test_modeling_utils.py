@@ -1685,7 +1685,6 @@ class ModelUtilsTest(TestCasePlus):
             torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
         )
 
-
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
         logger = logging.get_logger("transformers.modeling_utils")

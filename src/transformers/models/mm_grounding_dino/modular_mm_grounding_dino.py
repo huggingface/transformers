@@ -423,7 +423,7 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
             ]
         )
         # Initialize weights and apply final processing
-        self.model.decoder.class_embed = self.class_embed # class embed has no weights so nothing to tie
+        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
         self.model.decoder.bbox_embed = self.bbox_embed
         self.post_init()
 

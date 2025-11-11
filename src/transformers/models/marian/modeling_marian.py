@@ -840,8 +840,6 @@ class MarianDecoder(MarianPreTrainedModel):
 
 @auto_docstring
 class MarianModel(MarianPreTrainedModel):
-
-
     def __init__(self, config: MarianConfig):
         super().__init__(config)
 
