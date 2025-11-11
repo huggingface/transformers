@@ -771,7 +771,7 @@ class Sam3PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
 
