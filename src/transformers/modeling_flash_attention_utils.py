@@ -108,7 +108,7 @@ def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Cal
             if flash_attn_varlen_func is None:
                 raise ValueError(
                     f"Could not find the currently requested flash attention implementation at `{implementation}`."
-                    "Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn`."
+                    "Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn2`."
                 )
             if flash_attn_func is None:
                 logger.warning(
