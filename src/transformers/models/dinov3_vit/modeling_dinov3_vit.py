@@ -29,11 +29,12 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import check_model_inputs
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
@@ -522,10 +523,79 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         sequence_output = self.norm(hidden_states)
         pooled_output = sequence_output[:, 0, :]
 
-        return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-        )
+        return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
 
 
-__all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel"]
+@auto_docstring
+class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
+    def __init__(self, config):
+        super().__init__(config)
+        super()._init_backbone(config)
+
+        self.embeddings = DINOv3ViTEmbeddings(config)
+        self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
+        self.layer = nn.ModuleList([DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.gradient_checkpointing = False
+
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.patch_embeddings
+
+    @check_model_inputs()
+    @can_return_tuple
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BackboneOutput:
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
+        hidden_states = self.embeddings(pixel_values)
+        position_embeddings = self.rope_embeddings(pixel_values)
+
+        stage_hidden_states: list[torch.Tensor] = [hidden_states]
+
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings)
+            stage_hidden_states.append(hidden_states)
+
+        batch_size, _, image_height, image_width = pixel_values.shape
+        patch_size = self.config.patch_size
+        num_patches_height = image_height // patch_size
+        num_patches_width = image_width // patch_size
+
+        num_prefix = 1 + getattr(self.config, "num_register_tokens", 0)
+
+        feature_maps = []
+        sequence_output = None
+        last_stage_idx = len(self.stage_names) - 1
+        for idx, (stage_name, hidden_state) in enumerate(zip(self.stage_names, stage_hidden_states)):
+            if idx == last_stage_idx:
+                hidden_state = self.norm(hidden_state)
+                sequence_output = hidden_state
+            elif self.config.apply_layernorm:
+                hidden_state = self.norm(hidden_state)
+
+            if stage_name in self.out_features:
+                patch_tokens = hidden_state[:, num_prefix:, :]
+                if self.config.reshape_hidden_states:
+                    fmap = (
+                        patch_tokens.reshape(batch_size, num_patches_height, num_patches_width, patch_tokens.shape[-1])
+                        .permute(0, 3, 1, 2)
+                        .contiguous()
+                    )
+                else:
+                    fmap = patch_tokens
+
+                feature_maps.append(fmap)
+
+        output = BackboneOutput(feature_maps=tuple(feature_maps))
+        output.last_hidden_state = sequence_output
+
+        return output
+
+
+__all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel", "DINOv3ViTBackbone"]
