@@ -629,7 +629,7 @@ class Speech2Text2DecoderWrapper(Speech2Text2PreTrainedModel):
     SPEECH_TO_TEXT_2_START_DOCSTRING,
 )
 class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
-    # _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
+    _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config):
         config.is_decoder = True
