@@ -25,11 +25,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+import torch
 from safetensors.torch import safe_open
 
 from transformers import (
     AudioFlamingo3Config,
-    AudioFlamingo3EncoderConfig,
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3Processor,
     AutoTokenizer,
@@ -166,7 +166,6 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlam
         eos_token_id=tok.eos_token_id,
         pad_token_id=tok.pad_token_id,
         vocab_size=len(tok),
-        dtype="bfloat16",
         hidden_size=3584,
         intermediate_size=18944,
         model_max_length=8192,
@@ -176,14 +175,8 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlam
         rope_theta=1000000.0,
         use_cache=False,
     )
-    audio_config = AudioFlamingo3EncoderConfig(dtype="bfloat16")
-    config = AudioFlamingo3Config(
-        text_config=text_config,
-        audio_config=audio_config,
-        audio_token_id=tok.get_vocab()["<sound>"],
-        dtype="bfloat16",
-    )
-    model = AudioFlamingo3ForConditionalGeneration(config)
+    config = AudioFlamingo3Config(text_config=text_config, audio_token_id=tok.get_vocab()["<sound>"])
+    model = AudioFlamingo3ForConditionalGeneration(config).to(dtype=torch.bfloat16)
 
     # Update state dict to new key names if necessary
     projector_key_mapping = {
