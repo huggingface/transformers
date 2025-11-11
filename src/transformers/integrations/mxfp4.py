@@ -14,7 +14,7 @@
 
 from typing import Optional
 
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, get_loaded_parameter_class
 from ..utils import is_accelerate_available, is_torch_available, logging
 
 
@@ -423,7 +423,9 @@ def dequantize_convertops(module, param_name, param_value, target_device, missin
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
                 if target_device == "cpu" and torch.cuda.is_available():
                     torch.cuda.empty_cache()
-                setattr(module, proj, torch.nn.Parameter(dequantized.to(target_device)))
+                dequantized = torch.nn.Parameter(dequantized.to(target_device))
+                dequantized = get_loaded_parameter_class(dequantized.__class__)(from_existing=dequantized)
+                setattr(module, proj, dequantized)
                 missing_keys.discard(param_name.rsplit("_", 1)[0])
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
