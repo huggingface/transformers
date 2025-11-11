@@ -220,7 +220,6 @@ class FSMTConfig(PreTrainedConfig):
             early_stopping=early_stopping,
             **common_kwargs,
         )
-        self.tie_encoder_decoder = True
 
 
 __all__ = ["FSMTConfig"]

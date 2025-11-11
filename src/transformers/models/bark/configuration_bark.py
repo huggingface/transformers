@@ -86,6 +86,7 @@ class BarkSubModelConfig(PreTrainedConfig):
         use_cache=True,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.block_size = block_size
         self.input_vocab_size = input_vocab_size
         self.output_vocab_size = output_vocab_size
@@ -97,7 +98,6 @@ class BarkSubModelConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.initializer_range = initializer_range
 
-        super().__init__(**kwargs)
 
 
 @add_start_docstrings(
@@ -250,6 +250,7 @@ class BarkConfig(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         if semantic_config is None:
             semantic_config = BarkSemanticConfig()
             logger.info("`semantic_config` is `None`. Initializing the `BarkSemanticConfig` with default values.")
@@ -284,7 +285,6 @@ class BarkConfig(PreTrainedConfig):
 
         self.initializer_range = initializer_range
 
-        super().__init__(**kwargs)
 
 
 __all__ = ["BarkCoarseConfig", "BarkConfig", "BarkFineConfig", "BarkSemanticConfig"]
