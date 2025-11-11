@@ -1126,7 +1126,7 @@ def get_model_name(obj):
         if file_name.startswith(start) and file_name.endswith(end):
             model_name_lowercase = file_name[len(start) : -len(end)]
             return model_name_lowercase
-    print(f"🚨 Something went wrong trying to find the model name in the path: {path}")
+    print(f"[ERROR] Something went wrong trying to find the model name in the path: {path}")
     return "model"
 
 
@@ -1273,7 +1273,7 @@ def _get_model_info(func, parent_class):
             else:
                 config_class = "ModelConfig"
                 print(
-                    f"🚨 Config not found for {model_name_lowercase}. You can manually add it to HARDCODED_CONFIG_FOR_MODELS in utils/auto_docstring.py"
+                    f"[ERROR] Config not found for {model_name_lowercase}. You can manually add it to HARDCODED_CONFIG_FOR_MODELS in utils/auto_docstring.py"
                 )
 
     return model_name_lowercase, class_name, config_class
@@ -1300,7 +1300,7 @@ def _process_parameter_type(param, param_name, func):
         else:
             if False:
                 print(
-                    f"🚨 {param_type} for {param_name} of {func.__qualname__} in file {func.__code__.co_filename} has an invalid type"
+                    f"[ERROR] {param_type} for {param_name} of {func.__qualname__} in file {func.__code__.co_filename} has an invalid type"
                 )
         if "ForwardRef" in param_type:
             param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
@@ -1409,7 +1409,7 @@ def _process_regular_parameters(
                 else:
                     param_type = f"[`{param_type.split('.')[-1]}`]"
             # elif param_type == "" and False:  # TODO: Enforce typing for all parameters
-            #     print(f"🚨 {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
+            #     print(f"[ERROR] {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
             param_type = param_type if "`" in param_type else f"`{param_type}`"
             # Format the parameter docstring
             if additional_info:
@@ -1431,7 +1431,7 @@ def _process_regular_parameters(
                 "default": param_default,
             }
             undocumented_parameters.append(
-                f"🚨 `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
+                f"[ERROR] `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
             )
 
     return docstring, missing_args
@@ -1524,7 +1524,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                     # Check if type is missing
                     if param_type == "":
                         print(
-                            f"🚨 {param_name} for {kwarg_param.annotation.__args__[0].__qualname__} in file {func.__code__.co_filename} has no type"
+                            f"[ERROR] {param_name} for {kwarg_param.annotation.__args__[0].__qualname__} in file {func.__code__.co_filename} has no type"
                         )
                     param_type = param_type if "`" in param_type else f"`{param_type}`"
                     # Format the parameter docstring
@@ -1540,7 +1540,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                         )
                 else:
                     undocumented_parameters.append(
-                        f"🚨 `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
+                        f"[ERROR] `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
                     )
 
     return docstring
@@ -1692,7 +1692,7 @@ def _process_example_section(
                 example_docstring = set_min_indent(example_annotation, indent_level + 4)
             else:
                 print(
-                    f"🚨 No checkpoint found for {class_name}.{func.__name__}. Please add a `checkpoint` arg to `auto_docstring` or add one in {config_class}'s docstring"
+                    f"[ERROR] No checkpoint found for {class_name}.{func.__name__}. Please add a `checkpoint` arg to `auto_docstring` or add one in {config_class}'s docstring"
                 )
         else:
             # Check if the model is in a pipeline to get an example
@@ -1865,7 +1865,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
                 if is_documented:
                     # Check if type is missing
                     if param_type == "":
-                        print(f"🚨 {param_name} for {cls.__qualname__} in file {cls.__code__.co_filename} has no type")
+                        print(
+                            f"[ERROR] {param_name} for {cls.__qualname__} in file {cls.__code__.co_filename} has no type"
+                        )
                     param_type = param_type if "`" in param_type else f"`{param_type}`"
                     # Format the parameter docstring
                     if additional_info:
