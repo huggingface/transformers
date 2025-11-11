@@ -2609,7 +2609,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 target_name = f"^{module_prefix}.{target_name}" if module_prefix else "^" + target_name
                 source_params = sorted(filter(lambda x: re.search(source_name, x), top_level_params.keys()))
                 target_params = sorted(filter(lambda x: re.search(target_name, x), top_level_params.keys()))
-                if len(target_params) % len(source_params) != 0:
+                if not len(source_params) > 0 or len(target_params) % len(source_params) != 0:
                     raise ValueError(
                         f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. We found {source_params} to tie into {target_params}"
                     )
