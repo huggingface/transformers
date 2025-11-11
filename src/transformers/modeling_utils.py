@@ -4477,7 +4477,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             missing_keys, unexpected_keys, False, model
         )
 
-        # We make sure we TIE after _init_
+        # We make sure we TIE after _init_. We need the missing keys to remove the ones
+        # we do tie, and not random remove.
         model.tie_weights(missing_keys)
 
         # Post-processing for tensor parallelism

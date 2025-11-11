@@ -332,16 +332,16 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "prophetnet"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.init_std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.init_std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+    # @torch.no_grad()
+    # def _init_weights(self, module):
+    #     if isinstance(module, nn.Linear):
+    #         module.weight.normal_(mean=0.0, std=self.config.init_std)
+    #         if module.bias is not None:
+    #             module.bias.zero_()
+    #     elif isinstance(module, nn.Embedding):
+    #         module.weight.normal_(mean=0.0, std=self.config.init_std)
+    #         if module.padding_idx is not None:
+    #             module.weight[module.padding_idx].zero_()
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -1697,6 +1697,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "lm_head.weight": "prophetnet.word_embeddings.weight",
+        "prophetnet.decoder.word_embeddings.weight": "prophetnet.word_embeddings.weight",
     }
 
     def __init__(self, config: ProphetNetConfig):

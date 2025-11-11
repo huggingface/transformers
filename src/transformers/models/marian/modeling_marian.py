@@ -1041,6 +1041,8 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
     def __init__(self, config: MarianConfig):
         super().__init__(config)
         self.model = MarianModel(config)
+        if self.config.share_encoder_decoder_embeddings:
+            self._tied_weights_keys = {"lm_head.weight": "model.shared.weight"}
 
         target_vocab_size = config.vocab_size if config.share_encoder_decoder_embeddings else config.decoder_vocab_size
         self.register_buffer("final_logits_bias", torch.zeros((1, target_vocab_size)))
@@ -1060,7 +1062,6 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
     ) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
         if self.config.share_encoder_decoder_embeddings:
-            self._tied_weights_keys = {"lm_head.weight": "model.shared.weight"}
             self._resize_final_logits_bias(new_num_tokens)
         return new_embeddings
 
