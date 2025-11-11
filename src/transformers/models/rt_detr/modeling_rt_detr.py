@@ -1826,7 +1826,6 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             [RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3) for _ in range(num_pred)]
         )
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
-
         self.post_init()
 
     def _set_aux_loss(self, outputs_class, outputs_coord):
