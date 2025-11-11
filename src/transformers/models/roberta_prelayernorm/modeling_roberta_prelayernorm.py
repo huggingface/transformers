@@ -865,7 +865,7 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel, Generat
 )
 class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "roberta_prelayernorm.embeddings.weight",
+        "lm_head.decoder.weight": "roberta_prelayernorm.embeddings.word_embeddings.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 

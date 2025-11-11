@@ -2585,8 +2585,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and not self.config.tie_encoder_decoder  # if missing keys is None we init?
         ):
             return
-        top_level_params =  dict(top_level.named_parameters(remove_duplicate=False))
 
+        # TODO let's pray this is not too slow :)
+        top_level_params = dict(top_level.named_parameters(remove_duplicate=False)) | dict(top_level.named_buffers(remove_duplicate=False))
         for target_name, source_name in mapping.items():
             source_name = f"^{module_prefix}.{source_name}" if module_prefix else "^" + source_name
 
