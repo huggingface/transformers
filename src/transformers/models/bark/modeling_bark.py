@@ -341,7 +341,8 @@ class BarkPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
+            if getattr(module, "bias", None) is not None:
+                module.bias.zero_()
             module.weight.fill_(1.0)
 
     def __init__(self, *inputs, **kwargs):

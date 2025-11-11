@@ -906,7 +906,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 class BarkModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return BarkModel.from_pretrained("suno/bark").to(torch_device)
+        return BarkModel.from_pretrained("suno/bark", revision="refs/pr/25", trust_remote_code=True).to(torch_device)
 
     @cached_property
     def processor(self):
