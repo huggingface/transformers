@@ -2598,7 +2598,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
             # if neither are here, we still want to the training to have same grads
-            target_is_not_there = (]
+            target_is_not_there = (
                 missing_keys
                 and re.search(target_name, "\n".join(missing_keys), flags=re.MULTILINE)
                 and not source_is_there
