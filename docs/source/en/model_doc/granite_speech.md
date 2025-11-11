@@ -40,6 +40,8 @@ This model was contributed by [Alexander Brooks](https://huggingface.co/abrooks9
 ## Usage tips
 
 - This model bundles its own LoRA adapter, which will be automatically loaded and enabled/disabled as needed during inference calls. Be sure to install [PEFT](https://github.com/huggingface/peft) to ensure the LoRA is correctly applied!
+- The model expects 16kHz sampling rate audio. The processor will automatically resample if needed.
+- The LoRA adapter is automatically enabled when audio features are present and disabled for text-only inputs, so you don't need to manage it manually.
 
 ## Usage example
 
@@ -72,9 +74,9 @@ transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[
 print(transcription)
 ```
 
-### Speech-to-Text with Additional Context
+### Speech-to-Text with Chat Template
 
-You can provide text context along with audio for more controlled generation:
+For instruction-following with audio, use the chat template to format prompts properly:
 
 ```python
 from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
@@ -87,25 +89,26 @@ model = GraniteSpeechForConditionalGeneration.from_pretrained(
 )
 processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
 
-# Prepare inputs with text prompt
-text_prompt = "Transcribe the following audio:"
-audio_input = "path/to/audio.wav"
+# Prepare chat-formatted inputs with audio
+messages = [
+    {"role": "user", "content": "Transcribe the following audio:"}
+]
+
+# Apply chat template and add audio
+text = processor.tokenizer.apply_chat_template(
+    messages, 
+    tokenize=False, 
+    add_generation_prompt=True
+)
 
 inputs = processor(
-    text=text_prompt,
-    audio=audio_input,
+    text=text,
+    audio="path/to/audio.wav",
     return_tensors="pt"
 ).to(model.device)
 
-# Generate with custom parameters
-generated_ids = model.generate(
-    **inputs,
-    max_new_tokens=512,
-    do_sample=True,
-    temperature=0.7,
-    top_p=0.9
-)
-
+# Generate transcription
+generated_ids = model.generate(**inputs, max_new_tokens=512)
 output_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 print(output_text)
 ```
@@ -139,13 +142,6 @@ for i, transcription in enumerate(transcriptions):
     print(f"Audio {i+1}: {transcription}")
 ```
 
-### Tips for Best Results
-
-- **Audio Format**: The model expects 16kHz sampling rate audio. The processor will automatically resample if needed.
-- **LoRA Adapter**: The LoRA adapter is automatically enabled when audio features are present, so you don't need to manage it manually.
-- **Memory Usage**: For large models, use `torch.bfloat16` or quantization to reduce memory footprint.
-- **Temperature**: Use lower temperatures (0.1-0.5) for accurate transcription, higher (0.7-1.0) for more creative responses.
-- **Batch Size**: Adjust batch size based on available GPU memory. Larger batches improve throughput but require more memory.
 
 ## GraniteSpeechConfig
 
