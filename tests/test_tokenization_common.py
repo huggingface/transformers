@@ -686,29 +686,55 @@ Hey how are you doing"""
         shutil.rmtree(tmpdirname)
 
     def _run_integration_checks(self, tokenizer, tokenizer_type):
-        # Test 1: Tokens match expected
-        tokens = tokenizer.tokenize(self.integration_test_input_string)
-        self.assertEqual(
-            tokens,
-            self.integration_expected_tokens,
-            f"Tokenized tokens don't match expected for {tokenizer.__class__.__name__} ({tokenizer_type})",
-        )
+        try:
+            # Test 1: Tokens match expected
+            tokens = tokenizer.tokenize(self.integration_test_input_string)
+            self.assertEqual(
+                tokens,
+                self.integration_expected_tokens,
+                f"Tokenized tokens don't match expected for {tokenizer.__class__.__name__} ({tokenizer_type})",
+            )
 
-        # Test 2: IDs from encode match expected (without special tokens)
-        ids_from_encode = tokenizer.encode(self.integration_test_input_string, add_special_tokens=False)
-        self.assertEqual(
-            ids_from_encode,
-            self.integration_expected_token_ids,
-            f"Encoded IDs don't match expected for {tokenizer.__class__.__name__} ({tokenizer_type})",
-        )
+            # Test 2: IDs from encode match expected (without special tokens)
+            ids_from_encode = tokenizer.encode(self.integration_test_input_string, add_special_tokens=False)
+            self.assertEqual(
+                ids_from_encode,
+                self.integration_expected_token_ids,
+                f"Encoded IDs don't match expected for {tokenizer.__class__.__name__} ({tokenizer_type})",
+            )
 
-        # Test 3: Round-trip decode produces expected text (if provided)
-        decoded_text = tokenizer.decode(self.integration_expected_token_ids, clean_up_tokenization_spaces=False)
-        self.assertEqual(
-            decoded_text,
-            self.integration_expected_decoded_text,
-            f"Decoded text doesn't match expected for {tokenizer.__class__.__name__} ({tokenizer_type})",
-        )
+            # Test 3: Round-trip decode produces expected text (if provided)
+            decoded_text = tokenizer.decode(self.integration_expected_token_ids, clean_up_tokenization_spaces=False)
+            self.assertEqual(
+                decoded_text,
+                self.integration_expected_decoded_text,
+                f"Decoded text doesn't match expected for {tokenizer.__class__.__name__} ({tokenizer_type})",
+            )
+        except AssertionError as err:
+            decoded = tokenizer.decode(
+                self.integration_expected_token_ids, clean_up_tokenization_spaces=False
+            )
+            tokenizer_class = type(tokenizer).__name__
+            tokenizer_module = type(tokenizer).__module__
+            has_backend_tokenizer = hasattr(tokenizer, "backend_tokenizer")
+            has_tokenizer_attr = hasattr(tokenizer, "_tokenizer")
+            backend_tokenizer = getattr(tokenizer, "backend_tokenizer", None) or getattr(tokenizer, "_tokenizer", None)
+            
+            # Additional debugging info
+            tokenizer_mro = [cls.__name__ for cls in type(tokenizer).__mro__]
+            
+            debug_info = (
+                f"{err}\nTokenizer debug info:\n"
+                f"  tokenizer_class: {tokenizer_class}\n"
+                f"  tokenizer_module: {tokenizer_module}\n"
+                f"  tokenizer_mro: {tokenizer_mro}\n"
+                f"  has_backend_tokenizer attr: {has_backend_tokenizer}\n"
+                f"  has_tokenizer attr: {has_tokenizer_attr}\n"
+                f"  backend_tokenizer value: {backend_tokenizer}\n"
+                f"  decoded: {decoded!r}\n"
+                f"  tokenizer_type param: {tokenizer_type}"
+            )
+            raise AssertionError(debug_info) from err
 
     def test_integration(self):
         """
