@@ -76,7 +76,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         # Prepare attention mask for transformer layers
         batch_size = input_features.shape[0]
         seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
-        
+
         input_features_lengths = input_features_mask.sum(-1)
         input_features_lengths = (input_features_lengths - 1) // 2 + 1  # conv2 downsampling
         input_features_mask = torch.arange(seq_len, device=input_features.device) < input_features_lengths[:, None]

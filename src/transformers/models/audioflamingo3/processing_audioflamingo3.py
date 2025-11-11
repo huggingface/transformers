@@ -84,6 +84,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio_token="<sound>",
     ):
         self.audio_token = audio_token
+        self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -123,7 +124,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         text_kwargs = call_kwargs["text_kwargs"]
         audio_kwargs = call_kwargs["audio_kwargs"]
-        return_tensors = text_kwargs.pop("return_tensors", None)
+        return_tensors = text_kwargs.get("return_tensors")
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
