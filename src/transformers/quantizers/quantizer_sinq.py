@@ -29,9 +29,15 @@ def _normalize_cuda_device(dev: Optional[Union[str, int]]) -> str:
       - 'cpu' -> 'cpu'
       - 'cuda', 'cuda:0', 0, 1 -> canonicalized CUDA forms
     """
-    # Handle 'auto' or None
     if dev is None or dev == "auto":
-        return "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            # pick the current device if it's set, otherwise 0
+            idx = torch.cuda.current_device() if torch.cuda.device_count() else 0
+            return f"cuda:{idx}"
+        return "cpu"
+
+    if dev == "cuda":
+        return "cuda:0"  # explicit index
     
     # Explicit CPU
     if dev == "cpu":
@@ -83,7 +89,6 @@ def _flatten_device_map(dmap: Optional[dict]) -> set[str]:
 
     _walk(dmap)
     return out
-
 
 # ------------------------------------------------------------------------------------
 # SINQ dynamic import
@@ -169,8 +174,13 @@ class SinqHfQuantizer(HfQuantizer):
 
         device_str = _normalize_cuda_device(getattr(cfg, "device", "auto"))
         _validate_cuda_device_str(device_str)
+
+        print(f'Device string is: {device_str}')
         
         self._normalized_device_str = device_str
+
+        if device_str.startswith("cuda"):
+            torch.cuda.set_device(torch.device(device_str))
 
         # Not supported: multi-GPU sharding via device_map
         devs = _flatten_device_map(device_map)
@@ -234,6 +244,7 @@ class SinqHfQuantizer(HfQuantizer):
         compute_dtype = self.update_dtype(None)
         to_skip = set(cfg.modules_to_not_convert or [])
         device_str = getattr(self, "_normalized_device_str", _normalize_cuda_device(cfg.device))
+        print(f'Device string in process model before_weights: {device_str}')
 
         def _convert(m: nn.Module, prefix: str = ""):
             for child_name, child in list(m.named_children()):
@@ -245,7 +256,7 @@ class SinqHfQuantizer(HfQuantizer):
                         use_bias=(child.bias is not None),
                         sinq_quant_dict=sinq_quant_dict,
                         compute_dtype=compute_dtype,
-                        device_str="cpu",
+                        device_str=device_str,
                     )
                     setattr(m, child_name, ph)
                 else:
@@ -268,7 +279,11 @@ class SinqHfQuantizer(HfQuantizer):
         method = str(getattr(cfg, "method", "sinq")).lower()
         device_str = getattr(self, "_normalized_device_str", _normalize_cuda_device(cfg.device))
         device = torch.device(device_str)
+        if device.type == "cuda":
+            torch.cuda.set_device(device)
         model = model 
+
+        print(f'Device string in process model after weights: {device_str}')
 
         placeholders: list[tuple[str, _SinqLoadTimeLinear, nn.Module]] = []
 
