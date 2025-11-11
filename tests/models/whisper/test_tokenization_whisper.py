@@ -401,7 +401,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
             "openai/whisper-tiny", language="spanish", task="translate"
         )
         batch = ["El gato ", "El gato se sentó"]
-        batch_output = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
+        batch_output = multilingual_tokenizer(batch, padding=True).input_ids
 
         # fmt: off
         EXPECTED_MULTI = [
@@ -423,7 +423,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         multilingual_tokenizer.set_prefix_tokens(language="english")
 
         batch = ["the cat", "the cat sat"]
-        batch_output = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
+        batch_output = multilingual_tokenizer(batch, padding=True).input_ids
 
         # fmt: off
         EXPECTED_MULTI = [
@@ -439,8 +439,8 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     def test_batch_encoding_decoding(self):
         multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny", language="spanish")
         batch = ["hola güey", "que onda"]
-        batch_encoding = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
-        transcription = multilingual_tokenizer.batch_decode(batch_encoding, skip_special_tokens=True)
+        batch_encoding = multilingual_tokenizer(batch, padding=True).input_ids
+        transcription = multilingual_tokenizer.decode(batch_encoding, skip_special_tokens=True)
         self.assertListEqual(batch, transcription)
 
     def test_offset_decoding(self):

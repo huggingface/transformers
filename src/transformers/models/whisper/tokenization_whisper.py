@@ -280,8 +280,15 @@ class WhisperTokenizer(TokenizersBackend):
         self.task = task
         self.predict_timestamps = predict_timestamps
         
-      #  self._post_init()
+        self._post_init()
 
+    def _post_init(self):
+        """Post-initialization hook to set up prefix tokens after the tokenizer is fully loaded."""
+        super()._post_init()
+        # Set up prefix tokens if language or task is specified (may be set from config in from_pretrained)
+        if hasattr(self, 'language') and hasattr(self, 'task') and hasattr(self, 'predict_timestamps'):
+            if self.language is not None or self.task is not None:
+                self.set_prefix_tokens(language=self.language, task=self.task, predict_timestamps=self.predict_timestamps)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._decode_with_timestamps
     def _decode_with_timestamps(
@@ -507,7 +514,11 @@ class WhisperTokenizer(TokenizersBackend):
                 filtered_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
             )
         else:
-            text = self._filter_timestamp_ids(text)
+            # Handle both single string and batch (list of strings) outputs
+            if isinstance(text, list):
+                text = [self._filter_timestamp_ids(t) for t in text]
+            else:
+                text = self._filter_timestamp_ids(text)
 
         # retrieve offsets
         if output_offsets:
