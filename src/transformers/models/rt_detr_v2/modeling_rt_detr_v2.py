@@ -459,16 +459,16 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module,  RTDetrV2Decoder):
-            if module.class_embed is not None:
-                for layer in module.class_embed:
+        if isinstance(module, RTDetrV2ForObjectDetection):
+            if module.model.decoder.class_embed is not None:
+                for layer in module.model.decoder.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
                     bias = float(-math.log((1 - prior_prob) / prior_prob))
                     nn.init.xavier_uniform_(layer.weight)
                     nn.init.constant_(layer.bias, bias)
 
-            if module.bbox_embed is not None:
-                for layer in module.bbox_embed:
+            if module.model.decoder.bbox_embed is not None:
+                for layer in module.model.decoder.bbox_embed:
                     nn.init.constant_(layer.layers[-1].weight, 0)
                     nn.init.constant_(layer.layers[-1].bias, 0)
 

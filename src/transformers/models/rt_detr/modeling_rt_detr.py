@@ -1012,16 +1012,16 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, RTDetrDecoder):
-            if module.class_embed is not None:
-                for layer in module.class_embed:
+        if isinstance(module, RTDetrForObjectDetection):
+            if module.model.decoder.class_embed is not None:
+                for layer in module.model.decoder.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
                     bias = float(-math.log((1 - prior_prob) / prior_prob))
                     nn.init.xavier_uniform_(layer.weight)
                     nn.init.constant_(layer.bias, bias)
 
-            if module.bbox_embed is not None:
-                for layer in module.bbox_embed:
+            if module.model.decoder.bbox_embed is not None:
+                for layer in module.model.decoder.bbox_embed:
                     nn.init.constant_(layer.layers[-1].weight, 0)
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
@@ -1816,10 +1816,6 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
-    # _tied_weights_keys = {
-    #     "model.decoder.class_embed": "class_embed",
-    #     "model.decoder.bbox_embed": "bbox_embed",
-    # }
 
     def __init__(self, config: RTDetrConfig):
         super().__init__(config)
