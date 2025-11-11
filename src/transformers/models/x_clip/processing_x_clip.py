@@ -23,19 +23,15 @@ class XCLIPProcessor(ProcessorMixin):
     r"""
     Constructs an X-CLIP processor which wraps a VideoMAE image processor and a CLIP tokenizer into a single processor.
 
-    [`XCLIPProcessor`] offers all the functionalities of [`VideoMAEImageProcessor`] and [`CLIPTokenizerFast`]. See the
+    [`XCLIPProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`CLIPTokenizerFast`]. See the
     [`~XCLIPProcessor.__call__`] and [`~XCLIPProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`VideoMAEImageProcessor`], *optional*):
+        image_processor ([`CLIPImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`CLIPTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "VideoMAEImageProcessor"
-    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
