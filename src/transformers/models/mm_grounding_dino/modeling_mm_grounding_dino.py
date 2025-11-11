@@ -2388,7 +2388,7 @@ def build_text_mask(logits, attention_mask):
 )
 class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
     _tied_weights_keys = {
-        r"bbox_embed.(?![0])\d+": r"^bbox_embed.0",
+        r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
         r"class_embed.(?![0])\d+": r"^class_embed.0",
         "model.decoder.bbox_embed": "bbox_embed",
         "model.decoder.class_embed": "class_embed",

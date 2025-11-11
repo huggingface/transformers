@@ -1813,7 +1813,7 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
     _tied_weights_keys = {
-        r"bbox_embed.(?![0])\d+": r"^bbox_embed.0",
+        r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
         r"class_embed.(?![0])\d+": r"^class_embed.0",
         "model.decoder.class_embed": "class_embed",
         "model.decoder.bbox_embed": "bbox_embed",
