@@ -263,7 +263,7 @@ class Blip2Config(PreTrainedConfig):
     ```"""
 
     model_type = "blip-2"
-    attribute_map = {"image_token_id": "image_token_index", "tie_words_embeddings": "use_decoder_only_language_model"}
+    attribute_map = {"image_token_id": "image_token_index", "tie_word_embeddings": "use_decoder_only_language_model"}
     sub_configs = {"text_config": AutoConfig, "qformer_config": Blip2QFormerConfig, "vision_config": Blip2VisionConfig}
 
     def __init__(
