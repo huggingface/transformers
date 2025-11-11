@@ -26,7 +26,7 @@ from typing import Optional
 import regex as re
 import torch
 
-from transformers import CLIPTokenizerFast, Sam2ImageProcessorFast, Sam3Config, Sam3Model, Sam3Processor
+from transformers import CLIPTokenizerFast, Sam3Config, Sam3ImageProcessorFast, Sam3Model, Sam3Processor
 from transformers.utils import logging
 
 
@@ -401,9 +401,7 @@ def convert_sam3_checkpoint(
 
     # Save processor
     print("Creating and saving processor...")
-    image_processor = Sam2ImageProcessorFast(
-        image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5], size={"height": 1008, "width": 1008}
-    )
+    image_processor = Sam3ImageProcessorFast()
     tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32", max_length=32, model_max_length=32)
     processor = Sam3Processor(image_processor=image_processor, tokenizer=tokenizer)
     processor.save_pretrained(output_path)

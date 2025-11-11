@@ -1,0 +1,337 @@
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+# SAM3
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    </div>
+</div>
+
+## Overview
+
+<!-- TODO: This section needs to be filled in with the SAM3 overview. -->
+
+This model was contributed by [username](https://github.com/username).
+
+## Usage examples with 🤗 Transformers
+
+### Text-Only Prompts
+
+SAM3 can segment objects using natural language descriptions:
+
+```python
+>>> from transformers import Sam3Processor, Sam3Model
+>>> import torch
+>>> from PIL import Image
+>>> import requests
+
+>>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
+>>> model = Sam3Model.from_pretrained("facebook/sam3-base").to(device)
+>>> processor = Sam3Processor.from_pretrained("facebook/sam3-base")
+
+>>> # Load image
+>>> image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+>>> image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+
+>>> # Segment using text prompt
+>>> inputs = processor(images=image, text="ear", return_tensors="pt").to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> # Post-process results
+>>> results = processor.post_process_instance_segmentation(
+...     outputs,
+...     threshold=0.5,
+...     mask_threshold=0.5,
+...     target_sizes=inputs.get("original_sizes").tolist()
+... )[0]
+
+>>> print(f"Found {len(results['masks'])} objects")
+>>> # Results contain:
+>>> # - masks: Binary masks resized to original image size
+>>> # - boxes: Bounding boxes in absolute pixel coordinates (xyxy format)
+>>> # - scores: Confidence scores
+```
+
+### Single Bounding Box Prompt
+
+Segment objects using a bounding box:
+
+```python
+>>> # Box in xyxy format: [x1, y1, x2, y2] in pixel coordinates
+>>> # Example: laptop region
+>>> box_xyxy = [100, 150, 500, 450]
+>>> input_boxes = [[box_xyxy]]  # [batch, num_boxes, 4]
+>>> input_boxes_labels = [[1]]  # 1 = positive box
+
+>>> inputs = processor(
+...     images=image,
+...     input_boxes=input_boxes,
+...     input_boxes_labels=input_boxes_labels,
+...     return_tensors="pt"
+... ).to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> # Post-process results
+>>> results = processor.post_process_instance_segmentation(
+...     outputs,
+...     threshold=0.5,
+...     mask_threshold=0.5,
+...     target_sizes=inputs.get("original_sizes").tolist()
+... )[0]
+```
+
+### Multiple Box Prompts (Positive and Negative)
+
+Use multiple boxes with positive and negative labels to refine segmentation:
+
+```python
+>>> # Load kitchen image
+>>> kitchen_url = "http://images.cocodataset.org/val2017/000000136466.jpg"
+>>> kitchen_image = Image.open(requests.get(kitchen_url, stream=True).raw).convert("RGB")
+
+>>> # Define two positive boxes (e.g., dial and button on oven)
+>>> # Boxes are in xyxy format [x1, y1, x2, y2] in pixel coordinates
+>>> box1_xyxy = [59, 144, 76, 163]  # Dial box
+>>> box2_xyxy = [87, 148, 104, 159]  # Button box
+>>> input_boxes = [[box1_xyxy, box2_xyxy]]
+>>> input_boxes_labels = [[1, 1]]  # Both positive
+
+>>> inputs = processor(
+...     images=kitchen_image,
+...     input_boxes=input_boxes,
+...     input_boxes_labels=input_boxes_labels,
+...     return_tensors="pt"
+... ).to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> # Post-process results
+>>> results = processor.post_process_instance_segmentation(
+...     outputs,
+...     threshold=0.5,
+...     mask_threshold=0.5,
+...     target_sizes=inputs.get("original_sizes").tolist()
+... )[0]
+```
+
+### Point Prompts
+
+Segment objects using point clicks:
+
+```python
+>>> # Points in image coordinates
+>>> img_width, img_height = image.size
+>>> point1 = [img_width * 0.3, img_height * 0.3]  # Click on object
+>>> point2 = [img_width * 0.4, img_height * 0.35]  # Refine with second click
+
+>>> input_points = [[point1, point2]]
+>>> input_points_labels = [[1, 1]]  # Both positive clicks
+
+>>> inputs = processor(
+...     images=image,
+...     input_points=input_points,
+...     input_points_labels=input_points_labels,
+...     return_tensors="pt"
+... ).to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+```
+
+### Combined Prompts (Text + Negative Box)
+
+Use text prompts with negative visual prompts to exclude specific regions:
+
+```python
+>>> # Segment "handle" but exclude the oven handle using a negative box
+>>> text = "handle"
+>>> # Negative box covering oven handle area (xyxy): [40, 183, 318, 204]
+>>> oven_handle_box = [40, 183, 318, 204]
+>>> input_boxes = [[oven_handle_box]]
+
+>>> inputs = processor(
+...     images=kitchen_image,
+...     text=text,
+...     input_boxes=input_boxes,
+...     input_boxes_labels=[[0]],  # 0 = negative (exclude this region)
+...     return_tensors="pt"
+... ).to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> # Post-process results
+>>> results = processor.post_process_instance_segmentation(
+...     outputs,
+...     threshold=0.5,
+...     mask_threshold=0.5,
+...     target_sizes=inputs.get("original_sizes").tolist()
+... )[0]
+>>> # This will segment pot handles but exclude the oven handle
+```
+
+### Batched Inference with Text Prompts
+
+Process multiple images with different text prompts efficiently:
+
+```python
+>>> # Load two images
+>>> cat_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+>>> kitchen_url = "http://images.cocodataset.org/val2017/000000136466.jpg"
+>>> images = [
+...     Image.open(requests.get(cat_url, stream=True).raw).convert("RGB"),
+...     Image.open(requests.get(kitchen_url, stream=True).raw).convert("RGB")
+... ]
+
+>>> # Different text prompt for each image
+>>> text_prompts = ["ear", "dial"]
+
+>>> inputs = processor(images=images, text=text_prompts, return_tensors="pt").to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> # Post-process results for both images
+>>> results = processor.post_process_instance_segmentation(
+...     outputs,
+...     threshold=0.5,
+...     mask_threshold=0.5,
+...     target_sizes=inputs.get("original_sizes").tolist()
+... )
+
+>>> print(f"Image 1: {len(results[0]['masks'])} objects found")
+>>> print(f"Image 2: {len(results[1]['masks'])} objects found")
+```
+
+### Batched Mixed Prompts
+
+Use different prompt types for different images in the same batch:
+
+```python
+>>> # Image 1: text prompt "laptop"
+>>> # Image 2: visual prompt (dial box)
+>>> # Box for dial in image 2 (xyxy): [59, 144, 76, 163]
+>>> box2_xyxy = [59, 144, 76, 163]
+
+>>> inputs = processor(
+...     images=images,
+...     text=["laptop", None],  # Only first image has text
+...     input_boxes=[None, [box2_xyxy]],  # Only second image has box
+...     input_boxes_labels=[None, [1]],  # Positive box for second image
+...     return_tensors="pt"
+... ).to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> # Post-process results for both images
+>>> results = processor.post_process_instance_segmentation(
+...     outputs,
+...     threshold=0.5,
+...     mask_threshold=0.5,
+...     target_sizes=inputs.get("original_sizes").tolist()
+... )
+>>> # Both images processed in single forward pass
+```
+
+### Semantic Segmentation Output
+
+SAM3 also provides semantic segmentation alongside instance masks:
+
+```python
+>>> inputs = processor(images=image, text="ear", return_tensors="pt").to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> # Instance segmentation masks
+>>> instance_masks = torch.sigmoid(outputs.pred_masks)  # [batch, num_queries, H, W]
+
+>>> # Semantic segmentation (single channel)
+>>> semantic_seg = outputs.semantic_seg  # [batch, 1, H, W]
+
+>>> print(f"Instance masks: {instance_masks.shape}")
+>>> print(f"Semantic segmentation: {semantic_seg.shape}")
+```
+
+### Prompt Label Conventions
+
+SAM3 uses the following label conventions:
+
+**For points and boxes:**
+- `1`: Positive prompt (include this region/object)
+- `0`: Negative prompt (exclude this region/object)
+- `-10`: Padding value for batched inputs
+
+**Coordinate formats:**
+- **Input boxes**: `[x1, y1, x2, y2]` (xyxy format) in pixel coordinates
+- **Input points**: `[x, y]` in image pixel coordinates
+- **Output boxes** (raw): `[x1, y1, x2, y2]` (xyxy format), normalized to [0, 1]
+- **Output boxes** (post-processed): `[x1, y1, x2, y2]` (xyxy format) in absolute pixel coordinates
+
+## Sam3Config
+
+[[autodoc]] Sam3Config
+
+## Sam3ViTConfig
+
+[[autodoc]] Sam3ViTConfig
+
+## Sam3VisionConfig
+
+[[autodoc]] Sam3VisionConfig
+
+## Sam3GeometryEncoderConfig
+
+[[autodoc]] Sam3GeometryEncoderConfig
+
+## Sam3DETREncoderConfig
+
+[[autodoc]] Sam3DETREncoderConfig
+
+## Sam3DETRDecoderConfig
+
+[[autodoc]] Sam3DETRDecoderConfig
+
+## Sam3MaskDecoderConfig
+
+[[autodoc]] Sam3MaskDecoderConfig
+
+## Sam3Processor
+
+[[autodoc]] Sam3Processor
+    - __call__
+
+## Sam3VisionModel
+
+[[autodoc]] Sam3VisionModel
+    - forward
+
+## Sam3Model
+
+[[autodoc]] Sam3Model
+    - forward
+

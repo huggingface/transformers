@@ -105,7 +105,7 @@ class Sam3Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Sam2ImageProcessorFast"
+    image_processor_class = "Sam3ImageProcessorFast"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
@@ -262,8 +262,7 @@ class Sam3Processor(ProcessorMixin):
                 self._normalize_tensor_coordinates(
                     final_boxes, original_sizes, is_bounding_box=True, preserve_padding=True
                 )
-                # TODO: Uncomment this when we fix the input boxes format
-                # final_boxes = box_xyxy_to_cxcywh(final_boxes)
+                final_boxes = box_xyxy_to_cxcywh(final_boxes)
                 encoding_image_processor.update({"input_boxes": final_boxes})
 
             if processed_boxes_labels is not None:
@@ -605,50 +604,126 @@ class Sam3Processor(ProcessorMixin):
                 else:
                     tensor[img_idx] = normalized_coords
 
-    def post_process_masks(
-        self,
-        masks,
-        original_sizes,
-        mask_threshold=0.0,
-        binarize=True,
-        max_hole_area=0.0,
-        max_sprinkle_area=0.0,
-        apply_non_overlapping_constraints=False,
-        **kwargs,
-    ):
+    def post_process_semantic_segmentation(self, outputs, target_sizes=None, threshold=0.5):
         """
-        Remove padding and upscale masks to the original image size.
+        Converts the output of [`Sam3Model`] into semantic segmentation maps.
 
         Args:
-            masks (`Union[List[torch.Tensor], List[np.ndarray]]`):
-                Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
-            original_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
-                The original sizes of each image before it was resized to the model's expected input shape, in (height,
-                width) format.
-            mask_threshold (`float`, *optional*, defaults to 0.0):
-                Threshold for binarization and post-processing operations.
-            binarize (`bool`, *optional*, defaults to `True`):
-                Whether to binarize the masks.
-            max_hole_area (`float`, *optional*, defaults to 0.0):
-                The maximum area of a hole to fill.
-            max_sprinkle_area (`float`, *optional*, defaults to 0.0):
-                The maximum area of a sprinkle to fill.
-            apply_non_overlapping_constraints (`bool`, *optional*, defaults to `False`):
-                Whether to apply non-overlapping constraints to the masks.
+            outputs ([`Sam3ImageSegmentationOutput`]):
+                Raw outputs of the model containing semantic_seg.
+            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+            threshold (`float`, *optional*, defaults to 0.5):
+                Threshold for binarizing the semantic segmentation masks.
 
         Returns:
-            (`torch.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
-            is given by original_size.
+            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry is a binary mask (0 or 1).
         """
-        return self.image_processor.post_process_masks(
-            masks,
-            original_sizes,
-            mask_threshold,
-            binarize,
-            max_hole_area,
-            max_sprinkle_area,
-            apply_non_overlapping_constraints,
-            **kwargs,
+        return self.image_processor.post_process_semantic_segmentation(outputs, target_sizes, threshold)
+
+    def post_process_object_detection(self, outputs, threshold=0.3, target_sizes=None):
+        """
+        Converts the raw output of [`Sam3Model`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format. This is a convenience wrapper around the image processor method.
+
+        Args:
+            outputs ([`Sam3ImageSegmentationOutput`]):
+                Raw outputs of the model containing pred_boxes, pred_logits, and optionally presence_logits.
+            threshold (`float`, *optional*, defaults to 0.3):
+                Score threshold to keep object detection predictions.
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                List of tuples (`tuple[int, int]`) containing the target size `(height, width)` of each image in the
+                batch. If unset, predictions will not be resized.
+
+        Returns:
+            `list[dict]`: A list of dictionaries, each dictionary containing the following keys:
+                - **scores** (`torch.Tensor`): The confidence scores for each predicted box on the image.
+                - **boxes** (`torch.Tensor`): Image bounding boxes in (top_left_x, top_left_y, bottom_right_x,
+                  bottom_right_y) format.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoModel, AutoProcessor
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> model = AutoModel.from_pretrained("facebook/sam3-base")
+        >>> processor = AutoProcessor.from_pretrained("facebook/sam3-base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = processor(images=image, text="cat", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> # Post-process to get bounding boxes
+        >>> results = processor.post_process_object_detection(outputs, threshold=0.3, target_sizes=[image.size[::-1]])
+        >>> boxes = results[0]["boxes"]
+        >>> scores = results[0]["scores"]
+        ```
+        """
+        return self.image_processor.post_process_object_detection(outputs, threshold, target_sizes)
+
+    def post_process_instance_segmentation(
+        self,
+        outputs,
+        threshold=0.3,
+        mask_threshold=0.5,
+        target_sizes=None,
+    ):
+        """
+        Converts the raw output of [`Sam3Model`] into instance segmentation predictions with bounding boxes and masks.
+        This is a convenience wrapper around the image processor method.
+
+        Args:
+            outputs ([`Sam3ImageSegmentationOutput`]):
+                Raw outputs of the model containing pred_boxes, pred_logits, pred_masks, and optionally
+                presence_logits.
+            threshold (`float`, *optional*, defaults to 0.3):
+                Score threshold to keep instance predictions.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold for binarizing the predicted masks.
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                List of tuples (`tuple[int, int]`) containing the target size `(height, width)` of each image in the
+                batch. If unset, predictions will not be resized.
+
+        Returns:
+            `list[dict]`: A list of dictionaries, each dictionary containing the following keys:
+                - **scores** (`torch.Tensor`): The confidence scores for each predicted instance on the image.
+                - **boxes** (`torch.Tensor`): Image bounding boxes in (top_left_x, top_left_y, bottom_right_x,
+                  bottom_right_y) format.
+                - **masks** (`torch.Tensor`): Binary segmentation masks for each instance, shape (num_instances,
+                  height, width).
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoModel, AutoProcessor
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> model = AutoModel.from_pretrained("facebook/sam3-base")
+        >>> processor = AutoProcessor.from_pretrained("facebook/sam3-base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = processor(images=image, text="cat", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> # Post-process to get instance segmentation
+        >>> results = processor.post_process_instance_segmentation(
+        ...     outputs, threshold=0.3, target_sizes=[image.size[::-1]]
+        ... )
+        >>> masks = results[0]["masks"]
+        >>> boxes = results[0]["boxes"]
+        >>> scores = results[0]["scores"]
+        ```
+        """
+        return self.image_processor.post_process_instance_segmentation(
+            outputs, threshold, mask_threshold, target_sizes
         )
 
 

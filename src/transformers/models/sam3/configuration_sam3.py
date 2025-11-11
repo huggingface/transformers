@@ -80,9 +80,12 @@ class Sam3ViTConfig(PreTrainedConfig):
             Whether to apply layer norm after transformer blocks.
         output_channels (`int`, *optional*, defaults to 256):
             Output dimensionality after the neck.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing weight matrices.
     """
 
-    model_type = "sam3_vision"
+    base_config_key = "backbone_config"
+    model_type = "sam3_vit_model"
 
     def __init__(
         self,
@@ -195,7 +198,7 @@ class Sam3VisionConfig(PreTrainedConfig):
         scale_factors = [4.0, 2.0, 1.0, 0.5] if scale_factors is None else scale_factors
 
         if isinstance(backbone_config, dict):
-            backbone_config["model_type"] = backbone_config.get("model_type", "sam2_hiera_det_model")
+            backbone_config["model_type"] = backbone_config.get("model_type", "sam3_vit_model")
             backbone_config = Sam3ViTConfig(**backbone_config)
         elif isinstance(backbone_config, Sam3ViTConfig):
             pass
@@ -268,6 +271,8 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
             Total stride for mask downsampler.
         mask_downsampler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             Activation function for mask downsampler.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing weight matrices.
     """
 
     model_type = "sam3_geometry_encoder"
@@ -296,6 +301,7 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
         mask_downsampler_padding=1,
         mask_downsampler_total_stride=4,
         mask_downsampler_hidden_act="gelu",
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -322,6 +328,7 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
         self.mask_downsampler_padding = mask_downsampler_padding
         self.mask_downsampler_total_stride = mask_downsampler_total_stride
         self.mask_downsampler_hidden_act = mask_downsampler_hidden_act
+        self.initializer_range = initializer_range
 
 
 class Sam3DETREncoderConfig(PreTrainedConfig):
@@ -343,6 +350,8 @@ class Sam3DETREncoderConfig(PreTrainedConfig):
             Activation function in FFN.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             Epsilon for layer normalization.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing weight matrices.
     """
 
     model_type = "sam3_detr_encoder"
@@ -357,6 +366,7 @@ class Sam3DETREncoderConfig(PreTrainedConfig):
         hidden_act="relu",
         hidden_dropout=0.0,
         layer_norm_eps=1e-6,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -368,6 +378,7 @@ class Sam3DETREncoderConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.hidden_dropout = hidden_dropout
         self.layer_norm_eps = layer_norm_eps
+        self.initializer_range = initializer_range
 
 
 class Sam3DETRDecoderConfig(PreTrainedConfig):
@@ -397,6 +408,8 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
             Mode for box relative position bias ("log" or "linear").
         use_presence_token (`bool`, *optional*, defaults to `True`):
             Whether to use presence token for object detection.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing weight matrices.
     """
 
     model_type = "sam3_detr_decoder"
@@ -415,6 +428,7 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
         layer_norm_eps=1e-6,
         box_rpb_mode="log",
         use_presence_token=True,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -430,6 +444,7 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.box_rpb_mode = box_rpb_mode
         self.use_presence_token = use_presence_token
+        self.initializer_range = initializer_range
 
 
 class Sam3MaskDecoderConfig(PreTrainedConfig):
@@ -447,6 +462,8 @@ class Sam3MaskDecoderConfig(PreTrainedConfig):
             Dropout probability for prompt cross-attention.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for prompt cross-attention.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing weight matrices.
     """
 
     model_type = "sam3_mask_decoder"
@@ -458,6 +475,7 @@ class Sam3MaskDecoderConfig(PreTrainedConfig):
         layer_norm_eps=1e-6,
         dropout=0.0,
         num_attention_heads=8,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -466,6 +484,7 @@ class Sam3MaskDecoderConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.dropout = dropout
         self.num_attention_heads = num_attention_heads
+        self.initializer_range = initializer_range
 
 
 class Sam3Config(PreTrainedConfig):
@@ -525,7 +544,6 @@ class Sam3Config(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         # Vision config
         if vision_config is None:
             vision_config = {}
@@ -584,6 +602,7 @@ class Sam3Config(PreTrainedConfig):
             self.mask_decoder_config = mask_decoder_config
 
         self.initializer_range = initializer_range
+        super().__init__(**kwargs)
 
 
 __all__ = [
