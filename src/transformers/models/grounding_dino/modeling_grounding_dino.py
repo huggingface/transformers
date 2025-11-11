@@ -2415,7 +2415,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # the bbox_embed in the decoder are all clones though
     _tied_weights_keys ={
-        r"^bbox_embed.(?![0])\d+": "bbox_embed.0",
+        r"bbox_embed.(?![0])\d+": "bbox_embed.0",
         "model.decoder.bbox_embed": "bbox_embed",
     }
 

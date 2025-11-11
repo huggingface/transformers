@@ -1833,8 +1833,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         if config.with_box_refine:
             self._tied_weights_keys = {
-                r"^bbox_embed.(?![0])\d+": r"^bbox_embed.0",
-                r"^class_embed.(?![0])\d+": r"^class_embed.0",
+                r"bbox_embed.(?![0])\d+": r"^bbox_embed.0",
+                r"class_embed.(?![0])\d+": r"^class_embed.0",
                 "model.decoder.class_embed": "class_embed",
                 "model.decoder.bbox_embed": "bbox_embed",
             }
