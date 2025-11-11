@@ -94,8 +94,7 @@ PRIVATE_MODELS = [
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
     "Phi4MultimodalVisionModel",
-    "Glm4vVisionModel",
-    "Glm4vMoeVisionModel",
+    "Glm46VVisionModel",
     "EvollaSaProtPreTrainedModel",
     "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
