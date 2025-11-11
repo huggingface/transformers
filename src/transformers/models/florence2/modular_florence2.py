@@ -1520,9 +1520,6 @@ class Florence2Model(LlavaModel):
     def get_encoder(self):
         return self.language_model.get_encoder()
 
-    def get_decoder(self):
-        return self.language_model.get_decoder()
-
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.

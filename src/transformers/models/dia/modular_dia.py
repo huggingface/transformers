@@ -620,9 +620,6 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
     def get_encoder(self):
         return self.model.get_encoder()
 
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     @auto_docstring
     @can_return_tuple
     def forward(

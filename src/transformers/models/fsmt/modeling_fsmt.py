@@ -1091,9 +1091,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
     def get_encoder(self):
         return self.model.encoder
 
-    def get_decoder(self):
-        return self.model.decoder
-
     def get_output_embeddings(self):
         return self.model.decoder.embed_tokens
 

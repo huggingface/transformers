@@ -2587,20 +2587,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         Order of attempts (covers ~85 % of current usages):
 
-        1. `self.decoder`
-        2. `self.model`                       (many wrappers store the decoder here)
-        3. `self.model.get_decoder()`         (nested wrappers)
+        1. `self.decoder/self.language_model/self.text_model`
+        2. `self.base_model`                  (many wrappers store the decoder here)
+        3. `self.base_model.get_decoder()`    (nested wrappers)
         4. fallback: raise for the few exotic models that need a bespoke rule
         """
-        if hasattr(self, "decoder"):
-            return self.decoder
+        possible_module_names = ["language_model", "text_model", "decoder"]
+        for name in possible_module_names:
+            if hasattr(self, name):
+                return getattr(self, name)
 
-        if hasattr(self, "model"):
-            inner = self.model
-            # See: https://github.com/huggingface/transformers/issues/40815
-            if hasattr(inner, "get_decoder") and type(inner) is not type(self):
-                return inner.get_decoder()
-            return inner
+        if self.base_model is not self and hasattr(self.base_model, "get_decoder"):
+            return self.base_model.get_decoder()
 
         # If this is a base transformer model (no decoder/model attributes), return self
         # This handles cases like MistralModel which is itself the decoder
@@ -2611,19 +2609,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Symmetric setter. Mirrors the lookup logic used in `get_decoder`.
         """
 
-        if hasattr(self, "decoder"):
-            self.decoder = decoder
-            return
+        possible_module_names = ["language_model", "text_model", "decoder"]
+        for name in possible_module_names:
+            if hasattr(self, name):
+                print(name)
+                setattr(self, name, decoder)
+                return
 
-        if hasattr(self, "model"):
-            inner = self.model
-            if hasattr(inner, "set_decoder"):
-                inner.set_decoder(decoder)
+        if self.base_model is not self:
+            if hasattr(self.base_model, "set_decoder"):
+                self.base_model.set_decoder(decoder)
             else:
                 self.model = decoder
-            return
-
-        return
 
     def _init_weights(self, module):
         """

@@ -1073,9 +1073,6 @@ class Blip2Model(Blip2PreTrainedModel):
     def get_encoder(self):
         return self.language_model.get_encoder()
 
-    def get_decoder(self):
-        return self.language_model.get_decoder()
-
     def _tie_weights(self):
         if not self.config.use_decoder_only_language_model:
             self.language_model.encoder.embed_tokens = self.language_model.shared
@@ -1635,9 +1632,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
     def get_encoder(self):
         return self.language_model.get_encoder()
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
 
     def _tie_weights(self):
         if not self.config.use_decoder_only_language_model:
