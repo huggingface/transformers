@@ -586,21 +586,23 @@ class RTDetrV2MLPPredictionHead(RTDetrMLPPredictionHead):
 
 
 class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedModel):
+    _tied_weights_keys = {
+        r"^bbox_embed.(?![0])\d+": r"^bbox_embed.0",
+        r"^class_embed.(?![0])\d+": r"^class_embed.0",
+        "model.decoder.class_embed": "class_embed",
+        "model.decoder.bbox_embed": "bbox_embed",
+    }
+
     def __init__(self, config: RTDetrV2Config):
         RTDetrV2PreTrainedModel.__init__(self, config)
         # RTDETR encoder-decoder model
         self.model = RTDetrV2Model(config)
-
-        # Detection heads on top
-        class_embed = partial(nn.Linear, config.d_model, config.num_labels)
-        bbox_embed = partial(RTDetrV2MLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
-
-        self.class_embed = nn.ModuleList([class_embed() for _ in range(config.decoder_layers)])
-        self.bbox_embed = nn.ModuleList([bbox_embed() for _ in range(config.decoder_layers)])
-
-        # TODO this increases usage but is really the least worst way of doing it for now.
-        self.model.decoder.class_embed = deepcopy(self.class_embed)
-        self.model.decoder.bbox_embed = deepcopy(self.bbox_embed)
+        self.class_embed = nn.ModuleList([torch.nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)])
+        self.bbox_embed = nn.ModuleList(
+            [RTDetrV2MLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3) for _ in range(config.decoder_layers)]
+        )
+        self.model.decoder.class_embed = self.class_embed
+        self.model.decoder.bbox_embed = self.bbox_embed
 
         # Initialize weights and apply final processing
         self.post_init()

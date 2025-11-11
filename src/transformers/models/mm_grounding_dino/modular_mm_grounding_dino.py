@@ -399,9 +399,8 @@ class MMGroundingDinoMLPPredictionHead(GroundingDinoMLPPredictionHead):
 
 class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroundingDinoPreTrainedModel):
     _tied_weights_keys = {
+        r"^bbox_embed.(?![0])\d+": "bbox_embed.0",
         "model.decoder.bbox_embed": "bbox_embed",
-        "model.decoder.class_embed": "class_embed",
-        r"class_embed.(?![0])\d+": "class_embed.0",
     }
 
     def __init__(self, config: MMGroundingDinoConfig):
@@ -422,6 +421,8 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
             ]
         )
         # Initialize weights and apply final processing
+        self.model.decoder.class_embed = self.class_embed # class embed has no weights so nothing to tie
+        self.model.decoder.bbox_embed = self.bbox_embed
         self.post_init()
 
 
