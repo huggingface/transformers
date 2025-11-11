@@ -18,11 +18,13 @@ import unittest
 from tests.test_tokenization_common import TokenizerTesterMixin
 from transformers.models.gemma.tokenization_gemma import GemmaTokenizer
 from transformers.testing_utils import (
+    require_read_token,
     require_tokenizers,
 )
 
 
 @require_tokenizers
+@require_read_token
 class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase): 
     from_pretrained_id = "google/gemma-7b"
     tokenizer_class = GemmaTokenizer

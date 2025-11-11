@@ -48,7 +48,7 @@ def whitespace_tokenize(text):
     return tokens
 
 
-class BertTokenizer(PreTrainedTokenizer):
+class BertTokenizerLegacy(PreTrainedTokenizer):
     r"""
     Construct a BERT tokenizer. Based on WordPiece.
 
@@ -475,4 +475,4 @@ class WordpieceTokenizer:
         return output_tokens
 
 
-__all__ = ["BasicTokenizer", "BertTokenizer", "WordpieceTokenizer"]
+__all__ = ["BasicTokenizer", "BertTokenizerLegacy", "WordpieceTokenizer"]
