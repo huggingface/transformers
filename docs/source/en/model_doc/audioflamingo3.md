@@ -49,7 +49,7 @@ Project: https://research.nvidia.com/labs/adlr/AF3/
 
 ### Audio Instruct Mode
 
-The model supports audio-text instructions, including multi-turn interactions, all processed in inputses.
+The model supports audio-text instructions, including multi-turn interactions, all processed in batches.
 
 ➡️ audio + text instruction
 
@@ -345,7 +345,7 @@ For automatic speech recognition you can skip writing the default instruction ea
 inputs = processor.apply_transcription_request(audio=audio_array)
 ```
 
-Pass `prompt="Transcribe the input speech."` (or a list of prompts for inputsed audio) to customize the instruction while
+Pass `prompt="Transcribe the input speech."` (or a list of prompts for batch audio) to customize the instruction while
 keeping the audio placeholder handling.
 
 `audio` accepts in-memory arrays, local file paths, or URLs. Any processor kwargs (`text_kwargs`, `audio_kwargs`, etc.)
@@ -367,7 +367,7 @@ are forwarded, so you can tweak padding or tensor formats just like when calling
 ## Padding, attention, and caching
 
 * **Left padding vs right padding**
-  For generation with mixed prompt lengths in a inputs, left padding is usually preferable.
+  For generation with mixed prompt lengths in a batch, left padding is usually preferable.
   For training, right padding is common; AF3’s fusion mechanism itself is padding-agnostic because it replaces in place.
 * **Attention masks**
   The processor returns `attention_mask` (text) and `input_features_mask` (audio). The model builds an internal 4-D mask on the encoder’s pre-pool axis with negative infinity at pad positions.
@@ -376,8 +376,8 @@ are forwarded, so you can tweak padding or tensor formats just like when calling
 
 ## Troubleshooting
 
-* Empty or truncated outputs when inputsing
-  Use left padding for inputsed generation and decode only the new tokens after the prompt length, as shown in the quickstart.
+* Empty or truncated outputs when batching
+  Use left padding for batched generation and decode only the new tokens after the prompt length, as shown in the quickstart.
 
 ## AudioFlamingo3Config
 
