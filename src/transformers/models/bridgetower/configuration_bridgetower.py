@@ -271,7 +271,7 @@ class BridgeTowerConfig(PreTrainedConfig):
         # TODO: remove this once the Hub files are updated.
         _ = kwargs.pop("text_config_dict", None)
         _ = kwargs.pop("vision_config_dict", None)
-
+        super().__init__(**kwargs)
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
@@ -298,7 +298,7 @@ class BridgeTowerConfig(PreTrainedConfig):
 
         self.text_config = text_config
         self.vision_config = vision_config
-        super().__init__(**kwargs)
+
 
 
 __all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]

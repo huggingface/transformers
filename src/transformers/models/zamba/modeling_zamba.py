@@ -843,12 +843,14 @@ class ZambaModel(ZambaPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers_block_type = config.layers_block_type
         layers = []
-        self._tied_weights_keys = {r"layers.(?![0])\d+.shared_transf": "layers.0.shared_transf"}
+        self._tied_weights_keys = None
         for layer_id, layer_type in enumerate(self.layers_block_type):
             mamba = ZambaMambaDecoderLayer(config, layer_idx=layer_id)
             if layer_type == "hybrid":
                 linear = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
                 layers.append(ZambaHybridLayer(ZambaAttentionDecoderLayer(config), linear, mamba))
+                if self._tied_weights_keys is None:
+                    self._tied_weights_keys = {rf"layers.(?![{layer_id}])\d+.shared_transf": f"layers.{layer_id}.shared_transf"}
             else:
                 layers.append(mamba)
         self.layers = nn.ModuleList(layers)
@@ -1190,7 +1192,6 @@ class ZambaForSequenceClassification(ZambaPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = ZambaModel(config)
-        self._tied_weights_keys = self.model._tied_weights_keys
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
