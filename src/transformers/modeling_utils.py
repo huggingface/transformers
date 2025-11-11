@@ -2604,7 +2604,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 and not source_is_there
             )
             if source_is_there or missing_keys is None or target_is_not_there:
-                target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
+                target_name = f"^{module_prefix}.{target_name}" if module_prefix else "^" + target_name
                 source_params = sorted(filter(lambda x: re.search(source_name, x), top_level_params.keys()))
                 target_params = sorted(filter(lambda x: re.search(target_name, x), top_level_params.keys()))
                 if len(source_params) != len(target_params):
