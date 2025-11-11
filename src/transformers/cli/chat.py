@@ -18,10 +18,11 @@ import platform
 import re
 import string
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Annotated, Optional
 
 import click
+import MeCab
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
@@ -96,58 +97,90 @@ If you're a new user, check this basic flag guide: https://huggingface.co/docs/t
 - **!exit**: closes the interface
 """
 
+tagger = MeCab.Tagger("")
+KANJI_RE = re.compile(r"[一-龯々〇ヶ]")
+KATAKANA_RE = re.compile(r"^[ァ-ンヴー]+$")
+
+
+def kata2hira(s: str) -> str:
+    res = []
+    for ch in s:
+        code = ord(ch)
+        if 0x30A1 <= code <= 0x30F6:  # ァ(0x30A1) .. ヶ(0x30F6)
+            res.append(chr(code - 0x60))  # shift to ぁ..ゖ
+        else:
+            res.append(ch)  # leave ー etc. as-is
+    return "".join(res)
+
+
+def pick_reading(feature_csv: str) -> str:
+    cols = feature_csv.split(",")
+    for s in reversed(cols):
+        if KATAKANA_RE.match(s):
+            return s
+    return ""
+
+
+def furigana(text: str) -> str:
+    n = tagger.parseToNode(text)
+    out = []
+    while n:
+        surf = n.surface
+        if surf:
+            if KANJI_RE.search(surf):
+                yomi_kata = pick_reading(n.feature)
+                if yomi_kata:
+                    yomi_hira = kata2hira(yomi_kata)
+                    out.append(f"{surf}({yomi_hira})")
+                else:
+                    out.append(surf)  # no reading found so fall back to surface
+            else:
+                out.append(surf)  # no kanji so no furigana
+        n = n.next
+    return "".join(out)
+
 
 class RichInterface:
-    def __init__(self, model_id: str, user_id: str):
+    def __init__(
+        self,
+        model_id: str,
+        user_id: str,
+        token_processors: list[Callable[[str], str]] = None,
+        sequence_processor: list[Callable[[str], str]] = None,
+    ):
         self._console = Console()
         self.model_id = model_id
         self.user_id = user_id
 
+        token_processors = token_processors or []
+        sequence_processor = sequence_processor or []
+
+        self.token_processors = [self._special_token_processor, *token_processors]
+        self.sequence_processor = sequence_processor
+
     async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, int]:
         self._console.print(f"[bold blue]<{self.model_id}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
-            text = ""
+            sequence = ""
             async for token in await stream:
                 outputs = token.choices[0].delta.content
-
                 if not outputs:
                     continue
 
-                # Escapes single words encased in <>, e.g. <think> -> \<think\>, for proper rendering in Markdown.
-                # It only escapes single words that may have `_`, optionally following a `/` (e.g. </think>)
-                outputs = re.sub(r"<(/*)(\w*)>", r"\<\1\2\>", outputs)
-
-                text += outputs
-                # Render the accumulated text as Markdown
-                # NOTE: this is a workaround for the rendering "unstandard markdown"
-                #  in rich. The chatbots output treat "\n" as a new line for
-                #  better compatibility with real-world text. However, rendering
-                #  in markdown would break the format. It is because standard markdown
-                #  treat a single "\n" in normal text as a space.
-                #  Our workaround is adding two spaces at the end of each line.
-                #  This is not a perfect solution, as it would
-                #  introduce trailing spaces (only) in code block, but it works well
-                #  especially for console output, because in general the console does not
-                #  care about trailing spaces.
-
-                lines = []
-                for line in text.splitlines():
-                    lines.append(line)
-                    if line.startswith("```"):
-                        # Code block marker - do not add trailing spaces, as it would
-                        #  break the syntax highlighting
-                        lines.append("\n")
-                    else:
-                        lines.append("  \n")
-
-                markdown = Markdown("".join(lines).strip(), code_theme="github-dark")
+                sequence += outputs
 
                 # Update the Live console output
+                sequence = self._process_sequence(sequence)
+                markdown = Markdown(sequence, code_theme="github-dark")
                 live.update(markdown, refresh=True)
+
+            sequence = self._process_sequence(sequence)
+            markdown = Markdown(sequence, code_theme="github-dark")
+            live.update(markdown, refresh=True)
 
         self._console.print()
 
-        return text
+        return sequence
 
     def input(self) -> str:
         """Gets user input from the console."""
@@ -179,6 +212,46 @@ class RichInterface:
         self._console.print(f"[bold blue]Model: {self.model_id}\n")
         self._console.print(f"[bold blue]{config}")
         self._console.print()
+
+    def _special_token_processor(self, token):
+        # Escapes single words encased in <>, e.g. <think> -> \<think\>, for proper rendering in Markdown.
+        # It only escapes single words that may have `_`, optionally following a `/` (e.g. </think>)
+        return re.sub(r"<(/*)(\w*)>", r"\<\1\2\>", token)
+
+    def _code_blocks_sequence_processor(self, sequence):
+        # Render the accumulated text as Markdown
+        # NOTE: this is a workaround for the rendering "unstandard markdown"
+        #  in rich. The chatbots output treat "\n" as a new line for
+        #  better compatibility with real-world text. However, rendering
+        #  in markdown would break the format. It is because standard markdown
+        #  treat a single "\n" in normal text as a space.
+        #  Our workaround is adding two spaces at the end of each line.
+        #  This is not a perfect solution, as it would
+        #  introduce trailing spaces (only) in code block, but it works well
+        #  especially for console output, because in general the console does not
+        #  care about trailing spaces.
+
+        lines = []
+        for line in sequence.splitlines():
+            lines.append(line)
+            if line.startswith("```"):
+                # Code block marker - do not add trailing spaces, as it would
+                #  break the syntax highlighting
+                lines.append("\n")
+            else:
+                lines.append("  \n")
+
+        return "".join(lines).strip()
+
+    def _process_token(self, token):
+        for token_processor in self.token_processors:
+            token = token_processor(token)
+        return token
+
+    def _process_sequence(self, sequence):
+        for sequence_processor in self.sequence_processor:
+            sequence = sequence_processor(sequence)
+        return sequence
 
 
 class ChatCommand(typer.core.TyperCommand):
@@ -352,7 +425,7 @@ class Chat:
     # Main logic
 
     async def _inner_run(self):
-        interface = RichInterface(model_id=self.model_id, user_id=self.user)
+        interface = RichInterface(model_id=self.model_id, user_id=self.user, sequence_processor=[furigana])
         interface.clear()
         chat = new_chat_history(self.system_prompt)
 
