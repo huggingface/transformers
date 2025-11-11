@@ -264,7 +264,6 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False
     test_missing_keys = False
 
     def setUp(self):
@@ -599,10 +598,6 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     @unittest.skip
     def test_generate_without_input_ids(self):
-        pass
-
-    @unittest.skip(reason="Test failing,  @RocketNight is looking into it")
-    def test_tf_from_pt_safetensors(self):
         pass
 
 

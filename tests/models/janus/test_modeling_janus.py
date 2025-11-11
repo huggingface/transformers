@@ -193,7 +193,6 @@ class JanusVisionText2TextModelTester:
 class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (JanusModel, JanusForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (JanusForConditionalGeneration,) if is_torch_available() else ()
-    fx_compatible = False
 
     _is_composite = True
 
@@ -354,7 +353,6 @@ class JanusVQModelTester:
 class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (JanusVQVAE,) if is_torch_available() else ()
 
-    fx_compatible = False
     has_attentions = False
     test_resize_embeddings = False
 
@@ -511,6 +509,12 @@ class JanusIntegrationTest(unittest.TestCase):
                     897, 4044, 1762, 4676
                 ],
                 ("cuda", None): [
+                    4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
+                    13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
+                    15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,
+                    897, 4044, 1762, 4676
+                ],
+                ("xpu", None): [
                     4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
                     13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
                     15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,

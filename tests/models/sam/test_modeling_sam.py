@@ -158,7 +158,6 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SamVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_torch_exportable = True
@@ -512,7 +511,6 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {"feature-extraction": SamModel, "mask-generation": SamModel} if is_torch_available() else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = False
     _is_composite = True

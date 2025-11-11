@@ -300,7 +300,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False

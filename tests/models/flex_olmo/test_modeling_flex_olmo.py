@@ -47,7 +47,6 @@ class FlexOlmoModelTester(CausalLMModelTester):
 
 @require_torch
 class FlexOlmoModelTest(CausalLMModelTest, unittest.TestCase):
-    fx_compatible = False
     test_all_params_have_gradient = False
     model_tester_class = FlexOlmoModelTester
 

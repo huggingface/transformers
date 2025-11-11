@@ -711,7 +711,11 @@ def match_docstring_with_signature(obj: Any) -> tuple[str, str] | None:
         elif re.search(r"^\s*#\s*ignore-order\s*$", line_before_docstring):
             ignore_order = True
 
-    # Read the signature
+    # Read the signature. Skip on `TypedDict` objects for now. Inspect cannot
+    # parse their signature ("no signature found for builtin type <class 'dict'>")
+    if issubclass(obj, dict) and hasattr(obj, "__annotations__"):
+        return
+
     signature = inspect.signature(obj).parameters
 
     obj_doc_lines = obj.__doc__.split("\n")
@@ -1359,7 +1363,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
                 print(
                     "Some docstrings are missing. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to generate the docstring templates where needed."
                 )
-            print(f"🚨 Missing docstring for the following arguments in {candidate_file}:")
+            print(f"[ERROR] Missing docstring for the following arguments in {candidate_file}:")
             for warning in missing_docstring_args_warnings:
                 print(warning)
         if docstring_args_ro_remove_warnings:
@@ -1367,11 +1371,11 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
                 print(
                     "Some docstrings are redundant with the ones in `auto_docstring.py` and will be removed. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
                 )
-            print(f"🚨 Redundant docstring for the following arguments in {candidate_file}:")
+            print(f"[ERROR] Redundant docstring for the following arguments in {candidate_file}:")
             for warning in docstring_args_ro_remove_warnings:
                 print(warning)
         if fill_docstring_args_warnings:
-            print(f"🚨 Docstring needs to be filled for the following arguments in {candidate_file}:")
+            print(f"[ERROR] Docstring needs to be filled for the following arguments in {candidate_file}:")
             for warning in fill_docstring_args_warnings:
                 print(warning)
 

@@ -406,8 +406,6 @@
       title: Models
     - local: main_classes/text_generation
       title: 텍스트 생성
-    - local: main_classes/onnx
-      title: ONNX
     - local: main_classes/optimizer_schedules
       title: 최적화
     - local: main_classes/output
@@ -1057,7 +1055,7 @@
         title: FLAVA
       - local: model_doc/gemma3
         title: Gemma3
-      - local: in_translation
+      - local: model_doc/gemma3n
         title: Gemma3n
       - local: in_translation
         title: GIT

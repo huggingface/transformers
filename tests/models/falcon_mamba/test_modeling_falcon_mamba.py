@@ -263,7 +263,6 @@ class FalconMambaModelTester:
 class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FalconMambaModel, FalconMambaForCausalLM) if is_torch_available() else ()
     has_attentions = False  # FalconMamba does not support attentions
-    fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
 
     pipeline_model_mapping = (
