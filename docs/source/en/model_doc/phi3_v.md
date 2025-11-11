@@ -1,4 +1,4 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -30,32 +30,14 @@ rendered properly in your Markdown viewer.
 
 ## Usage Example
 
-The example below demonstrates how to generate text with [`Pipeline`] or the [`Phi3VForConditionalGeneration`].
+The example below demonstrates how to generate text with `Phi3VForConditionalGeneration`.
 
-<hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```py
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(
-    task="text-generation",
-    model="huggyllama/llama-7b",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("Plants create energy through a process known as")
-```
-
-</hfoption>
-<hfoption id="AutoModel">
 
 ```py
 import torch
 from transformers import Phi3VForConditionalGeneration, Phi3VProcessor
 
-model_id = ""
+model_id = "yaswanthgali/Phi-3.5-vision-instruct"
 
 # Prepare inputsfor generation.
 messages = [
