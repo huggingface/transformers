@@ -2174,7 +2174,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             )
 
         aux_loss = None
-        if output_router_logits and labels is not None:
+        if output_router_logits and self.training:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,
