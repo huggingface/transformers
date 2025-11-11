@@ -100,9 +100,10 @@ def use_cache_if_possible(func):
         cached = func(*args, **kwargs)
         copied = copy.deepcopy(cached)
 
-        if hasattr(copied, "_tokenizer") and "tests.models.clip.test_tokenization_clip.CLIPTokenizationTest" in str(
-            args[0]
-        ):
+        # Preserve _tokenizer for all tokenizers (Rust tokenizer objects don't deep copy properly)
+        # This was previously only done for CLIP, but it's needed for all TokenizersBackend tokenizers
+        if hasattr(cached, "_tokenizer"):
+            # Restore _tokenizer from original since deep copy may have lost or corrupted it
             copied._tokenizer = cached._tokenizer
 
         if hasattr(copied, "sp_model"):
