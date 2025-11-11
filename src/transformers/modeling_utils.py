@@ -4498,25 +4498,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # In this case, the top-most task module weights were not moved to device and parallelized as they
             # were not part of the loaded weights: do it now
-            if loading_task_model_from_base_state_dict:
-                parameters_to_initialize = {
-                    name: param
-                    for name, param in model.named_parameters()
-                    if not name.startswith(model.base_model_prefix)
-                }
-                for name, param in parameters_to_initialize.items():
+            if missing_keys:
+                state_dict = model.state_dict()
+                for name in missing_keys:
+                    param = state_dict[name]
                     # If it is still on meta here, it means that it's a tied weight that will be tied later anyway -> skip it
                     if param.device.type == "meta":
                         continue
                     # Shard the param
-                    to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param)
                     shard_and_distribute_module(
                         model,
                         param.to(tp_device),
                         param,
                         name,
-                        casting_dtype,
-                        to_contiguous,
+                        None,
+                        False,
                         device_mesh.get_local_rank(),
                         device_mesh,
                     )
