@@ -1817,7 +1817,7 @@ class ReformerOnlyLMHead(nn.Module):
         # Layer Norm is done over 2 * hidden_size
         self.seq_len_dim = 1
         self.chunk_size_lm_head = config.chunk_size_lm_head
-        self.decoder = nn.Linear(2 * config.hidden_size, config.vocab_size, bias=True)
+        self.decoder = nn.Linear(2 * config.hidden_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
     def forward(self, hidden_states):
@@ -2141,9 +2141,6 @@ class ReformerModel(ReformerPreTrainedModel):
     """
 )
 class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {
-        "lm_head.decoder.bias": "lm_head.bias",
-    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -2279,9 +2276,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class ReformerForMaskedLM(ReformerPreTrainedModel):
-    _tied_weights_keys = {
-        "lm_head.decoder.bias": "lm_head.bias",
-    }
 
     def __init__(self, config):
         super().__init__(config)
