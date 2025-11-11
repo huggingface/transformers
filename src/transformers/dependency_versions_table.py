@@ -31,7 +31,7 @@ deps = {
     "kenlm": "kenlm",
     "kernels": "kernels>=0.10.2,<0.11",
     "librosa": "librosa",
-    "natten": "natten>=0.20.0,<0.21.0",
+    "natten": "natten>=0.21.0,<0.22.0",
     "nltk": "nltk<=3.8.1",
     "num2words": "num2words",
     "numpy": "numpy>=1.17",
