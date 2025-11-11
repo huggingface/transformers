@@ -3556,7 +3556,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 error_names.extend(shared_names)
 
             if len(error_names) > 0:
-                suggested_fix = {v: k for k, v in list(shared_ptrs.values())}
+                suggested_fix = {v: k for k, v in list(shared_ptrs.values())} if shared_ptrs else None
                 raise RuntimeError(
                     f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined"
                     f"as being shared in `_tied_weight_keys`. You should probably add: `_tied_weight_keys = {suggested_fix}. If a whole module is shared you can use it directly",

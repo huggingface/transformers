@@ -16,13 +16,14 @@
 
 import math
 import warnings
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from copy import deepcopy
+
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_timm_available, requires_backends
 from ...integrations import use_kernel_forward_from_hub
@@ -2413,16 +2414,17 @@ def build_text_mask(logits, attention_mask):
 class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # the bbox_embed in the decoder are all clones though
-    _tied_weights_keys = {
-        r"class_embed.(?![0])\d+": "class_embed.0",
+    _tied_weights_keys ={
+        r"^bbox_embed.(?![0])\d+": "bbox_embed.0",
+        "model.decoder.bbox_embed": "bbox_embed",
     }
 
     def __init__(self, config: GroundingDinoConfig):
         super().__init__(config)
 
         self.model = GroundingDinoModel(config)
-        if config.decoder_bbox_embed_share:
-            self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]= "bbox_embed.0"
+        if not config.decoder_bbox_embed_share:
+            del self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]
 
         self.bbox_embed = nn.ModuleList(
             [
@@ -2436,10 +2438,12 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             ]
         )
 
-        self.class_embed = nn.ModuleList([GroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)])
+        self.class_embed = nn.ModuleList(
+            [GroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
+        )
         # hack for box-refinement
-        self.model.decoder.class_embed = deepcopy(self.class_embed)
-        self.model.decoder.bbox_embed = deepcopy(self.bbox_embed)
+        self.model.decoder.class_embed = self.class_embed # class embed has no weights so nothing to tie
+        self.model.decoder.bbox_embed = self.bbox_embed
         self.post_init()
 
     @auto_docstring

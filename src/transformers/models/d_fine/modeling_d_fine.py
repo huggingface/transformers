@@ -1551,10 +1551,11 @@ class DFineForObjectDetection(DFinePreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
-    _keys_to_ignore_on_load_missing = [r"model.decoder.bbox_embed.*", r"model.decoder.class_embed.*"]
     _tied_weights_keys ={
+        r"^bbox_embed.(?![0])\d+": "bbox_embed.0",
+        r"^class_embed.(?![0])\d+": "class_embed.0",
         "model.decoder.class_embed": "class_embed",
-        "model.decoder.bbox_embed": "bbox_embed"
+        "model.decoder.bbox_embed": "bbox_embed",
     }
 
     def __init__(self, config: DFineConfig):
@@ -1576,16 +1577,12 @@ class DFineForObjectDetection(DFinePreTrainedModel):
                 for _ in range(config.decoder_layers - self.eval_idx - 1)
             ]
         )
+
+        self.model.decoder.class_embed = self.class_embed
+        self.model.decoder.bbox_embed = self.bbox_embed
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _tie_weights(self, missing_keys=None):
-        r"""
-        One of the only classes were we have to define this because :drum: self.model.decoder.class_embed just
-        does not exist.
-        """
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
 
 
     def _set_aux_loss(self, outputs_class, outputs_coord):
