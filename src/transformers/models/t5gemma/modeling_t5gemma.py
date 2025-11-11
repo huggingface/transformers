@@ -771,6 +771,8 @@ class T5GemmaDecoder(T5GemmaEncoder):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if not self.training and use_cache and past_key_values is None:
+            # We do not pass the config to the cross attn cache to avoid initializing SWA
+            # --> we use full attention between our cross attentions
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache())
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
