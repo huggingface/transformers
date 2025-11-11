@@ -233,6 +233,8 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
     [`LogitsProcessor`] that enforces a thinking budget by forcing the model to emit `end_thinking_token_id` once
     `max_thinking_tokens` tokens have been generated inside the very first `<think>` block that crosses the prompt
     boundary. After that block closes, new `<think>` tokens are suppressed instead of starting a fresh budget window.
+    This is an experimental control: forcibly injecting a closing token can reduce reasoning quality or final-response
+    accuracy, so downstream tasks should be evaluated when enabling it.
 
     Args:
         max_thinking_tokens (`int`):

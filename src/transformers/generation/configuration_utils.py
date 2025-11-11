@@ -114,7 +114,9 @@ class GenerationConfig(PushToHubMixin):
             emit `end_thinking_token_id`. Requires `begin_thinking_token_id`, `end_thinking_token_id`, and
             `max_new_tokens` to be set and is ignored for models that do not expose such a segment. Because emitting
             `end_thinking_token_id` also consumes one generation step, at most `max_new_tokens - max_thinking_tokens - 1`
-            tokens remain for the final response.
+            tokens remain for the final response. This is an experimental feature: forcing the model to emit
+            `</think>` earlier than it would naturally can degrade reasoning quality or final-answer accuracy, so use
+            cautiously and evaluate task impact.
         prompt_prefilled_suffix_length (`int`, *optional*, defaults to 3):
             Number of prompt tokens (counting back from the prompt boundary) that should be treated as potentially
             containing unfinished `<think>` markup when `max_thinking_tokens` is enabled. Only unmatched blocks within
