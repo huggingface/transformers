@@ -157,7 +157,7 @@ class ImageToTextPipeline(Pipeline):
         if prompt is not None:
             logger.warning_once(
                 "Passing `prompt` to the `image-to-text` pipeline is deprecated and will be removed in version 4.48"
-                " of 🤗 Transformers. Use the `image-text-to-text` pipeline instead",
+                " of Hugging Face Transformers. Use the `image-text-to-text` pipeline instead",
             )
             if not isinstance(prompt, str):
                 raise ValueError(
