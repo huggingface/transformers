@@ -31,13 +31,6 @@ from typing import Callable, Optional, Union
 import torch
 from torch import nn
 
-import torch_npu
-if "910" in torch.npu.get_device_name():
-    NPU_ATTN_INFR = True
-    print("[INFO] torch_npu detected. Using NPU fused infer attention.")
-else:
-    NPU_ATTN_INFR = False
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -248,30 +241,16 @@ class PanguEmbeddedAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
         
-        if not self.training and NPU_ATTN_INFR:
-            q_len = input_shape[1]
-            if attention_mask is not None:
-                attention_mask = ~attention_mask.bool()
-            elif q_len > 1:
-                attention_mask = torch.triu(torch.ones([q_len, q_len]), diagonal=1).bool().unsqueeze(0).unsqueeze(0).to(query_states.device)
-
-            attn_output, _ = torch_npu.npu_fused_infer_attention_score(
-                query_states, key_states, value_states,
-                num_heads=self.num_heads, num_key_value_heads=self.num_key_value_heads,
-                input_layout="BNSD", atten_mask=attention_mask, scale=self.scaling)
-            attn_output = attn_output.transpose(1, 2)
-            attn_weights = None
-        else:
-            attn_output, attn_weights = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask,
-                dropout=0.0 if not self.training else self.attention_dropout,
-                scaling=self.scaling,
-                **kwargs,
-            )
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
