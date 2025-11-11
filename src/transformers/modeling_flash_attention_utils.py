@@ -81,7 +81,7 @@ def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Cal
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
-    is_paged = "|" in implementation
+    is_paged = implementation.startswith("paged|")
     implementation = implementation.split("|")[1] if is_paged else implementation
 
     if (implementation == "flash_attention_2" and is_fa2) or (implementation is None and is_fa2 and not is_fa3):
