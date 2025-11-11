@@ -574,7 +574,7 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @slow
     def test_model_from_pretrained(self):
         model_name = "sweetcocoa/pop2piano"
-        model = Pop2PianoForConditionalGeneration.from_pretrained(model_name,  trust_remote_code=True)
+        model = Pop2PianoForConditionalGeneration.from_pretrained(model_name, trust_remote_code=True)
         self.assertIsNotNone(model)
 
     def test_pass_with_input_features(self):
@@ -611,7 +611,7 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 "attention_mask_extrapolated_beatstep": torch.ones((5, 900)).type(torch.int32),
             }
         )
-        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano",  trust_remote_code=True)
+        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano", trust_remote_code=True)
         model_opts = model.generate(
             input_features=input_features["input_features"],
             attention_mask=input_features["attention_mask"],

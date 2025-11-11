@@ -2619,9 +2619,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if missing_keys and source_is_there:  # test_model_weights_reload_no_missing_tied_weights
                         missing_keys.discard(target_n)
             else:
-                target_is_not_there = (
-                    missing_keys
-                    and re.search(target_name, "\n".join(missing_keys), flags=re.MULTILINE)
+                target_is_not_there = missing_keys and re.search(
+                    target_name, "\n".join(missing_keys), flags=re.MULTILINE
                 )
                 raise ValueError(
                     "There is a problem in the way you tie your keys or the way they were saved.\n"

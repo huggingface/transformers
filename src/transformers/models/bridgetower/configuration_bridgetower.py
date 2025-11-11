@@ -300,5 +300,4 @@ class BridgeTowerConfig(PreTrainedConfig):
         self.vision_config = vision_config
 
 
-
 __all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]
