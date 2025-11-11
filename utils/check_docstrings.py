@@ -1378,6 +1378,10 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
             print(f"[ERROR] Docstring needs to be filled for the following arguments in {candidate_file}:")
             for warning in fill_docstring_args_warnings:
                 print(warning)
+        if missing_docstring_args_warnings or docstring_args_ro_remove_warnings or fill_docstring_args_warnings:
+            raise ValueError(
+                "There was at least one problem when checking docstrings of objects decorated with @auto_docstring."
+            )
 
 
 def check_docstrings(overwrite: bool = False, check_all: bool = False):
