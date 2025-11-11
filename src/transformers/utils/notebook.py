@@ -197,15 +197,22 @@ class NotebookProgressBar:
             self.parent.display()
             return
         if self.output is None:
-            self.output = disp.display(disp.HTML(self.html_code), display_id=True)
-        else:
-            self.output.update(disp.HTML(self.html_code))
-
+            try:
+                self.output = disp.display(disp.HTML(self.html_code), display_id=True)
+            except (IsADirectoryError, AttributeError, OSError):
+                pass  # Silently handle IPython display errors in some environments (e.g., Azure ML Notebooks)        else:
+            else:
+                try:
+                    self.output.update(disp.HTML(self.html_code))
+                except (IsADirectoryError, AttributeError, OSError):
+                    pass  # Silently handle IPython display errors
     def close(self):
         "Closes the progress bar."
         if self.parent is None and self.output is not None:
-            self.output.update(disp.HTML(""))
-
+                try:
+                    self.output.update(disp.HTML(""))
+                except (IsADirectoryError, AttributeError, OSError):
+                    pass
 
 class NotebookTrainingTracker(NotebookProgressBar):
     """
@@ -229,10 +236,14 @@ class NotebookTrainingTracker(NotebookProgressBar):
         if self.child_bar is not None:
             self.html_code += self.child_bar.html_code
         if self.output is None:
-            self.output = disp.display(disp.HTML(self.html_code), display_id=True)
-        else:
-            self.output.update(disp.HTML(self.html_code))
-
+                try:
+                    self.output = disp.display(disp.HTML(self.html_code), display_id=True)
+                except (IsADirectoryError, AttributeError, OSError):
+            else:
+                try:
+                    self.output.update(disp.HTML(self.html_code))
+                except (IsADirectoryError, AttributeError, OSError):
+                    pass
     def write_line(self, values):
         """
         Write the values in the inner table.
