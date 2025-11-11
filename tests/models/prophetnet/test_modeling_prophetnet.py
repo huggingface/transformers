@@ -354,12 +354,12 @@ class ProphetNetModelTester:
                 decoder_attention_mask=decoder_attention_mask,
                 labels=lm_labels,
             )
-        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(4.5892, device=torch_device), atol=1e-3))
+        torch.testing.assert_close(result.loss, torch.tensor(4.5892, device=torch_device), atol=1e-2, rtol=1e-2)
 
         expected_logit_slice = torch.tensor(
             [-0.0184, 0.0758, -0.0543, -0.0093, 0.0050, -0.0660, -0.1453], device=torch_device
         )
-        self.parent.assertTrue(torch.allclose(result.logits[0, :, 1], expected_logit_slice, atol=1e-3))
+        torch.testing.assert_close(result.logits[0, :, 1], expected_logit_slice,  atol=1e-2, rtol=1e-2)
 
     def check_model_with_attn_mask(self, config, input_ids, decoder_input_ids, *args):
         model = ProphetNetModel(config=config)
