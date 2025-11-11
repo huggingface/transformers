@@ -410,7 +410,9 @@ def main():
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to store the converted model."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     parser.add_argument(
         "--check_logits", action="store_false", help="Whether or not to verify the logits of the converted model."

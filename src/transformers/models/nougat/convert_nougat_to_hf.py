@@ -275,7 +275,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
-        help="Whether or not to push the converted model and processor to the 🤗 hub.",
+        help="Whether or not to push the converted model and processor to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

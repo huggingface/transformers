@@ -135,7 +135,7 @@ def summarize_all_tests(
     total_models = len(model_names)
     test_names = list(tests_with_origin)
 
-    print(f"📝 Aggregating {len(test_names)} tests...")
+    print(f"[INFO] Aggregating {len(test_names)} tests...")
     for index, test_fn in enumerate(test_names, 1):
         print(f"  ({index}/{len(test_names)}) {test_fn}", end="\r")
         models_ran, models_skipped, reasons_for_skipping = [], [], []
@@ -155,7 +155,7 @@ def summarize_all_tests(
             "skipped_proportion": round(skipped_ratio, 4),
             "reasons_skipped": sorted(reasons_for_skipping),
         }
-    print("\n✅ Scan complete.")
+    print("\n[INFO] Scan complete.")
     return results
 
 
@@ -182,7 +182,7 @@ def main() -> None:
         tests_with_origin = {test_method_name: tests_with_origin.get(test_method_name, "unknown")}
 
     model_names, model_test_files = get_models_and_test_files(MODELS_DIR)
-    print(f"🔬 Parsing {len(model_test_files)} model test files once each...")
+    print(f"[INFO] Parsing {len(model_test_files)} model test files once each...")
     model_overrides = build_model_overrides(model_test_files)
 
     if test_method_name:
@@ -192,7 +192,7 @@ def main() -> None:
         data = summarize_all_tests(tests_with_origin, model_names, model_overrides)
         json_path = output_dir / "all_tests_scan_result.json"
     save_json(data, json_path)
-    print(f"\n📄 JSON saved to {json_path.resolve()}")
+    print(f"\n[INFO] JSON saved to {json_path.resolve()}")
 
 
 if __name__ == "__main__":

@@ -336,7 +336,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
-        help="Whether or not to push the converted model to the 🤗 hub.",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     parser.add_argument("--upload_original", action="store_true", help="upload the original checkpoint")
 

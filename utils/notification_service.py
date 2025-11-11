@@ -227,7 +227,7 @@ class Message:
             "type": "section",
             "text": {
                 "type": "plain_text",
-                "text": f"🌞 There were no failures: all {self.n_tests} tests passed. The suite ran in {self.time}.",
+                "text": f"[SUCCESS] There were no failures: all {self.n_tests} tests passed. The suite ran in {self.time}.",
                 "emoji": True,
             },
             "accessory": {
@@ -245,7 +245,7 @@ class Message:
                 "type": "plain_text",
                 "text": (
                     f"There were {self.n_failures} failures, out of {self.n_tests} tests.\n"
-                    f"🚨 There were {self.n_jobs_errored_out} jobs errored out (not producing test output files).\n"
+                    f"[ERROR] There were {self.n_jobs_errored_out} jobs errored out (not producing test output files).\n"
                     f"The suite ran in {self.time}."
                 ),
                 "emoji": True,
@@ -712,16 +712,16 @@ class Message:
 
         offline_runners = []
         if runner_not_available:
-            text = "💔 CI runners are not available! Tests are not run. 😭"
+            text = "[FAIL] CI runners are not available! Tests are not run."
             result = os.environ.get("OFFLINE_RUNNERS")
             if result is not None:
                 offline_runners = json.loads(result)
         elif runner_failed:
-            text = "💔 CI runners have problems! Tests are not run. 😭"
+            text = "[FAIL] CI runners have problems! Tests are not run."
         elif setup_failed:
-            text = "💔 Setup job failed. Tests are not run. 😭"
+            text = "[FAIL] Setup job failed. Tests are not run."
         else:
-            text = "💔 There was an issue running the tests. 😭"
+            text = "[FAIL] There was an issue running the tests."
 
         error_block_1 = {
             "type": "header",
@@ -735,7 +735,7 @@ class Message:
         if len(offline_runners) > 0:
             text = "\n  • " + "\n  • ".join(offline_runners)
             text = f"The following runners are offline:\n{text}\n\n"
-        text += "🙏 Let's fix it ASAP! 🙏"
+        text += "Let's fix it ASAP!"
 
         error_block_2 = {
             "type": "section",
@@ -1120,7 +1120,7 @@ if __name__ == "__main__":
         ci_title = ""
 
     # `title` will be updated at the end before calling `Message()`.
-    title = f"🤗 Results of {ci_event}"
+    title = f"[INFO] Results of {ci_event}"
     if runner_not_available or runner_failed or setup_failed:
         Message.error_out(title, ci_title, runner_not_available, runner_failed, setup_failed)
         exit(0)
@@ -1604,7 +1604,7 @@ if __name__ == "__main__":
     if job_name in job_to_test_map:
         ci_name_in_report = job_to_test_map[job_name]
 
-    title = f"🤗 Results of {ci_event}: {ci_name_in_report}"
+    title = f"[INFO] Results of {ci_event}: {ci_name_in_report}"
 
     message = Message(
         title,
