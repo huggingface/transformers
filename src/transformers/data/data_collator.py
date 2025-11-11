@@ -725,7 +725,6 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
                 warnings.warn(
                     "Random token replacement is not supported with whole word masking. "
                     "Setting mask_replace_prob to 1.",
-                    UserWarning,
                 )
                 self.mask_replace_prob = 1
                 self.random_replace_prob = 0
