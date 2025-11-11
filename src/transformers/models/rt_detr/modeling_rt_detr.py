@@ -1028,7 +1028,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
 
-            if not getattr(module.sampling_offsets.bias, "_is_hf_initialized") :
+            if not getattr(module.sampling_offsets.bias, "_is_hf_initialized", False) :
                 module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
             nn.init.constant_(module.attention_weights.weight, 0.0)
             nn.init.constant_(module.attention_weights.bias, 0.0)
