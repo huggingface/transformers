@@ -1012,9 +1012,21 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        if isinstance(module, RTDetrDecoder):
+            if module.class_embed is not None:
+                for layer in module.class_embed:
+                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+                    bias = float(-math.log((1 - prior_prob) / prior_prob))
+                    nn.init.xavier_uniform_(layer.weight)
+                    nn.init.constant_(layer.bias, bias)
 
-        if isinstance(module, RTDetrMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight, 0.0)
+            if module.bbox_embed is not None:
+                for layer in module.bbox_embed:
+                    nn.init.constant_(layer.layers[-1].weight, 0)
+                    nn.init.constant_(layer.layers[-1].bias, 0)
+
+        elif isinstance(module, RTDetrMultiscaleDeformableAttention):
+            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
                 2.0 * math.pi / module.n_heads
