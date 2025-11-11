@@ -301,6 +301,34 @@ class BertweetTokenizer(PreTrainedTokenizer):
     #     tokens_generated_so_far = re.sub('(@@ ?$)', '', string=tokens_generated_so_far)
     #     return ''.join(tokens_generated_so_far)
 
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str, ...]:
+        """
+        Save the vocabulary and merges files to a directory.
+        """
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return ()
+
+        vocab_files_names = getattr(self, "vocab_files_names", {})
+        prefix = f"{filename_prefix}-" if filename_prefix else ""
+
+        # Save vocabulary in the format expected by add_from_file: <token> <id>
+        # Exclude special tokens (IDs 0-3) as they are added in __init__ before add_from_file
+        vocab_file = os.path.join(save_directory, prefix + vocab_files_names.get("vocab_file", "vocab.txt"))
+        with open(vocab_file, "w", encoding="utf-8") as f:
+            for token, token_id in sorted(self.encoder.items(), key=lambda kv: kv[1]):
+                # Only save tokens with ID >= 4, as IDs 0-3 are reserved for special tokens
+                if token_id >= 4:
+                    f.write(f"{token} {token_id}\n")
+
+        # Save BPE merges
+        merge_file = os.path.join(save_directory, prefix + vocab_files_names.get("merges_file", "bpe.codes"))
+        with open(merge_file, "w", encoding="utf-8") as writer:
+            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
+                writer.write(" ".join(bpe_tokens) + "\n")
+
+        return (vocab_file, merge_file)
+
     def add_from_file(self, f):
         """
         Loads a pre-existing dictionary from a text file and adds its symbols to this instance.
