@@ -141,11 +141,6 @@ class SmolVLMProcessor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer", "video_processor"]
-    image_processor_class = "SmolVLMImageProcessor"
-    video_processor_class = "SmolVLMVideoProcessor"  # NOTE: uses different interpolation than slow processors
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor,
@@ -348,7 +343,7 @@ class SmolVLMProcessor(ProcessorMixin):
 
             # If user has not requested video metadata, pop it. By default metadata
             # is always returned to expand video tokens correctly
-            if "return_metadata" not in kwargs:
+            if not kwargs.get("return_metadata"):
                 vision_inputs.pop("video_metadata")
             inputs.update(vision_inputs)
 

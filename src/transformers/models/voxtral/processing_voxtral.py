@@ -74,10 +74,6 @@ class VoxtralProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
-    attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = "MistralCommonTokenizer"
-
     def __init__(
         self,
         feature_extractor,
