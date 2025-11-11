@@ -37,7 +37,7 @@ pip install transformers[dev]
 o una instalación editable:
 
 ```bash
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 
 del repositorio de Transformers.
