@@ -26,6 +26,7 @@ from transformers.models.aya_vision.modeling_aya_vision import (
     AyaVisionForConditionalGeneration,
     AyaVisionModel,
     AyaVisionModelOutputWithPast,
+    AyaVisionPreTrainedModel,
 )
 from transformers.models.got_ocr2.image_processing_got_ocr2_fast import GotOcr2ImageProcessorFast
 
@@ -87,6 +88,10 @@ class Cohere2VisionModelOutputWithPast(AyaVisionModelOutputWithPast):
 
 class Cohere2VisionCausalLMOutputWithPast(AyaVisionCausalLMOutputWithPast):
     pass
+
+
+class Cohere2VisionPreTrainedModel(AyaVisionPreTrainedModel):
+    base_model_prefix = "model"
 
 
 class Cohere2VisionModel(AyaVisionModel):
@@ -340,7 +345,7 @@ class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
 
 __all__ = [
     "Cohere2VisionForConditionalGeneration",
-    "Cohere2VisionPreTrainedModel",  # noqa: F822
+    "Cohere2VisionPreTrainedModel",
     "Cohere2VisionModel",
     "Cohere2VisionImageProcessorFast",
 ]

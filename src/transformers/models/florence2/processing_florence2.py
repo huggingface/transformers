@@ -62,10 +62,6 @@ class Florence2Processor(ProcessorMixin):
             thresholds, or banned tokens.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = ("BartTokenizer", "BartTokenizerFast")
-
     def __init__(
         self,
         image_processor=None,
