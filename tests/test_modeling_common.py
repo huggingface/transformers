@@ -3910,10 +3910,10 @@ class ModelTesterMixin:
 
         # Some MoE models alternate between a classic MLP and a MoE layer, in which case we want to have each one
         # in order to test the whole tp plan
-        config.num_hidden_layers = 2  # we need at least 2 layers to get one MLP of each type
-        config.first_k_dense_replace = 1  # means that the first layer (idx 0) will be MLP, then MoE
-        config.moe_layer_start_index = 1  # same as above but for Ernie 4.5...
-        config.mlp_only_layers = [0]
+        config_to_set = config.get_text_config()
+        config_to_set.first_k_dense_replace = 1  # means that the first layer (idx 0) will be MLP, then MoE
+        config_to_set.moe_layer_start_index = 1  # same as above but for Ernie 4.5...
+        config_to_set.mlp_only_layers = [0]  # same but for qwens
 
         for model_class in self.all_model_classes:
             model = model_class(copy.deepcopy(config))
