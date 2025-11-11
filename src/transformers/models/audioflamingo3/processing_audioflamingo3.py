@@ -70,6 +70,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         chat_template (`Optional[str]`, *optional*):
             The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
             template will be used.
+        audio_token (`<fill_type>`, *optional*, defaults to `"<sound>"`): <fill_docstring>
     """
 
     attributes = ["feature_extractor", "tokenizer"]
