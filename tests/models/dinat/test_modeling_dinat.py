@@ -213,11 +213,12 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     test_torch_exportable = True
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = DinatModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=DinatConfig, embed_dim=37, common_properties=["patch_size", "num_channels"]
+            self, config_class=DinatConfig, has_text_modality=False, embed_dim=37, common_properties=["patch_size", "num_channels"]
         )
 
     def test_config(self):
