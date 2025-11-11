@@ -102,8 +102,8 @@ class RichInterface:
         self,
         model_id: str,
         user_id: str,
-        token_processors: list[Callable[[str], str]] = None,
-        sequence_processor: list[Callable[[str], str]] = None,
+        token_processors: Optional[list[Callable[[str], str]]] = None,
+        sequence_processor: Optional[list[Callable[[str], str]]] = None,
     ):
         self._console = Console()
         self.model_id = model_id
@@ -113,7 +113,7 @@ class RichInterface:
         sequence_processor = sequence_processor or []
 
         self.token_processors = [self._special_token_processor, *token_processors]
-        self.sequence_processor = sequence_processor
+        self.sequence_processor = [self._code_blocks_sequence_processor, *sequence_processor]
 
     async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, int]:
         self._console.print(f"[bold blue]<{self.model_id}>:")
@@ -264,12 +264,17 @@ class Chat:
                 help="Path to a local generation config file or to a HuggingFace repo containing a `generation_config.json` file. Other generation settings passed as CLI arguments will be applied on top of this generation config."
             ),
         ] = None,
+        token_processors: Optional[list[Callable[[str], str]]] = None,
+        sequence_processors: Optional[list[Callable[[str], str]]] = None,
     ) -> None:
         """Chat with a model from the command line."""
         self.base_url = base_url
         self.model_id = model_id
         self.system_prompt = system_prompt
         self.save_folder = save_folder
+
+        self.token_processors = token_processors or []
+        self.sequence_processors = sequence_processors or []
 
         # Generation settings
         config = load_generation_config(generation_config)
@@ -376,7 +381,12 @@ class Chat:
     # Main logic
 
     async def _inner_run(self):
-        interface = RichInterface(model_id=self.model_id, user_id=self.user)
+        interface = RichInterface(
+            model_id=self.model_id,
+            user_id=self.user,
+            sequence_processor=self.sequence_processors,
+            token_processors=self.token_processors,
+        )
         interface.clear()
         chat = new_chat_history(self.system_prompt)
 
