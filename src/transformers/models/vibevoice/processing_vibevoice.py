@@ -48,8 +48,7 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
             "sampling_rate": 24000,
             "padding": True,
             "return_attention_mask": True,
-            "speech_tok_compress_ratio": 3200,  # acoustic_tokenizer.hop_length
-            "pad_to_multiple_of": 3200,
+            "pad_to_multiple_of": 3200,     # acoustic_tokenizer.hop_length
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
@@ -138,26 +137,25 @@ class VibeVoiceProcessor(ProcessorMixin):
         return_tensors = text_kwargs.get("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
-        speech_tok_compress_ratio = int(audio_kwargs.pop("speech_tok_compress_ratio"))
 
-        # Normalize text input to list
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, (list, tuple)):
             raise ValueError("text input must be a string or list of strings")
+        n_audio_in_text = [sample.count(self.speech_diffusion_token) for sample in text]
 
-        # Count speech token placeholders in each text sample
-        n_speech_in_text = [sample.count(self.speech_diffusion_token) for sample in text]
-        n_speech = len(audio) if audio is not None else 0
+        n_audio = 0
+        if audio is not None:
+            audio = make_list_of_audio(audio)
+            n_audio = len(audio)
 
-        # Validate speech token count matches audio samples
-        if sum(n_speech_in_text) > 0 and n_speech != sum(n_speech_in_text):
+        if sum(n_audio_in_text) > 0 and n_audio != sum(n_audio_in_text):
             if audio is None:
-                raise ValueError("No audio samples were provided, but there are speech tokens in the text")
+                raise ValueError("No audio were provided, but there are audio tokens in the prompt")
             else:
                 raise ValueError(
-                    f"The number of speech tokens in each text ({n_speech_in_text}) should match the "
-                    f"number of provided audio samples ({n_speech})."
+                    f"The number of audio tokens in each text ({n_audio_in_text}) should be the same as the "
+                    f"number of provided audios ({n_audio})."
                 )
 
         data = {}
@@ -166,15 +164,16 @@ class VibeVoiceProcessor(ProcessorMixin):
             data = self.feature_extractor(audio, **audio_kwargs)
             data["input_features"] = data["input_features"].unsqueeze(1)
 
-            # Create speech masks for audio tokenizer based on its compression ratio
+            # Create mask for audio tokenizer based on compression ratio
             padding_masks = data["input_features_mask"]
+            speech_tok_compress_ratio = int(audio_kwargs["pad_to_multiple_of"])
             num_audio_tokens_list = torch.ceil(padding_masks.sum(dim=-1) / speech_tok_compress_ratio).int().tolist()
             input_features_mask = torch.zeros((len(padding_masks), max(num_audio_tokens_list)), dtype=torch.bool)
             for i, seq_len in enumerate(num_audio_tokens_list):
                 input_features_mask[i, :seq_len] = True
             data["input_features_mask"] = input_features_mask
 
-            # Expand the text to repeat the speech token for the corresponding number of frames
+            # expand the text to repeat the audio token for the corresponding number of frames
             num_audio_tokens_list_copy = num_audio_tokens_list.copy()
             expanded_text = []
             for sample in text:

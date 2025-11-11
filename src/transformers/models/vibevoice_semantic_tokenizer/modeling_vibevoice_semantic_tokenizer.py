@@ -122,7 +122,6 @@ class VibeVoiceConv1dCache:
             if len(batch_mask) != batch_size:
                 raise ValueError("batch_mask length must match batch size")
 
-        # Get existing cache or initialize if None
         existing_cache = self.cache[layer_idx]
         if existing_cache is None:
             current_cache = torch.zeros(
@@ -131,21 +130,15 @@ class VibeVoiceConv1dCache:
         else:
             current_cache = existing_cache[batch_mask]
 
-        # Update the cache with full input as in original (otherwise not enough context):
+        # Update the cache with padded input (otherwise not enough context):
         # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L345
         input_with_context = torch.cat([current_cache, hidden_states], dim=-1)
         if context > 0:
-            new_padding_states = input_with_context[..., -context:]
-        else:
-            new_padding_states = torch.empty(
-                batch_size, channels, 0, device=hidden_states.device, dtype=hidden_states.dtype
-            )
-
-        if existing_cache is None:
-            self.cache[layer_idx] = new_padding_states
-        else:
-            self.cache[layer_idx][batch_mask] = new_padding_states
-
+            new_cache = input_with_context[..., -context:]
+            if existing_cache is None:
+                self.cache[layer_idx] = new_cache
+            else:
+                self.cache[layer_idx][batch_mask] = new_cache
         return current_cache
 
 
@@ -211,7 +204,7 @@ class VibeVoiceConvNext1dLayer(nn.Module):
     https://github.com/huggingface/transformers/blob/e20df45bf676d80bdddb9757eeeafe6c0c81ecfa/src/transformers/models/convnext/modeling_convnext.py#L120
     """
 
-    def __init__(self, config, hidden_size, drop_path=0.0, dilation=1, stride=1):
+    def __init__(self, config, hidden_size, drop_path=0.0, dilation=1, stride=1, layer_idx=None):
         super().__init__()
 
         self.norm = VibeVoiceRMSNorm(hidden_size, eps=config.rms_norm_eps)
@@ -220,7 +213,7 @@ class VibeVoiceConvNext1dLayer(nn.Module):
         self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
         self.ffn_gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
 
-        # TODO (ebezzam) original code has option for DropPath but is never actually used (and `nn.modules.DropPath` does not exist):
+        # NOTE (ebezzam) original code has option for DropPath but is never actually used (and `nn.modules.DropPath` does not exist):
         # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L637
         # however, could be interesting feature for future versions of `ConvNext1dLayer` as the 2D version has it:
         # https://github.com/huggingface/transformers/blob/e20df45bf676d80bdddb9757eeeafe6c0c81ecfa/src/transformers/models/convnext/modeling_convnext.py#L146
@@ -238,12 +231,13 @@ class VibeVoiceConvNext1dLayer(nn.Module):
             bias=config.bias,
             dilation=dilation,
             stride=stride,
+            layer_idx=layer_idx,
         )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, padding_cache=None, batch_mask=None):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.transpose(1, 2)).transpose(1, 2)
-        hidden_states = self.mixer(hidden_states)
+        hidden_states = self.mixer(hidden_states, padding_cache=padding_cache, batch_mask=batch_mask)
         hidden_states = hidden_states * self.gamma.unsqueeze(-1)
         # (ebezzam) original code (https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L653)
         # as mentioned above, drop_path is not used and the VibeVoice authors don't use the `forward` method but a custom
@@ -265,23 +259,12 @@ class VibeVoiceConvNext1dLayer(nn.Module):
 class VibeVoiceSemanticTokenizerEncoder(nn.Module):
     """
     Encoder component for the VibeVoice tokenizer that converts audio to latent representations.
-
-    Paper (https://arxiv.org/pdf/2508.19205) says:
-    "7 stages of modified Transformer blocks (using 1D depth-wise causal convolutions instead of self-attention module)
-    for efficient streaming processing. Six downsampling layers achieve a cumulative 3200X downsampling rate from a
-    24kHz input, yielding 7.5 tokens/frames per second."
-
-    But each block is more like a ConvNeXt block (but 1D): https://arxiv.org/abs/2201.03545
-    Hence the name `ConvNext1dLayer` in this code for the blocks.
-
-    Args:
-        config: Configuration object with model parameters
     """
 
     def __init__(self, config):
         super().__init__()
 
-        # stem and intermediate downsampling conv layers
+        layer_idx = 0
         self.downsample_layers = nn.ModuleList()
         self.downsample_layers.append(
             VibeVoiceCausalConv1d(
@@ -289,9 +272,10 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
                 out_channels=config.n_filters,
                 kernel_size=config.kernel_size,
                 bias=config.bias,
-                layer_idx=0,
+                layer_idx=layer_idx,
             )
         )
+        layer_idx += 1
         for stage_idx in range(len(config.downsampling_ratios)):
             downsample_layer = VibeVoiceCausalConv1d(
                 in_channels=config.n_filters * (2**stage_idx),
@@ -299,32 +283,37 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
                 kernel_size=config.downsampling_ratios[stage_idx] * 2,
                 stride=config.downsampling_ratios[stage_idx],
                 bias=config.bias,
-                layer_idx=stage_idx + 1,
+                layer_idx=layer_idx,
             )
             self.downsample_layers.append(downsample_layer)
+            layer_idx += 1
 
-        # configure ConvNext1D blocks
         self.stages = nn.ModuleList()
         for stage_idx in range(len(config.depths)):
             input_channels = config.n_filters * (2**stage_idx)
             stage = nn.ModuleList(
-                [VibeVoiceConvNext1dLayer(config, hidden_size=input_channels) for _ in range(config.depths[stage_idx])]
+                [
+                    VibeVoiceConvNext1dLayer(config, hidden_size=input_channels, layer_idx=layer_idx + depth_idx)
+                    for depth_idx in range(config.depths[stage_idx])
+                ]
             )
             self.stages.append(stage)
+            layer_idx += config.depths[stage_idx]
 
         self.head = VibeVoiceCausalConv1d(
             in_channels=input_channels,
             out_channels=config.hidden_size,
             kernel_size=config.kernel_size,
             bias=config.bias,
-            layer_idx=len(config.downsampling_ratios) + 1,
+            layer_idx=layer_idx,
         )
+        self.num_layers = layer_idx + 1
 
     def forward(self, hidden_states, padding_cache=None, batch_mask=None):
         for layer_idx, downsample_layer in enumerate(self.downsample_layers):
             hidden_states = downsample_layer(hidden_states, padding_cache=padding_cache, batch_mask=batch_mask)
             for block in self.stages[layer_idx]:
-                hidden_states = block(hidden_states)
+                hidden_states = block(hidden_states, padding_cache=padding_cache, batch_mask=batch_mask)
         hidden_states = self.head(hidden_states, padding_cache=padding_cache, batch_mask=batch_mask)
         return hidden_states.permute(0, 2, 1)
 
@@ -377,7 +366,7 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel)
             Whether to use caching for convolution states.
         """
         if use_cache and padding_cache is None:
-            padding_cache = VibeVoiceConv1dCache(num_layers=len(self.config.downsampling_ratios) + 2)
+            padding_cache = VibeVoiceConv1dCache(num_layers=self.encoder.num_layers)
 
         latents = self.encoder(audio, padding_cache=padding_cache, batch_mask=batch_mask)
 
