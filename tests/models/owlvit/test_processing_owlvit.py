@@ -64,6 +64,11 @@ class OwlViTProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = OwlViTProcessor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
         processor.save_pretrained(self.tmpdirname)
 
+        image_processor = OwlViTImageProcessor.from_pretrained(self.tmpdirname)
+        image_processor.save_pretrained(self.tmpdirname)
+        tokenizer = CLIPTokenizer.from_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(self.tmpdirname)
+
     def get_tokenizer(self, **kwargs):
         return CLIPTokenizer.from_pretrained(self.tmpdirname, pad_token="!", **kwargs)
 
