@@ -338,8 +338,8 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         pass
 
     def test_tp_plan_matches_params(self):
-        """Make sure that each entry of the tp plan matches at least one param (this avoid typos and/or edge cases
-        with regexes)"""
+        """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
+        be valid all at the same time"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         # They are valid but not always used, depending on config.is_moe flag (the modules are not the same in both cases)
         problematic_keys = {
