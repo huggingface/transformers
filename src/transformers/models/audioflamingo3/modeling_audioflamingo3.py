@@ -22,7 +22,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -351,16 +351,20 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
                 Log-Mel features extracted from raw audio. Use the processor/feature extractor to compute and pad
                 these features from waveform input.
             input_features_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding feature indices. Unlike Whisper, this mask is used
-                within the encoder layers to create attention masks on the time axis, with `1` for valid positions
-                and `0` for padded positions. If `None`, full attention is used. The mask is applied after the
-                conv front-end downsampling (resulting in sequence length `ceil(T_mel/2)`).
+                Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
         """
 
         # Prepare attention mask for transformer layers
         batch_size = input_features.shape[0]
         seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
-        encoder_attention_mask = eager_mask(
+
+        input_features_lengths = input_features_mask.sum(-1)
+        input_features_lengths = (input_features_lengths - 1) // 2 + 1  # conv2 downsampling
+        input_features_mask = torch.arange(seq_len, device=input_features.device) < input_features_lengths[:, None]
+        attention_mask = eager_mask(
             batch_size=batch_size,
             cache_position=torch.arange(seq_len, device=input_features.device),
             kv_length=seq_len,
@@ -382,7 +386,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         for layer in self.layers:
             drop = self.training and torch.rand([]) < self.layerdrop
             if not drop:
-                hidden_states = layer(hidden_states, encoder_attention_mask)[0]
+                hidden_states = layer(hidden_states, attention_mask)[0]
 
         # AvgPool (time/2) + LayerNorm
         hidden_states = hidden_states.permute(0, 2, 1)
@@ -418,15 +422,6 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
         self.linear_2 = nn.Linear(
             config.text_config.hidden_size, config.text_config.hidden_size, bias=config.projector_bias
         )
-        projector_dtype = (
-            getattr(config, "dtype", None)
-            or getattr(config.text_config, "dtype", None)
-            or getattr(config.audio_config, "dtype", None)
-        )
-        if isinstance(projector_dtype, str):
-            projector_dtype = getattr(torch, projector_dtype)
-        if isinstance(projector_dtype, torch.dtype):
-            self.to(dtype=projector_dtype)
 
     def forward(self, audio_features):
         hidden_states = self.linear_1(audio_features)
@@ -521,6 +516,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
@@ -539,9 +535,9 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         ```python
         >>> from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
-        >>> MODEL_ID = "nvidia/audio-flamingo-3-hf"
-        >>> processor = AutoProcessor.from_pretrained(MODEL_ID)
-        >>> model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
+        >>> model_id = "nvidia/audio-flamingo-3-hf"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
         >>> conversations = [
         >>>     [
@@ -570,19 +566,19 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         >>>     ],
         >>> ]
 
-        >>> batch = processor.apply_chat_template(
+        >>> inputs = processor.apply_chat_template(
         >>>     conversations,
         >>>     tokenize=True,
         >>>     add_generation_prompt=True,
         >>>     return_dict=True,
         >>> ).to(model.device)
 
-        >>> gen_ids = model.generate(**batch)
+        >>> outputs = model.generate(**inputs, max_new_tokens=500)
 
-        >>> inp_len = batch["input_ids"].shape[1]
-        >>> new_tokens = gen_ids[:, inp_len:]
-        >>> texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
-        >>> print(texts)
+        >>> decoded_outputs = processor.batch_decode(
+        >>>     outputs[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
+        >>> )
+        >>> print(decoded_outputs)
         ["The spoken content of the audio is...", "The track's calming and meditative feel can be attributed to..."]
         ```"""
 
@@ -598,38 +594,18 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
                 audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
             )
 
-        outputs = self.language_model(
+        outputs: CausalLMOutputWithPast = self.language_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            labels=labels,
             use_cache=use_cache,
             cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
-        logits = outputs[0]
-
-        loss = None
-        if labels is not None:
-            if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
-            )
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        return outputs
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
         # Overwritten -- we should not pass input_features when we are in cached decoding stage

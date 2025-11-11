@@ -49,16 +49,16 @@ Project: https://research.nvidia.com/labs/adlr/AF3/
 
 ### Audio Instruct Mode
 
-The model supports audio-text instructions, including multi-turn interactions, all processed in batches.
+The model supports audio-text instructions, including multi-turn interactions, all processed in inputses.
 
 ➡️ audio + text instruction
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
-MODEL_ID = "nvidia/audio-flamingo-3-hf"
-processor = AutoProcessor.from_pretrained(MODEL_ID)
-model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
+model_id = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 conversation = [
     {
@@ -70,19 +70,17 @@ conversation = [
     }
 ]
 
-batch = processor.apply_chat_template(
+inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     add_generation_prompt=True,
     return_dict=True,
 ).to(model.device)
 
-gen_ids = model.generate(**batch)
+outputs = model.generate(**inputs, max_new_tokens=500)
 
-inp_len = batch["input_ids"].shape[1]
-new_tokens = gen_ids[:, inp_len:]
-texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
-print(texts)
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+print(decoded_outputs)
 ```
 
 ➡️ multi-turn:
@@ -90,9 +88,9 @@ print(texts)
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
-MODEL_ID = "nvidia/audio-flamingo-3-hf"
-processor = AutoProcessor.from_pretrained(MODEL_ID)
-model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
+model_id = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 conversation = [
     {
@@ -117,19 +115,17 @@ conversation = [
     },
 ]
 
-batch = processor.apply_chat_template(
+inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     add_generation_prompt=True,
     return_dict=True,
 ).to(model.device)
 
-gen_ids = model.generate(**batch)
+outputs = model.generate(**inputs, max_new_tokens=500)
 
-inp_len = batch["input_ids"].shape[1]
-new_tokens = gen_ids[:, inp_len:]
-texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
-print(texts)
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+print(decoded_outputs)
 ```
 
 ➡️ text only:
@@ -137,9 +133,9 @@ print(texts)
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
-MODEL_ID = "nvidia/audio-flamingo-3-hf"
-processor = AutoProcessor.from_pretrained(MODEL_ID)
-model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
+model_id = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 conversation = [
     {
@@ -150,19 +146,17 @@ conversation = [
     }
 ]
 
-batch = processor.apply_chat_template(
+inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     add_generation_prompt=True,
     return_dict=True,
 ).to(model.device)
 
-gen_ids = model.generate(**batch)
+outputs = model.generate(**inputs, max_new_tokens=500)
 
-inp_len = batch["input_ids"].shape[1]
-new_tokens = gen_ids[:, inp_len:]
-texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
-print(texts)
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+print(decoded_outputs)
 ```
 
 ➡️ audio only:
@@ -170,9 +164,9 @@ print(texts)
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
-MODEL_ID = "nvidia/audio-flamingo-3-hf"
-processor = AutoProcessor.from_pretrained(MODEL_ID)
-model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
+model_id = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 conversation = [
     {
@@ -183,29 +177,27 @@ conversation = [
     }
 ]
 
-batch = processor.apply_chat_template(
+inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     add_generation_prompt=True,
     return_dict=True,
 ).to(model.device)
 
-gen_ids = model.generate(**batch)
+outputs = model.generate(**inputs, max_new_tokens=500)
 
-inp_len = batch["input_ids"].shape[1]
-new_tokens = gen_ids[:, inp_len:]
-texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
-print(texts)
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+print(decoded_outputs)
 ```
 
-➡️ batched inference!
+➡️ inputsed inference!
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
-MODEL_ID = "nvidia/audio-flamingo-3-hf"
-processor = AutoProcessor.from_pretrained(MODEL_ID)
-model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
+model_id = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 conversations = [
     [
@@ -234,19 +226,17 @@ conversations = [
     ],
 ]
 
-batch = processor.apply_chat_template(
+inputs = processor.apply_chat_template(
     conversations,
     tokenize=True,
     add_generation_prompt=True,
     return_dict=True,
 ).to(model.device)
 
-gen_ids = model.generate(**batch)
+outputs = model.generate(**inputs, max_new_tokens=500)
 
-inp_len = batch["input_ids"].shape[1]
-new_tokens = gen_ids[:, inp_len:]
-texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
-print(texts)
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+print(decoded_outputs)
 ```
 
 ➡️ transcription shortcut
@@ -254,16 +244,16 @@ print(texts)
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
-MODEL_ID = "nvidia/audio-flamingo-3-hf"
-processor = AutoProcessor.from_pretrained(MODEL_ID)
-model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
+model_id = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 inputs = processor.apply_transcription_request(audio="https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav").to(model.device)
 
-generated = model.generate(**inputs)
-transcription = processor.batch_decode(generated[:, inputs.input_ids.shape[1]:], skip_special_tokens=True, strip_prefix=True)
+outputs = model.generate(**inputs, max_new_tokens=500)
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True, strip_prefix=True)
 
-print(transcription[0])
+print(decoded_outputs)
 ```
 
 The model is trained to emit transcriptions prefixed with assistant framing such as `The spoken content of the audio is "<text>".`. Use `strip_prefix=True` (as shown above) to remove the fixed assistant sentence and surrounding quotes so that only the transcription remains.
@@ -300,7 +290,7 @@ For automatic speech recognition you can skip writing the default instruction ea
 inputs = processor.apply_transcription_request(audio=audio_array)
 ```
 
-Pass `prompt="Transcribe the input speech."` (or a list of prompts for batched audio) to customize the instruction while
+Pass `prompt="Transcribe the input speech."` (or a list of prompts for inputsed audio) to customize the instruction while
 keeping the audio placeholder handling.
 
 `audio` accepts in-memory arrays, local file paths, or URLs. Any processor kwargs (`text_kwargs`, `audio_kwargs`, etc.)
@@ -322,7 +312,7 @@ are forwarded, so you can tweak padding or tensor formats just like when calling
 ## Padding, attention, and caching
 
 * **Left padding vs right padding**
-  For generation with mixed prompt lengths in a batch, left padding is usually preferable.
+  For generation with mixed prompt lengths in a inputs, left padding is usually preferable.
   For training, right padding is common; AF3’s fusion mechanism itself is padding-agnostic because it replaces in place.
 * **Attention masks**
   The processor returns `attention_mask` (text) and `input_features_mask` (audio). The model builds an internal 4-D mask on the encoder’s pre-pool axis with negative infinity at pad positions.
@@ -331,8 +321,8 @@ are forwarded, so you can tweak padding or tensor formats just like when calling
 
 ## Troubleshooting
 
-* Empty or truncated outputs when batching
-  Use left padding for batched generation and decode only the new tokens after the prompt length, as shown in the quickstart.
+* Empty or truncated outputs when inputsing
+  Use left padding for inputsed generation and decode only the new tokens after the prompt length, as shown in the quickstart.
 
 ## AudioFlamingo3Config
 
