@@ -21,13 +21,9 @@ from parameterized import parameterized
 
 from transformers import ShieldGemma2Processor
 from transformers.testing_utils import get_tests_dir, require_vision
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
-if is_vision_available():
-    pass
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 

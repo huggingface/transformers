@@ -310,19 +310,6 @@ class ProcessorTesterMixin:
         return component_class
 
     @classmethod
-    def _save_processor(cls, components):
-        """
-        Create and save the processor with all components.
-
-        Args:
-            components: Dictionary mapping attribute names to component instances.
-        """
-        # Create processor with custom kwargs
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = cls.processor_class(**components, **processor_kwargs)
-        processor.save_pretrained(cls.tmpdirname)
-
-    @classmethod
     def tearDownClass(cls):
         """Clean up the temporary directory."""
         if hasattr(cls, "tmpdirname"):
@@ -474,7 +461,9 @@ class ProcessorTesterMixin:
         """
         attributes = self.processor_class.get_attributes()
 
-        if not any(attr in ["tokenizer", "image_processor"] for attr in attributes):
+        if not any(
+            attr in ["tokenizer", "image_processor", "feature_extractor", "video_processor"] for attr in attributes
+        ):
             self.skipTest("Processor has no tokenizer or image_processor to test additional features")
         additional_kwargs = {}
 
@@ -486,6 +475,9 @@ class ProcessorTesterMixin:
         has_image_processor = "image_processor" in attributes
         if has_image_processor:
             additional_kwargs["do_normalize"] = False
+        has_video_processor = "video_processor" in attributes
+        if has_video_processor:
+            additional_kwargs["do_normalize"] = False
 
         processor_second = self.processor_class.from_pretrained(self.tmpdirname, **additional_kwargs)
         if has_tokenizer:
@@ -493,6 +485,8 @@ class ProcessorTesterMixin:
             self.assertEqual(processor_second.tokenizer.sep_token, "(SEP)")
         if has_image_processor:
             self.assertEqual(processor_second.image_processor.do_normalize, False)
+        if has_video_processor:
+            self.assertEqual(processor_second.video_processor.do_normalize, False)
 
     def test_model_input_names(self):
         processor = self.get_processor()
@@ -540,7 +534,7 @@ class ProcessorTesterMixin:
 
         # Verify outputs match
         for key in input_image_proc:
-            self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
+            torch.testing.assert_close(input_image_proc[key], input_processor[key])
 
     def test_tokenizer_defaults(self):
         """
@@ -573,6 +567,100 @@ class ProcessorTesterMixin:
         for key in encoded_tok:
             if key in encoded_processor:
                 self.assertListEqual(encoded_tok[key].tolist(), encoded_processor[key].tolist())
+
+    def test_feature_extractor_defaults(self):
+        """
+        Tests that feature extractor is called correctly when passing audio to the processor.
+        This test verifies that processor(audio=X) produces the same output as feature_extractor(X).
+        """
+        # Skip if processor doesn't have feature_extractor
+        if (
+            "feature_extractor" not in self.processor_class.get_attributes()
+            and "audio_processor" not in self.processor_class.get_attributes()
+        ):
+            self.skipTest(f"feature_extractor or audio_processor attribute not present in {self.processor_class}")
+
+        if "feature_extractor" in self.processor_class.get_attributes():
+            feature_extractor = self.get_component("feature_extractor")
+        else:
+            feature_extractor = self.get_component("audio_processor")
+
+        # Get all required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components)
+
+        audio_input = self.prepare_audio_inputs()
+
+        # Process with both feature_extractor and processor
+        input_feat_extract = feature_extractor(audio_input, return_tensors="pt")
+        try:
+            input_processor = processor(audio=audio_input, return_tensors="pt")
+        except Exception:
+            # The processor does not accept audio only input, so we can skip this test
+            self.skipTest("Processor does not accept audio-only input.")
+
+        # Verify outputs match
+        for key in input_feat_extract:
+            torch.testing.assert_close(input_feat_extract[key], input_processor[key])
+
+    def test_video_processor_defaults(self):
+        """
+        Tests that video processor is called correctly when passing videos to the processor.
+        This test verifies that processor(videos=X) produces the same output as video_processor(X).
+        """
+        # Skip if processor doesn't have video_processor
+        if "video_processor" not in self.processor_class.get_attributes():
+            self.skipTest(f"video_processor attribute not present in {self.processor_class}")
+
+        video_processor = self.get_component("video_processor")
+
+        # Get all required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components)
+
+        video_input = self.prepare_video_inputs()
+
+        # Process with both video_processor and processor
+        input_video_proc = video_processor(video_input, return_tensors="pt")
+        try:
+            input_processor = processor(videos=video_input, return_tensors="pt")
+        except Exception:
+            # The processor does not accept video only input, so we can skip this test
+            self.skipTest("Processor does not accept video-only input.")
+
+        # Verify outputs match
+        for key in input_video_proc:
+            torch.testing.assert_close(input_video_proc[key], input_processor[key])
+
+    def test_tokenizer_decode_defaults(self):
+        """
+        Tests that processor.batch_decode() correctly forwards to tokenizer.batch_decode().
+        """
+        # Skip if processor doesn't have tokenizer
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
+
+        # Get all required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components)
+        tokenizer = components["tokenizer"]
+
+        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
+
+        # Test batch_decode
+        decoded_processor = processor.batch_decode(predicted_ids)
+        decoded_tok = tokenizer.batch_decode(predicted_ids)
+
+        self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_processor_with_multiple_inputs(self):
         """
@@ -627,122 +715,6 @@ class ProcessorTesterMixin:
         # Test that it raises error when no input is passed
         with self.assertRaises((TypeError, ValueError)):
             processor()
-
-    def test_feature_extractor_defaults(self):
-        """
-        Tests that feature extractor is called correctly when passing audio to the processor.
-        This test verifies that processor(audio=X) produces the same output as feature_extractor(X).
-        """
-        # Skip if processor doesn't have feature_extractor
-        if "feature_extractor" not in self.processor_class.get_attributes():
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-
-        feature_extractor = self.get_component("feature_extractor")
-
-        # Get all required components for processor
-        components = {}
-        for attribute in self.processor_class.get_attributes():
-            components[attribute] = self.get_component(attribute)
-
-        processor = self.processor_class(**components)
-
-        audio_input = self.prepare_audio_inputs()
-
-        # Process with both feature_extractor and processor
-        input_feat_extract = feature_extractor(audio_input, return_tensors="pt")
-        try:
-            input_processor = processor(audio=audio_input, return_tensors="pt")
-        except Exception:
-            # The processor does not accept audio only input, so we can skip this test
-            self.skipTest("Processor does not accept audio-only input.")
-
-        # Verify outputs match
-        for key in input_feat_extract:
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_audio_processor_defaults(self):
-        """
-        Tests that audio processor is called correctly when passing audio to the processor.
-        This test verifies that processor(audio=X) produces the same output as audio_processor(X).
-        """
-        # Skip if processor doesn't have audio_processor
-        if "audio_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"audio_processor attribute not present in {self.processor_class}")
-
-        audio_processor = self.get_component("audio_processor")
-
-        # Get all required components for processor
-        components = {}
-        for attribute in self.processor_class.get_attributes():
-            components[attribute] = self.get_component(attribute)
-
-        processor = self.processor_class(**components)
-
-        audio_input = self.prepare_audio_inputs()
-
-        # Process with both audio_processor and processor
-        input_audio_proc = audio_processor(audio_input, return_tensors="pt")
-        input_processor = processor(audio=audio_input, return_tensors="pt")
-
-        # Verify outputs match
-        for key in input_audio_proc:
-            self.assertAlmostEqual(input_audio_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_video_processor_defaults(self):
-        """
-        Tests that video processor is called correctly when passing videos to the processor.
-        This test verifies that processor(videos=X) produces the same output as video_processor(X).
-        """
-        # Skip if processor doesn't have video_processor
-        if "video_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"video_processor attribute not present in {self.processor_class}")
-
-        video_processor = self.get_component("video_processor")
-
-        # Get all required components for processor
-        components = {}
-        for attribute in self.processor_class.get_attributes():
-            components[attribute] = self.get_component(attribute)
-
-        processor = self.processor_class(**components)
-
-        video_input = self.prepare_video_inputs()
-
-        # Process with both video_processor and processor
-        input_video_proc = video_processor(video_input, return_tensors="pt")
-        try:
-            input_processor = processor(videos=video_input, return_tensors="pt")
-        except Exception:
-            # The processor does not accept video only input, so we can skip this test
-            self.skipTest("Processor does not accept video-only input.")
-
-        # Verify outputs match
-        for key in input_video_proc:
-            self.assertAlmostEqual(input_video_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_tokenizer_decode_defaults(self):
-        """
-        Tests that processor.batch_decode() correctly forwards to tokenizer.batch_decode().
-        """
-        # Skip if processor doesn't have tokenizer
-        if "tokenizer" not in self.processor_class.get_attributes():
-            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
-
-        # Get all required components for processor
-        components = {}
-        for attribute in self.processor_class.get_attributes():
-            components[attribute] = self.get_component(attribute)
-
-        processor = self.processor_class(**components)
-        tokenizer = components["tokenizer"]
-
-        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
-
-        # Test batch_decode
-        decoded_processor = processor.batch_decode(predicted_ids)
-        decoded_tok = tokenizer.batch_decode(predicted_ids)
-
-        self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_processor_text_has_no_visual(self):
         """

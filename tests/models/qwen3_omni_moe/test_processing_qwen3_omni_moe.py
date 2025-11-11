@@ -31,16 +31,13 @@ from transformers.testing_utils import (
     require_torchvision,
     require_vision,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 @require_vision

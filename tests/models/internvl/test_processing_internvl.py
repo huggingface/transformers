@@ -19,16 +19,13 @@ from parameterized import parameterized
 
 from transformers import InternVLProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 @require_vision

@@ -277,6 +277,10 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
-    @unittest.skip("ColPali can't process text+image inputs at the same time")
+    @unittest.skip("ColQwen2Processor can't process text+image inputs at the same time")
     def test_processor_text_has_no_visual(self):
+        pass
+
+    @unittest.skip("ColQwen2Processor adds a batch dimension to the pixel_values")
+    def test_image_processor_defaults(self):
         pass
