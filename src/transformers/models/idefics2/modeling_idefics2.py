@@ -1011,7 +1011,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
     """
 )
 class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)

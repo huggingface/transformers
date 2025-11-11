@@ -1726,8 +1726,10 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             ]
         )
         if config.with_box_refine:
+            self.model.decoder.bbox_embed = self.bbox_embed
             self._tied_weights_keys["model.decoder.bbox_embed"] = "bbox_embed"
         if config.two_stage:
+            self.model.decoder.class_embed = self.class_embed
             self._tied_weights_keys["model.decoder.class_embed"] = "class_embed"
         self.post_init()
 
