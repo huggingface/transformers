@@ -2535,6 +2535,47 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
         and the encoder and decoder. This relies on the `_tied_weights_keys` dict.
+
+        This is very sensible! For many reasons and especially this one:
+        ```python
+        from torch import nn
+        import torch
+        class MyClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.proj = nn.Linear(8,8)
+                self.bias = nn.Parameter(torch.empty(8))
+                self.proj.bias = self.bias
+
+        c = MyClass()
+        print(list(c.named_parameters()))
+        ```
+        That's for a parameter, for a module, it will just remove the ones that are "shared" (that makes sense) and overwrite getattr for it.
+
+        ```python
+        from torch import nn
+        import torch
+        class Decoder(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.embedding = nn.Embedding(8,8)
+
+        class Encoder(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.embedding = nn.Embedding(8,8)
+
+        class EncoderDecoder(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.encoder = Encoder()
+                self.decoder = Decoder()
+                self.encoder.embedding = self.decoder.embedding # setattr is convenient
+
+        c = EncoderDecoder()
+        print(list(c.named_parameters()))
+        ```
+        Thus the order of the keys matters. If you tie `self.decoder.embedding` you can no longer tie anything inside it.
         """
         mapping = getattr(self, "_tied_weights_keys", None)
         if not isinstance(mapping, dict):
@@ -2544,6 +2585,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and not self.config.tie_encoder_decoder  # if missing keys is None we init?
         ):
             return
+        top_level_params =  dict(top_level.named_parameters(remove_duplicate=False))
 
         for target_name, source_name in mapping.items():
             source_name = f"{module_prefix}.{source_name}" if module_prefix else source_name
@@ -2561,62 +2603,31 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 and not source_is_there
             )
             if source_is_there or missing_keys is None or target_is_not_there:
-                try:
-                    if source_name.endswith(".bias") or source_name.endswith(".weight"):
-                        source_param_or_module = top_level.get_parameter_or_buffer(source_name)
-                    else:
-                        source_param_or_module = top_level.get_submodule(source_name)
-                except AttributeError:
-                    continue
-
                 target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
+                source_params = sorted(filter(lambda x: re.search(source_name, x), top_level_params.keys()))
+                target_params = sorted(filter(lambda x: re.search(target_name, x), top_level_params.keys()))
 
-                if "d+" in target_name:
-                    reg = re.compile(target_name)
-                    modules = dict(self.named_modules())
-                    params = dict(self.named_parameters())
-                    for target_n in modules.keys() | params.keys():
-                        if not reg.fullmatch(target_n):
-                            continue
+                if len(target_params) > 0:
+                    for target_n, source_n in zip(target_params, source_params):
                         if "." in target_n:
                             parent_path, last = target_n.rsplit(".", 1)
-                            parent = self.get_submodule(parent_path)
+                            parent = top_level.get_submodule(parent_path)
                         else:
                             parent_path, last = "", target_n
-                            parent = self  # top-level
-                        if last in parent._modules:
-                            parent._modules[last] = source_param_or_module
-                            if missing_keys:
-                                for k, _ in source_param_or_module.named_parameters():
-                                    missing_keys.discard(f"{parent_path}.{last}.{k}")
-                        else:
-                            setattr(parent, last, source_param_or_module)
-                            self._adjust_bias(parent, source_param_or_module)
-                            if missing_keys:
-                                missing_keys.discard(target_n)
-                else:
-                    if "." in target_name:
-                        submodule, weight = target_name.rsplit(".", 1)
-                        submodule = top_level.get_submodule(submodule)
-                        setattr(submodule, weight, source_param_or_module)
-                        self._adjust_bias(submodule, source_param_or_module)
-                    else:
-                        setattr(top_level, target_name, source_param_or_module)
-
-                    if missing_keys:
-                        missing_keys.discard(target_name)
-
-            # source and target are missing, but we don't need to warn about target missing as we are prob gonna tie
+                            parent = top_level  # top-level
+                        setattr(parent, last, top_level_params[source_n])
+                        self._adjust_bias(parent, top_level_params[source_n])
+                        if missing_keys and source_is_there: # test_model_weights_reload_no_missing_tied_weights
+                            missing_keys.discard(target_n)
+            # source and target are missing, but we don't need to warn about target missing if we do tie.
             elif (
                 source_is_there
                 and missing_keys
                 and (self.config.tie_word_embeddings or self.config.tie_encoder_decoder)
             ):
-                if "d+" in target_name:
-                    for target_n, _ in self.named_parameters():
-                        missing_keys.discard(target_n)
-                else:
-                    missing_keys.discard(target_name)
+                target_params = sorted(filter(lambda x: re.search(target_name, x), top_level_params.keys()))
+                for target_n in target_params:
+                    missing_keys.discard(target_n)
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
         if getattr(output_embeddings, "bias", None) is not None and hasattr(output_embeddings, "weight"):
