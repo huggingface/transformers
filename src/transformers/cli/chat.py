@@ -22,7 +22,6 @@ from collections.abc import AsyncIterator, Callable
 from typing import Annotated, Optional
 
 import click
-import MeCab
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
@@ -97,48 +96,6 @@ If you're a new user, check this basic flag guide: https://huggingface.co/docs/t
 - **!exit**: closes the interface
 """
 
-tagger = MeCab.Tagger("")
-KANJI_RE = re.compile(r"[一-龯々〇ヶ]")
-KATAKANA_RE = re.compile(r"^[ァ-ンヴー]+$")
-
-
-def kata2hira(s: str) -> str:
-    res = []
-    for ch in s:
-        code = ord(ch)
-        if 0x30A1 <= code <= 0x30F6:  # ァ(0x30A1) .. ヶ(0x30F6)
-            res.append(chr(code - 0x60))  # shift to ぁ..ゖ
-        else:
-            res.append(ch)  # leave ー etc. as-is
-    return "".join(res)
-
-
-def pick_reading(feature_csv: str) -> str:
-    cols = feature_csv.split(",")
-    for s in reversed(cols):
-        if KATAKANA_RE.match(s):
-            return s
-    return ""
-
-
-def furigana(text: str) -> str:
-    n = tagger.parseToNode(text)
-    out = []
-    while n:
-        surf = n.surface
-        if surf:
-            if KANJI_RE.search(surf):
-                yomi_kata = pick_reading(n.feature)
-                if yomi_kata:
-                    yomi_hira = kata2hira(yomi_kata)
-                    out.append(f"{surf}({yomi_hira})")
-                else:
-                    out.append(surf)  # no reading found so fall back to surface
-            else:
-                out.append(surf)  # no kanji so no furigana
-        n = n.next
-    return "".join(out)
-
 
 class RichInterface:
     def __init__(
@@ -161,26 +118,20 @@ class RichInterface:
     async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, int]:
         self._console.print(f"[bold blue]<{self.model_id}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
-            sequence = ""
+            text = ""
             async for token in await stream:
                 outputs = token.choices[0].delta.content
                 if not outputs:
                     continue
 
-                sequence += outputs
+                text += outputs
+                sequence = self._process_sequence(text)
 
-                # Update the Live console output
-                sequence = self._process_sequence(sequence)
                 markdown = Markdown(sequence, code_theme="github-dark")
                 live.update(markdown, refresh=True)
 
-            sequence = self._process_sequence(sequence)
-            markdown = Markdown(sequence, code_theme="github-dark")
-            live.update(markdown, refresh=True)
-
         self._console.print()
-
-        return sequence
+        return text
 
     def input(self) -> str:
         """Gets user input from the console."""
@@ -425,7 +376,7 @@ class Chat:
     # Main logic
 
     async def _inner_run(self):
-        interface = RichInterface(model_id=self.model_id, user_id=self.user, sequence_processor=[furigana])
+        interface = RichInterface(model_id=self.model_id, user_id=self.user)
         interface.clear()
         chat = new_chat_history(self.system_prompt)
 
