@@ -256,7 +256,7 @@ class DabDetrConfig(PreTrainedConfig):
         self.sine_position_embedding_scale = sine_position_embedding_scale
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-        self.tie_word_embeddings = True  # weights have to be tied for this model
+        self.tie_encoder_decoder = True  # weights have to be tied for this model
 
 
 __all__ = ["DabDetrConfig"]
