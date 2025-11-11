@@ -3908,9 +3908,17 @@ class ModelTesterMixin:
         ):
             self.skipTest("Model does not have a TP plan.")
 
+        # Some MoE models alternate between a classic MLP and a MoE layer, in which case we want to have each one
+        # in order to test the whole tp plan
+        config.num_hidden_layers = 2  # we need at least 2 layers to get one MLP of each type
+        config.first_k_dense_replace = 1  # means that the first layer (idx 0) will be MLP, then MoE
+        config.moe_layer_start_index = 1  # same as above but for Ernie 4.5...
+        config.mlp_only_layers = [0]
+
         for model_class in self.all_model_classes:
             model = model_class(copy.deepcopy(config))
             param_names = {name for name, _ in model.named_parameters()} | {name for name, _ in model.named_buffers()}
+            module_names = {name for name, _ in model.named_modules()}
             tp_plan = model.tp_plan
             # Make sure the plan is not empty
             self.assertTrue(
@@ -3919,9 +3927,12 @@ class ModelTesterMixin:
             )
             pattern_usage = {}
             for pattern in tp_plan:
-                # Check if this given pattern matches any param (the value attributed to the pattern does not matter)
+                # Check if this given pattern matches any param or module (the value attributed to the pattern does not matter)
                 pattern_usage[pattern] = any(
-                    _get_parameter_tp_plan(param, {pattern: ""}) is not None for param in param_names
+                    _get_parameter_tp_plan(param, {pattern: ""}, is_weight=True) is not None for param in param_names
+                ) or any(
+                    _get_parameter_tp_plan(module, {pattern: ""}, is_weight=False) is not None
+                    for module in module_names
                 )
 
             unused_entries = {k for k, v in pattern_usage.items() if not v}
