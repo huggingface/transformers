@@ -521,7 +521,7 @@ class T5GemmaDecoderLayer(GradientCheckpointingLayer):
     """Decoder sub-layer: an extra cross-attention layer."""
 
     def __init__(self, config, layer_idx: int):
-        super().__init__(config, layer_idx)
+        super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
         self.layer_idx = layer_idx
