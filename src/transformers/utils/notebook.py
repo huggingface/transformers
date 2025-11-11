@@ -197,9 +197,9 @@ class NotebookProgressBar:
             self.parent.display()
             return
         if self.output is None:
-            self.output = disp.display(disp.HTML(self.html_code), display_id=True)
+            self.output = disp.display(disp.HTML(data=self.html_code), display_id=True)
         else:
-            self.output.update(disp.HTML(self.html_code))
+            self.output.update(disp.HTML(data=self.html_code))
 
     def close(self):
         "Closes the progress bar."
@@ -229,9 +229,9 @@ class NotebookTrainingTracker(NotebookProgressBar):
         if self.child_bar is not None:
             self.html_code += self.child_bar.html_code
         if self.output is None:
-            self.output = disp.display(disp.HTML(self.html_code), display_id=True)
+            self.output = disp.display(disp.HTML(data=self.html_code), display_id=True)
         else:
-            self.output.update(disp.HTML(self.html_code))
+            self.output.update(disp.HTML(data=self.html_code))
 
     def write_line(self, values):
         """
