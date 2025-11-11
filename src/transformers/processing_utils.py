@@ -1187,7 +1187,6 @@ class ProcessorMixin(PushToHubMixin):
         tokenizer_init_kwargs: Optional[dict] = None,
         **kwargs,
     ) -> dict[str, dict]:
-        kwargs = copy.deepcopy(kwargs)
         """
         Method to merge dictionaries of kwargs cleanly separated by modality within a Processor instance.
         The order of operations is as follows:
@@ -1227,6 +1226,9 @@ class ProcessorMixin(PushToHubMixin):
                 Dictionary of per-modality kwargs to be passed to each modality-specific processor.
 
         """
+        # holding a copy to avoid mutating user-provided arguments
+        kwargs = kwargs.copy()
+
         # Initialize dictionaries
         output_kwargs = {
             "text_kwargs": {},
