@@ -36,6 +36,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     backend_empty_cache,
     require_flash_attn,
     require_torch,
@@ -831,7 +832,14 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         torch.testing.assert_close(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=1e-4, rtol=1e-4)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
-        EXPECTED_DECODED_TEXT = "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress"
+        # fmt: off
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                ("cuda", None): "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+                ("xpu", None): "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+            }
+        ).get_expectation()
+        # fmt: on
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -874,11 +882,21 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
+        # fmt: off
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                ("cuda", None): [
+                    "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+                    "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
+                ],
+                ("xpu", None): [
+                    "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+                    "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
+                ],
+            }
+        ).get_expectation()
+        # fmt: on
 
-        EXPECTED_DECODED_TEXT = [
-            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
-            "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
-        ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,

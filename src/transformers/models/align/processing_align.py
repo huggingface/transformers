@@ -59,9 +59,6 @@ class AlignProcessor(ProcessorMixin):
 
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "EfficientNetImageProcessor"
-    tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
     valid_processor_kwargs = AlignProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):
