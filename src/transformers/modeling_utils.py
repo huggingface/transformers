@@ -34,6 +34,7 @@ from functools import partial, wraps
 from threading import Thread
 from typing import Any, Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
+from itertools import cycle
 
 import torch
 from huggingface_hub import split_torch_state_dict_into_shards
@@ -2607,7 +2608,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. We found {source_params} to tie into {target_params}"
                 )
             if len(target_params) > 0:
-                for target_n, source_n in zip(target_params, source_params):
+                # we cycle source as it should be dispatch in many target if regex
+                for target_n, source_n in zip(target_params, cycle(source_params)):
                     if "." in target_n:
                         parent_path, last = target_n.rsplit(".", 1)
                         parent = top_level.get_submodule(parent_path)
