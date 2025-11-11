@@ -22,11 +22,9 @@ from transformers.core_model_loading import (
     Concatenate,
     MergeModulelist,
     WeightConverter,
-    _apply_star_subst,
     _glob_to_regex_src,
     build_glob_alt,
     convert_and_load_state_dict_in_model,
-    glob_to_re,
     match_glob,
 )
 
@@ -138,18 +136,6 @@ class TestGlobRegexHelpers(unittest.TestCase):
         pattern = _glob_to_regex_src("model.layers.*.mlp.weight", digits_only=False)
         self.assertEqual(pattern, r"model\.layers\.(.+)\.mlp\.weight")
 
-    def test_glob_to_re_fullmatch(self):
-        regex_src = glob_to_re(
-            "model.layers.*.mlp.weight",
-        )
-        regex = re.compile(f"^{regex_src}$")
-        self.assertIsNotNone(regex.fullmatch("model.layers.12.mlp.weight"))
-        self.assertIsNone(regex.fullmatch("model.layers.foo.mlp.weight"))
-
-    def test_apply_star_subst(self):
-        pattern = "model.layers.*.block.*.weight"
-        replaced = _apply_star_subst(pattern, ["03", "attn"])
-        self.assertEqual(replaced, "model.layers.03.block.attn.weight")
 
 
 class DummyParamModule(nn.Module):
@@ -193,6 +179,7 @@ class DummyMLP(nn.Module):
 
 
 class DummyRoot(nn.Module):
+    base_model_prefix = "model"
     def __init__(self):
         super().__init__()
         self.model = DummyTopModel()
