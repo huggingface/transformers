@@ -2594,7 +2594,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # if there are missing keys but the source is also missing, we are out, _init_weights will init later and tie later.
             # maybe we still need ot remove tied from missing just because you tie
             source_is_there = missing_keys and not re.search(
-                rf"^{re.escape(source_name)}", "\n".join(missing_keys), flags=re.MULTILINE
+                rf"{re.escape(source_name)}", "\n".join(missing_keys), flags=re.MULTILINE
             )
 
             # if neither are here, we still want to the training to have same grads
