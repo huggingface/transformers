@@ -2576,6 +2576,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         print(list(c.named_parameters()))
         ```
         Thus the order of the keys matters. If you tie `self.decoder.embedding` you can no longer tie anything inside it.
+
+        If you call this function, it will always tie. There is only 1 tricky case, if all weights are missing, you still want to mention that
+        the ones you tied were missing.
         """
         mapping = getattr(self, "_tied_weights_keys", None)
         if not isinstance(mapping, dict):
@@ -2592,48 +2595,39 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
         for target_name, source_name in mapping.items():
             source_name = f"^{module_prefix}.{source_name}" if module_prefix else "^" + source_name
+            target_name = f"^{module_prefix}.{target_name}" if module_prefix else "^" + target_name
 
-            # if there are missing keys but the source is also missing, we are out, _init_weights will init later and tie later.
-            # maybe we still need ot remove tied from missing just because you tie
-            source_is_there = missing_keys and not re.search(
+            source_is_there = bool(missing_keys) and not re.search(
                 source_name, "\n".join(missing_keys), flags=re.MULTILINE
             )
-
-            # if neither are here, we still want the training to have same grads
-            target_is_not_there = (
-                missing_keys
-                and re.search(target_name, "\n".join(missing_keys), flags=re.MULTILINE)
-                and not source_is_there
-            )
-            if source_is_there or missing_keys is None or target_is_not_there:
-                target_name = f"^{module_prefix}.{target_name}" if module_prefix else "^" + target_name
-                source_params = sorted(filter(lambda x: re.search(source_name, x), top_level_params.keys()))
-                target_params = sorted(filter(lambda x: re.search(target_name, x), top_level_params.keys()))
-                if not len(source_params) > 0 or len(target_params) % len(source_params) != 0:
-                    raise ValueError(
-                        f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. We found {source_params} to tie into {target_params}"
-                    )
-                if len(target_params) > 0:
-                    for target_n, source_n in zip(target_params, source_params):
-                        if "." in target_n:
-                            parent_path, last = target_n.rsplit(".", 1)
-                            parent = top_level.get_submodule(parent_path)
-                        else:
-                            parent_path, last = "", target_n
-                            parent = top_level  # top-level
-                        setattr(parent, last, top_level_params[source_n])
-                        self._adjust_bias(parent, top_level_params[source_n])
-                        if missing_keys and source_is_there:  # test_model_weights_reload_no_missing_tied_weights
-                            missing_keys.discard(target_n)
-            # source and target are missing, but we don't need to warn about target missing if we do tie.
-            elif (
-                source_is_there
-                and missing_keys
-                and (self.config.tie_word_embeddings or self.config.tie_encoder_decoder)
-            ):
-                target_params = sorted(filter(lambda x: re.search(target_name, x), top_level_params.keys()))
-                for target_n in target_params:
-                    missing_keys.discard(target_n)
+            source_params = sorted(filter(lambda x: re.search(source_name, x), top_level_params.keys()))
+            target_params = sorted(filter(lambda x: re.search(target_name, x), top_level_params.keys()))
+            if not len(source_params) > 0 or len(target_params) % len(source_params) != 0:
+                raise ValueError(
+                    f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. We found {source_params} to tie into {target_params}"
+                )
+            if len(target_params) > 0:
+                for target_n, source_n in zip(target_params, source_params):
+                    if "." in target_n:
+                        parent_path, last = target_n.rsplit(".", 1)
+                        parent = top_level.get_submodule(parent_path)
+                    else:
+                        parent_path, last = "", target_n
+                        parent = top_level  # top-level
+                    setattr(parent, last, top_level_params[source_n])
+                    self._adjust_bias(parent, top_level_params[source_n])
+                    if missing_keys and source_is_there:  # test_model_weights_reload_no_missing_tied_weights
+                        missing_keys.discard(target_n)
+            else:
+                target_is_not_there = (
+                    missing_keys
+                    and re.search(target_name, "\n".join(missing_keys), flags=re.MULTILINE)
+                )
+                raise ValueError(
+                    "There is a problem in the way you tie your keys or the way they were saved.\n"
+                    f"source_is_there={source_is_there}, target_is_there={not target_is_not_there}, missing_keys={missing_keys},"
+                    "tie_word_embeddings/tie_encoder_decoder={(self.config.tie_word_embeddings or self.config.tie_encoder_decoder)}"
+                )
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
         if getattr(output_embeddings, "bias", None) is not None and hasattr(output_embeddings, "weight"):
