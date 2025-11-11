@@ -289,12 +289,13 @@ class WeightConverter:
                 f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
             )
 
-        for pattern in self.source_keys:
-            if any(ch in pattern for ch in set("^$+?{}[]|()")):
-                raise AssertionError(f"'{pattern}' is not glob")
-        for pattern in self.target_keys:
-            if any(ch in pattern for ch in set("^$+?{}[]|()")):
-                raise AssertionError(f"'{pattern}' is not glob")
+        # Actually regex is fine and can work
+        # for pattern in self.source_keys:
+        #     if any(ch in pattern for ch in set("^$+?{}[]|()")):
+        #         raise AssertionError(f"'{pattern}' is not glob")
+        # for pattern in self.target_keys:
+        #     if any(ch in pattern for ch in set("^$+?{}[]|()")):
+        #         raise AssertionError(f"'{pattern}' is not glob")
 
 
 @dataclass(slots=True)
