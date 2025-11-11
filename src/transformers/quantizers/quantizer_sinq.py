@@ -174,8 +174,6 @@ class SinqHfQuantizer(HfQuantizer):
 
         device_str = _normalize_cuda_device(getattr(cfg, "device", "auto"))
         _validate_cuda_device_str(device_str)
-
-        print(f'Device string is: {device_str}')
         
         self._normalized_device_str = device_str
 
@@ -244,7 +242,6 @@ class SinqHfQuantizer(HfQuantizer):
         compute_dtype = self.update_dtype(None)
         to_skip = set(cfg.modules_to_not_convert or [])
         device_str = getattr(self, "_normalized_device_str", _normalize_cuda_device(cfg.device))
-        print(f'Device string in process model before_weights: {device_str}')
 
         def _convert(m: nn.Module, prefix: str = ""):
             for child_name, child in list(m.named_children()):
@@ -282,8 +279,6 @@ class SinqHfQuantizer(HfQuantizer):
         if device.type == "cuda":
             torch.cuda.set_device(device)
         model = model 
-
-        print(f'Device string in process model after weights: {device_str}')
 
         placeholders: list[tuple[str, _SinqLoadTimeLinear, nn.Module]] = []
 
