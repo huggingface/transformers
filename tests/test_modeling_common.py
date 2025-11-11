@@ -20,6 +20,7 @@ import os.path
 import random
 import re
 import tempfile
+import unittest.mock
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
@@ -46,6 +47,7 @@ from transformers.integrations.deepspeed import (
     is_deepspeed_zero3_enabled,
     unset_hf_deepspeed_config,
 )
+from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_utils import _get_tied_weight_keys
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
@@ -827,6 +829,12 @@ class ModelTesterMixin:
             model = model_class(copy.deepcopy(config))
             self.assertFalse(model.is_gradient_checkpointing)
 
+            # Gradient checkpointing is implemented via GradientCheckpointingLayer, if none is present this is likely
+            # an implementation issue. Note we exclude clvp for now since they are still not using
+            # GradientCheckpointingLayer.
+            if config.model_type not in ["clvp", "clvp_decoder"]:
+                self.assertTrue([m for m in model.modules() if isinstance(m, GradientCheckpointingLayer)])
+
             # check enable works
             model.gradient_checkpointing_enable()
             self.assertTrue(model.is_gradient_checkpointing)
@@ -1151,22 +1159,63 @@ class ModelTesterMixin:
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
                 config.use_cache = False
                 config.return_dict = True
-                model = model_class(config)
 
+                # make sure that test runs are consistent by disabling dropout
+                #
+                # Note: attention_probs_dropout_prob seem to influence classifier.bias in BertForMultipleChoice
+                # (and other Bert derived models). Sometimes classifier.bias is None when
+                # attention_probs_dropout_prob > 0. This might indicate a bug somewhere.
+                if hasattr(config, "hidden_dropout_prob"):
+                    config.hidden_dropout_prob = 0.0
+                if hasattr(config, "attention_probs_dropout_prob"):
+                    config.attention_probs_dropout_prob = 0.0
+
+                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+                torch.manual_seed(0)
+                model = model_class(config)
                 model.to(torch_device)
-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
                 model.train()
 
                 # unfreeze additional layers
                 for p in model.parameters():
                     p.requires_grad_(True)
 
+                # do a non-checkpointing run, so we can compare the set of non-zero gradients later. we skip None
+                # grads here to collect a reference set of modules that have non-zero gradients (to filter layers like
+                # MoE that drop out parts of the model).
                 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-
-                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                torch.manual_seed(0)
                 loss = model(**inputs).loss
                 loss.backward()
-                optimizer.step()
+                grad_expected_params = [(n, p) for n, p in model.named_parameters() if p.grad is not None]
+                non_zero_grads_normal = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
+
+                # reset all gradients to zero for the comparison with the gradient checkpointing run
+                optimizer.zero_grad()
+
+                # now enable gradient checkpointing and compare the gradients
+                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+
+                checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
+
+                optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+                with unittest.mock.patch.object(
+                    checkpointing_layer, "forward", wraps=checkpointing_layer.forward
+                ) as forward_mock:
+                    torch.manual_seed(0)
+                    loss = model(**inputs).loss
+                    loss.backward()
+                    optimizer.step()
+
+                    # test that gradient checkpointing is active as it would call the gradient checkpointing layer's
+                    # forward more than once.
+                    self.assertGreater(forward_mock.call_count, 1)
+
+                # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
+                # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
+                non_zero_grads_gradcp = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
+                self.assertEqual(non_zero_grads_gradcp, non_zero_grads_normal)
 
                 if self.test_all_params_have_gradient:
                     for k, v in model.named_parameters():

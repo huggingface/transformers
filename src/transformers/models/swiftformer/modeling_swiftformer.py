@@ -21,6 +21,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2CLS
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -295,7 +296,7 @@ class SwiftFormerEncoderBlock(nn.Module):
         return x
 
 
-class SwiftFormerStage(nn.Module):
+class SwiftFormerStage(GradientCheckpointingLayer):
     """
     A Swiftformer stage consisting of a series of `SwiftFormerConvEncoder` blocks and a final
     `SwiftFormerEncoderBlock`.
