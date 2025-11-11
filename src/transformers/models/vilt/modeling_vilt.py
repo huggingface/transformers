@@ -690,7 +690,7 @@ class ViltPooler(nn.Module):
 )
 class ViltForMaskedLM(ViltPreTrainedModel):
     _tied_weights_keys = {
-        "mlm_score.decoder.weight": "vilt.embeddings.text_embeddings.weight",
+        "mlm_score.decoder.weight": "vilt.embeddings.text_embeddings.word_embeddings.weight",
         "mlm_score.decoder.bias": "mlm_score.bias",
     }
 

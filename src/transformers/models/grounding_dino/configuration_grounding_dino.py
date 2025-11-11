@@ -287,6 +287,7 @@ class GroundingDinoConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         self.tie_word_embeddings = True
+        self.tie_encoder_decoder = True
 
 
 __all__ = ["GroundingDinoConfig"]
