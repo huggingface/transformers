@@ -1114,11 +1114,6 @@ class SamVisionModel(SamPreTrainedModel):
 )
 class SamModel(SamPreTrainedModel):
     input_modalities = ["image", "text"]
-    _tied_weights_keys = {
-        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
-    }
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamTwoWayAttentionBlock, index=2)}
 
     def __init__(self, config: SamConfig):
@@ -1130,7 +1125,6 @@ class SamModel(SamPreTrainedModel):
         # The module using it is not a PreTrainedModel subclass so we need this
         config.mask_decoder_config._attn_implementation = config._attn_implementation
         self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
-
         self.post_init()
 
     def get_input_embeddings(self):
