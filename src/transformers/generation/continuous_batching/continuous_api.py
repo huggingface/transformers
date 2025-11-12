@@ -587,7 +587,6 @@ class ContinuousBatchProcessor:
                 raise ValueError(f"Request {state.request_id} is in an unexpected state: {state.status}")
 
 
-        # We error out if the cache is full
         if self.cache.get_num_free_blocks() == 0:
             raise ValueError("No more free blocks")
 
