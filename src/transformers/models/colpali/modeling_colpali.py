@@ -186,7 +186,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
 
-
     def resize_token_embeddings(
         self,
         new_num_tokens: Optional[int] = None,
