@@ -3480,9 +3480,17 @@ class ModelTesterMixin:
 
             with self.subTest(model_class.__name__):
                 model = model_class(config).eval().to(torch_device)
-                # needed to prepare cache inputs for auto-regressive models
-                # and process output flags (use_cache, output_attentions, etc)
+                # needed to prepare cache inputs for auto-regressive models and process
+                # output flags (e.g. use_cache, output_attentions, etc) to avoid passing them as inputs
                 model, inputs_dict = prepare_inputs_for_export(model, inputs_dict)
+                # filtering of inputs that are not in the forward signature or that are None
+                # this is needed since sometimes inputs_dict contains extra inputs that are not
+                # accepted by model (e.g. output_router_logits is not used by SwitchTransformersModel)
+                inputs_dict = {
+                    k: v
+                    for k, v in inputs_dict.items()
+                    if k in inspect.signature(model.forward).parameters and v is not None
+                }
 
                 with torch.no_grad():
                     set_seed(1234)

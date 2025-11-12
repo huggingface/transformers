@@ -138,6 +138,13 @@ def register_encoder_decoder_cache_for_export():
 def prepare_inputs_for_export(
     model: "PreTrainedModel", sample_inputs: dict[str, torch.Tensor | Cache]
 ) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache]]:
+    for output_flag in ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss"):
+        if output_flag in sample_inputs:
+            logger.info(
+                f"Found an output flag '{output_flag}' in sample_inputs. Setting model.config.{output_flag} instead."
+            )
+            setattr(model.config, output_flag, sample_inputs.pop(output_flag))
+
     if (
         getattr(model.config, "use_cache", False)
         and not getattr(model.config, "is_encoder_decoder", False)
@@ -202,7 +209,7 @@ def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str
             ]
         elif isinstance(input, torch.Tensor):
             dynamic_shapes[name] = _auto_dynamic_shape(input)
-        elif isinstance(input, (int, float, bool)) or input is None:
+        elif isinstance(input, (int, float, bool, str)):
             dynamic_shapes[name] = None
         elif isinstance(input, dict):
             dynamic_shapes[name] = get_auto_dynamic_shapes(input)
@@ -211,8 +218,10 @@ def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str
         else:
             raise ValueError(
                 f"Input '{name}' is of unsupported type '{type(input)}'. "
-                "Only 'torch.Tensor' and 'DynamicCache' are supported. "
+                "Only torch.Tensor, DynamicCache, int, float, bool, str, dict, list, tuple, and set are supported."
             )
+
+    print("final dynamic_shapes:", dynamic_shapes)
 
     return dynamic_shapes
 
