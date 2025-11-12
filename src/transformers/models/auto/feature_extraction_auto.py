@@ -200,7 +200,7 @@ def get_feature_extractor_config(
 
     # Load feature_extractor dict. Priority goes as (nested config if found -> feature extractor config)
     # We are downloading both configs because almost all models have a `processor_config.json` but
-    # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+    # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
     feature_extractor_dict = {}
     if resolved_processor_file is not None:
         try:
