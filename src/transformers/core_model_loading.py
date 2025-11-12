@@ -113,7 +113,7 @@ def build_glob_alt(
 
         parts.append(f"(?P<{name}>{prefix_src}{pat_src})")
 
-    alt_src = "|".join(parts).replace('\\^','^').replace('\\.',r'\.')
+    alt_src = "|".join(parts).replace("\\^", "^").replace("\\.", r"\.")
     try:
         reg = re.compile(alt_src)
     except re.error as e:
@@ -497,11 +497,9 @@ def log_to_misc(
 
 
 def set_param_for_module(
-    model: torch.nn.Module,
+    model: PreTrainedModel,
     layer_name: str,
     param_value: torch.Tensor,
-    meta_model_state_dict: MutableMapping[str, Any],
-    empty_param: torch.Tensor,
     mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
     missing_keys: MutableSet[str],
     misc: MutableMapping[str, Any],
@@ -511,7 +509,7 @@ def set_param_for_module(
         module_path, _, param_name = layer_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
         param_value = param_value[0] if isinstance(param_value, list) else param_value[...]
-        ref = meta_model_state_dict.get(layer_name, empty_param)
+        ref = getattr(module_obj, param_name)
 
         use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
         if not isinstance(param_value, torch.nn.Parameter):
@@ -531,12 +529,12 @@ def set_param_for_module(
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
         param_value = get_loaded_parameter_class(param_value.__class__)(from_existing=param_value)
 
+        # Remove from missing keys (it's either mismatched, or all good)
+        missing_keys.discard(layer_name)
         if ref is not None and ref.shape != param_value.shape:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
-            setattr(module_obj._parameters[param_name], "_is_hf_initialized", False)  # Needs to be initialized
-            missing_keys.discard(layer_name)
+            module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
         else:
-            missing_keys.discard(layer_name)
             param_value._is_hf_initialized = True  # super important otherwise _init_weight re-initi if bias is missing
             setattr(module_obj, param_name, param_value)
 
@@ -697,8 +695,6 @@ def convert_and_load_state_dict_in_model(
                                 model,
                                 k,
                                 output_value,
-                                meta_model_state_dict,
-                                empty_param,
                                 mismatch_keys,
                                 missing_keys,
                                 misc,

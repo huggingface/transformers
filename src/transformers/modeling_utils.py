@@ -23,7 +23,6 @@ import json
 import os
 import re
 import sys
-import time
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
@@ -909,7 +908,7 @@ def _get_dtype(
 
 @contextmanager
 def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
-    import torch.nn.init as I
+    import torch.nn.init as init
 
     originals = {}
 
@@ -927,13 +926,13 @@ def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
 
     try:
         for name in TORCH_INIT_FUNCTIONS:
-            if hasattr(I, name):
-                originals[name] = getattr(I, name)
-                setattr(I, name, make_wrapper(originals[name]))
+            if hasattr(init, name):
+                originals[name] = getattr(init, name)
+                setattr(init, name, make_wrapper(originals[name]))
         yield
     finally:
         for name, fn in originals.items():
-            setattr(I, name, fn)
+            setattr(init, name, fn)
 
 
 class PipelineParallel(Enum):
@@ -2284,46 +2283,38 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
-        try:
-            if isinstance(module, PreTrainedModel):
-                return
-            elif isinstance(
-                module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)
-            ):
-                if getattr(module, "weight", None) is not None:
-                    module.weight.normal_(mean=0.0, std=std)
-                if getattr(module, "bias", None) is not None:
-                    module.bias.zero_()
-            elif isinstance(module, nn.Embedding):
-                if getattr(module, "weight", None) is not None:
-                    module.weight.normal_(mean=0.0, std=std)
-                if getattr(self.config, "pad_token_id", None) is not None:
-                    module.weight[self.config.pad_token_id].zero_()
-            elif isinstance(module, nn.Parameter):
-                module.normal_(mean=0.0, std=std)
-            elif isinstance(module, nn.MultiheadAttention):
-                # This uses torch's original init
-                module._reset_parameters()
-            # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
-            # between modelings (because they are prefixed with the model name)
-            elif (
-                isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
-                or "LayerNorm" in module.__class__.__name__
-                or "RMSNorm" in module.__class__.__name__
-            ):
-                # Norms can exist without weights (in which case they are None from torch primitives)
-                if hasattr(module, "weight") and module.weight is not None:
-                    module.weight.fill_(1.0)
-                if hasattr(module, "bias") and module.bias is not None:
-                    module.bias.zero_()
-            if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
-                module.gate_up_proj.normal_(mean=0.0, std=std)
-            if isinstance(getattr(module, "down_proj", None), nn.Parameter):
-                module.down_proj.normal_(mean=0.0, std=std)
-            if isinstance(getattr(module, "gate", None), nn.Parameter):
-                module.gate.normal_(mean=0.0, std=std)
-        except Exception as e:
-            logger.warning(f"Failed to init: {str(e)}")
+
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
+            if getattr(module, "weight", None) is not None:
+                module.weight.normal_(mean=0.0, std=std)
+            if getattr(module, "bias", None) is not None:
+                module.bias.zero_()
+        elif isinstance(module, nn.Embedding):
+            if getattr(module, "weight", None) is not None:
+                module.weight.normal_(mean=0.0, std=std)
+            if getattr(self.config, "pad_token_id", None) is not None:
+                module.weight[self.config.pad_token_id].zero_()
+        elif isinstance(module, nn.MultiheadAttention):
+            # This uses torch's original init
+            module._reset_parameters()
+        # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
+        # between modelings (because they are prefixed with the model name)
+        elif (
+            isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
+            or "LayerNorm" in module.__class__.__name__
+            or "RMSNorm" in module.__class__.__name__
+        ):
+            # Norms can exist without weights (in which case they are None from torch primitives)
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.fill_(1.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.zero_()
+        if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
+            module.gate_up_proj.normal_(mean=0.0, std=std)
+        if isinstance(getattr(module, "down_proj", None), nn.Parameter):
+            module.down_proj.normal_(mean=0.0, std=std)
+        if isinstance(getattr(module, "gate", None), nn.Parameter):
+            module.gate.normal_(mean=0.0, std=std)
 
     def _initialize_weights(self, module):
         """
@@ -2349,7 +2340,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         `torch.nn.init` functions (which are all no_grad by default), but simply do in-place ops such as
         `module.weight.zero_()`.
         """
-        # Sort by depth (stable) then name for deterministic order.
         if not hasattr(torch.nn.Module, "smart_apply"):
             # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function
             # to apply as we go down the graph
@@ -4242,10 +4232,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model, expanded_device_map, hf_quantizer)
 
-        # Now we read all the files to get a pointer on each physical weights
-        merged_state_dict = {}
-        all_pointer = set()
-
         if device_map is None:
             device_map = {"": "cpu"}
         keys = sorted(device_map.keys(), key=len, reverse=True)
@@ -4256,6 +4242,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_deepspeed_zero3_enabled() and not is_quantized:
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
         else:
+            all_pointer = set()
             if checkpoint_files is not None:
                 pattern = re.compile(r"(" + "|".join(map(re.escape, keys)) + r")")
                 if sharded_metadata is None:
@@ -4265,6 +4252,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 else:
                     k_v_iterator = sharded_metadata["weight_map"].items()
 
+                merged_state_dict = {}
                 for k, v in k_v_iterator:
                     match = pattern.match(k)
                     if match and match.group(1) != "":
@@ -4284,7 +4272,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 merged_state_dict = state_dict
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
-            start = time.perf_counter()
+
             missing_keys, unexpected_keys, mismatched_keys, misc = convert_and_load_state_dict_in_model(
                 model,
                 merged_state_dict,
@@ -4296,10 +4284,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 model.dtype_plan,
                 device_mesh,
             )
-            end = time.perf_counter()
 
-        for k in all_pointer:  # finally close all opened file pointers TODO async
-            k.__exit__(None, None, None)
+            # finally close all opened file pointers
+            for k in all_pointer:
+                k.__exit__(None, None, None)
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
@@ -4309,12 +4297,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(miss_and_mismatched, is_quantized)
-        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
-            missing_keys, unexpected_keys, False, model
-        )
+        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys, False)
 
-        # We make sure we TIE after _init_. We need the missing keys to remove the ones
-        # we do tie, and not random remove.
+        # We make sure we tie after _init_. We need the missing keys to remove the ones we do tie, and not random remove
         model.tie_weights(missing_keys)
 
         # Post-processing for tensor parallelism
@@ -4333,9 +4318,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 state_dict = model.state_dict()
                 for name in missing_keys:
                     param = state_dict[name]
-                    # If it is still on meta here, it means that it's a tied weight that will be tied later anyway -> skip it
-                    if param.device.type == "meta":
-                        continue
                     # Shard the param
                     shard_and_distribute_module(
                         model,
@@ -4348,7 +4330,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         device_mesh,
                     )
 
-        logger.warning(f"Loading the checkpoint files into the model took {end - start}")
         log_state_dict_report(
             model=model,
             pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -4597,7 +4578,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 p.__class__ = p._original_cls
 
     def _adjust_missing_and_unexpected_keys(
-        self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool, model
+        self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool
     ) -> tuple[set[str], set[str]]:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors.
