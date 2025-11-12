@@ -35,11 +35,11 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from ...utils.generic import check_model_inputs
 from .configuration_deepseek_ocr import (
     DeepseekOcrCLIPVisionConfig,
@@ -50,6 +50,42 @@ from .configuration_deepseek_ocr import (
 
 
 logger = logging.get_logger(__name__)
+
+
+class DeepseekOcrPatchEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, pixel_values):
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        if height % self.patch_size[0] != 0 or width % self.patch_size[1] != 0:
+            raise ValueError(
+                "Input height and width must be divisible by the patch size "
+                f"({self.patch_size[0]}x{self.patch_size[1]}). Received {height}x{width}."
+            )
+        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
+        return embeddings
 
 
 class DeepseekOcrPreTrainedModel(PreTrainedModel):
@@ -327,42 +363,6 @@ class DeepseekOcrVisionEncoderOutput(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
-class DeepseekOcrPatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self, pixel_values):
-        batch_size, num_channels, height, width = pixel_values.shape
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
-        if height % self.patch_size[0] != 0 or width % self.patch_size[1] != 0:
-            raise ValueError(
-                "Input height and width must be divisible by the patch size "
-                f"({self.patch_size[0]}x{self.patch_size[1]}). Received {height}x{width}."
-            )
-        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
-        return embeddings
-
-
 class DeepseekOcrMLPBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -561,6 +561,7 @@ class DeepseekOcrSamVisionEncoder(DeepseekOcrPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.image_size = config.image_size
+
         self.patch_embed = DeepseekOcrPatchEmbeddings(config)
 
         self.pos_embed = None
@@ -589,7 +590,6 @@ class DeepseekOcrSamVisionEncoder(DeepseekOcrPreTrainedModel):
         out_channels = config.out_channels
         downsample_channels = config.downsample_channels
 
-        # TODO move hardcoded values to config
         self.net_2 = nn.Conv2d(out_channels, downsample_channels[0], kernel_size=3, stride=2, padding=1, bias=False)
         self.net_3 = nn.Conv2d(
             downsample_channels[0], downsample_channels[1], kernel_size=3, stride=2, padding=1, bias=False
@@ -1676,12 +1676,11 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
     def get_image_features(
         self,
-        pixel_values: Optional[torch.FloatTensor],
-        image_sizes: Optional[torch.Tensor] = None,
-        image_spatial_crops: Optional[torch.Tensor] = None,
-        pixel_values_global: Optional[torch.FloatTensor] = None,
+        pixel_values_global: torch.FloatTensor,
         pixel_values_local: Optional[torch.FloatTensor] = None,
         num_local_crops: Optional[torch.LongTensor] = None,
+        image_sizes: Optional[torch.Tensor] = None,
+        image_spatial_crops: Optional[torch.Tensor] = None,
         vision_feature_layer: Optional[int] = None,
         vision_feature_select_strategy: Optional[str] = None,
     ):
@@ -1690,46 +1689,26 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
         image_feature_groups: list[list[torch.Tensor]] = []
 
-        if pixel_values_global is not None:
-            batch_size = pixel_values_global.shape[0]
-            device = pixel_values_global.device
-            if num_local_crops is None:
-                if image_spatial_crops is not None:
-                    num_local_crops = (image_spatial_crops[:, 0] * image_spatial_crops[:, 1]).to(dtype=torch.long)
-                else:
-                    num_local_crops = torch.zeros(batch_size, dtype=torch.long, device=device)
-
-            for batch_idx in range(batch_size):
-                patch_features = []
-                local_count = num_local_crops[batch_idx].item()
-
-                if local_count > 0 and pixel_values_local is not None and pixel_values_local.shape[1] >= local_count:
-                    local_pixels = pixel_values_local[batch_idx, :local_count]
-                    patch_features.extend(self._project_image_patches(local_pixels))
-
-                global_pixels = pixel_values_global[batch_idx, 0]
-                patch_features.extend(self._project_image_patches(global_pixels))
-
-                image_feature_groups.append(patch_features)
-        else:
-            if pixel_values is None:
-                raise ValueError("Pixel values must be provided.")
-
-            if pixel_values.dim() == 5:
-                batch_size = pixel_values.shape[0]
-                image_num_patches = [pixel_values.shape[1]] * batch_size
-                flat_pixels = pixel_values.view(-1, *pixel_values.shape[2:])
-            elif pixel_values.dim() == 4:
-                image_num_patches = [pixel_values.shape[0]]
-                flat_pixels = pixel_values
+        batch_size = pixel_values_global.shape[0]
+        device = pixel_values_global.device
+        if num_local_crops is None:
+            if image_spatial_crops is not None:
+                num_local_crops = (image_spatial_crops[:, 0] * image_spatial_crops[:, 1]).to(dtype=torch.long)
             else:
-                raise ValueError(f"pixel_values has shape {pixel_values.shape}, expected 4D or 5D")
+                num_local_crops = torch.zeros(batch_size, dtype=torch.long, device=device)
 
-            projected_patches = self._project_image_patches(flat_pixels)
-            offset = 0
-            for patch_count in image_num_patches:
-                image_feature_groups.append(projected_patches[offset : offset + patch_count])
-                offset += patch_count
+        for batch_idx in range(batch_size):
+            patch_features = []
+            local_count = num_local_crops[batch_idx].item()
+
+            if local_count > 0 and pixel_values_local is not None and pixel_values_local.shape[1] >= local_count:
+                local_pixels = pixel_values_local[batch_idx, :local_count]
+                patch_features.extend(self._project_image_patches(local_pixels))
+
+            global_pixels = pixel_values_global[batch_idx, 0]
+            patch_features.extend(self._project_image_patches(global_pixels))
+
+            image_feature_groups.append(patch_features)
 
         packed_features = self.pack_image_features(
             image_features=image_feature_groups,
@@ -1772,22 +1751,24 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values_global: Optional[torch.FloatTensor] = None,
+        pixel_values_local: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        pixel_values_local: Optional[torch.FloatTensor] = None,
-        pixel_values_global: Optional[torch.FloatTensor] = None,
         num_local_crops: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
-        r"""
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
+        """
+        Args:
+            pixel_values_global (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
+                Global view of images downsampled to 1024x1024 for processing by both SAM and CLIP encoders.
+            pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
+                High-resolution local crops (640x640) extracted from images for detailed OCR processing.
+            num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
+                Number of valid local crops for each image in the batch.
         """
         image_spatial_crop = kwargs.pop("image_spatial_crop", None)
         pixel_values_local = kwargs.pop("pixel_values_local", pixel_values_local)
@@ -1804,9 +1785,8 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         image_hidden_states = None
-        if pixel_values is not None and pixel_values.size(0) > 0 or pixel_values_global is not None:
+        if pixel_values_global is not None:
             image_features = self.get_image_features(
-                pixel_values=pixel_values,
                 image_sizes=image_sizes,
                 image_spatial_crops=image_spatial_crop if image_spatial_crop is not None else image_sizes,
                 pixel_values_global=pixel_values_global,
@@ -1940,60 +1920,42 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values_global: Optional[torch.FloatTensor] = None,
+        pixel_values_local: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        num_local_crops: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, DeepseekOcrCausalLMOutputWithPast]:
-        r"""
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, DeepseekOcrForConditionalGeneration
-
-        >>> model = DeepseekOcrForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-
-        >>> prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot (...)"
-        ```"""
+        """
+        Args:
+            pixel_values_global (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
+                Global view of images downsampled to 1024x1024 for processing by both SAM and CLIP encoders.
+            pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
+                High-resolution local crops (640x640) extracted from images for detailed OCR processing.
+            num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
+                Number of valid local crops for each image in the batch.
+        """
         image_spatial_crop = kwargs.pop("image_spatial_crop", None)
         if image_sizes is None and image_spatial_crop is not None:
             image_sizes = image_spatial_crop
 
         outputs = self.model(
             input_ids=input_ids,
-            pixel_values=pixel_values,
+            pixel_values_global=pixel_values_global,
+            pixel_values_local=pixel_values_local,
             image_sizes=image_sizes,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            num_local_crops=num_local_crops,
             cache_position=cache_position,
             image_spatial_crop=image_spatial_crop,
             **kwargs,
@@ -2023,9 +1985,8 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
         input_ids,
         past_key_values=None,
         inputs_embeds=None,
-        pixel_values=None,
-        pixel_values_local=None,
         pixel_values_global=None,
+        pixel_values_local=None,
         num_local_crops=None,
         image_sizes=None,
         image_attention_mask=None,
@@ -2047,11 +2008,10 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
         )
 
         if cache_position[0] == 0:
-            model_inputs["pixel_values"] = pixel_values
-            if pixel_values_local is not None:
-                model_inputs["pixel_values_local"] = pixel_values_local
             if pixel_values_global is not None:
                 model_inputs["pixel_values_global"] = pixel_values_global
+            if pixel_values_local is not None:
+                model_inputs["pixel_values_local"] = pixel_values_local
             if num_local_crops is not None:
                 model_inputs["num_local_crops"] = num_local_crops
             model_inputs["image_sizes"] = image_sizes

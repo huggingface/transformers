@@ -48,10 +48,26 @@ from ..llava_next.modeling_llava_next import (
     LlavaNextModel,
     LlavaNextModelOutputWithPast,
 )
-from ..sam.modeling_sam import SamVisionAttention, SamVisionEncoder, SamVisionNeck
+from ..sam.modeling_sam import SamPatchEmbeddings, SamVisionAttention, SamVisionEncoder, SamVisionNeck
 
 
 logger = logging.get_logger(__name__)
+
+
+class DeepseekOcrPatchEmbeddings(SamPatchEmbeddings):
+    def forward(self, pixel_values):
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        if height % self.patch_size[0] != 0 or width % self.patch_size[1] != 0:
+            raise ValueError(
+                "Input height and width must be divisible by the patch size "
+                f"({self.patch_size[0]}x{self.patch_size[1]}). Received {height}x{width}."
+            )
+        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
+        return embeddings
 
 
 class DeepseekOcrSamConfig(PreTrainedConfig):
@@ -470,7 +486,8 @@ class DeepseekOcrSamVisionEncoder(SamVisionEncoder):
         out_channels = config.out_channels
         downsample_channels = config.downsample_channels
 
-        # TODO move hardcoded values to config
+        self.patch_embed = DeepseekOcrPatchEmbeddings(config)
+
         self.net_2 = nn.Conv2d(out_channels, downsample_channels[0], kernel_size=3, stride=2, padding=1, bias=False)
         self.net_3 = nn.Conv2d(
             downsample_channels[0], downsample_channels[1], kernel_size=3, stride=2, padding=1, bias=False
@@ -1026,12 +1043,11 @@ class DeepseekOcrModel(LlavaNextModel):
 
     def get_image_features(
         self,
-        pixel_values: Optional[torch.FloatTensor],
-        image_sizes: Optional[torch.Tensor] = None,
-        image_spatial_crops: Optional[torch.Tensor] = None,
-        pixel_values_global: Optional[torch.FloatTensor] = None,
+        pixel_values_global: torch.FloatTensor,
         pixel_values_local: Optional[torch.FloatTensor] = None,
         num_local_crops: Optional[torch.LongTensor] = None,
+        image_sizes: Optional[torch.Tensor] = None,
+        image_spatial_crops: Optional[torch.Tensor] = None,
         vision_feature_layer: Optional[int] = None,
         vision_feature_select_strategy: Optional[str] = None,
     ):
@@ -1040,46 +1056,26 @@ class DeepseekOcrModel(LlavaNextModel):
 
         image_feature_groups: list[list[torch.Tensor]] = []
 
-        if pixel_values_global is not None:
-            batch_size = pixel_values_global.shape[0]
-            device = pixel_values_global.device
-            if num_local_crops is None:
-                if image_spatial_crops is not None:
-                    num_local_crops = (image_spatial_crops[:, 0] * image_spatial_crops[:, 1]).to(dtype=torch.long)
-                else:
-                    num_local_crops = torch.zeros(batch_size, dtype=torch.long, device=device)
-
-            for batch_idx in range(batch_size):
-                patch_features = []
-                local_count = num_local_crops[batch_idx].item()
-
-                if local_count > 0 and pixel_values_local is not None and pixel_values_local.shape[1] >= local_count:
-                    local_pixels = pixel_values_local[batch_idx, :local_count]
-                    patch_features.extend(self._project_image_patches(local_pixels))
-
-                global_pixels = pixel_values_global[batch_idx, 0]
-                patch_features.extend(self._project_image_patches(global_pixels))
-
-                image_feature_groups.append(patch_features)
-        else:
-            if pixel_values is None:
-                raise ValueError("Pixel values must be provided.")
-
-            if pixel_values.dim() == 5:
-                batch_size = pixel_values.shape[0]
-                image_num_patches = [pixel_values.shape[1]] * batch_size
-                flat_pixels = pixel_values.view(-1, *pixel_values.shape[2:])
-            elif pixel_values.dim() == 4:
-                image_num_patches = [pixel_values.shape[0]]
-                flat_pixels = pixel_values
+        batch_size = pixel_values_global.shape[0]
+        device = pixel_values_global.device
+        if num_local_crops is None:
+            if image_spatial_crops is not None:
+                num_local_crops = (image_spatial_crops[:, 0] * image_spatial_crops[:, 1]).to(dtype=torch.long)
             else:
-                raise ValueError(f"pixel_values has shape {pixel_values.shape}, expected 4D or 5D")
+                num_local_crops = torch.zeros(batch_size, dtype=torch.long, device=device)
 
-            projected_patches = self._project_image_patches(flat_pixels)
-            offset = 0
-            for patch_count in image_num_patches:
-                image_feature_groups.append(projected_patches[offset : offset + patch_count])
-                offset += patch_count
+        for batch_idx in range(batch_size):
+            patch_features = []
+            local_count = num_local_crops[batch_idx].item()
+
+            if local_count > 0 and pixel_values_local is not None and pixel_values_local.shape[1] >= local_count:
+                local_pixels = pixel_values_local[batch_idx, :local_count]
+                patch_features.extend(self._project_image_patches(local_pixels))
+
+            global_pixels = pixel_values_global[batch_idx, 0]
+            patch_features.extend(self._project_image_patches(global_pixels))
+
+            image_feature_groups.append(patch_features)
 
         packed_features = self.pack_image_features(
             image_features=image_feature_groups,
@@ -1097,17 +1093,25 @@ class DeepseekOcrModel(LlavaNextModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values_global: Optional[torch.FloatTensor] = None,
+        pixel_values_local: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        pixel_values_local: Optional[torch.FloatTensor] = None,
-        pixel_values_global: Optional[torch.FloatTensor] = None,
         num_local_crops: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
+        """
+        Args:
+            pixel_values_global (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
+                Global view of images downsampled to 1024x1024 for processing by both SAM and CLIP encoders.
+            pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
+                High-resolution local crops (640x640) extracted from images for detailed OCR processing.
+            num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
+                Number of valid local crops for each image in the batch.
+        """
         image_spatial_crop = kwargs.pop("image_spatial_crop", None)
         pixel_values_local = kwargs.pop("pixel_values_local", pixel_values_local)
         pixel_values_global = kwargs.pop("pixel_values_global", pixel_values_global)
@@ -1123,9 +1127,8 @@ class DeepseekOcrModel(LlavaNextModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         image_hidden_states = None
-        if pixel_values is not None and pixel_values.size(0) > 0 or pixel_values_global is not None:
+        if pixel_values_global is not None:
             image_features = self.get_image_features(
-                pixel_values=pixel_values,
                 image_sizes=image_sizes,
                 image_spatial_crops=image_spatial_crop if image_spatial_crop is not None else image_sizes,
                 pixel_values_global=pixel_values_global,
@@ -1179,29 +1182,42 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values_global: Optional[torch.FloatTensor] = None,
+        pixel_values_local: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        num_local_crops: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, DeepseekOcrCausalLMOutputWithPast]:
+        """
+        Args:
+            pixel_values_global (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
+                Global view of images downsampled to 1024x1024 for processing by both SAM and CLIP encoders.
+            pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
+                High-resolution local crops (640x640) extracted from images for detailed OCR processing.
+            num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
+                Number of valid local crops for each image in the batch.
+        """
         image_spatial_crop = kwargs.pop("image_spatial_crop", None)
         if image_sizes is None and image_spatial_crop is not None:
             image_sizes = image_spatial_crop
 
         outputs = self.model(
             input_ids=input_ids,
-            pixel_values=pixel_values,
+            pixel_values_global=pixel_values_global,
+            pixel_values_local=pixel_values_local,
             image_sizes=image_sizes,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            num_local_crops=num_local_crops,
             cache_position=cache_position,
             image_spatial_crop=image_spatial_crop,
             **kwargs,
@@ -1231,9 +1247,8 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
         input_ids,
         past_key_values=None,
         inputs_embeds=None,
-        pixel_values=None,
-        pixel_values_local=None,
         pixel_values_global=None,
+        pixel_values_local=None,
         num_local_crops=None,
         image_sizes=None,
         image_attention_mask=None,
@@ -1255,11 +1270,10 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
         )
 
         if cache_position[0] == 0:
-            model_inputs["pixel_values"] = pixel_values
-            if pixel_values_local is not None:
-                model_inputs["pixel_values_local"] = pixel_values_local
             if pixel_values_global is not None:
                 model_inputs["pixel_values_global"] = pixel_values_global
+            if pixel_values_local is not None:
+                model_inputs["pixel_values_local"] = pixel_values_local
             if num_local_crops is not None:
                 model_inputs["num_local_crops"] = num_local_crops
             model_inputs["image_sizes"] = image_sizes

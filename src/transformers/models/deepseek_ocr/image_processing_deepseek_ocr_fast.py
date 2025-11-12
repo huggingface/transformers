@@ -376,7 +376,6 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         images_tokens = [info["num_tokens"] for info in crop_infos]
 
         data = {
-            "pixel_values": pixel_values_global,
             "pixel_values_global": pixel_values_global,
             "pixel_values_local": pixel_values_local,
             "num_local_crops": num_local_crops,
