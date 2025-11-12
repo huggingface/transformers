@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from copy import deepcopy
+
 from .core_model_loading import Concatenate, MergeModulelist, WeightConverter
 from .utils import is_torch_available
 
-from copy import deepcopy
 
 if is_torch_available():
     import torch
@@ -125,9 +126,9 @@ def _build_checkpoint_conversion_mapping():
     return mapping
 
 
-
-
 _checkpoint_conversion_mapping_cache = None
+
+
 def get_checkpoint_conversion_mapping(model_type):
     global _checkpoint_conversion_mapping_cache
     _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()

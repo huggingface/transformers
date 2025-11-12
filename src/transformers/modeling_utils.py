@@ -4239,6 +4239,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
+            # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
+            missing_keys, unexpected_keys, mismatched_keys, misc = set(), set(), set(), set()
         else:
             all_pointer = set()
             if checkpoint_files is not None:
@@ -4576,13 +4578,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for name, p in list(self.named_parameters()) + list(self.named_buffers()):
             # We get back the original parameter that we stored in _original. This attribute was created when we initialized LoadedParam when loading the checkpoints.
             if hasattr(p, "_original"):
-                if '.' in name:
+                if "." in name:
                     module, name = name.rsplit(".", 1)
                     module = self.get_submodule(module)
                 else:
                     module = self
                 setattr(module, name, p._original)
-
 
     def _adjust_missing_and_unexpected_keys(
         self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool

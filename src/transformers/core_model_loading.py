@@ -705,11 +705,9 @@ def convert_and_load_state_dict_in_model(
                                 converter.distributed_operation,
                             )
 
-
                 except SkipLayer:
                     continue
             del group
-
 
     model.inverse_converters = inverse_converters
     thread_pool.shutdown(wait=False)
