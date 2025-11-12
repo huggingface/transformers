@@ -393,3 +393,9 @@ model = AutoModelForCausalLM.from_pretrained(
     "mistralai/Mistral-7B-v0.1", quantization_config=quant_config, device_map="auto"
 )
 ```
+
+## Continuous Batching
+
+When serving LLMs for inference, you may have multiple requests arriving at different times. Continuous Batching (CB) is a technique that groups incoming requests into batches to maximize GPU utilization and throughput.
+
+See the [Continuous Batching](./continuous_batching) guide for more details on how to use CB in transformers.

@@ -34,10 +34,6 @@ class AltCLIPProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("CLIPImageProcessor", "CLIPImageProcessorFast")
-    tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")
-
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
 
