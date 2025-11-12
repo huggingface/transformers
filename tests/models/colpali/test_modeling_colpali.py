@@ -205,7 +205,6 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertIsInstance(outputs, ColPaliForRetrievalOutput)
 
-
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )

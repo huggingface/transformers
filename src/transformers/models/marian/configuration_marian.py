@@ -154,8 +154,7 @@ class MarianConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.share_encoder_decoder_embeddings = share_encoder_decoder_embeddings
-        self.tie_encoder_decoder = True
+        self.share_encoder_decoder_embeddings = self.tie_encoder_decoder = share_encoder_decoder_embeddings
 
 
 __all__ = ["MarianConfig"]
