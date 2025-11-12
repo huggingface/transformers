@@ -27,21 +27,8 @@
 
 [[autodoc]] Glm46VProcessor
 
-## Glm46VVisionModel
-
-[[autodoc]] Glm46VVisionModel
-
-## Glm46VTextModel
-
-[[autodoc]] Glm46VTextModel
-    - forward
-
 ## Glm46VModel
 
 [[autodoc]] Glm46VModel
     - forward
 
-## Glm46VForConditionalGeneration
-
-[[autodoc]] Glm46VForConditionalGeneration
-    - forward
