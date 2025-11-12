@@ -53,6 +53,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("aria", "AriaModel"),
         ("aria_text", "AriaTextModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
+        ("audioflamingo3", "AudioFlamingo3ForConditionalGeneration"),
+        ("audioflamingo3_encoder", "AudioFlamingo3Encoder"),
         ("autoformer", "AutoformerModel"),
         ("aya_vision", "AyaVisionModel"),
         ("bamba", "BambaModel"),
@@ -446,6 +448,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
         ("albert", "AlbertForPreTraining"),
+        ("audioflamingo3", "AudioFlamingo3ForConditionalGeneration"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForPreTraining"),
         ("big_bird", "BigBirdForPreTraining"),
@@ -1162,6 +1165,7 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("audioflamingo3", "AudioFlamingo3ForConditionalGeneration"),
         ("bart", "BartForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("blenderbot", "BlenderbotForConditionalGeneration"),

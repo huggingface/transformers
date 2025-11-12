@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from .arcee import *
     from .aria import *
     from .audio_spectrogram_transformer import *
+    from .audioflamingo3 import *
     from .auto import *
     from .autoformer import *
     from .aya_vision import *

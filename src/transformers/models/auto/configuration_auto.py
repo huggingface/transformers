@@ -45,6 +45,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("aria", "AriaConfig"),
         ("aria_text", "AriaTextConfig"),
         ("audio-spectrogram-transformer", "ASTConfig"),
+        ("audioflamingo3", "AudioFlamingo3Config"),
+        ("audioflamingo3_encoder", "AudioFlamingo3EncoderConfig"),
         ("autoformer", "AutoformerConfig"),
         ("aya_vision", "AyaVisionConfig"),
         ("bamba", "BambaConfig"),
@@ -478,6 +480,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("aria", "Aria"),
         ("aria_text", "AriaText"),
         ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
+        ("audioflamingo3", "AudioFlamingo3"),
+        ("audioflamingo3_encoder", "AudioFlamingo3Encoder"),
         ("autoformer", "Autoformer"),
         ("aya_vision", "AyaVision"),
         ("bamba", "Bamba"),
@@ -962,6 +966,7 @@ DEPRECATED_MODELS = [
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
+        ("audioflamingo3_encoder", "audioflamingo3"),
         ("openai-gpt", "openai"),
         ("data2vec-audio", "data2vec"),
         ("data2vec-text", "data2vec"),
