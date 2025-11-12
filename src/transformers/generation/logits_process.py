@@ -252,6 +252,15 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
             containing prefilled `<think>` markup. Any unmatched `<think>` in this suffix is treated as an active block
             when generation starts. Only the first unmatched block inside this suffix is replayed, so nested `<think>`
             markup earlier in the prompt is intentionally ignored to keep the lookback bounded.
+
+    Note:
+        Only the tokens generated after the prompt boundary count toward `max_thinking_tokens`. Prompt-prefilled
+        reasoning markup can activate the first `<think>` block, but its tokens are not retroactively charged against
+        the budget, preventing an immediate forced `</think>` before the model produces any new output.
+        For predictable behavior the prompt (or any cached conversation history) should avoid pre-inserting `<think>`
+        or `</think>` tokens, since they could be treated as part of the active block and can trigger premature budget
+        exhaustion or forced closures. The `prompt_prefilled_suffix_length` lookback (default `3`) mitigates this by
+        ignoring older history, but tokens near the boundary are still honored.
     """
 
     def __init__(
@@ -363,6 +372,7 @@ class MaxThinkingTokensLogitsProcessor(LogitsProcessor):
                 continue
 
             # Only count tokens that are inside the open `<think>` block and were generated after the prompt
+            # boundary. Prompt-prefilled reasoning text does not retroactively consume the budget.
             count_start = max(first_open_position + 1, batch_prompt_length)
 
             tokens_inside_block = sequence.shape[-1] - count_start
