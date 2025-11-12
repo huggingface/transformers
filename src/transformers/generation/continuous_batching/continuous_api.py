@@ -708,35 +708,6 @@ class ContinuousBatchProcessor:
         tokens = next_tokens.size(1)  # Get seq_len dimension
         self.output_ids[:, :tokens].copy_(next_tokens)
 
-    def close(self):
-        self.cache.close()
-        self.requests_in_batch.clear()
-
-        if self._graphs is not None:
-            self._graphs.clear()
-
-        del self.input_ids
-        del self.position_ids
-        del self.cumulative_seqlens_q
-        del self.logits_indices
-        del self.output_ids
-
-        self.cumulative_seqlens_k.clear()
-
-        if self.attention_mask is not None:
-            self.attention_mask.clear()
-            self.attention_mask = None
-
-        self.write_index_storage.clear()
-        self.read_index_storage.clear()
-
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-            import gc
-
-            gc.collect()
-            torch.cuda.empty_cache()
-
 
 # Manager Class (User Interface)
 @attach_tracer()
@@ -855,9 +826,7 @@ class ContinuousBatchingManager:
         if block:
             self.join(stop_trigger_time, timeout)
 
-        if self.batch_processor is not None:
-            self.batch_processor.close()
-            self.batch_processor = None  # NOTE: this is enough to clear memory after stop, still calling `close()` because it calls torch cache intrinsics
+        self.batch_processor = None
 
     def join(self, stop_trigger_time: float, timeout: Optional[float] = None) -> None:
         """Wait for the background thread to finish.

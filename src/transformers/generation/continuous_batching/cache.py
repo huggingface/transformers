@@ -189,7 +189,7 @@ class PagedAttentionCache:
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=getattr(generation_config, "num_blocks", None),
             max_batch_tokens=getattr(generation_config, "max_batch_tokens", None),
-            max_memory_percent=getattr(generation_config, "max_memory", 0.9),
+            max_memory_percent=getattr(generation_config, "max_memory", 0.8),
             cache_dtype=self.dtype,
         )
 
@@ -334,14 +334,6 @@ class PagedAttentionCache:
 
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
-
-    @traced
-    def close(self):
-        self.key_cache.clear()
-        self.value_cache.clear()
-
-        torch._dynamo.reset()
-        torch._dynamo.reset_code_caches()
 
 
 # TODO: rework computation with the groups and their sizes
