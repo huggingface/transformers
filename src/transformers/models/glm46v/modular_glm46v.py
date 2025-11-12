@@ -19,6 +19,8 @@ import numpy as np
 
 from ...video_utils import VideoMetadata
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig
+from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
+from ..glm4v.image_processing_glm4v_fast import Glm4vImageProcessorFast
 from ..glm4v.modeling_glm4v import Glm4vModel, Glm4vPreTrainedModel, Glm4vTextModel
 from ..glm4v.processing_glm4v import Glm4vProcessor
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
@@ -47,6 +49,14 @@ class Glm46VModel(Glm4vModel):
 class Glm46VProcessor(Glm4vProcessor):
     def replace_frame_token_id(self, timestamp_sec):
         return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec:.1f} seconds"
+
+
+class Glm46VImageProcessor(Glm4vImageProcessor):
+    pass
+
+
+class Glm46VImageProcessorFast(Glm4vImageProcessorFast):
+    pass
 
 
 class Glm46VVideoProcessor(Glm4vVideoProcessor):
@@ -124,5 +134,7 @@ __all__ = [
     "Glm46VPreTrainedModel",
     "Glm46VTextModel",
     "Glm46VProcessor",
+    "Glm46VImageProcessor",
+    "Glm46VImageProcessorFast",
     "Glm46VVideoProcessor",
 ]

@@ -26,8 +26,8 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.nn import LayerNorm
+from torchvision.transforms.v2 import functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache

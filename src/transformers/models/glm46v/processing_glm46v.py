@@ -23,7 +23,7 @@ from typing import Optional, Union
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput

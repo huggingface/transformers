@@ -24,7 +24,7 @@ from typing import Optional, Union
 import numpy as np
 import torch
 
-from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
