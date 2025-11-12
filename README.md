@@ -218,11 +218,19 @@ pipeline(
     - Low barrier to entry for researchers, engineers, and developers.
     - Few user-facing abstractions with just three classes to learn.
     - A unified API for using all our pretrained models.
+    -
 
 1. Lower compute costs, smaller carbon footprint:
     - Share trained models instead of training from scratch.
     - Reduce compute time and production costs.
     - Dozens of model architectures with 1M+ pretrained checkpoints across all modalities.
+
+1. Flexibility and Interoperability
+    -Easily switch between major deep learning frameworks like PyTorch, TensorFlow, and JAX using the same model weights and API.
+
+1. Customization: 
+    - Provides the foundation for easy fine-tuning and adapting models to specific downstream tasks.
+
 
 1. Choose the right framework for every part of a models lifetime:
     - Train state-of-the-art models in 3 lines of code.
