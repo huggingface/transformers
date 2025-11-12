@@ -373,7 +373,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                     if c is not None:
                         if param_val == "weight":
                             # we can apply the module config directly
-                            quantize_(module, c, lambda x, fqn: True)
+                            quantize_(module, c, (lambda x, fqn: True))
                         else:
                             # need to apply to custom param name
                             custom_param_fqn_config = FqnToConfig({param_val: c})
