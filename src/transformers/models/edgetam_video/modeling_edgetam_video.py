@@ -1651,7 +1651,7 @@ class EdgeTamVideoPromptEncoder(nn.Module):
         corner_embedding = self.shared_embedding(coords, (self.input_image_size, self.input_image_size))
         corner_embedding[:, :, 0, :] += self.point_embed.weight[2]
         corner_embedding[:, :, 1, :] += self.point_embed.weight[3]
-        corner_embedding[:, :, 2, :] = self.not_a_point_embed.weight.clone().expand_as(corner_embedding[:, :, 2, :])
+        corner_embedding[:, :, 2, :] = self.not_a_point_embed.weight.expand_as(corner_embedding[:, :, 2, :])
         return corner_embedding
 
     def forward(
