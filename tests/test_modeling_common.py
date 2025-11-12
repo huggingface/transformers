@@ -735,7 +735,9 @@ class ModelTesterMixin:
 
             if isinstance(first, tuple) and isinstance(second, tuple):
                 for tensor1, tensor2 in zip(first, second):
-                    torch.testing.assert_close(tensor1, tensor2, msg="Running save/load and forward yields different results")
+                    torch.testing.assert_close(
+                        tensor1, tensor2, msg="Running save/load and forward yields different results"
+                    )
             else:
                 torch.testing.assert_close(first, second, msg="Running save/load and forward yields different results")
 

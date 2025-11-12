@@ -31,10 +31,10 @@ from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
+from itertools import cycle
 from threading import Thread
 from typing import Any, Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
-from itertools import cycle
 
 import torch
 from huggingface_hub import split_torch_state_dict_into_shards
@@ -131,7 +131,6 @@ if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         extract_model_from_parallel,
-        offload_weight,
     )
     from accelerate.utils.modeling import get_state_dict_from_offload
 
@@ -534,169 +533,11 @@ def _find_identical(tensors: list[set[str]], state_dict: dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def _infer_parameter_dtype(
-    model: "PreTrainedModel",
-    param_name: str,
-    empty_param: torch.Tensor,
-    hf_quantizer: Optional[HfQuantizer] = None,
-) -> Union[bool, Optional[torch.dtype]]:
-    try:
-        old_param = model.get_parameter_or_buffer(param_name)
-    except Exception as e:
-        if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
-            QuantizationMethod.HQQ,
-            QuantizationMethod.QUARK,
-            QuantizationMethod.MXFP4,
-            QuantizationMethod.BITS_AND_BYTES,
-        }:
-            return True, None
-        else:
-            raise e
-    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
-    # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
-    # in int/uint/bool and not cast them.
-    casting_dtype = None
-    is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
-    if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
-        # dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
-        if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, param_name):
-            casting_dtype = model.config._pre_quantization_dtype
-        else:
-            casting_dtype = old_param.dtype
-    return old_param is not None and old_param.is_contiguous(), casting_dtype
-
-
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
     """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
     module, param_type = get_module_from_name(model, param_name)
     # This will check potential shape mismatch if skipped before
     module.load_state_dict({param_type: tensor}, strict=False, assign=True)
-
-
-@torch.no_grad()
-def _load_state_dict_into_meta_model(
-    model: "PreTrainedModel",
-    state_dict: dict,
-    shard_file: str,
-    reverse_renaming_mapping: dict[str, str],
-    device_map: Optional[dict] = None,
-    disk_offload_folder: Optional[str] = None,
-    disk_offload_index: Optional[dict] = None,
-    hf_quantizer: Optional[HfQuantizer] = None,
-    device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
-) -> tuple[Optional[dict], Optional[dict]]:
-    """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
-    device in order to easily infer the shapes and dtypes that they will have. Then proper parameters are then loaded
-    from `shard_file`, which is the actual state dict file on disk.
-    This function takes care of correctly casting dtypes, devices, and sharding tensors in case of tensor parallelism.
-    """
-    tensor_device = "cpu"
-    if device_map is not None and device_map.get("", None) is not None:
-        if device_map[""] not in ("cpu", torch.device("cpu")):
-            tensor_device = device_map[""].index if isinstance(device_map[""], torch.device) else device_map[""]
-    if device_map is not None:
-        device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
-
-    is_quantized = hf_quantizer is not None
-    is_safetensors = shard_file.endswith(".safetensors")
-    is_meta_state_dict = is_safetensors
-    file_pointer = safe_open(shard_file, framework="pt", device=tensor_device) if is_meta_state_dict else None
-    params_to_load = list(state_dict.keys())
-
-    for param_name in params_to_load:
-        empty_param = state_dict[param_name]
-        # we need to use serialized_param_name as file pointer is untouched
-        if is_meta_state_dict:
-            # This is the name of the parameter as it appears on disk file
-            serialized_param_name = reverse_renaming_mapping[param_name]
-            param = file_pointer.get_slice(serialized_param_name)
-        else:
-            param = empty_param.to(tensor_device)  # It is actually not empty!
-        to_contiguous, casting_dtype = _infer_parameter_dtype(model, param_name, empty_param, hf_quantizer)
-
-        if device_mesh is not None:
-            if not is_quantized or not hf_quantizer.param_needs_quantization(model, param_name):
-                # In this case, the param is already on the correct device!
-                shard_and_distribute_module(
-                    model,
-                    param,
-                    empty_param,
-                    param_name,
-                    casting_dtype,
-                    to_contiguous,
-                    device_mesh.get_local_rank(),
-                    device_mesh,
-                )
-            else:
-                # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param
-                sharding_kwargs = {
-                    "empty_param": empty_param,
-                    "casting_dtype": casting_dtype,
-                    "to_contiguous": to_contiguous,
-                    "rank": device_mesh.get_local_rank(),
-                    "device_mesh": device_mesh,
-                }
-                hf_quantizer.create_quantized_param(
-                    model,
-                    param,
-                    param_name,
-                    device_mesh.get_local_rank(),
-                    **sharding_kwargs,
-                )
-        else:
-            param = param[...]
-            if casting_dtype is not None:
-                param = param.to(casting_dtype)
-            if to_contiguous:
-                param = param.contiguous()
-
-            if device_map is None:
-                param_device = "cpu"
-            else:
-                module_layer = re.search(device_map_regex, param_name)
-                if not module_layer:
-                    raise ValueError(f"{param_name} doesn't have any device set.")
-                else:
-                    param_device = device_map[module_layer.group()]
-
-            if param_device == "disk":
-                if not is_safetensors:
-                    disk_offload_index = offload_weight(param, param_name, disk_offload_folder, disk_offload_index)
-            elif not is_quantized or not hf_quantizer.param_needs_quantization(model, param_name):
-                if is_fsdp_enabled():
-                    param_device = "cpu" if is_local_dist_rank_0() else "meta"
-
-                _load_parameter_into_model(model, param_name, param.to(param_device))
-
-            else:
-                # TODO naming is stupid it loads it as well
-                hf_quantizer.create_quantized_param(model, param, param_name, param_device)
-
-                # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
-                # and then cast it to CPU to avoid excessive memory usage on each GPU
-                # in comparison to the sharded model across GPUs.
-                if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                    param_name = hf_quantizer.get_param_name(param_name)
-                    module, param_type = get_module_from_name(model, param_name)
-                    value = getattr(module, param_type)
-                    # We need to wait until the quantized value is created
-                    if value.device.type == "meta":
-                        continue
-                    val_kwargs = value.__dict__
-                    if not value.is_floating_point():
-                        val_kwargs["requires_grad"] = False
-                    device = "meta" if is_fsdp_enabled() and not is_local_dist_rank_0() else "cpu"
-                    value = type(value)(value.data.to(device), **val_kwargs)
-                    setattr(module, param_type, value)
-
-        # Remove the param from the state dict if it was not loaded on the fly to avoid wasting memory
-        if not is_meta_state_dict:
-            del state_dict[param_name]
-
-    if file_pointer is not None:
-        file_pointer.__exit__(None, None, None)
-
-    return disk_offload_index
 
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:

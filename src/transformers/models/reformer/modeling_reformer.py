@@ -2141,7 +2141,6 @@ class ReformerModel(ReformerPreTrainedModel):
     """
 )
 class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
-
     def __init__(self, config):
         super().__init__(config)
         assert config.is_decoder, "If you want to use `ReformerModelWithLMHead` make sure that `is_decoder=True`."
@@ -2276,7 +2275,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class ReformerForMaskedLM(ReformerPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         assert not config.is_decoder, (

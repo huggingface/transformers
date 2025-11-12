@@ -158,5 +158,4 @@ class MarianConfig(PreTrainedConfig):
         self.tie_encoder_decoder = True
 
 
-
 __all__ = ["MarianConfig"]

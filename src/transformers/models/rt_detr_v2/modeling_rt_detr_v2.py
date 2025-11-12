@@ -486,7 +486,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            if not getattr(module.sampling_offsets.bias, "_is_hf_initialized", False) :
+            if not getattr(module.sampling_offsets.bias, "_is_hf_initialized", False):
                 module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
             nn.init.constant_(module.attention_weights.weight, 0.0)
             nn.init.constant_(module.attention_weights.bias, 0.0)
@@ -1812,11 +1812,12 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
+
     def __init__(self, config: RTDetrV2Config):
         super().__init__(config)
         # RTDETR encoder-decoder model
         self.model = RTDetrV2Model(config)
-        self.model.decoder.class_embed =  nn.ModuleList(
+        self.model.decoder.class_embed = nn.ModuleList(
             [torch.nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
         )
         self.model.decoder.bbox_embed = nn.ModuleList(
