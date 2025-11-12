@@ -2287,7 +2287,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         elif isinstance(module, nn.Embedding):
             if getattr(module, "weight", None) is not None:
                 module.weight.normal_(mean=0.0, std=std)
-            if getattr(self.config, "pad_token_id", None) is not None:
+            if getattr(self.config, "pad_token_id", None) is not None and self.config.pad_token_id < module.weight.size(0):
                 module.weight[self.config.pad_token_id].zero_()
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
