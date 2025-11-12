@@ -20,9 +20,13 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn as nn
 
-from ...cache_utils import DynamicCache, EncoderDecoderCache
+from ...cache_utils import DynamicCache, StaticCache, EncoderDecoderCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
+from ...generation import (
+    GenerationConfig,
+    GenerationMode,
+    GenerationMixin
+)
 from ...masking_utils import and_masks, create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -63,7 +67,6 @@ from ..t5gemma.modeling_t5gemma import (
     T5GemmaEncoderLayer,
     T5GemmaLMHead,
     bidirectional_mask_function,
-    make_default_2d_attention_mask,
 )
 
 
@@ -72,6 +75,70 @@ logger = logging.get_logger(__name__)
 
 class T5Gemma2ModuleConfig(Gemma3TextConfig):
     model_type = "t5gemma2_module"
+
+
+class T5Gemma2VisionConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to cover vision-related processing in T5Gemma 2.
+    
+    It is used to instantiate an T5Gemma2Vision model, defining the vision preprocessing logic, including siglip features and
+    multi-modal projection.
+    
+    Args:
+        siglip_config (`Union[SiglipVisionConfig, dict]`, optional, *optional*):
+            Configuration for the vision encoder.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for attention.
+        mm_tokens_per_image (`int`, *optional*, defaults to 256):
+            The number of tokens per image embedding.
+        boi_token_index (`int`, *optional*, defaults to 255999):
+            The begin-of-image token index to wrap the image prompt.
+        eoi_token_index (`int`, *optional*, defaults to 256000):
+            The end-of-image token index to wrap the image prompt.
+        image_token_index (`int`, *optional*, defaults to 256001):
+            The image token index to encode the image prompt. Defaults to 256001, which is right after the eoi_token_index.
+            Note this is different from Gemma 3.
+        hidden_size (`int`, *optional*, defaults to 768):
+            The hidden size of the model.
+    """
+    model_type = "t5gemma2_vision"
+
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "boi_token_id": "boi_token_index",
+        "eoi_token_id": "eoi_token_index",
+    }
+
+    def __init__(
+        self,
+        siglip_config: Optional[Union[SiglipVisionConfig, dict[str, Any]]] = None,
+        attention_dropout: float = 0.0,
+        mm_tokens_per_image: int = 256,
+        boi_token_index: int = 255_999,
+        eoi_token_index: int = 256_000,
+        image_token_index: int = 256_001,
+        hidden_size: int = 768,
+        **kwargs,
+    ):
+        if isinstance(siglip_config, dict):
+            siglip_config = SiglipVisionConfig(**siglip_config)
+        elif siglip_config is None:
+            siglip_config = SiglipVisionConfig()
+            logger.info("siglip_config is None, using default SiglipVisionConfig vision config.")
+        else:
+            if not isinstance(siglip_config, SiglipVisionConfig):
+                raise ValueError(f"{type(siglip_config)} is not supported.")
+
+        siglip_config.attention_dropout = attention_dropout
+        self.siglip_config = siglip_config
+
+        self.mm_tokens_per_image = mm_tokens_per_image
+        self.boi_token_index = boi_token_index
+        self.eoi_token_index = eoi_token_index
+        self.image_token_index = image_token_index
+        self.hidden_size = hidden_size
+
+        super().__init__(**kwargs)
 
 
 class T5Gemma2Config(PreTrainedConfig):
@@ -88,7 +155,7 @@ class T5Gemma2Config(PreTrainedConfig):
             Configuration for the encoder.
         decoder (`Union[T5Gemma2ModuleConfig, dict]`, optional, *optional*):
             Configuration for the decoder.
-        vision_config (`Union[SiglipVisionConfig, dict]`, optional, *optional*):
+        vision_config (`Union[T5Gemma2VisionConfig, dict]`, optional, *optional*):
             Configuration for the vision encoder.
         is_encoder_decoder (bool, optional, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
@@ -98,21 +165,10 @@ class T5Gemma2Config(PreTrainedConfig):
             The dropout ratio for attention.
         classifier_dropout_rate (`float`, *optional*, defaults to 0.0):
             The dropout ratio for classifier (following T5).
-        mm_tokens_per_image (`int`, *optional*, defaults to 256):
-            The number of tokens per image embedding.
-        boi_token_index (`int`, *optional*, defaults to 255999):
-            The begin-of-image token index to wrap the image prompt.
-        eoi_token_index (`int`, *optional*, defaults to 256000):
-            The end-of-image token index to wrap the image prompt.
-        image_token_index (`int`, *optional*, defaults to 256001):
-            The image token index to encode the image prompt. Defaults to 256001, which is right after the eoi_token_index.
-            Note this is different from Gemma 3.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         vocab_size (`int`, *optional*, defaults to 262144):
             Vocabulary size of the T5Gemma2 model (the same as Gemma 3).
-        kwargs (additional keyword arguments, optional, *optional*):
-            Will be passed to the PreTrainedConfig base class.
     ```python
     >>> from transformers import T5Gemma2Config, T5Gemma2Model
     >>> t5gemma2_config = T5Gemma2Config.from_pretrained("google/t5gemma-270m-270m")
@@ -150,25 +206,16 @@ class T5Gemma2Config(PreTrainedConfig):
         "decoder.layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "decoder.norm": (["hidden_states"], ["hidden_states"]),
     }
-    attribute_map = {
-        "image_token_id": "image_token_index",
-        "boi_token_id": "boi_token_index",
-        "eoi_token_id": "eoi_token_index",
-    }
 
     def __init__(
         self,
         encoder: Optional[Union[T5Gemma2ModuleConfig, dict[str, Any]]] = None,
         decoder: Optional[Union[T5Gemma2ModuleConfig, dict[str, Any]]] = None,
-        vision_config: Optional[Union[SiglipVisionConfig, dict[str, Any]]] = None,
+        vision_config: Optional[Union[T5Gemma2VisionConfig, dict[str, Any]]] = None,
         is_encoder_decoder: bool = True,
         dropout_rate: float = 0.0,
         attention_dropout: float = 0.0,
         classifier_dropout_rate: float = 0.0,
-        mm_tokens_per_image: int = 256,
-        boi_token_index: int = 255_999,
-        eoi_token_index: int = 256_000,
-        image_token_index: int = 256_001,
         initializer_range: float = 0.02,
         vocab_size: int = 262_144,
         **kwargs,
@@ -192,12 +239,12 @@ class T5Gemma2Config(PreTrainedConfig):
                 raise ValueError(f"{type(decoder)} is not supported.")
 
         if isinstance(vision_config, dict):
-            vision_config = SiglipVisionConfig(**vision_config)
+            vision_config = T5Gemma2VisionConfig(**vision_config)
         elif vision_config is None:
-            vision_config = SiglipVisionConfig()
-            logger.info("vision_config is None, using default SiglipVisionConfig vision config.")
+            vision_config = T5Gemma2VisionConfig()
+            logger.info("vision_config is None, using default T5Gemma2VisionConfig vision config.")
         else:
-            if not isinstance(vision_config, SiglipVisionConfig):
+            if not isinstance(vision_config, T5Gemma2VisionConfig):
                 raise ValueError(f"{type(vision_config)} is not supported.")
 
         if encoder.hidden_size != decoder.hidden_size:
@@ -217,37 +264,34 @@ class T5Gemma2Config(PreTrainedConfig):
 
         encoder = T5Gemma2ModuleConfig(**encoder.to_dict())
         decoder = T5Gemma2ModuleConfig(**decoder.to_dict())
-        vision_config = SiglipVisionConfig(**vision_config.to_dict())
+        vision_config = T5Gemma2VisionConfig(**vision_config.to_dict())
 
-        encoder.is_decoder = False
+        # Encoder.
         encoder.dropout_rate = dropout_rate
         encoder.attention_dropout = attention_dropout
         self.encoder = encoder
 
-        decoder.is_decoder = True
-        decoder.use_cache = True
+        # Decoder.
         decoder.dropout_rate = dropout_rate
         decoder.attention_dropout = attention_dropout
         self.decoder = decoder
 
+        # Vision encoder.
+        vision_config.hidden_size = encoder.hidden_size
+        vision_config.siglip_config.attention_dropout = attention_dropout
         self.vision_config = vision_config
 
-        for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id", "use_cache"]:
+        for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id"]:
             if special_token_key not in kwargs:
                 kwargs[special_token_key] = getattr(decoder, special_token_key)
 
         super().__init__(**kwargs)
 
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.boi_token_index = boi_token_index
-        self.eoi_token_index = eoi_token_index
-        self.image_token_index = image_token_index
-        self.initializer_range = initializer_range
-
         self.is_encoder_decoder = is_encoder_decoder
         self.dropout_rate = dropout_rate
         self.attention_dropout = attention_dropout
         self.classifier_dropout_rate = classifier_dropout_rate
+        self.initializer_range = initializer_range
 
         # Used in pipeline generation.
         self.vocab_size = vocab_size
@@ -260,13 +304,15 @@ class T5Gemma2Config(PreTrainedConfig):
             "dropout_rate",
             "attention_dropout",
             "vocab_size",
+            "dtype",
         ]
 
         if key in shared_attr_with_submodules:
             setattr(self.encoder, key, value)
             setattr(self.decoder, key, value)
-            if key == "_attn_implementation":
-                self.vision_config._attn_implementation = value
+            if key in ["_attn_implementation", "attention_dropout", "dtype"]:
+                setattr(self.vision_config, key, value)
+                setattr(self.vision_config.siglip_config, key, value)
         super().__setattr__(key, value)
 
 
@@ -363,11 +409,6 @@ class T5Gemma2MergedAttention(Gemma3Attention):
             cross_key_states = self.k_norm(cross_key_states)
 
             if past_key_values is not None:
-                # Handle sliding window for cross-attention: convert the window size to the input size.
-                if len(cross_attention_cache.layers) > self.layer_idx and hasattr(
-                    cross_attention_cache.layers[self.layer_idx], "sliding_window"
-                ):
-                    cross_attention_cache.layers[self.layer_idx].sliding_window = cross_key_states.shape[2] + 1
                 cross_key_states, cross_value_states = cross_attention_cache.update(
                     cross_key_states, cross_value_states, self.layer_idx
                 )
@@ -411,8 +452,6 @@ class T5Gemma2MergedAttention(Gemma3Attention):
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
-            # merged attention is not causal or sliding window
-            sliding_window=None,
             is_causal=False,
             **kwargs,
         )
@@ -512,21 +551,34 @@ class T5Gemma2ClassificationHead(T5GemmaClassificationHead):
 
 
 class T5Gemma2MultiModalProjector(Gemma3MultiModalProjector):
-    def __init__(self, config: T5Gemma2Config):
-        super().__init__()
+    def __init__(self, config: T5Gemma2VisionConfig):
+        super().__init__(config)
 
         self.mm_input_projection_weight = nn.Parameter(
-            torch.zeros(config.vision_config.hidden_size, config.encoder.hidden_size)
+            torch.zeros(config.siglip_config.hidden_size, config.hidden_size)
         )
-
         self.mm_soft_emb_norm = T5Gemma2RMSNorm(
-            config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps
+            config.siglip_config.hidden_size, eps=config.siglip_config.layer_norm_eps
         )
+        self.patches_per_image = int(config.siglip_config.image_size // config.siglip_config.patch_size)
 
-        self.patches_per_image = int(config.vision_config.image_size // config.vision_config.patch_size)
-        self.tokens_per_side = int(config.mm_tokens_per_image**0.5)
-        self.kernel_size = self.patches_per_image // self.tokens_per_side
-        self.avg_pool = nn.AvgPool2d(kernel_size=self.kernel_size, stride=self.kernel_size)
+
+
+class T5Gemma2VisionEncoder(nn.Module):
+    def __init__(self, config: T5Gemma2VisionConfig):
+        super().__init__()
+        self.config = config
+
+        self.vision_tower = AutoModel.from_config(config=config.siglip_config)
+        self.multi_modal_projector = T5Gemma2MultiModalProjector(config)
+
+    def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        """Convert pixel image to image features via the encoder and projector."""
+        # pixel_values: (batch_size, channels, height, width)
+        # image_features: Image feature tensor of shape (num_images, image_length, embed_dim).
+        vision_outputs = self.vision_tower(pixel_values=pixel_values).last_hidden_state
+        image_features = self.multi_modal_projector(vision_outputs)
+        return image_features
 
 
 class T5Gemma2TextScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
@@ -625,14 +677,17 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         self,
         config: T5Gemma2ModuleConfig,
         eoi_token_index: int = 256_000,
-        pixel2feature_preprocessor_fn: Optional[Callable] = None,
+        vision_config: Optional[T5Gemma2VisionConfig] = None,
     ):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        # preprocessor for raw images pixel values: injected from outside.
-        self.pixel2feature_preprocessor_fn = pixel2feature_preprocessor_fn
+        # setup vision encoder
+        if vision_config is not None:
+            self.vision_encoder = T5Gemma2VisionEncoder(vision_config)
+        else:
+            self.vision_encoder = None
 
         self.embed_tokens = T5Gemma2TextScaledWordEmbedding(
             config.vocab_size,
@@ -653,6 +708,55 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_image_placeholder_mask(
+        self,
+        input_ids: Optional[torch.LongTensor],
+        inputs_embeds: Optional[torch.FloatTensor],
+        image_features: torch.FloatTensor,
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        image_token_id = self.vision_encoder.config.image_token_id
+        if input_ids is None:
+            if inputs_embeds is None:
+                raise ValueError("Either `input_ids` or `inputs_embeds` has to be provided.")
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
+
+    def preprocess_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        input_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+    ):
+        """Convert pixel images to image features and merge into input embeds."""
+        if self.vision_encoder is None:
+            raise ValueError("Vision tower is not initialized in the encoder.")
+        image_features = self.vision_encoder.get_image_features(pixel_values)
+        image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+
+        image_mask = self.get_image_placeholder_mask(
+            input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+        )
+
+        inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
+        return inputs_embeds
+
     @check_model_inputs()
     @auto_docstring
     def forward(
@@ -669,7 +773,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
             Pixel values to be processed by the image encoder to extract image features.
         """
-        # Part of Gemma 3 processor output but not used by t5gemma 2.
+        # Unused for processor compatibility kept in signature.
         del token_type_ids
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -681,18 +785,12 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            if self.pixel2feature_preprocessor_fn is None:
-                raise ValueError("`pixel2feature_preprocessor_fn` has to be provided to process `pixel_values`.")
-            image_features, image_mask = self.pixel2feature_preprocessor_fn(pixel_values, input_ids, inputs_embeds)
-
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
+            inputs_embeds = self.preprocess_image_features(
+                pixel_values, input_ids=input_ids, inputs_embeds=inputs_embeds
+            )
 
         if position_ids is None:
             position_ids = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
-
-        if attention_mask is None:
-            attention_mask = make_default_2d_attention_mask(input_ids, inputs_embeds, self.config.pad_token_id)
 
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
             mask_kwargs = {
@@ -726,8 +824,6 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         hidden_states = self.dropout(hidden_states)
 
         for layer_module in self.layers[: self.config.num_hidden_layers]:
-            if not isinstance(layer_module, T5Gemma2EncoderLayer):
-                raise ValueError(f"Expected T5Gemma2EncoderLayer, but got {type(layer_module)}.")
             hidden_states = layer_module(
                 hidden_states,
                 position_embeddings[layer_module.attention_type],
@@ -750,8 +846,13 @@ class T5Gemma2Decoder(T5Gemma2Encoder):
         "hidden_states": T5Gemma2DecoderLayer,
     }
 
-    def __init__(self, config: T5Gemma2ModuleConfig, shared_embedding: T5Gemma2TextScaledWordEmbedding):
-        super().__init__(config, shared_embedding)
+    def __init__(
+            self,
+            config: T5Gemma2ModuleConfig,
+            eoi_token_index: int = 256_000,
+            vision_config: Optional[T5Gemma2VisionConfig] = None
+    ):
+        super().__init__(config, eoi_token_index, vision_config)
         self.layers = nn.ModuleList(
             [T5Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -782,7 +883,11 @@ class T5Gemma2Decoder(T5Gemma2Encoder):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if not self.training and use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+            cross_attn_config = copy.deepcopy(self.config)
+            del cross_attn_config.layer_types
+            del cross_attn_config.sliding_window
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=cross_attn_config))
+
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -791,9 +896,6 @@ class T5Gemma2Decoder(T5Gemma2Encoder):
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-
-        if attention_mask is None and past_key_values is None:
-            attention_mask = make_default_2d_attention_mask(input_ids, inputs_embeds, self.config.pad_token_id)
 
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
             mask_kwargs = {
@@ -840,8 +942,6 @@ class T5Gemma2Decoder(T5Gemma2Encoder):
         hidden_states = self.dropout(hidden_states)
 
         for layer_module in self.layers[: self.config.num_hidden_layers]:
-            if not isinstance(layer_module, T5Gemma2DecoderLayer):
-                raise ValueError(f"Expected T5Gemma2DecoderLayer, but got {type(layer_module)}.")
             hidden_states = layer_module(
                 hidden_states,
                 position_embeddings[layer_module.attention_type],
@@ -878,12 +978,9 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
         super().__init__(config)
 
         # setup encoder and decoder
-        self.encoder = T5Gemma2Encoder(config.encoder, config.eoi_token_index, self.pixel2feature_preprocessor)
-        self.decoder = T5Gemma2Decoder(config.decoder, config.eoi_token_index)
-
-        # setup vision encoder
-        self.vision_tower = AutoModel.from_config(config=config.vision_config)
-        self.multi_modal_projector = T5Gemma2MultiModalProjector(config)
+        vision_config = config.vision_config
+        self.encoder = T5Gemma2Encoder(config.encoder, vision_config.eoi_token_index, vision_config)
+        self.decoder = T5Gemma2Decoder(config.decoder, vision_config.eoi_token_index)
 
         self.post_init()
 
@@ -904,52 +1001,6 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
         if self.config.tie_word_embeddings:
             self.decoder.embed_tokens.weight = self.encoder.embed_tokens.weight
             self.decoder.embed_tokens.eoi_embedding = self.encoder.embed_tokens.eoi_embedding
-
-    def _get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        """Convert pixel image to image features via the encoder and projector."""
-        # pixel_values: (batch_size, channels, height, width)
-        # image_features: Image feature tensor of shape (num_images, image_length, embed_dim).
-        vision_outputs = self.vision_tower(pixel_values=pixel_values).last_hidden_state
-        image_features = self.multi_modal_projector(vision_outputs)
-        return image_features
-
-    def _get_placeholder_mask(
-        self,
-        input_ids: Optional[torch.LongTensor],
-        inputs_embeds: Optional[torch.FloatTensor],
-        image_features: torch.FloatTensor,
-    ):
-        """
-        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
-        """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
-        return special_image_mask
-
-    def pixel2feature_preprocessor(
-        self,
-        pixel_values: torch.Tensor,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-    ):
-        """Convert pixel images to image features and obtain placeholder mask."""
-        image_features = self._get_image_features(pixel_values)
-        image_mask = self._get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_features)
-        return image_features, image_mask
 
     @can_return_tuple
     @auto_docstring
@@ -1010,9 +1061,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states
-            if kwargs.get("output_hidden_states", False)
-            else (decoder_outputs.last_hidden_state,),
+            decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
@@ -1071,12 +1120,8 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         return self.model.get_image_features(pixel_values)
 
     @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
+    def vision_encoder(self):
+        return self.model.encoder.vision_encoder
 
     @can_return_tuple
     @auto_docstring
@@ -1163,6 +1208,77 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
+
+    def _prepare_cache_for_generation(
+        self,
+        generation_config: GenerationConfig,
+        model_kwargs: dict,
+        generation_mode: GenerationMode,
+        batch_size: int,
+        max_cache_length: int,
+    ) -> bool:
+        """Override cache preparation to support T5Gemma2-specific EncoderDecoder Cache."""
+
+        # Build cache and past_key_values structure first and then override as needed.
+        super()._prepare_cache_for_generation(
+            generation_config,
+            model_kwargs,
+            generation_mode,
+            batch_size,
+            max_cache_length,
+        )
+
+        # If use_cache is False, do not prepare the cache.
+        if generation_config.use_cache is False:
+            return
+
+        cache_implementation = generation_config.cache_implementation
+        if cache_implementation is None:
+            offload_cache = False
+        else:
+            offload_cache = "offloaded" in generation_config.cache_implementation
+
+        # Main change: use full cache for cross-attention.
+        cross_attn_config = copy.deepcopy(self.config.get_text_config(decoder=True))
+
+        # cross-attention does not use sliding window
+        del cross_attn_config.sliding_window
+        del cross_attn_config.layer_types
+
+        cross_attn_cache_kwargs = {
+            "config": cross_attn_config,
+            "offloading": offload_cache,
+        }
+
+        past_key_values = model_kwargs.get("past_key_values", None)
+        if past_key_values is not None:
+            if not isinstance(past_key_values, EncoderDecoderCache):
+                raise ValueError("The `past_key_values` in `model_kwargs` must be of type `EncoderDecoderCache` for T5Gemma2 model.")
+        
+            # Cache already established, no need to re-initialize.
+            if len(past_key_values.is_updated) > 0 and past_key_values.is_updated.get(0):
+                return
+
+            cross_attn_cls = type(past_key_values.cross_attention_cache)
+            if cross_attn_cls == StaticCache:
+                cross_attn_cache_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
+            # Update cross-attention cache only (switch from sliding_window to full).
+            past_key_values.cross_attention_cache = cross_attn_cls(**cross_attn_cache_kwargs)
+        else:
+            # Initialize new cache.
+            model_kwargs["past_key_values"] = EncoderDecoderCache(
+                DynamicCache(**{
+                    "config": self.config.get_text_config(decoder=True),
+                    "offloading": offload_cache,
+                }),  # self-attention cache
+                DynamicCache(**cross_attn_cache_kwargs),  # cross-attention cache
+            )
+
+        if hasattr(self, "_cache") and self._cache is not None:
+            if not isinstance(self._cache, EncoderDecoderCache):
+                raise ValueError("The internal cache must be of type `EncoderDecoderCache` for T5Gemma2 model.")
+        
+            self._cache = model_kwargs["past_key_values"]
 
 
 @auto_docstring
@@ -1373,6 +1489,7 @@ class T5Gemma2ForTokenClassification(T5Gemma2PreTrainedModel):
 __all__ = [
     "T5Gemma2Config",
     "T5Gemma2ModuleConfig",
+    "T5Gemma2VisionConfig",
     "T5Gemma2ForConditionalGeneration",
     "T5Gemma2Model",
     "T5Gemma2PreTrainedModel",
