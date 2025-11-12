@@ -282,7 +282,7 @@ class BambaMixer(nn.Module):
             logger.warning_once(
                 "The fast path is not available because one of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
-                " https://github.com/Dao-AILab/causal-conv1d or install the kernels library using `pip install kernels`"
+                " https://github.com/Dao-AILab/causal-conv1d"
             )
         else:
             logger.warning_once("The fast path for Bamba will be used when running the model on a GPU")
