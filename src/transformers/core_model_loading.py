@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from types import MethodType
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 
@@ -39,6 +39,10 @@ _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 if _is_dtensor_available:
     from torch.distributed.tensor import DTensor
+
+if TYPE_CHECKING:
+    from .modeling_utils import PreTrainedModel
+    from .quantizers import HfQuantizer
 
 
 logger = logging.get_logger(__name__)
@@ -300,14 +304,6 @@ class WeightConverter:
                 f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
             )
 
-        # Actually regex is fine and can work
-        # for pattern in self.source_keys:
-        #     if any(ch in pattern for ch in set("^$+?{}[]|()")):
-        #         raise AssertionError(f"'{pattern}' is not glob")
-        # for pattern in self.target_keys:
-        #     if any(ch in pattern for ch in set("^$+?{}[]|()")):
-        #         raise AssertionError(f"'{pattern}' is not glob")
-
 
 @dataclass(slots=True)
 class ConversionEntry:
@@ -514,10 +510,6 @@ def set_param_for_module(
     with log_to_misc(layer_name, misc, layer_name):
         module_path, _, param_name = layer_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
-        if isinstance(param_value, list):
-            param_value = param_value[0]
-        elif not isinstance(param_value, torch.nn.Parameter):
-            param_value = param_value[...]
         param_value = param_value[0] if isinstance(param_value, list) else param_value[...]
         ref = meta_model_state_dict.get(layer_name, empty_param)
 
@@ -556,17 +548,15 @@ class SkipLayer(Exception):
 
 
 def convert_and_load_state_dict_in_model(
-    model,
-    state_dict,
-    weight_mapping,
-    tp_plan,
-    quantizer,
-    dtype=None,
-    device_map=None,
-    dtype_plan=None,
-    device_mesh=None,
-    loading_task_model_from_base_state_dict: bool = False,
-    loading_base_model_from_task_state_dict: bool = False,
+    model: PreTrainedModel,
+    state_dict: dict[str, Any],
+    weight_mapping: dict[str, WeightConverter] | None,
+    tp_plan: dict[str, str] | None,
+    quantizer: HfQuantizer | None,
+    dtype: torch.dtype | None = None,
+    device_map: dict | None = None,
+    dtype_plan: dict | None = None,
+    device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
 ):
     """
     Convert a state dict according to a weight mapping (one WeightConverter per glob pattern),
