@@ -73,11 +73,7 @@ TEXT_TO_VISION_CONFIG_KEYS = [
     "spatial_conv_size",
     "temporal_conv_size",
 ]
-ALL_VISION_CONFIG_KEYS = (
-    VALID_VISION_CONFIG_KEYS
-    + TEXT_TO_VISION_CONFIG_KEYS
-    + ["intermediate_size"]
-)
+ALL_VISION_CONFIG_KEYS = VALID_VISION_CONFIG_KEYS + TEXT_TO_VISION_CONFIG_KEYS + ["intermediate_size"]
 ALL_TEXT_CONFIG_KEYS = VALID_TEXT_CONFIG_KEYS + [
     "hidden_act",
     "moe_layer_end_index",
@@ -455,10 +451,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    #convert_weights(args.checkpoint_path, args.pytorch_dump_folder_path)
+    # convert_weights(args.checkpoint_path, args.pytorch_dump_folder_path)
     convert_config(args.checkpoint_path, args.pytorch_dump_folder_path)
 
-    #if args.convert_preprocessor:
+    # if args.convert_preprocessor:
     #    convert_processor(args.checkpoint_path, args.pytorch_dump_folder_path)
 
     print(f"Saved converted checkpoint to {args.pytorch_dump_folder_path}")
