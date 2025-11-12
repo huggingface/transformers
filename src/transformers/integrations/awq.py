@@ -71,7 +71,7 @@ AWQ_FUSED_MAPPINGS = {
         "mlp": ["gate_proj", "up_proj", "down_proj"],
         "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
         "use_alibi": False,
-    }
+    },
 }
 
 AWQ_SCALES_MAPPINGS = {
@@ -105,6 +105,7 @@ if is_auto_awq_available():
             device (`torch.device`):
                 The device to put the module on.
         """
+
         def __init__(self, rope_type, head_dim, max_seq_len, config, device):
             rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
             self.inv_freq, self.attention_scaling = rope_init_fn(config, device)
@@ -324,9 +325,11 @@ def fuse_awq_modules(model, quantization_config):
 
         # Hack QuantAttentionFused to modify the return value of forward function to avoid returning past_key_value
         old_quant_attention_fused_forward = QuantAttentionFused.forward
+
         def new_quant_attention_fused_forward(self, *args, **kwargs):
             attn_output, attention_weight, _ = old_quant_attention_fused_forward(self, *args, **kwargs)
             return attn_output, attention_weight
+
         QuantAttentionFused.forward = new_quant_attention_fused_forward
     else:
         raise ValueError("Fusing is only supported for the AutoAWQ backend")

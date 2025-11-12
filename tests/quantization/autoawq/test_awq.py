@@ -544,6 +544,7 @@ class AwqFusedTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=12, do_sample=False)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_AWQ_ROPE)
 
+
 @slow
 @require_torch_accelerator
 @require_auto_awq
