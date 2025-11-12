@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig
-from ..glm4v.modeling_glm4v import Glm4vModel, Glm4vPreTrainedModel, Glm4vTextModel, Glm4vVisionModel
+from ..glm4v.modeling_glm4v import Glm4vModel, Glm4vPreTrainedModel, Glm4vTextModel
 from ..glm4v.processing_glm4v import Glm4vProcessor
 
 
@@ -27,10 +27,6 @@ class Glm46VConfig(Glm4vConfig):
 
 
 class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
-    pass
-
-
-class Glm46VVisionModel(Glm4vVisionModel):
     pass
 
 
