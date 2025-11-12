@@ -126,6 +126,10 @@ class ShieldGemma2Processor(Gemma3Processor):
         if not self.chat_template:
             raise ValueError("ShieldGemma 2 requires the use of a specific chat template")
 
+        common_kwargs = kwargs.setdefault("common_kwargs", {})
+        if "return_tensors" in kwargs:
+            common_kwargs["return_tensors"] = kwargs.pop("return_tensors")
+
         # Disable pan and scan
         images_kwargs = kwargs.setdefault("images_kwargs", {})
         if images_kwargs.get("do_pan_and_scan") is True:
