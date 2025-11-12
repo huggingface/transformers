@@ -445,11 +445,11 @@ class PixtralPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, PixtralRMSNorm):
-            module.weight.fill_(1.0)
+            nn.init.ones_(module.weight)
 
 
 def generate_block_attention_mask(patch_embeds_list, tensor):

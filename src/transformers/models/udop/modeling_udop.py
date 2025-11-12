@@ -266,7 +266,7 @@ class UdopPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Embedding):
             module.weight.normal_(mean=0.0, std=factor)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.Conv2d):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
@@ -274,7 +274,7 @@ class UdopPreTrainedModel(PreTrainedModel):
                 nn.init.trunc_normal_(module.weight.to(torch.float32), mean=0.0, std=factor).to(module.weight.dtype)
             )
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, RelativePositionBiasBase):
             factor = self.config.initializer_factor
             d_model = self.config.d_model

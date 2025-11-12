@@ -577,7 +577,7 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.token_type_embeddings.weight, mean=0.0, std=self.config.initializer_range)
             for embedding in [module.word_embeddings, module.position_embeddings, module.token_type_embeddings]:
                 if embedding.padding_idx is not None:
-                    embedding.weight[embedding.padding_idx].zero_()
+                    nn.init.zeros_(embedding.weight[embedding.padding_idx])
         elif isinstance(module, ChineseCLIPVisionAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -603,12 +603,12 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
             )
 
         if isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
 
 
 # Copied from transformers.models.align.modeling_align.AlignTextEncoder with Align->ChineseCLIP

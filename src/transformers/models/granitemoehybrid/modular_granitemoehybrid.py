@@ -180,11 +180,11 @@ class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeHybridMambaLayer):
-            module.dt_bias.fill_(1.0)
-            module.A_log.copy_(torch.log(torch.arange(1, module.num_heads + 1)))
-            module.D.fill_(1.0)
+            nn.init.ones_(module.dt_bias)
+            nn.init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            nn.init.ones_(module.D)
         elif isinstance(module, GraniteMoeHybridRMSNormGated):
-            module.weight.fill_(1.0)
+            nn.init.ones_(module.weight)
 
 
 class GraniteMoeHybridModel(GraniteMoeSharedModel):

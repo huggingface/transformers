@@ -766,7 +766,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
                 if not getattr(module.bias, "_no_reinit", False):
                     nn.init.zeros_(module.bias)
         elif isinstance(module, (Mamba2RMSNorm, MambaRMSNormGated)):
-            module.weight.fill_(1.0)
+            nn.init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, std=std)
 

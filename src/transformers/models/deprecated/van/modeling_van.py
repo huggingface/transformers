@@ -372,9 +372,9 @@ class VanPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Conv2d):
             fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
             fan_out //= module.groups
-            module.weight.normal_(0, math.sqrt(2.0 / fan_out))
+            nn.init.normal_(module.weight, 0, math.sqrt(2.0 / fan_out))
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
 
 
 VAN_START_DOCSTRING = r"""

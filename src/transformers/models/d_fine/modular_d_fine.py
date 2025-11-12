@@ -591,6 +591,7 @@ class DFineDecoderLayer(RTDetrDecoderLayer):
 class DFinePreTrainedModel(RTDetrPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
+        """Initialize the weights"""
         # initialize linear layer bias value according to a given probability value.
         if isinstance(module, (DFineForObjectDetection, DFineDecoder)):
             if module.class_embed is not None:
@@ -606,10 +607,10 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
             if hasattr(module, "reg_scale"):
-                module.reg_scale.fill_(self.config.reg_scale)
+                nn.init.constant_(module.reg_scale, self.config.reg_scale)
 
             if hasattr(module, "up"):
-                module.up.fill_(self.config.up)
+                nn.init.constant_(module.up, self.config.up)
 
         if isinstance(module, DFineMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight, 0.0)
@@ -622,8 +623,7 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             grid_init = grid_init.reshape(module.n_heads, 1, 2).tile([1, sum(module.num_points_list), 1])
             scaling = torch.concat([torch.arange(1, n + 1) for n in module.num_points_list]).reshape(1, -1, 1)
             grid_init *= scaling
-            with torch.no_grad():
-                module.sampling_offsets.bias[...] = grid_init.flatten()
+            nn.init.copy_(module.sampling_offsets.bias, grid_init.flatten())
 
             nn.init.constant_(module.attention_weights.weight, 0.0)
             nn.init.constant_(module.attention_weights.bias, 0.0)
@@ -635,9 +635,9 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             nn.init.constant_(module.enc_score_head.bias, bias)
 
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
 
         if isinstance(module, DFineGate):
             bias = float(-math.log((1 - 0.5) / 0.5))
@@ -649,8 +649,8 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             init.constant_(module.reg_conf.layers[-1].weight, 0)
 
         if isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             nn.init.xavier_uniform_(module.weight_embedding.weight)

@@ -437,9 +437,9 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
         elif isinstance(module, ModernBertDecoderForCausalLM):
             init_weight(module.decoder, stds["out"])
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
+            nn.init.ones_(module.weight)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
 
 
 @auto_docstring

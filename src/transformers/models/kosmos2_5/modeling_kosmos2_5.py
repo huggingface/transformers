@@ -1238,17 +1238,17 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
         elif isinstance(self, (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)):
             std = self.config.text_config.init_std
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, (nn.LayerNorm, Kosmos2_5LayerNorm)):
-            module.weight.fill_(1.0)
+            nn.init.ones_(module.weight)
             if getattr(module, "bias", None) is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, Kosmos2_5ImageToTextProjection):
             module.latent_query.normal_(mean=0.0, std=1.0)
 

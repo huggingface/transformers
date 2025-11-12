@@ -403,7 +403,7 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
 
             module.weight.normal_(mean=0.0, std=factor * ((hidden_size) ** -0.5))
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, Pix2StructTextModel):
             hidden_size = (
                 self.config.text_config.hidden_size
@@ -421,14 +421,14 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
                 )
             )
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, Pix2StructLayerNorm):
             if module.weight is not None:
-                module.weight.fill_(1.0)
+                nn.init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
 
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right with T5->Pix2Struct
     def _shift_right(self, input_ids):

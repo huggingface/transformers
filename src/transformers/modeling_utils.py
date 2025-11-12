@@ -42,6 +42,7 @@ from safetensors import safe_open
 from safetensors.torch import save_file as safe_save_file
 from torch import Tensor, nn
 from torch.distributions import constraints
+from torch.nn import init
 from torch.utils.checkpoint import checkpoint
 
 from .configuration_utils import PreTrainedConfig
@@ -903,8 +904,6 @@ def _get_dtype(
 
 @contextmanager
 def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
-    import torch.nn.init as init
-
     originals = {}
 
     def make_wrapper(fn):
@@ -2275,22 +2274,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         if hasattr(self.config, "initializer_range"):
             std = self.config.initializer_range or 0.02
+        elif hasattr(self.config, "init_std"):
+            std = self.config.init_std
         else:
             # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
             if getattr(module, "weight", None) is not None:
-                module.weight.normal_(mean=0.0, std=std)
+                nn.init.normal_(module.weight, mean=0.0, std=std)
             if getattr(module, "bias", None) is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             if getattr(module, "weight", None) is not None:
-                module.weight.normal_(mean=0.0, std=std)
+                nn.init.normal_(module.weight, mean=0.0, std=std)
             if getattr(
                 self.config, "pad_token_id", None
             ) is not None and self.config.pad_token_id < module.weight.size(0):
-                module.weight[self.config.pad_token_id].zero_()
+                nn.init.zeros_(module.weight[self.config.pad_token_id])
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
             module._reset_parameters()
@@ -2303,15 +2304,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ):
             # Norms can exist without weights (in which case they are None from torch primitives)
             if hasattr(module, "weight") and module.weight is not None:
-                module.weight.fill_(1.0)
+                nn.init.ones_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.gate_up_proj, mean=0.0, std=std)
         if isinstance(getattr(module, "down_proj", None), nn.Parameter):
-            module.down_proj.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.down_proj, mean=0.0, std=std)
         if isinstance(getattr(module, "gate", None), nn.Parameter):
-            module.gate.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.gate, mean=0.0, std=std)
 
     def _initialize_weights(self, module):
         """

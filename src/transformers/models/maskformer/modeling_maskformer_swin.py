@@ -705,17 +705,17 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, MaskFormerSwinEmbeddings):
             if module.position_embeddings is not None:
-                module.position_embeddings.zero_()
+                nn.init.zeros_(module.position_embeddings)
         elif isinstance(module, MaskFormerSwinSelfAttention):
-            module.relative_position_bias_table.zero_()
+            nn.init.zeros_(module.relative_position_bias_table)
 
 
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):

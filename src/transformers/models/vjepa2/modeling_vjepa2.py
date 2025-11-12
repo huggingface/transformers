@@ -970,10 +970,10 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
             trunc_normal_f32_(module.weight, std=init_std)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
 
 
 @auto_docstring

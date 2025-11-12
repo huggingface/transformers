@@ -240,7 +240,7 @@ class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Ernie4_5_MoeStatics):
-            module.e_score_correction_bias.zero_()
+            nn.init.zeros_(module.e_score_correction_bias)
 
 
 @auto_docstring

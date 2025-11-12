@@ -668,29 +668,19 @@ class FlavaPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, FlavaMaskedPredictionHead):
-            module.bias.zero_()
+        super()._init_weights(module)
+        if isinstance(module, FlavaMaskedPredictionHead):
+            nn.init.zeros_(module.bias)
         elif isinstance(module, FlavaImageEmbeddings):
-            module.cls_token.zero_()
-            module.position_embeddings.zero_()
+            nn.init.zeros_(module.cls_token)
+            nn.init.zeros_(module.position_embeddings)
             if module.mask_token is not None:
-                module.mask_token.zero_()
+                nn.init.zeros_(module.mask_token)
         elif isinstance(module, FlavaMultimodalModel):
             if module.use_cls_token:
-                module.cls_token.zero_()
+                nn.init.zeros_(module.cls_token)
         elif isinstance(module, FlavaModel):
-            module.logit_scale.fill_(self.config.logit_scale_init_value)
+            nn.init.constant_(module.logit_scale, self.config.logit_scale_init_value)
 
 
 @auto_docstring

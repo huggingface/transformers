@@ -426,7 +426,7 @@ class RwkvPreTrainedModel(PreTrainedModel):
             gain = 1.0
             scale = 1.0  # extra scale for gain
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
             if shape[0] > shape[1]:
                 gain = math.sqrt(shape[0] / shape[1])
             if shape[0] == self.config.vocab_size and shape[1] == self.config.hidden_size:  # final projection?
@@ -439,8 +439,8 @@ class RwkvPreTrainedModel(PreTrainedModel):
             gain = 1e-4 * math.sqrt(max(shape[0], shape[1]))
             nn.init.orthogonal_(module.weight, gain=gain)
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
 
 
 @dataclass

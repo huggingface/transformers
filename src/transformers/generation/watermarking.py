@@ -387,7 +387,7 @@ class BayesianDetectorModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Parameter):
-            module.weight.normal_(mean=0.0, std=0.02)
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def _compute_posterior(
         self,

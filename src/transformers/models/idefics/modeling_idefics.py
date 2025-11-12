@@ -836,34 +836,21 @@ class IdeficsPreTrainedModel(PreTrainedModel):
         # important: this ported version of Idefics isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the m4 code
         # base should be used for training from scratch and it contains the correct code.
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, IdeficsRMSNorm):
-            module.weight.fill_(1.0)
-        elif isinstance(module, IdeficsVisionEmbeddings):
-            module.class_embedding.normal_()
+        super()._init_weights(module)
+        if isinstance(module, IdeficsVisionEmbeddings):
+            nn.init.normal_(module.class_embedding)
         elif isinstance(module, IdeficsGatedCrossAttentionLayer):
             if self.config.alpha_initializer == "zeros":
-                module.alpha_cross_attn.zero_()
-                module.alpha_dense.zero_()
+                nn.init.zeros_(module.alpha_cross_attn)
+                nn.init.zeros_(module.alpha_dense)
             elif self.config.alpha_initializer == "ones":
-                module.alpha_cross_attn.fill_(1.0)
-                module.alpha_dense.fill_(1.0)
+                nn.init.ones_(module.alpha_cross_attn)
+                nn.init.ones_(module.alpha_dense)
             elif self.config.alpha_initializer in {"normal", "gaussian", "random"}:
-                module.alpha_cross_attn.normal_(mean=0.0, std=self.config.alphas_initializer_range)
-                module.alpha_dense.normal_(mean=0.0, std=self.config.alphas_initializer_range)
+                nn.init.normal_(module.alpha_cross_attn, mean=0.0, std=self.config.alphas_initializer_range)
+                nn.init.normal_(module.alpha_dense., mean=0.0, std=self.config.alphas_initializer_range)
         elif isinstance(module, IdeficsPerceiverResampler):
-            module.latents.normal_()
+            nn.init.normal_(module.latents)
 
 
 @auto_docstring

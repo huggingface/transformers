@@ -536,16 +536,16 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, ViTMAEEmbeddings):
             module.initialize_weights()
         elif isinstance(module, ViTMAEDecoder):
-            module.mask_token.zero_()
+            nn.init.zeros_(module.mask_token)
             module.decoder_pos_embed.zero_()
 
 

@@ -1879,11 +1879,11 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
-            module.weight.fill_(1.0)
+            nn.init.ones_(module.weight)
         elif isinstance(module, Gemma3nAudioAttention):
-            module.per_dim_scale.zero_()
+            nn.init.zeros_(module.per_dim_scale)
         elif isinstance(module, Gemma3nTextAltUp):
-            module.correct_output_scale.zero_()
+            nn.init.zeros_(module.correct_output_scale)
 
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")

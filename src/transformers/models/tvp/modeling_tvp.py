@@ -526,10 +526,10 @@ class TvpPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
@@ -538,7 +538,7 @@ class TvpPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.text_prompt)
 
         if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.zero_()
+            nn.init.zeros_(module.bias)
         if hasattr(module, "pad_up"):
             nn.init.normal_(module.pad_up)
         if hasattr(module, "pad_down"):
