@@ -704,6 +704,11 @@ def _preprocess_mask_arguments(
         if attention_mask is None:
             kv_length, kv_offset = input_embeds.shape[1], 0
         # 2. Rely on the mask instead - needed for special cases like prefix tuning in PEFT
+        #
+        # This is a very unique and special case where an encoder utilizes a cache and expects its length
+        # to be accounted for (usually, they should never use a cache). In general, the mask should always
+        # match with the input sizes nonetheless (i.e. it does not affect others).
+        # Conclusion: "prefix tuning is evil"
         else:
             kv_length, kv_offset = attention_mask.shape[-1], 0
 
