@@ -304,11 +304,11 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "text",
-                            "text": "Transcribe the input speech.",
+                            "text": "What is surprising about the relationship between the barking and the music?",
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Why_do_we_ask_questions_converted.wav",
+                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
                         },
                     ],
                 }
