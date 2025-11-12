@@ -966,15 +966,15 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
     def default_model(self):
-        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts").to(torch_device)
+        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts", revision="refs/pr/19").to(torch_device)
 
     @cached_property
     def default_processor(self):
-        return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
+        return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts", revision="refs/pr/19")
 
     @cached_property
     def default_vocoder(self):
-        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan").to(torch_device)
+        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan", revision="refs/pr/1").to(torch_device)
 
     def test_generation(self):
         model = self.default_model

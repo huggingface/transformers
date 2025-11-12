@@ -2420,12 +2420,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif isinstance(
                 module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)
             ):
-                module.weight.normal_(mean=0.0, std=std)
-                if module.bias is not None:
+                if getattr(module, "weight", None) is not None:
+                    module.weight.normal_(mean=0.0, std=std)
+                if getattr(module, "bias", None) is not None:
                     module.bias.zero_()
             elif isinstance(module, nn.Embedding):
-                module.weight.normal_(mean=0.0, std=std)
-                if module.padding_idx is not None:
+                if getattr(module, "weight", None) is not None:
+                    module.weight.normal_(mean=0.0, std=std)
+                if getattr(module, "padding_idx", None) is not None:
                     module.weight[module.padding_idx].zero_()
             elif isinstance(module, nn.Parameter):
                 module.normal_(mean=0.0, std=std)
@@ -2444,11 +2446,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     module.weight.fill_(1.0)
                 if hasattr(module, "bias") and module.bias is not None:
                     module.bias.zero_()
-            if hasattr(module, "gate_up_proj"):
+            if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
                 module.gate_up_proj.normal_(mean=0.0, std=std)
-            if hasattr(module, "down_proj"):
+            if isinstance(getattr(module, "down_proj", None), nn.Parameter):
                 module.down_proj.normal_(mean=0.0, std=std)
-            if hasattr(module, "gate"):
+            if isinstance(getattr(module, "gate", None), nn.Parameter):
                 module.gate.normal_(mean=0.0, std=std)
         except Exception as e:
             logger.warning(f"Failed to init: {str(e)}")
@@ -2557,8 +2559,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         if last in parent._modules:
                             parent._modules[last] = source_param_or_module
                             if missing_keys:
-                                for k, _ in parent.named_parameters():
-                                    missing_keys.discard(k)
+                                for k, _ in source_param_or_module.named_parameters():
+                                    missing_keys.discard(f"{parent_path}.{last}.{k}")
                         else:
                             setattr(parent, last, source_param_or_module)
                             self._adjust_bias(parent, source_param_or_module)
@@ -2608,7 +2610,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if missing_keys is None:
             # called from `post_init`
             self.tie_weight_source_and_target(self, missing_keys, "")
-        else:
+        else: # this is from_pretrained, so its not called on every sub module
             for module_prefix, module in self.named_modules():
                 # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
                 if isinstance(module, PreTrainedModel):
@@ -4718,14 +4720,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             self.initialize_weights()
 
-        for name, p in self.named_parameters():
-            if hasattr(p, "_original_param"):
-                parts = name.split(".")
-                submod = self
-                for part in parts[:-1]:
-                    submod = getattr(submod, part)
-                setattr(submod, parts[-1], p._original_param)
-                setattr(p, "_is_hf_initialized", True)
+        for p in self.parameters():  # TODO @Cyrilvallez if we are able to do this while we smart apply my be better
+            setattr(p, "__class__", nn.Parameter)
+            setattr(p, "_is_hf_initialized", True)
 
     def _adjust_missing_and_unexpected_keys(
         self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool, model

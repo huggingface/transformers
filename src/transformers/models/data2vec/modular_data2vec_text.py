@@ -121,7 +121,7 @@ class Data2VecTextClassificationHead(RobertaClassificationHead):
 )
 class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "data2vec_text.embedding.weight",
+        "lm_head.decoder.weight": "data2vec_text.embeddings.word_embeddings.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
@@ -223,7 +223,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
 @auto_docstring
 class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "data2vec_text.embedding.weight",
+        "lm_head.decoder.weight": "data2vec_text.embeddings.word_embeddings.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
