@@ -35,6 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import check_model_inputs
 from .configuration_higgs_audio_v2 import HiggsAudioV2Config
 from .generation_higgs_audio_v2 import HiggsAudioV2GenerationMixin
 
@@ -288,43 +289,6 @@ class HiggsAudioV2DecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Higgs Audio Model outputting raw hidden-states without any specific head on top.
-    """
-)
-@auto_docstring
-class HiggsAudioV2PreTrainedModel(PreTrainedModel):
-    config_class = HiggsAudioV2Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = []
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-
-    def _init_weights(self, module):
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
-        else:
-            # 0.02 is the standard default value across the library
-            std = getattr(self.config, "initializer_range", 0.02)
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, HiggsAudioV2RMSNorm):
-            module.weight.data.fill_(1.0)
-
-
 class HiggsAudioV2Embeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -376,6 +340,25 @@ class HiggsAudioV2RotaryEmbedding(nn.Module):
 
 
 @auto_docstring
+class HiggsAudioV2PreTrainedModel(PreTrainedModel):
+    config: HiggsAudioV2Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["HiggsAudioV2DecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": HiggsAudioV2DecoderLayer,
+        "attentions": HiggsAudioV2Attention,
+    }
+
+
+@auto_docstring
 class HiggsAudioV2Model(HiggsAudioV2PreTrainedModel):
     def __init__(self, config: HiggsAudioV2Config):
         super().__init__(config)
@@ -394,8 +377,8 @@ class HiggsAudioV2Model(HiggsAudioV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @check_model_inputs()
     @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

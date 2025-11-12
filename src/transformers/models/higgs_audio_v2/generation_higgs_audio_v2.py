@@ -16,7 +16,7 @@
 
 import os
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional, Union, Any
 
 import torch
 import torch.nn as nn
@@ -27,6 +27,7 @@ from ...generation import (
     GenerationMixin,
     LogitsProcessorList,
     StoppingCriteriaList,
+    GenerationMode,
 )
 from ...generation.logits_process import HiggsAudioV2DelayPatternLogitsProcessor
 from ...generation.streamers import BaseStreamer
@@ -93,6 +94,25 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
             )
         )
         return logits_processor
+    
+    def _prepare_generation_config(
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Any
+    ) -> tuple[GenerationConfig, dict]:
+        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, use_model_defaults, **kwargs)
+        original_get_generation_mode = generation_config.get_generation_mode
+
+        def patched_get_generation_mode(assistant_model=None):
+            generation_mode = original_get_generation_mode(assistant_model)
+            if generation_mode not in [GenerationMode.GREEDY_SEARCH, GenerationMode.SAMPLE]:
+                raise ValueError(
+                    f"Generation mode {generation_mode} is not supported for HiggsAudioV2 model. Please set generation parameters to use greedy or sampling generation."
+                )
+
+            return generation_mode
+
+        generation_config.get_generation_mode = patched_get_generation_mode
+
+        return generation_config, model_kwargs
 
     def _sample(
         self,
@@ -262,7 +282,8 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
             next_tokens_flat[has_audio_stream_eos | (input_ids[:, -1] == self.config.audio_delay_token_id)] = (
                 self.config.audio_delay_token_id
             )
-            next_tokens_flat[has_all_audio_stream_eos] = self.config.eos_token_id
+            if self.config.eos_token_id is not None:
+                next_tokens_flat[has_all_audio_stream_eos] = self.config.eos_token_id
             next_tokens = next_tokens_flat
             # ============================
 

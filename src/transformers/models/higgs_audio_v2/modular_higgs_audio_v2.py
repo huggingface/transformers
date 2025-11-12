@@ -30,14 +30,10 @@ from ...utils import (
     is_torch_flex_attn_available,
     logging,
 )
+from ...utils.generic import check_model_inputs
 from ..csm.modeling_csm import CsmBackboneModelEmbeddings
 from ..llama.configuration_llama import LlamaConfig
-from ..llama.modeling_llama import (
-    LlamaDecoderLayer,
-    LlamaMLP,
-    LlamaModel,
-    LlamaRMSNorm,
-)
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaMLP, LlamaModel, LlamaRMSNorm
 from .generation_higgs_audio_v2 import HiggsAudioV2GenerationMixin
 
 
@@ -188,43 +184,6 @@ class HiggsAudioV2DecoderLayer(LlamaDecoderLayer):
         return hidden_states
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Higgs Audio Model outputting raw hidden-states without any specific head on top.
-    """
-)
-@auto_docstring
-class HiggsAudioV2PreTrainedModel(PreTrainedModel):
-    config_class = HiggsAudioV2Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = []
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-
-    def _init_weights(self, module):
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
-        else:
-            # 0.02 is the standard default value across the library
-            std = getattr(self.config, "initializer_range", 0.02)
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, HiggsAudioV2RMSNorm):
-            module.weight.data.fill_(1.0)
-
-
 class HiggsAudioV2Embeddings(CsmBackboneModelEmbeddings):
     def forward(self, input_ids):
         inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
@@ -237,8 +196,8 @@ class HiggsAudioV2Model(LlamaModel):
         super().__init__(config)
         self.embed_audio_tokens = HiggsAudioV2Embeddings(config)
 
+    @check_model_inputs()
     @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
