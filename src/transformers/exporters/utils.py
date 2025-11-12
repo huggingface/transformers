@@ -20,7 +20,6 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 from ..cache_utils import Cache, DynamicCache, DynamicLayer, DynamicSlidingWindowLayer, EncoderDecoderCache
-from ..generation.utils import GenerationMixin
 from ..utils.import_utils import is_torch_available
 from ..utils.logging import get_logger
 
@@ -139,16 +138,9 @@ def register_encoder_decoder_cache_for_export():
 def prepare_inputs_for_export(
     model: "PreTrainedModel", sample_inputs: dict[str, torch.Tensor | Cache]
 ) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache]]:
-    for input_flag_name in ("use_cache", "return_loss", "output_attentions", "output_hidden_states"):
-        if input_flag_name in sample_inputs:
-            logger.info(
-                f"Detected input flag '{input_flag_name}' in sample_inputs. Setting model.config.{input_flag_name} accordingly."
-            )
-            setattr(model.config, input_flag_name, sample_inputs.pop(input_flag_name))
-
     if (
-        isinstance(model, GenerationMixin)
-        and getattr(model.config, "use_cache", False)
+        getattr(model.config, "use_cache", False)
+        and not getattr(model.config, "is_encoder_decoder", False)
         and "past_key_values" in inspect.signature(model.forward).parameters
         and model.config.model_type not in UNSUPPORTED_CACHE_CLASS_MODEL_TYPES
         and "past_key_values" not in sample_inputs
@@ -159,6 +151,7 @@ def prepare_inputs_for_export(
             "You can also provide past_key_values in sample_inputs to avoid this step."
         )
         with torch.no_grad():
+            # to avoid any in-place modifications of sample_inputs
             dummy_outputs = model(**copy.deepcopy(sample_inputs))
 
         if hasattr(dummy_outputs, "past_key_values"):
@@ -172,12 +165,6 @@ def prepare_inputs_for_export(
                         device=model.device,
                         dtype=torch.long,
                     )
-            elif isinstance(dummy_outputs.past_key_values, EncoderDecoderCache):
-                logger.warning(
-                    "The model seems to be returning an EncoderDecoderCache as past_key_values. "
-                    "DynamoExporter does not yet support cache in inputs for encoder-decoder models. "
-                    "The model will be exported as a monolithic graph with no cache inputs."
-                )
 
     return model, sample_inputs
 
@@ -215,6 +202,12 @@ def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str
             ]
         elif isinstance(input, torch.Tensor):
             dynamic_shapes[name] = _auto_dynamic_shape(input)
+        elif isinstance(input, (int, float, bool)) or input is None:
+            dynamic_shapes[name] = None
+        elif isinstance(input, dict):
+            dynamic_shapes[name] = get_auto_dynamic_shapes(input)
+        elif isinstance(input, (list, tuple, set)):
+            dynamic_shapes[name] = type(input)(get_auto_dynamic_shapes(dict(enumerate(input))).values())
         else:
             raise ValueError(
                 f"Input '{name}' is of unsupported type '{type(input)}'. "

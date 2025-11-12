@@ -27,14 +27,15 @@ class OnnxExporter(DynamoExporter):
             raise ImportError(f"{self.__class__.__name__} requires torch>=2.9.0 for Dynamo based ONNX export.")
 
     def export(self, model: "PreTrainedModel"):
+        from torch.export import ExportedProgram
         from torch.onnx import ONNXProgram
 
-        super().export(model)
+        exported_program: ExportedProgram = super().export(model)
         onnx_program: ONNXProgram = torch.onnx.export(
-            model.exported_model,
+            exported_program,
             f=self.export_config.f,
             optimize=self.export_config.optimize,
             do_constant_folding=self.export_config.do_constant_folding,
         )
-
         model.exported_model = onnx_program
+        return onnx_program

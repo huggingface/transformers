@@ -85,7 +85,5 @@ class DynamoExporter(HfExporter):
                 dynamic_shapes=dynamic_shapes,
                 strict=self.export_config.strict,
             )
-
         model.exported_model = exported_program
-
         return exported_program

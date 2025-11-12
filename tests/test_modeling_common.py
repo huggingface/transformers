@@ -3443,7 +3443,7 @@ class ModelTesterMixin:
     @slow
     @require_torch_greater_or_equal("2.5")
     @pytest.mark.torch_export_test
-    def test_torch_export(self, config=None, inputs_dict=None, tolerance=1e-4):
+    def test_torch_export(self, atol=1e-4, rtol=1e-4):
         """
         Test if model can be exported with torch.export.export()
 
@@ -3459,7 +3459,7 @@ class ModelTesterMixin:
         def recursively_check(eager_outputs, exported_outputs):
             is_tested = False
             if isinstance(eager_outputs, torch.Tensor):
-                torch.testing.assert_close(eager_outputs, exported_outputs, atol=tolerance, rtol=tolerance)
+                torch.testing.assert_close(eager_outputs, exported_outputs, atol=atol, rtol=rtol)
                 return True
             elif isinstance(eager_outputs, (tuple, list)):
                 for eager_output, exported_output in zip(eager_outputs, exported_outputs):
@@ -3491,9 +3491,8 @@ class ModelTesterMixin:
                     # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
                     eager_outputs = model(**copy.deepcopy(inputs_dict))
 
-                exporter = DynamoExporter(export_config=DynamoConfig(sample_inputs=copy.deepcopy(inputs_dict)))
-
                 try:
+                    exporter = DynamoExporter(export_config=DynamoConfig(sample_inputs=inputs_dict))
                     exported_program = exporter.export(model)
                 except NotImplementedError:
                     continue
