@@ -32,14 +32,12 @@ class Glm46VConfig(Glm4vConfig):
 
 
 class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
-    config: None
     _can_record_outputs = None
     _no_split_modules = None
 
 
 class Glm46VModel(Glm4vModel):
     _no_split_modules = None
-    config: None
 
     def __init__(self, config):
         super().__init__(config)
@@ -130,6 +128,7 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
 
 __all__ = [
     "Glm46VModel",
+    "Glm46VConfig",
     "Glm46VPreTrainedModel",
     "Glm46VProcessor",
     "Glm46VImageProcessor",

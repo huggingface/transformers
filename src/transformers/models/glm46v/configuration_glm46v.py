@@ -99,3 +99,6 @@ class Glm46VConfig(PreTrainedConfig):
         self.image_end_token_id = image_end_token_id
 
         super().__init__(**kwargs)
+
+
+__all__ = ["Glm46VConfig"]

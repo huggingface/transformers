@@ -31,11 +31,12 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
 from ..auto.modeling_auto import AutoModel
+from .configuration_glm46v import Glm46VConfig
 
 
 @auto_docstring
 class Glm46VPreTrainedModel(PreTrainedModel):
-    config: None
+    config: Glm46VConfig
     base_model_prefix = "model"
     input_modalities = ["image", "video", "text"]
     supports_gradient_checkpointing = True
@@ -79,7 +80,7 @@ class Glm46VModel(Glm46VPreTrainedModel):
     _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    config: None
+    config: Glm46VConfig
     _no_split_modules = None
 
     def __init__(self, config):
