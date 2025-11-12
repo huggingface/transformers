@@ -62,6 +62,16 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] Glm46VPreTrainedModel
     - forward
 
+## Glm46VImageProcessor
+
+[[autodoc]] Glm46VImageProcessor
+    - preprocess
+
+## Glm46VImageProcessorFast
+
+[[autodoc]] Glm46VImageProcessorFast
+    - preprocess
+
 ## Glm46VVideoProcessor
 
 [[autodoc]] Glm46VVideoProcessor
