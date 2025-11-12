@@ -588,7 +588,7 @@ def convert_and_load_state_dict_in_model(
         matched_pattern = match_glob(original_key, weight_pattern_alt, weight_pattern_by_group_name)
         if matched_pattern is not None:
             converter = source_to_target[matched_pattern]  # TODO make sure its the ref
-            sub_with_extractor = partial(re.sub, _glob_to_regex_src(matched_pattern), string=original_key)
+            sub_with_extractor = partial(re.sub, matched_pattern.replace("*", r"(\d+)"), string=original_key)
             entry_key = "|".join(converter.target_keys)
             target_key = "|".join(map(sub_with_extractor, [k.replace("*", "\\1") for k in converter.target_keys]))
             entry: ConversionEntry = by_conversion_pattern.setdefault(entry_key, ConversionEntry(converter))
@@ -715,7 +715,7 @@ def convert_and_load_state_dict_in_model(
 
 # TODO this is not done yet!
 def revert_weight_conversion(model, state_dict):
-    mapping = getattr(model, "", {})  # IDK why but setting this will fail all llava.
+    mapping = getattr(model, "_checkpoint_conversion_mapping", {})  # IDK why but setting this will fail all llava.
     reverse_key_mapping = [(v, k) for k, v in mapping.items()]
     original_state_dict = {}
     for key, value in state_dict.items():

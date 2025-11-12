@@ -3942,7 +3942,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if key_mapping is None and any(
             allowed_name in class_name.__name__.lower() for class_name in cls.__mro__[:-1] for allowed_name in VLMS
         ):
-            key_mapping = cls._checkpoint_conversion_mapping
+            key_mapping = copy.copy(cls._checkpoint_conversion_mapping)
 
         if distributed_config is not None and tp_plan is None:
             tp_plan = "auto"
@@ -4135,7 +4135,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype=dtype,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
-            key_mapping=key_mapping,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
         )
@@ -4212,7 +4211,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         dtype: Optional[torch.dtype] = None,
         hf_quantizer: Optional[HfQuantizer] = None,
         device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
-        key_mapping: Optional[dict[str, str]] = None,
         weights_only: bool = True,
         weight_mapping: Optional[Sequence[WeightConverter]] = None,
     ):
