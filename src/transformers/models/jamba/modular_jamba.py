@@ -38,29 +38,21 @@ from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM
 from .configuration_jamba import JambaConfig
 
 
-def _lazy_load_kernels():
-    global causal_conv1d_update, causal_conv1d_fn
-    causal_conv1d = lazy_load_kernel("causal-conv1d")
-    causal_conv1d_update, causal_conv1d_fn = (
-        (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-        if causal_conv1d is not None
-        else (None, None)
-    )
+causal_conv1d = lazy_load_kernel("causal-conv1d")
+causal_conv1d_update = causal_conv1d.causal_conv1d_update if causal_conv1d is not None else None
+causal_conv1d_fn = causal_conv1d.causal_conv1d_fn if causal_conv1d is not None else None
 
-    global selective_state_update, mamba_inner_fn, selective_scan_fn
-    mamba_ssm = lazy_load_kernel("mamba-ssm")
-    selective_state_update, mamba_inner_fn, selective_scan_fn = (
-        (
-            mamba_ssm.ops.triton.selective_state_update.selective_state_update,
-            mamba_ssm.ops.selective_scan_interface.mamba_inner_fn,
-            mamba_ssm.ops.selective_scan_interface.selective_scan_fn,
-        )
-        if mamba_ssm is not None
-        else (None, None, None)
-    )
+mamba_ssm = lazy_load_kernel("mamba-ssm")
+selective_state_update = (
+    mamba_ssm.ops.triton.selective_state_update.selective_state_update if mamba_ssm is not None else None
+)
+mamba_inner_fn = mamba_ssm.ops.selective_scan_interface.mamba_inner_fn if mamba_ssm is not None else None
+selective_scan_fn = mamba_ssm.ops.selective_scan_interface.selective_scan_fn if mamba_ssm is not None else None
 
 
-is_fast_path_available = False
+is_fast_path_available = all(
+    (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+)
 
 
 logger = logging.get_logger(__name__)
@@ -266,12 +258,6 @@ class JambaMambaMixer(nn.Module):
         self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
         self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
 
-        _lazy_load_kernels()
-
-        global is_fast_path_available
-        is_fast_path_available = all(
-            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
-        )
         if not is_fast_path_available:
             logger.warning_once(
                 "The fast path is not available because on of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"

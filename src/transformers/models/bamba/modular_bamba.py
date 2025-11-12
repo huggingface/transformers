@@ -55,34 +55,22 @@ from ...utils import (
 from .configuration_bamba import BambaConfig
 
 
-def _lazy_load_kernels():
-    global causal_conv1d_update, causal_conv1d_fn
+causal_conv1d = lazy_load_kernel("causal-conv1d")
+causal_conv1d_update = causal_conv1d.causal_conv1d_update if causal_conv1d is not None else None
+causal_conv1d_fn = causal_conv1d.causal_conv1d_fn if causal_conv1d is not None else None
 
-    causal_conv1d = lazy_load_kernel("causal-conv1d")
-    causal_conv1d_update, causal_conv1d_fn = (
-        (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-        if causal_conv1d is not None
-        else (None, None)
-    )
+mamba_ssm = lazy_load_kernel("mamba-ssm")
+selective_state_update = (
+    mamba_ssm.ops.triton.selective_state_update.selective_state_update if mamba_ssm is not None else None
+)
+mamba_chunk_scan_combined = (
+    mamba_ssm.ops.triton.ssd_combined.mamba_chunk_scan_combined if mamba_ssm is not None else None
+)
+mamba_split_conv1d_scan_combined = (
+    mamba_ssm.ops.triton.ssd_combined.mamba_split_conv1d_scan_combined if mamba_ssm is not None else None
+)
 
-    global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
-
-    mamba_ssm = lazy_load_kernel("mamba-ssm")
-    selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = (
-        (
-            mamba_ssm.ops.triton.selective_state_update.selective_state_update,
-            mamba_ssm.ops.triton.ssd_combined.mamba_chunk_scan_combined,
-            mamba_ssm.ops.triton.ssd_combined.mamba_split_conv1d_scan_combined,
-        )
-        if mamba_ssm is not None
-        else (None, None, None)
-    )
-
-
-selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = None, None, None
-causal_conv1d_update, causal_conv1d_fn = None, None
-
-is_fast_path_available = False
+is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
 
 logger = logging.get_logger(__name__)
 
@@ -289,11 +277,6 @@ class BambaMixer(nn.Module):
         self.D = nn.Parameter(torch.ones(self.num_heads))
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
-
-        _lazy_load_kernels()
-
-        global is_fast_path_available
-        is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
 
         if not is_fast_path_available:
             logger.warning_once(
