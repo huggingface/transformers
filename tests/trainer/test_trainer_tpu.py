@@ -115,7 +115,7 @@ def main():
 
         trainer.args.eval_accumulation_steps = None
 
-    logger.info("🔥 All distributed tests successful")
+    logger.info("All distributed tests successful")
 
 
 def _mp_fn(index):
