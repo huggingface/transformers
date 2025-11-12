@@ -300,6 +300,18 @@ class ServeCompletionsMixin:
         # sets `do_sample=True`
         self.assertEqual(output_text, '<think>\nOkay, the user just asked, "')
 
+    def test_early_return_due_to_length(self):
+        request = {
+            "model": "Qwen/Qwen3-0.6B",
+            "messages": [{"role": "user", "content": "Hello, how are you?"}],
+            "stream": True,
+            "max_tokens": 3,
+        }
+
+        all_payloads = self.run_server(request)
+        last_payload = all_payloads[-1]
+        self.assertTrue(last_payload.choices[0]["finish_reason"] == "length")
+
     # TODO: one test for each request flag, to confirm it is working as expected
     # TODO: speed-based test to confirm that KV cache is working across requests
 
