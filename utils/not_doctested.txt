@@ -322,7 +322,6 @@ src/transformers/convert_slow_tokenizer.py
 src/transformers/convert_slow_tokenizers_checkpoints_to_fast.py
 src/transformers/data/data_collator.py
 src/transformers/data/datasets/glue.py
-src/transformers/data/datasets/language_modeling.py
 src/transformers/data/datasets/squad.py
 src/transformers/data/metrics/squad_metrics.py
 src/transformers/data/processors/glue.py
@@ -738,7 +737,6 @@ src/transformers/models/yoso/convert_yoso_pytorch_to_pytorch.py
 src/transformers/models/yoso/modeling_yoso.py
 src/transformers/models/zamba/configuration_zamba.py
 src/transformers/models/zamba/modeling_zamba.py
-src/transformers/onnx/config.py
 src/transformers/optimization.py
 src/transformers/pipelines/audio_classification.py
 src/transformers/pipelines/audio_utils.py
