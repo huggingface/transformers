@@ -46,7 +46,7 @@ class Ernie4_5_VLVisionConfig(PreTrainedConfig):
             The size used for merging spatial dimensions.
         temporal_merge_size (`int`, *optional*, defaults to 2):
             The size used for merge along the temporal dimension.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.

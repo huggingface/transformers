@@ -267,8 +267,8 @@ class Ernie4_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
 
 @slow
-#@require_torch_multi_accelerator
-#@require_torch_large_accelerator
+@require_torch_multi_accelerator
+@require_torch_large_accelerator
 @require_torch
 class Ernie4_5_VLIntegrationTest(unittest.TestCase):
     # TODO: update path

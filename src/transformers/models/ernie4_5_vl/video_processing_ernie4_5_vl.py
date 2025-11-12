@@ -231,7 +231,6 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
                 "Decrease `num_frames` or `fps` for sampling."
             )
 
-        # same as `np.linspace(start=0, stop=total_num_frames, num=num_frames + 1).astype(int)[:-1]`
         indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
 
         return indices

@@ -545,8 +545,8 @@ class Ernie4_5_VLVisionTransformerPretrainedModel(Qwen2_5_VisionTransformerPretr
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
-        for blk in self.blocks:
-            hidden_states = blk(
+        for block in self.blocks:
+            hidden_states = block(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 position_embeddings=position_embeddings,
