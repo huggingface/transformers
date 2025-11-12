@@ -1893,6 +1893,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         use_cache=None,
+        is_prefill=False,
         **kwargs,
     ):
         # Overwritten -- our tests complain if we use GenerationMixin.prepare_inputs_for_generation
@@ -1901,7 +1902,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past_key_values is not None and past_key_values.get_seq_length() > 0:
+        if past_key_values is not None and not is_prefill:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         model_inputs = {

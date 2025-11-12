@@ -1252,7 +1252,9 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_loss = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, use_mems=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, use_mems=None, is_prefill=False, **kwargs
+    ):
         # Overwritten -- this model has unique input preparation
 
         # Add dummy token at the end (no attention on this one)

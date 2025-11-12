@@ -2257,7 +2257,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, **kwargs
+        self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, is_prefill=False, **kwargs
     ):
         # Overitten -- different expected inputs/outputs
 
