@@ -1597,11 +1597,8 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range
-        if isinstance(module, Qwen3OmniMoeThinkerTextExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
-            module.down_proj.normal_(mean=0.0, std=std)
-        elif isinstance(module, Qwen3OmniMoeThinkerTextTopKRouter):
-            module.weight.normal_(mean=0.0, std=std)
+        if hasattr(module, "router"):
+            module.router.weight.normal_(mean=0.0, std=std)
 
 
 @use_kernel_forward_from_hub("RMSNorm")

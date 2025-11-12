@@ -790,7 +790,15 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
 
 
 class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel):
-    pass
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
+            module.experts.gate_up_proj.normal_(mean=0.0, std=std)
+            module.experts.down_proj.normal_(mean=0.0, std=std)
+        elif isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
+            module.router.weight.normal_(mean=0.0, std=std)
 
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration):
