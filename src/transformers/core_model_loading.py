@@ -101,11 +101,22 @@ def build_glob_alt(
         name = f"g{i}"
         name_map[name] = g
         pat_src = _glob_to_regex_src(g)
-        prefix_src = r".*" if not pat_src.startswith(r"\^") else ""
+        prefix_src = ""
+        if pat_src.startswith("*"):
+            prefix_src = "."
+        elif not pat_src.startswith(r"\^") and not pat_src.startswith(r".*"):
+            prefix_src = ".*"
+
         parts.append(f"(?P<{name}>{prefix_src}{pat_src})")
 
     alt_src = "|".join(parts).replace('\\^','^').replace('\\.',r'\.')
-    return re.compile(alt_src), name_map
+    try:
+        reg = re.compile(alt_src)
+    except re.error as e:
+        logger.error(f"Error compiling regex for alternation: {alt_src}")
+        raise e
+
+    return reg, name_map
 
 
 def match_glob(key: str, alt: re.Pattern, name_map: dict[str, str]) -> Optional[str]:
