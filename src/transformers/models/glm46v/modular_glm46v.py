@@ -21,7 +21,7 @@ from ...video_utils import VideoMetadata
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
 from ..glm4v.image_processing_glm4v_fast import Glm4vImageProcessorFast
-from ..glm4v.modeling_glm4v import Glm4vModel, Glm4vPreTrainedModel, Glm4vTextModel
+from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vModel, Glm4vPreTrainedModel, Glm4vTextModel
 from ..glm4v.processing_glm4v import Glm4vProcessor
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 
@@ -39,6 +39,10 @@ class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
 
 
 class Glm46VTextModel(Glm4vTextModel):
+    pass
+
+
+class Glm46VForConditionalGeneration(Glm4vForConditionalGeneration):
     pass
 
 
@@ -131,6 +135,7 @@ __all__ = [
     "Glm46VConfig",
     "Glm46VTextConfig",
     "Glm46VModel",
+    "Glm4vForConditionalGeneration",
     "Glm46VPreTrainedModel",
     "Glm46VTextModel",
     "Glm46VProcessor",
