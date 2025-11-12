@@ -202,6 +202,8 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
+        if torch.compiler.is_exporting():
+            torch._check(attention_mask.shape[3] >= key_states.shape[-2])
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
