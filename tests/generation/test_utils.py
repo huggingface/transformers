@@ -900,7 +900,7 @@ class GenerationTesterMixin:
         candidate_generator = PromptLookupCandidateGenerator(
             eos_token_id=eos_token_id, num_output_tokens=4, max_matching_ngram_size=1
         )
-        output_prompt_lookup = candidate_generator.get_candidates(input_ids)[0]
+        output_prompt_lookup = candidate_generator.get_candidates(input_ids, is_first_iteration=None)[0]
 
         # PLD shouldn't propose any new tokens based on eos-match
         self.assertTrue(output_prompt_lookup.shape[-1] == 10)

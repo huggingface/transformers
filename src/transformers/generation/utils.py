@@ -2864,8 +2864,14 @@ class GenerationMixin(ContinuousMixin):
             else self.__call__
         )
 
-        prefill_consumed = False
-        outputs = self._prefill(input_ids, generation_config, model_kwargs)
+        # Assisted generation completes the prefill stage in candidate generator so that
+        # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
+        if not generation_config.is_assistant:
+            outputs = self._prefill(input_ids, generation_config, model_kwargs)
+            prefill_consumed = False
+        else:
+            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            prefill_consumed = True
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
@@ -3342,9 +3348,15 @@ class GenerationMixin(ContinuousMixin):
         )
         beam_indices = running_beam_indices.detach().clone()
 
-        prefill_consumed = False
         flat_running_sequences = input_ids
-        model_outputs = self._prefill(input_ids, generation_config, model_kwargs)
+        # Assisted generation completes the prefill stage in candidate generator so that
+        # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
+        if not generation_config.is_assistant:
+            model_outputs = self._prefill(input_ids, generation_config, model_kwargs)
+            prefill_consumed = False
+        else:
+            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            prefill_consumed = True
 
         # 4. run the generation loop
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
@@ -3650,7 +3662,7 @@ class GenerationMixin(ContinuousMixin):
             cur_len = input_ids.shape[1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator` and move to the correct device
-            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
+            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids, is_first_iteration)
             candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
@@ -3677,7 +3689,9 @@ class GenerationMixin(ContinuousMixin):
                     dim=0,
                 )
 
-            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(
+                candidate_input_ids, is_prefill=is_first_iteration, **candidate_kwargs
+            )
             if "logits_to_keep" in model_inputs:
                 model_inputs["logits_to_keep"] = candidate_length + 1
 
