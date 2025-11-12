@@ -46,7 +46,7 @@ class Glm46VForConditionalGeneration(Glm4vForConditionalGeneration):
     pass
 
 
-class Glm46VModel(Glm4vModel):
+class Glm46VModel(Glm46VPreTrainedModel):
     pass
 
 
