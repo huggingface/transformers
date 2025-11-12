@@ -370,24 +370,18 @@ class DeiTPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.copy_(
-                nn.init.trunc_normal_(module.weight.to(torch.float32), mean=0.0, std=self.config.initializer_range).to(
-                    module.weight.dtype
-                )
-            )
+            nn.init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, DeiTEmbeddings):
-            module.cls_token.zero_()
-            module.position_embeddings.zero_()
-            module.distillation_token.zero_()
+            nn.init.zeros_(module.cls_token)
+            nn.init.zeros_(module.position_embeddings)
+            nn.init.zeros_(module.distillation_token)
             if module.mask_token is not None:
-                module.mask_token.zero_()
+                nn.init.zeros_(module.mask_token)
 
 
 @auto_docstring

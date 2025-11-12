@@ -756,15 +756,15 @@ class GroupViTPreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.normal_(mean=0.0, std=init_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
 
         factor = self.config.initializer_factor
         if isinstance(module, GroupViTTextEmbeddings):
-            module.token_embedding.weight.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.normal_(mean=0.0, std=factor * 0.02)
+            nn.init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
+            nn.init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
         elif isinstance(module, GroupViTAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor

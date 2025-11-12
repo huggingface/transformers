@@ -263,16 +263,10 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, (nn.LayerNorm, ConvNextV2LayerNorm)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, ConvNextV2GRN):
-            module.weight.zero_()
-            module.bias.zero_()
+        super()._init_weights(module)
+        if isinstance(module, ConvNextV2GRN):
+            nn.init.zeros_(module.weight)
+            nn.init.zeros_(module.bias)
 
 
 @auto_docstring

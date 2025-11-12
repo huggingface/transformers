@@ -2828,16 +2828,16 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             module.in_proj_weight.normal_(mean=0.0, std=std)
             module.in_proj_bias.zero_()
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, OneFormerLoss):
             module.logit_scale.fill_(np.log(1 / self.config.contrastive_temperature))
 

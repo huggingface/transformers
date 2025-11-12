@@ -220,18 +220,18 @@ class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.text_config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.text_config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, DeepseekVLHybridLayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
         elif isinstance(module, DeepseekVLHybridModel):
-            module.high_res_vision_alpha.zero_()
+            nn.init.zeros_(module.high_res_vision_alpha)
 
 
 class DeepseekVLHybridModel(DeepseekVLModel):

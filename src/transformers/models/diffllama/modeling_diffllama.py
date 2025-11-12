@@ -600,10 +600,10 @@ class DiffLlamaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, DiffLlamaAttention):
-            module.lambda_q1.normal_(0, self.config.lambda_std_dev)
-            module.lambda_k1.normal_(0, self.config.lambda_std_dev)
-            module.lambda_q2.normal_(0, self.config.lambda_std_dev)
-            module.lambda_k2.normal_(0, self.config.lambda_std_dev)
+            nn.init.normal_(module.lambda_q1, 0, self.config.lambda_std_dev)
+            nn.init.normal_(module.lambda_k1, 0, self.config.lambda_std_dev)
+            nn.init.normal_(module.lambda_q2, 0, self.config.lambda_std_dev)
+            nn.init.normal_(module.lambda_k2, 0, self.config.lambda_std_dev)
 
 
 @auto_docstring

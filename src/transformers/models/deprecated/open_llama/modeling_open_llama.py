@@ -443,16 +443,16 @@ class OpenLlamaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             if self.config.use_stable_embedding:
                 torch.nn.init.xavier_normal_(module.weight)
             else:
-                module.weight.normal_(mean=0.0, std=std)
+                nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
 
 
 OPEN_LLAMA_INPUTS_DOCSTRING = r"""

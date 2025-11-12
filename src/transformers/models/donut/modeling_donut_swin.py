@@ -792,20 +792,14 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+        super()._init_weights(module)
         elif isinstance(module, DonutSwinEmbeddings):
             if module.mask_token is not None:
-                module.mask_token.zero_()
+                nn.init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
-                module.position_embeddings.zero_()
+                nn.init.zeros_(module.position_embeddings)
         elif isinstance(module, DonutSwinSelfAttention):
-            module.relative_position_bias_table.zero_()
+            nn.init.zeros_(module.relative_position_bias_table)
 
 
 @auto_docstring

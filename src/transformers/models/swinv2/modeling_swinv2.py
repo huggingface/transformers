@@ -890,17 +890,17 @@ class Swinv2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, Swinv2Embeddings):
             if module.mask_token is not None:
-                module.mask_token.zero_()
+                nn.init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
-                module.position_embeddings.zero_()
+                nn.init.zeros_(module.position_embeddings)
         elif isinstance(module, Swinv2SelfAttention):
             module.logit_scale.fill_(math.log(10))
 

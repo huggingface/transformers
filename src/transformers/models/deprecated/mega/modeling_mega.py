@@ -1345,7 +1345,7 @@ class MegaPreTrainedModel(PreTrainedModel):
                 if self.config.ema_projection_size > 1:
                     idx = torch.tensor(list(range(1, self.config.ema_projection_size, 2)))
                     val.index_fill_(0, idx, -1.0)
-                module.ema_expansion_matrix.normal_(mean=0.0, std=self.config.ema_beta_range).add_(val)
+                nn.init.copy_(module.ema_expansion_matrix, torch.normal(mean=0.0, std=self.config.ema_beta_range, size=module.ema_expansion_matrix.shape) + val)
                 # gamma & omega
                 nn.init.normal_(module.kernel_projection_matrix, mean=0.0, std=self.config.ema_gamma_omega_range)
                 nn.init.normal_(module.residual_weight, mean=0.0, std=self.config.ema_gamma_omega_range)
@@ -1366,16 +1366,16 @@ class MegaPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.qk_bias, 0.0)
         elif isinstance(module, nn.Linear):
             # initializes all linear layers in the entire network
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
 
 
 MEGA_START_DOCSTRING = r"""

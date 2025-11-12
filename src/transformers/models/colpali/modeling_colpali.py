@@ -47,13 +47,13 @@ class ColPaliPreTrainedModel(PreTrainedModel):
         )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
 
 
 @dataclass
@@ -185,7 +185,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
-
 
     def resize_token_embeddings(
         self,

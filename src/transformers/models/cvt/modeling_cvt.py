@@ -493,17 +493,15 @@ class CvtPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.copy_(nn.init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range))
+            nn.init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, CvtStage):
             if self.config.cls_token[module.stage]:
-                module.cls_token.copy_(
-                    nn.init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-                )
+                nn.init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring

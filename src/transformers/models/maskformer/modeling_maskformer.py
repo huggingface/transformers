@@ -1462,17 +1462,17 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
                     nn.init.xavier_uniform_(submodule.weight, gain=xavier_std)
                     nn.init.constant_(submodule.bias, 0)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         # copied from DETR
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
 
 
 @auto_docstring

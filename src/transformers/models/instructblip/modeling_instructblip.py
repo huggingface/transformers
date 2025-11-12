@@ -332,12 +332,12 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.normal_(mean=0.0, std=factor)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             module.weight.normal_(mean=0.0, std=factor)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, InstructBlipVisionEmbeddings):
             nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)

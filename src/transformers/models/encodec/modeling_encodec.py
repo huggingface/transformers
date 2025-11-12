@@ -458,8 +458,8 @@ class EncodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.GroupNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:

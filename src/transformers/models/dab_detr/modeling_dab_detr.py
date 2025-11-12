@@ -826,16 +826,16 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
             nn.init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, DabDetrForObjectDetection):
             nn.init.constant_(module.bbox_predictor.layers[-1].weight, 0)
             nn.init.constant_(module.bbox_predictor.layers[-1].bias, 0)
@@ -843,7 +843,7 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             # init prior_prob setting for focal loss
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias_value = -math.log((1 - prior_prob) / prior_prob)
-            module.class_embed.bias.fill_(bias_value)
+            nn.init.constant_(module.class_embed.bias, bias_value)
         elif isinstance(module, nn.PReLU):
             module.reset_parameters()
 

@@ -470,7 +470,7 @@ class Dots1PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Dots1TopkRouter):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring

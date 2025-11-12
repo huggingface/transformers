@@ -468,23 +468,12 @@ class DbrxPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, DbrxExpertGLU):
-            module.w1.normal_(mean=0.0, std=std)
-            module.v1.normal_(mean=0.0, std=std)
-            module.w2.normal_(mean=0.0, std=std)
+        if isinstance(module, DbrxExpertGLU):
+            nn.init.normal_(module.w1, mean=0.0, std=std)
+            nn.init.normal_(module.v1, mean=0.0, std=std)
+            nn.init.normal_(module.w2, mean=0.0, std=std)
 
 
 @auto_docstring

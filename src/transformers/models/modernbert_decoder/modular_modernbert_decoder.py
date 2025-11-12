@@ -463,9 +463,9 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
         elif isinstance(module, ModernBertDecoderForCausalLM):
             init_weight(module.decoder, stds["out"])
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
+            nn.init.ones_(module.weight)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
 
     def _check_and_adjust_attn_implementation(self, attn_implementation, is_init_check):
         raise AttributeError("No need to inherit!")

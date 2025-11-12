@@ -695,7 +695,7 @@ class FunnelPreTrainedModel(PreTrainedModel):
             std = 1.0 if self.config.initializer_std is None else self.config.initializer_std
             nn.init.normal_(module.word_embeddings.weight, std=std)
             if module.word_embeddings.padding_idx is not None:
-                module.word_embeddings.weight[module.word_embeddings.padding_idx].zero_()
+                nn.init.zeros_(module.word_embeddings.weight[module.word_embeddings.padding_idx])
 
 
 class FunnelClassificationHead(nn.Module):

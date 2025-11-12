@@ -499,7 +499,7 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Ernie4_5_MoeStatics):
-            module.e_score_correction_bias.zero_()
+            nn.init.zeros_(module.e_score_correction_bias)
 
 
 @auto_docstring

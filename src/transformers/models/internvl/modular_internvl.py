@@ -373,14 +373,14 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, InternVLVisionEmbeddings):
-            module.cls_token.zero_()
+            nn.init.zeros_(module.cls_token)
             if module.mask_token is not None:
-                module.mask_token.zero_()
+                nn.init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
-                module.position_embeddings.zero_()
+                nn.init.zeros_(module.position_embeddings)
         elif isinstance(module, InternVLVisionLayer):
-            module.lambda_1.fill_(self.config.layer_scale_init_value)
-            module.lambda_2.fill_(self.config.layer_scale_init_value)
+            nn.init.constant_(module.lambda_1, self.config.layer_scale_init_value)
+            nn.init.constant_(module.lambda_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring

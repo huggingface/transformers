@@ -483,11 +483,11 @@ class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
             nn.init.trunc_normal_(module.weight, std=0.02)
             nn.init.constant_(module.bias, 0)
         elif isinstance(module, Snake1d):
-            module.alpha.fill_(1.0)
+            nn.init.ones_(module.alpha)
         elif isinstance(module, nn.ConvTranspose1d):
             module.reset_parameters()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=0.02)
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm

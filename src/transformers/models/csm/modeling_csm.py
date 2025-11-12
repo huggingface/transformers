@@ -415,7 +415,7 @@ class CsmPreTrainedModel(PreTrainedModel):
         if isinstance(module, CsmCodebooksHead):
             num_codebooks = module.num_codebooks
             for i in range(num_codebooks - 1):
-                module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+                nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring

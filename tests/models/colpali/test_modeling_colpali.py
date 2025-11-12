@@ -13,9 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch ColPali model."""
 
-import collections
 import gc
-import re
 import unittest
 from typing import ClassVar
 
@@ -42,8 +40,6 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     import torch
-
-    from transformers.pytorch_utils import id_tensor_storage
 
 
 class ColPaliForRetrievalModelTester:

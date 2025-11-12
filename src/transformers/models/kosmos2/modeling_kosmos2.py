@@ -1167,11 +1167,11 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             if module.embed_tokens.padding_idx is not None:
                 module.embed_tokens.weight[module.embed_tokens.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
 
         if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.zero_()
+            nn.init.zeros_(module.bias)
 
 
 class Kosmos2VisionModel(Kosmos2PreTrainedModel):

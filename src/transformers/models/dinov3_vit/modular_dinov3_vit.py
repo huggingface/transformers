@@ -344,42 +344,22 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
     }
 
     @torch.no_grad()
-    def _init_weights(self, module):
+    def _init_weights(self, module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.copy_(
-                nn.init.trunc_normal_(
-                    module.weight.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                ).to(module.weight.dtype)
-            )
+            nn.init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, DINOv3ViTEmbeddings):
-            module.cls_token.copy_(
-                nn.init.trunc_normal_(
-                    module.cls_token.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                ).to(module.cls_token.dtype)
-            )
+            nn.init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.config.num_register_tokens > 0:
-                module.register_tokens.copy_(
-                    nn.init.trunc_normal_(
-                        module.register_tokens.to(torch.float32),
-                        mean=0.0,
-                        std=self.config.initializer_range,
-                    ).to(module.register_tokens.dtype)
-                )
-            module.mask_token.zero_()
+                nn.init.trunc_normal_(module.register_tokens, mean=0.0, std=self.config.initializer_range)
+            nn.init.zeros_(module.mask_token)
         elif isinstance(module, DINOv3ViTLayerScale):
-            module.lambda1.fill_(self.config.layerscale_value)
+            nn.init.constant_(module.lambda1, self.config.layerscale_value)
 
 
 @auto_docstring

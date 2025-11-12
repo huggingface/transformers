@@ -1006,20 +1006,18 @@ class EomtPreTrainedModel(PreTrainedModel):
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=1)
+            nn.init.normal_(module.weight, mean=0.0, std=1)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, EomtLayerScale):
             if hasattr(module, "lambda1"):
-                module.lambda1.fill_(self.config.layerscale_value)
+                nn.init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, EomtEmbeddings):
-            module.cls_token.copy_(
-                nn.init.trunc_normal_(module.cls_token.to(torch.float32), mean=0.0, std=std).to(module.cls_token.dtype)
-            )
-            module.register_tokens.zero_()
+            nn.init.trunc_normal_(module.cls_token, mean=0.0, std=std)
+            nn.init.zeros_(module.register_tokens)
 
 
 @auto_docstring(

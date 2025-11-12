@@ -572,8 +572,8 @@ class Owlv2PreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, Owlv2TextEmbeddings):
-            module.token_embedding.weight.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.normal_(mean=0.0, std=factor * 0.02)
+            nn.init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
+            nn.init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
         elif isinstance(module, Owlv2VisionEmbeddings):
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
@@ -601,12 +601,12 @@ class Owlv2PreTrainedModel(PreTrainedModel):
             )
             module.logit_scale.fill_(self.config.logit_scale_init_value)
         if isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         if isinstance(module, nn.Linear):
             module.weight.normal_(mean=0.0, std=factor)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTEncoder with OwlViT->Owlv2

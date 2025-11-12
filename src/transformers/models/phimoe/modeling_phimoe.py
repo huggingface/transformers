@@ -631,7 +631,7 @@ class PhimoePreTrainedModel(PreTrainedModel):
             module.gate_up_proj.normal_(mean=0.0, std=std)
             module.down_proj.normal_(mean=0.0, std=std)
         elif isinstance(module, PhimoeTopKRouter):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
 
 
 @auto_docstring

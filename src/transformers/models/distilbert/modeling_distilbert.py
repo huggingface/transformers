@@ -302,21 +302,11 @@ class DistilBertPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, Embeddings) and self.config.sinusoidal_pos_embds:
-            create_sinusoidal_embeddings(
-                self.config.max_position_embeddings, self.config.dim, module.position_embeddings.weight
-            )
+        super()._init_weights(module)
+        if isinstance(module, Embeddings) and self.config.sinusoidal_pos_embds:
+            nn.init.copy_(module.position_embeddings.weight, create_sinusoidal_embeddings(
+                self.config.max_position_embeddings, self.config.dim, torch.empty_like(module.position_embeddings.weight)
+            ))
 
 
 @auto_docstring

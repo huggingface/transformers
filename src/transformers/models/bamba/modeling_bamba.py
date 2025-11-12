@@ -30,6 +30,7 @@ from typing import Any, Optional, TypedDict, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
 from transformers.activations import ACT2FN
 
 from ...cache_utils import Cache
@@ -1130,9 +1131,9 @@ class BambaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, BambaMixer):
-            module.dt_bias.fill_(1.0)
-            module.A_log.copy_(torch.log(torch.arange(1, module.num_heads + 1)))
-            module.D.fill_(1.0)
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
 
 
 @auto_docstring

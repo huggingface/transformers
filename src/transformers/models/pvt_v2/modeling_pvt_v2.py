@@ -376,16 +376,16 @@ class PvtV2PreTrainedModel(PreTrainedModel):
             # `trunc_normal_cpu` not implemented in `half` issues
             module.weight.copy_(nn.init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range))
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, nn.Conv2d):
             fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
             fan_out //= module.groups
             module.weight.normal_(0, math.sqrt(2.0 / fan_out))
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
 
 
 @auto_docstring

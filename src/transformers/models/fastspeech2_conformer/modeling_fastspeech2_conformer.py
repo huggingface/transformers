@@ -997,19 +997,19 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             nn.init.normal_(module.weight, std=1.0 / math.sqrt(module.weight.size(1)))
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 key = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-key, b=key)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
             module.weight.normal_()
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, FastSpeech2ConformerAttention):
             nn.init.xavier_uniform_(module.pos_bias_u)
             nn.init.xavier_uniform_(module.pos_bias_v)
@@ -1403,14 +1403,6 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @torch.no_grad()
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm

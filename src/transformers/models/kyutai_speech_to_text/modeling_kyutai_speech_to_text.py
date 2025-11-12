@@ -129,17 +129,17 @@ class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
         std = self.config.initializer_range
 
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, KyutaiSpeechToTextFlexibleLinear):
             module.weight.normal_()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, KyutaiSpeechToTextRMSNorm):
-            module.weight.fill_(1.0)
+            nn.init.ones_(module.weight)
 
 
 class KyutaiSpeechToTextConv1dPaddingCache:

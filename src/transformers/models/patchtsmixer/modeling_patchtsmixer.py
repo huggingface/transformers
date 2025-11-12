@@ -693,15 +693,15 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
             if self.config.positional_encoding_type == "random":
                 nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, PatchTSMixerBatchNorm):
             module.batchnorm.bias.zero_()
             module.batchnorm.weight.fill_(1.0)
         elif isinstance(module, nn.Linear):
             module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
 
 
 class PatchTSMixerPretrainHead(nn.Module):

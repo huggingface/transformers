@@ -292,11 +292,11 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.zero_()
-                module.rel_pos_w.zero_()
+                nn.init.zeros_(module.rel_pos_h)
+                nn.init.zeros_(module.rel_pos_w)
         elif isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
-                module.pos_embed.zero_()
+                nn.init.zeros_(module.pos_embed)
 
 
 @dataclass

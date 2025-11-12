@@ -803,16 +803,16 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
                 std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
             )
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_factor)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_factor)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_factor)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_factor)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
 
 
 class AltCLIPVisionTransformer(nn.Module):

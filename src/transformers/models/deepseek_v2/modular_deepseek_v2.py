@@ -441,7 +441,7 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2Moe):
-            module.gate.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV2Model(LlamaModel):

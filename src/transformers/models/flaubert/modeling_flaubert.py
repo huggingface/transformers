@@ -678,19 +678,19 @@ class FlaubertPreTrainedModel(PreTrainedModel):
             if self.config is not None and self.config.embed_init_std is not None:
                 nn.init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         if isinstance(module, nn.Linear):
             if self.config is not None and self.config.init_std is not None:
                 nn.init.normal_(module.weight, mean=0, std=self.config.init_std)
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0.0)
         if isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         if isinstance(module, FlaubertModel) and self.config.sinusoidal_embeddings:
-            create_sinusoidal_embeddings(
-                self.config.max_position_embeddings, self.config.emb_dim, out=module.position_embeddings.weight
-            )
+            nn.init.copy_(module.position_embeddings.weight, create_sinusoidal_embeddings(
+                self.config.max_position_embeddings, self.config.emb_dim, out=torch.empty_like(module.position_embeddings.weight)
+            ))
 
 
 @auto_docstring

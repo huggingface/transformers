@@ -337,11 +337,11 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id

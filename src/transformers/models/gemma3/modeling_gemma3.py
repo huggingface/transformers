@@ -470,10 +470,10 @@ class Gemma3PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Gemma3MultiModalProjector):
-            module.mm_input_projection_weight.zero_()
+            nn.init.zeros_(module.mm_input_projection_weight)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.zero_()
+            nn.init.zeros_(module.weight)
 
 
 def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:

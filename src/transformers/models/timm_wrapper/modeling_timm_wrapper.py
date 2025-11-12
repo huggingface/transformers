@@ -131,9 +131,9 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         initialization, while all other weights should be loaded from the checkpoint.
         """
         if isinstance(module, (nn.Linear)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """

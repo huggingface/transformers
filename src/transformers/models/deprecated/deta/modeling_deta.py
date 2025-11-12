@@ -998,13 +998,13 @@ class DetaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, DetaMultiscaleDeformableAttention):
             module._reset_parameters()
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         if hasattr(module, "reference_points") and not self.config.two_stage:
             nn.init.xavier_uniform_(module.reference_points.weight, gain=1.0)
             nn.init.constant_(module.reference_points.bias, 0.0)
