@@ -164,6 +164,9 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
                 seen.add(idx)
                 uniq.append(idx)
 
+        if len(uniq) & 1:
+            uniq.append(uniq[-1])
+
         return np.array(uniq)
 
     def _preprocess(

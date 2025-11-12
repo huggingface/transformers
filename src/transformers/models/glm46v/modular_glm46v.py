@@ -102,6 +102,9 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
                 seen.add(idx)
                 uniq.append(idx)
 
+        if len(uniq) & 1:
+            uniq.append(uniq[-1])
+
         return np.array(uniq)
 
 
