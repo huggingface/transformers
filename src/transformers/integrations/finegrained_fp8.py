@@ -20,7 +20,6 @@ from typing import Any, Optional, Union
 from ..core_model_loading import ConversionOps
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
 
-
 if is_torch_available():
     import torch
     import torch.nn as nn
