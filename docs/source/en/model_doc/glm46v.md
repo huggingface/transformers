@@ -4,10 +4,6 @@
 
 [[autodoc]] Glm46VConfig
 
-## Glm46VTextConfig
-
-[[autodoc]] Glm46VTextConfig
-
 ## Glm46VImageProcessor
 
 [[autodoc]] Glm46VImageProcessor

@@ -172,6 +172,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("git", "GitConfig"),
         ("glm", "GlmConfig"),
         ("glm4", "Glm4Config"),
+        ("glm46v", "Glm46VConfig"),
         ("glm4_moe", "Glm4MoeConfig"),
         ("glm4v", "Glm4vConfig"),
         ("glm4v_moe", "Glm4vMoeConfig"),

@@ -19,11 +19,16 @@ import numpy as np
 
 from ...video_utils import VideoMetadata
 from ..auto.modeling_auto import AutoModel
+from ..glm4v.configuration_glm4v import Glm4vConfig
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
 from ..glm4v.image_processing_glm4v_fast import Glm4vImageProcessorFast
 from ..glm4v.modeling_glm4v import Glm4vModel, Glm4vPreTrainedModel
 from ..glm4v.processing_glm4v import Glm4vProcessor
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
+
+
+class Glm46VConfig(Glm4vConfig):
+    sub_configs = None
 
 
 class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
