@@ -2158,7 +2158,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 return True
 
             if is_torch_xpu_available():
-                logger.info("Detect using kernels-community/flash-attn2 on XPU.")
+                logger.info("Detect using FlashAttention2 (via kernel `kernels-community/flash-attn2`) on XPU.")
                 return True
 
             if importlib.util.find_spec("flash_attn") is None:
