@@ -378,8 +378,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
 
         # Add positions, dropout
-        embed_pos = self.embed_positions.weight
-        hidden_states = (inputs_embeds + embed_pos).to(inputs_embeds.dtype)
+        hidden_states = inputs_embeds + self.embed_positions.weight
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # Transformer stack

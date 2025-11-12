@@ -247,7 +247,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_fixture_single_matches(self):
         """
-        reproducer (creates JSON directly in repo): https://gist.github.com/lashahub/185b080ca87fe82fd397bc621e74efcb
+        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/c979f0f1a2b9223fa137faf1c02022d4#file-reproducer-py
         """
         path = Path(__file__).parent.parent.parent / "fixtures/audioflamingo3/expected_results_single.json"
         with open(path, "r", encoding="utf-8") as f:
@@ -289,7 +289,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_fixture_batched_matches(self):
         """
-        reproducer (creates JSON directly in repo): https://gist.github.com/lashahub/185b080ca87fe82fd397bc621e74efcb
+        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/c979f0f1a2b9223fa137faf1c02022d4#file-reproducer-py
         """
         path = Path(__file__).parent.parent.parent / "fixtures/audioflamingo3/expected_results_batched.json"
         with open(path, "r", encoding="utf-8") as f:
