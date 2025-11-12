@@ -19,7 +19,7 @@ import unittest
 
 import pytest
 
-from transformers import T5Gemma2Config, T5Gemma2ModuleConfig, is_torch_available
+from transformers import T5Gemma2Config, T5Gemma2ModuleConfig, T5Gemma2VisionConfig, is_torch_available
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -80,7 +80,7 @@ class T5Gemma2ModelTester:
         image_token_index=4,
         boi_token_index=5,
         eoi_token_index=6,
-        vision_config={
+        siglip_config={
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
@@ -136,9 +136,9 @@ class T5Gemma2ModelTester:
         self.image_token_index = image_token_index
         self.boi_token_index = boi_token_index
         self.eoi_token_index = eoi_token_index
-        self.vision_config = vision_config
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
+        self.siglip_config = siglip_config
+        self.num_channels = siglip_config["num_channels"]
+        self.image_size = siglip_config["image_size"]
         # common
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -203,18 +203,23 @@ class T5Gemma2ModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
         )
+    
+    def get_vision_config(self):
+        return T5Gemma2VisionConfig(
+            siglip_config=self.siglip_config,
+            image_token_index=self.image_token_index,
+            boi_token_index=self.boi_token_index,
+            eoi_token_index=self.eoi_token_index,
+            mm_tokens_per_image=self.mm_tokens_per_image,
+            hidden_size=self.encoder_hidden_size,
+        )
 
     def get_config(self, is_encoder_decoder=True):
         return self.config_class(
             encoder=self.get_encoder_config(),
             decoder=self.get_decoder_config(),
-            vision_config=self.vision_config,
+            vision_config=self.get_vision_config(),
             is_encoder_decoder=is_encoder_decoder,
-            # vision
-            image_token_index=self.image_token_index,
-            boi_token_index=self.boi_token_index,
-            eoi_token_index=self.eoi_token_index,
-            mm_tokens_per_image=self.mm_tokens_per_image,
             # Used for generation test.
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
@@ -232,9 +237,9 @@ class T5Gemma2ModelTester:
         pixel_values = floats_tensor(
             [
                 self.batch_size,
-                self.vision_config["num_channels"],
-                self.vision_config["image_size"],
-                self.vision_config["image_size"],
+                self.siglip_config["num_channels"],
+                self.siglip_config["image_size"],
+                self.siglip_config["image_size"],
             ]
         )
 
@@ -247,8 +252,8 @@ class T5Gemma2ModelTester:
 
         # set the 3 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
-        input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        input_ids[:, :1] = config.image_token_index
+        input_ids[input_ids == config.vision_config.image_token_index] = self.pad_token_id
+        input_ids[:, :1] = config.vision_config.image_token_index
 
         attention_mask = None
         decoder_attention_mask = None
@@ -364,7 +369,7 @@ class T5Gemma2ModelTester:
             labels=lm_labels,
             pixel_values=pixel_values,
         )
-        self.parent.assertEqual(len(outputs), 5)
+        self.parent.assertEqual(len(outputs), 4)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
 
