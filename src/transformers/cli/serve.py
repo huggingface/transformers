@@ -812,11 +812,18 @@ class Serve:
                 # they come from the assistant.
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
+                n_tokens_generated = 0
                 for result in self.running_continuous_batching_manager.request_id_iter(request_id):
+                    n_tokens_generated += 1
+
                     if result.status == RequestStatus.FINISHED:
+                        generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
+                        final_token_is_eos = result == tokenizer.eos_token
+                        reason = "length" if (generated_all_tokens and not final_token_is_eos) else "stop"
+
                         yield self.build_chat_completion_chunk(
                             request_id,
-                            finish_reason="stop",
+                            finish_reason=reason,
                             model=model_id_and_revision,
                         )
                         break
@@ -1052,8 +1059,13 @@ class Serve:
                 # they come from the assistant.
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
+                result = ""
+                n_tokens_generated = 0
+
                 for result in streamer:
-                    # Temporary hack for GPTOS 3: don't emit the final "<|return|>"
+                    n_tokens_generated += 1
+
+                    # Temporary hack for GPT-OSS 3: don't emit the final "<|return|>"
                     if "gptoss" in model.config.architectures[0].lower():
                         result = result.removesuffix("<|return|>")
                     results += result
@@ -1142,7 +1154,11 @@ class Serve:
                         yield self.build_chat_completion_chunk(
                             _request_id, content=result, model=model_id_and_revision
                         )
-                yield self.build_chat_completion_chunk(_request_id, finish_reason="stop", model=model_id_and_revision)
+
+                generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
+                final_token_is_eos = result == streamer.tokenizer.eos_token
+                reason = "length" if (generated_all_tokens and not final_token_is_eos) else "stop"
+                yield self.build_chat_completion_chunk(_request_id, finish_reason=reason, model=model_id_and_revision)
 
                 thread.join()
             except Exception as e:
@@ -1232,7 +1248,7 @@ class Serve:
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
-        # Temporary hack for GPTOSS 1: don't filter special tokens
+        # Temporary hack for GPT-OSS 1: don't filter special tokens
         skip_special_tokens = True
         if "gptoss" in model.config.architectures[0].lower():
             skip_special_tokens = False
@@ -1260,7 +1276,7 @@ class Serve:
         }
 
         def stream_response(streamer, _request_id):
-            # Temporary hack for GPTOS 2: filter out the CoT tokens. Full solution here implies defining new output
+            # Temporary hack for GPT-OS 2: filter out the CoT tokens. Full solution here implies defining new output
             # classes and piping the reasoning trace into a new field
             filter_cot = False
             cot_trace_end = None
