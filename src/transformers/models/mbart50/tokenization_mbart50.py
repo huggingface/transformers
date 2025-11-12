@@ -112,19 +112,39 @@ class MBart50Tokenizer(TokenizersBackend):
             # MBart50 uses fairseq vocab alignment matching MBart50Converter:
             # <s>=0, <pad>=1, </s>=2, <unk>=3, then tokens, lang codes, <mask>
 
-            # Input vocab from TokenizersExtractor is already in fairseq format
-            # We just need to add language codes and mask token at the end
             vocab = [(str(item[0]), float(item[1])) for item in vocab]
-            vocab_list = list(vocab)  # Copy the existing vocab
+            
+            # Check if vocab already includes language codes (from TokenizersExtractor/tokenizer.json)
+            vocab_tokens = [item[0] for item in vocab]
+            has_language_codes = any(lang_code in vocab_tokens for lang_code in FAIRSEQ_LANGUAGE_CODES)
+            
+            if has_language_codes:
+                # Vocab from TokenizersExtractor is already in fairseq format with language codes
+                # Just use it as-is
+                self._vocab_scores = vocab
+            else:
+                # Vocab from SentencePieceExtractor is in sentencepiece format:
+                # <unk>=0, <s>=1, </s>=2, then tokens
+                # We need to reorder to fairseq format: <s>=0, <pad>=1, </s>=2, <unk>=3, then tokens
+                
+                # Reorder: fairseq expects <s>, <pad>, </s>, <unk>, then rest of vocab starting from index 3
+                vocab_list = [
+                    (str(cls_token), 0.0),   # 0: <s>
+                    (str(pad_token), 0.0),   # 1: <pad>
+                    (str(eos_token), 0.0),   # 2: </s>
+                    (str(unk_token), 0.0),   # 3: <unk>
+                ]
+                # Add remaining tokens from position 3 onwards (skip <unk>, <s>, </s> from sentencepiece)
+                vocab_list.extend(vocab[3:])
 
-            # Add language codes
-            for lang_code in FAIRSEQ_LANGUAGE_CODES:
-                vocab_list.append((str(lang_code), 0.0))
+                # Add language codes
+                for lang_code in FAIRSEQ_LANGUAGE_CODES:
+                    vocab_list.append((str(lang_code), 0.0))
 
-            # Add mask token
-            vocab_list.append((str(mask_token), 0.0))
+                # Add mask token
+                vocab_list.append((str(mask_token), 0.0))
 
-            self._vocab_scores = vocab_list
+                self._vocab_scores = vocab_list
         else:
             # Minimal fallback: small vocab with specials and language codes
             self._vocab_scores = [
@@ -175,10 +195,6 @@ class MBart50Tokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        self.lang_code_to_id = {
-            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
-        }
-        self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
         self.fairseq_offset = 1
 
         # Mark language codes as extra special tokens without re-adding them to the backend.
@@ -193,6 +209,23 @@ class MBart50Tokenizer(TokenizersBackend):
         merged_extra = list(existing_extra) + [t for t in lang_tokens if str(t) not in existing_strs]
         self._extra_special_tokens = merged_extra
 
+        self._src_lang = src_lang if src_lang is not None else "en_XX"
+        self.tgt_lang = tgt_lang
+        
+        # Build language code mappings and fairseq mappings
+        # This will be called again in _post_init after tokenizer.json is loaded
+        self._build_language_code_mappings()
+        
+        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+        self.set_src_lang_special_tokens(self._src_lang)
+
+    def _build_language_code_mappings(self):
+        """Build language code to ID mappings and fairseq compatibility mappings."""
+        self.lang_code_to_id = {
+            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
+        }
+        self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
+
         # Build fairseq token mappings for backward compatibility
         self.fairseq_tokens_to_ids = {
             "<s>": 0,
@@ -201,13 +234,18 @@ class MBart50Tokenizer(TokenizersBackend):
             "<unk>": 3,
         }
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
+        mask_token = getattr(self, "mask_token", "<mask>")
         self.fairseq_tokens_to_ids["<mask>"] = self.convert_tokens_to_ids(str(mask_token))
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
-        self._src_lang = src_lang if src_lang is not None else "en_XX"
-        self.tgt_lang = tgt_lang
-        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
-        self.set_src_lang_special_tokens(self._src_lang)
+    def _post_init(self):
+        """Called after tokenizer.json is loaded in from_pretrained."""
+        # Rebuild language code mappings with the loaded tokenizer
+        self._build_language_code_mappings()
+        # Update cur_lang_code_id with the correct ID
+        if hasattr(self, "_src_lang"):
+            self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+            self.set_src_lang_special_tokens(self._src_lang)
 
     @property
     def src_lang(self) -> str:
