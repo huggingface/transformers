@@ -20,13 +20,9 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn as nn
 
-from ...cache_utils import DynamicCache, StaticCache, EncoderDecoderCache
+from ...cache_utils import DynamicCache, EncoderDecoderCache, StaticCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import (
-    GenerationConfig,
-    GenerationMode,
-    GenerationMixin
-)
+from ...generation import GenerationConfig, GenerationMixin, GenerationMode
 from ...masking_utils import and_masks, create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -80,10 +76,10 @@ class T5Gemma2ModuleConfig(Gemma3TextConfig):
 class T5Gemma2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to cover vision-related processing in T5Gemma 2.
-    
-    It is used to instantiate an T5Gemma2Vision model, defining the vision preprocessing logic, including siglip features and
+
+        It is used to instantiate an T5Gemma2Vision model, defining the vision preprocessing logic, including siglip features and
     multi-modal projection.
-    
+
     Args:
         siglip_config (`Union[SiglipVisionConfig, dict]`, optional, *optional*):
             Configuration for the vision encoder.
@@ -101,6 +97,7 @@ class T5Gemma2VisionConfig(PreTrainedConfig):
         hidden_size (`int`, *optional*, defaults to 768):
             The hidden size of the model.
     """
+
     model_type = "t5gemma2_vision"
 
     attribute_map = {
@@ -563,7 +560,6 @@ class T5Gemma2MultiModalProjector(Gemma3MultiModalProjector):
         self.patches_per_image = int(config.siglip_config.image_size // config.siglip_config.patch_size)
 
 
-
 class T5Gemma2VisionEncoder(nn.Module):
     def __init__(self, config: T5Gemma2VisionConfig):
         super().__init__()
@@ -847,10 +843,10 @@ class T5Gemma2Decoder(T5Gemma2Encoder):
     }
 
     def __init__(
-            self,
-            config: T5Gemma2ModuleConfig,
-            eoi_token_index: int = 256_000,
-            vision_config: Optional[T5Gemma2VisionConfig] = None
+        self,
+        config: T5Gemma2ModuleConfig,
+        eoi_token_index: int = 256_000,
+        vision_config: Optional[T5Gemma2VisionConfig] = None,
     ):
         super().__init__(config, eoi_token_index, vision_config)
         self.layers = nn.ModuleList(
@@ -886,7 +882,9 @@ class T5Gemma2Decoder(T5Gemma2Encoder):
             cross_attn_config = copy.deepcopy(self.config)
             del cross_attn_config.layer_types
             del cross_attn_config.sliding_window
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=cross_attn_config))
+            past_key_values = EncoderDecoderCache(
+                DynamicCache(config=self.config), DynamicCache(config=cross_attn_config)
+            )
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1250,11 +1248,13 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
             "offloading": offload_cache,
         }
 
-        past_key_values = model_kwargs.get("past_key_values", None)
+        past_key_values = model_kwargs.get("past_key_values")
         if past_key_values is not None:
             if not isinstance(past_key_values, EncoderDecoderCache):
-                raise ValueError("The `past_key_values` in `model_kwargs` must be of type `EncoderDecoderCache` for T5Gemma2 model.")
-        
+                raise ValueError(
+                    "The `past_key_values` in `model_kwargs` must be of type `EncoderDecoderCache` for T5Gemma2 model."
+                )
+
             # Cache already established, no need to re-initialize.
             if len(past_key_values.is_updated) > 0 and past_key_values.is_updated.get(0):
                 return
@@ -1267,17 +1267,19 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         else:
             # Initialize new cache.
             model_kwargs["past_key_values"] = EncoderDecoderCache(
-                DynamicCache(**{
-                    "config": self.config.get_text_config(decoder=True),
-                    "offloading": offload_cache,
-                }),  # self-attention cache
+                DynamicCache(
+                    **{
+                        "config": self.config.get_text_config(decoder=True),
+                        "offloading": offload_cache,
+                    }
+                ),  # self-attention cache
                 DynamicCache(**cross_attn_cache_kwargs),  # cross-attention cache
             )
 
         if hasattr(self, "_cache") and self._cache is not None:
             if not isinstance(self._cache, EncoderDecoderCache):
                 raise ValueError("The internal cache must be of type `EncoderDecoderCache` for T5Gemma2 model.")
-        
+
             self._cache = model_kwargs["past_key_values"]
 
 

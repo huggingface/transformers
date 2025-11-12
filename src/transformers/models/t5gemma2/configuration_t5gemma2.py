@@ -225,7 +225,7 @@ class T5Gemma2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to cover vision-related processing in T5Gemma 2.
 
-    It is used to instantiate an T5Gemma2Vision model, defining the vision preprocessing logic, including siglip features and
+        It is used to instantiate an T5Gemma2Vision model, defining the vision preprocessing logic, including siglip features and
     multi-modal projection.
 
     Args:
