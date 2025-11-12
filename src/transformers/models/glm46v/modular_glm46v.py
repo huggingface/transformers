@@ -19,7 +19,6 @@ import numpy as np
 
 from ...video_utils import VideoMetadata
 from ..auto.modeling_auto import AutoModel
-from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
 from ..glm4v.image_processing_glm4v_fast import Glm4vImageProcessorFast
 from ..glm4v.modeling_glm4v import Glm4vModel, Glm4vPreTrainedModel
@@ -27,20 +26,17 @@ from ..glm4v.processing_glm4v import Glm4vProcessor
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 
 
-class Glm46VTextConfig(Glm4vTextConfig):
-    pass
-
-
-class Glm46VConfig(Glm4vConfig):
-    pass
-
-
 class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
-    pass
+    config: None
+    _can_record_outputs = None
+    _no_split_modules = None
 
 
 class Glm46VModel(Glm4vModel):
-    def __init__(self, config: Glm46VConfig):
+    _no_split_modules = None
+    config: None
+
+    def __init__(self, config):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -128,8 +124,6 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
 
 
 __all__ = [
-    "Glm46VConfig",
-    "Glm46VTextConfig",
     "Glm46VModel",
     "Glm46VPreTrainedModel",
     "Glm46VProcessor",
