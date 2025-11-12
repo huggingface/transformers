@@ -126,20 +126,9 @@ class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-
-        if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, KyutaiSpeechToTextFlexibleLinear):
-            module.weight.normal_()
-        elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, KyutaiSpeechToTextRMSNorm):
-            nn.init.ones_(module.weight)
+        super()._init_weights(module)
+        if isinstance(module, KyutaiSpeechToTextFlexibleLinear):
+            nn.init.normal_(module.weight)
 
 
 class KyutaiSpeechToTextConv1dPaddingCache:

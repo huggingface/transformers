@@ -586,12 +586,12 @@ class OwlViTPreTrainedModel(PreTrainedModel):
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * factor,
             )
-            module.logit_scale.fill_(self.config.logit_scale_init_value)
+            nn.init.constant_(module.logit_scale, self.config.logit_scale_init_value)
         if isinstance(module, nn.LayerNorm):
             nn.init.zeros_(module.bias)
             nn.init.ones_(module.weight)
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=factor)
+            nn.init.normal_(module.weight, mean=0.0, std=factor)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
 

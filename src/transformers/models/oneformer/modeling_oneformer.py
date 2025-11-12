@@ -2790,8 +2790,8 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+
+            nn.init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
             nn.init.constant_(module.attention_weights.weight, 0.0)
             nn.init.constant_(module.attention_weights.bias, 0.0)
             nn.init.xavier_uniform_(module.value_proj.weight)
@@ -2825,8 +2825,8 @@ class OneFormerPreTrainedModel(PreTrainedModel):
                     nn.init.xavier_uniform_(submodule.weight, gain=xavier_std)
                     nn.init.constant_(submodule.bias, 0)
         elif isinstance(module, nn.MultiheadAttention):
-            module.in_proj_weight.normal_(mean=0.0, std=std)
-            module.in_proj_bias.zero_()
+            nn.init.normal_(module.in_proj_weight, mean=0.0, std=std)
+            nn.init.zeros_(module.in_proj_bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
@@ -2839,7 +2839,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 nn.init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, OneFormerLoss):
-            module.logit_scale.fill_(np.log(1 / self.config.contrastive_temperature))
+            nn.init.constant_(module.logit_scale, np.log(1 / self.config.contrastive_temperature))
 
 
 @auto_docstring

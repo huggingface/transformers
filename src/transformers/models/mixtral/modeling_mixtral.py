@@ -414,8 +414,8 @@ class MixtralPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, MixtralExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
-            module.down_proj.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            nn.init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, MixtralTopKRouter):
             nn.init.normal_(module.weight, mean=0.0, std=std)
 

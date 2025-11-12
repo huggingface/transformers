@@ -1163,9 +1163,9 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.dense.weight, std=std)
             nn.init.normal_(module.latent_query)
         elif isinstance(module, Kosmos2TextTransformer):
-            module.embed_tokens.weight.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.embed_tokens.weight, mean=0.0, std=std)
             if module.embed_tokens.padding_idx is not None:
-                module.embed_tokens.weight[module.embed_tokens.padding_idx].zero_()
+                nn.init.zeros_(module.embed_tokens.weight[module.embed_tokens.padding_idx])
         elif isinstance(module, nn.LayerNorm):
             nn.init.ones_(module.weight)
             nn.init.zeros_(module.bias)

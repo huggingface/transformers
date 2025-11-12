@@ -527,8 +527,8 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+
+            nn.init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
             nn.init.constant_(module.attention_weights.weight, 0.0)
             nn.init.constant_(module.attention_weights.bias, 0.0)
             nn.init.xavier_uniform_(module.value_proj.weight)
@@ -537,20 +537,20 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.output_proj.bias, 0.0)
         elif isinstance(module, MMGroundingDinoBiMultiHeadAttention):
             nn.init.xavier_uniform_(module.vision_proj.weight)
-            module.vision_proj.bias.fill_(0)
+            nn.init.zeros_(module.vision_proj.bias)
             nn.init.xavier_uniform_(module.text_proj.weight)
-            module.text_proj.bias.fill_(0)
+            nn.init.zeros_(module.text_proj.bias)
             nn.init.xavier_uniform_(module.values_vision_proj.weight)
-            module.values_vision_proj.bias.fill_(0)
+            nn.init.zeros_(module.values_vision_proj.bias)
             nn.init.xavier_uniform_(module.values_text_proj.weight)
-            module.values_text_proj.bias.fill_(0)
+            nn.init.zeros_(module.values_text_proj.bias)
             nn.init.xavier_uniform_(module.out_vision_proj.weight)
-            module.out_vision_proj.bias.fill_(0)
+            nn.init.zeros_(module.out_vision_proj.bias)
             nn.init.xavier_uniform_(module.out_text_proj.weight)
-            module.out_text_proj.bias.fill_(0)
+            nn.init.zeros_(module.out_text_proj.bias.)
         elif isinstance(module, MMGroundingDinoFusionLayer):
-            module.vision_param.fill_(1e-4)
-            module.text_param.fill_(1e-4)
+            nn.init.constant_(module.vision_param, 1e-4)
+            nn.init.constant_(module.text_param, 1e-4)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:

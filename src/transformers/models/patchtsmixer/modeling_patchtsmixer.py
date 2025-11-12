@@ -696,10 +696,10 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
             nn.init.zeros_(module.bias)
             nn.init.ones_(module.weight)
         elif isinstance(module, PatchTSMixerBatchNorm):
-            module.batchnorm.bias.zero_()
-            module.batchnorm.weight.fill_(1.0)
+            nn.init.zeros_(module.batchnorm.bias)
+            nn.init.ones_(module.batchnorm.weight)
         elif isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.init_std)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
 

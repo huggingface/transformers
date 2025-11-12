@@ -206,21 +206,11 @@ class LayoutLMv3PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
-        elif isinstance(module, LayoutLMv3Model):
+        super()._init_weights(module)
+        if isinstance(module, LayoutLMv3Model):
             if self.config.visual_embed:
                 nn.init.zeros_(module.cls_token)
-                module.pos_embed.zero_()
+                nn.init.zeros_(module.pos_embed)
 
 
 class LayoutLMv3SelfAttention(nn.Module):

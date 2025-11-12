@@ -1015,7 +1015,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
         elif isinstance(module, OmDetTurboLanguageBackbone):
             nn.init.normal_(module.text_projection, std=self.config.text_projection_in_dim**-0.5)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.init_std)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):

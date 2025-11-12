@@ -387,22 +387,6 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = self.config.initializer_factor
-        if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            nn.init.ones_(module.weight)
-            nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
-
-
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder with MUSICGEN->MUSICGEN_MELODY,Musicgen->MusicgenMelody
 class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
     """
@@ -1305,16 +1289,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         # Initialize projection layers weights and tie text encoder and decoder weights if set accordingly
         self.post_init()
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        # MusicgenMelodyForConditionalGeneration is made of PreTrainedModels that have already been initialized
-        # Projection layers still need to be initialized.
-        std = self.decoder.config.initializer_factor
-        if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
 
     def get_text_encoder(self):
         return self.text_encoder

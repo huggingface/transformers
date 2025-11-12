@@ -127,7 +127,7 @@ class LlavaOnevisionPreTrainedModel(PreTrainedModel):
                 nn.init.zeros_(module.bias)
         elif isinstance(module, LlavaOnevisionModel):
             embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            module.image_newline.normal_(mean=0.0, std=embed_std)
+            nn.init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
 
 class LlavaOnevisionMultiModalProjector(nn.Module):

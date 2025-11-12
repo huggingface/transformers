@@ -469,18 +469,6 @@ class MvpPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
-
     @property
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id
