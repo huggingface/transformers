@@ -354,7 +354,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                             "module fqn should not start with`re:`, which is used for specifying regex"
                         )
                         c = config.module_fqn_to_config[module_fqn]
-                    # regx match module and param
+                    # regex match module and param
                     else:
                         for maybe_module_fqn_pattern in config.module_fqn_to_config:
                             if not maybe_module_fqn_pattern.startswith("re:"):
