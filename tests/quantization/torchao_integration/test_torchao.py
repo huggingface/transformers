@@ -510,13 +510,13 @@ class TorchAoTest(unittest.TestCase):
         config = FqnToConfig(
             {
                 r"re:.*gate_up_proj": linear2_config,
-                "model.layers.44.feed_forward.experts.gate_up_proj": None,
+                "model.layers.0.feed_forward.experts.gate_up_proj": None,
                 "_default": linear1_config,
             }
         )
         quant_config = TorchAoConfig(quant_type=config)
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            "unsloth/Llama-4-Scout-17B-16E-Instruct",
+            "jcaip/Llama-4-Scout-Single-Layer",
             device_map="auto",
             dtype=torch.bfloat16,
             quantization_config=quant_config,
@@ -524,7 +524,7 @@ class TorchAoTest(unittest.TestCase):
 
         self.assertTrue(isinstance(quantized_model.model.layers[1].feed_forward.experts.gate_up_proj, Float8Tensor))
         self.assertTrue(
-            not isinstance(quantized_model.model.layers[44].feed_forward.experts.gate_up_proj, Float8Tensor)
+            not isinstance(quantized_model.model.layers[0].feed_forward.experts.gate_up_proj, Float8Tensor)
         )
         self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
 

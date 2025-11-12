@@ -342,21 +342,22 @@ class TorchAoHfQuantizer(HfQuantizer):
 
                 config = self.quantization_config.get_apply_tensor_subclass()
                 if isinstance(config, FqnToConfig):
-                    module_fqn, param_val = param_name.rsplit(".", 1)
+                    module_fqn, top_level_param_name = param_name.rsplit(".", 1)
                     c = None
-                    if param_name in config.module_fqn_to_config:
+                    if param_name in config.fqn_to_config:
                         assert not module_fqn.startswith("re:"), (
                             "param fqn should not start with`re:`, which is used for specifying regex"
                         )
                         c = config.module_fqn_to_config[param_name]
-                    elif module_fqn in config.module_fqn_to_config:
+                    elif module_fqn in config.fqn_to_config:
                         assert not module_fqn.startswith("re:"), (
                             "module fqn should not start with`re:`, which is used for specifying regex"
                         )
                         c = config.module_fqn_to_config[module_fqn]
                     # regex match module and param
                     else:
-                        for maybe_module_fqn_pattern in config.module_fqn_to_config:
+                        for maybe_module_fqn_pattern in config.fqn_to_config:
+                            # if key doesn't start with re, it is an exact fqn key, so we don't regex match
                             if not maybe_module_fqn_pattern.startswith("re:"):
                                 continue
                             # see if param matches first
@@ -371,12 +372,12 @@ class TorchAoHfQuantizer(HfQuantizer):
                             c = config.module_fqn_to_config.get("_default", None)
 
                     if c is not None:
-                        if param_val == "weight":
+                        if top_level_param_name == "weight":
                             # we can apply the module config directly
                             quantize_(module, c, (lambda x, fqn: True))
                         else:
                             # need to apply to custom param name
-                            custom_param_fqn_config = FqnToConfig({param_val: c})
+                            custom_param_fqn_config = FqnToConfig({top_level_param_name: c})
                             quantize_(module, custom_param_fqn_config, filter_fn=None)
                     return
 
