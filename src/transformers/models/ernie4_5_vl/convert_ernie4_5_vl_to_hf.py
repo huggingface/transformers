@@ -72,12 +72,11 @@ VALID_TEXT_CONFIG_KEYS = [
 TEXT_TO_VISION_CONFIG_KEYS = [
     "spatial_conv_size",
     "temporal_conv_size",
-    "rms_norm_eps",
 ]
 ALL_VISION_CONFIG_KEYS = (
     VALID_VISION_CONFIG_KEYS
     + TEXT_TO_VISION_CONFIG_KEYS
-    + ["intermediate_size", "text_hidden_size", "vision_rms_norm_eps"]
+    + ["intermediate_size"]
 )
 ALL_TEXT_CONFIG_KEYS = VALID_TEXT_CONFIG_KEYS + [
     "hidden_act",
@@ -292,8 +291,7 @@ def convert_vision_config_to_hf(vision_config, original_config, original_vision_
     # convert originally text attributes to vision
     for key in TEXT_TO_VISION_CONFIG_KEYS:
         vision_config[key.replace("conv", "merge")] = original_config[key]
-    vision_config["text_hidden_size"] = original_config["hidden_size"]
-    vision_config["vision_rms_norm_eps"] = 1e-6
+    vision_config["rms_norm_eps"] = 1e-6
 
     # delete everything else
     for key in list(vision_config.keys()):
@@ -315,6 +313,7 @@ def convert_text_config_to_hf(text_config, original_config):
     text_config["moe_num_experts"] = original_config["moe_num_experts"][0]  # the same for both modalities
     text_config["rope_parameters"] = {
         "rope_type": "ernie_3d",
+        "rope_theta": 500_000.0,
         "freq_allocation": 20,  # can also be extracted from mrope
     }
 
@@ -456,10 +455,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    convert_weights(args.checkpoint_path, args.pytorch_dump_folder_path)
+    #convert_weights(args.checkpoint_path, args.pytorch_dump_folder_path)
     convert_config(args.checkpoint_path, args.pytorch_dump_folder_path)
 
-    if args.convert_preprocessor:
-        convert_processor(args.checkpoint_path, args.pytorch_dump_folder_path)
+    #if args.convert_preprocessor:
+    #    convert_processor(args.checkpoint_path, args.pytorch_dump_folder_path)
 
     print(f"Saved converted checkpoint to {args.pytorch_dump_folder_path}")

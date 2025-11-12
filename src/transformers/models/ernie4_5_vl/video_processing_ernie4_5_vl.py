@@ -20,6 +20,8 @@ import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
 from huggingface_hub.dataclasses import validate_typed_dict
+from PIL import Image, ImageDraw, ImageFont
+from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -35,7 +37,6 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     TensorType,
     add_start_docstrings,
-    is_vision_available,
     logging,
 )
 from ...utils.import_utils import is_tracing, requires
@@ -48,11 +49,6 @@ from ...video_utils import (
     reorder_videos,
 )
 from .image_processing_ernie4_5_vl import smart_resize
-
-
-if is_vision_available():
-    from PIL import Image, ImageDraw, ImageFont
-    from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 
 
 logger = logging.get_logger(__name__)
@@ -139,7 +135,7 @@ class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs, total=False):
         draw_on_frames (`bool`, *optional*, defaults to `True`):
             Whether to draw timestamps on each frame or not.
             This does not work with `torch.compile` but resembles
-            the performance of he original model.
+            the performance of the original model.
     """,
 )
 @requires(backends=("torchvision",))
@@ -243,13 +239,10 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
     def _convert_timestamp(self, time_stamp_in_seconds):
         """Convert to `time: hr:min:sec` format"""
         hours = 0
-        while time_stamp_in_seconds >= 3600:
-            hours += 1
-            time_stamp_in_seconds -= 3600
-        mins = 0
-        while time_stamp_in_seconds >= 60:
-            mins += 1
-            time_stamp_in_seconds -= 60
+        hours = time_stamp_in_seconds // 3600
+        time_stamp_in_seconds = time_stamp_in_seconds % 3600
+        mins = time_stamp_in_seconds // 60
+        time_stamp_in_seconds = time_stamp_in_seconds % 60
         return f"time: {int(hours):02d}:{int(mins):02d}:{time_stamp_in_seconds:05.02f}"
 
     def _render_image_with_timestamp(self, image: torch.Tensor, timestamp: str):

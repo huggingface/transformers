@@ -102,7 +102,7 @@ class Ernie4_5_VLVisionText2TextModelTester:
                 "hidden_act": "silu",
                 "max_position_embeddings": 512,
                 "tie_word_embeddings": True,
-                "rope_parameters": {"type": "ernie_3d", "freq_allocation": 2},
+                "rope_parameters": {"type": "ernie_3d", "rope_theta": 500_000.0, "freq_allocation": 2},
                 "moe_intermediate_size": [22, 22],
                 "moe_k": 2,
                 "moe_num_experts": 8,
@@ -120,7 +120,6 @@ class Ernie4_5_VLVisionText2TextModelTester:
                 "hidden_act": "silu",
                 "intermediate_size": 22,
                 "num_heads": 2,
-                "text_hidden_size": 16,
                 "spatial_merge_size": 1,
             }
 
@@ -268,8 +267,8 @@ class Ernie4_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
 
 @slow
-@require_torch_multi_accelerator
-@require_torch_large_accelerator
+#@require_torch_multi_accelerator
+#@require_torch_large_accelerator
 @require_torch
 class Ernie4_5_VLIntegrationTest(unittest.TestCase):
     # TODO: update path

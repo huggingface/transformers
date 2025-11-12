@@ -385,7 +385,7 @@ class Ernie4_5_VLMoeBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        mm_token_type_ids: Optional[torch.BoolTensor] = None,
+        mm_token_type_ids: Optional[torch.IntTensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
 
@@ -401,7 +401,7 @@ class Ernie4_5_VLMoeBlock(nn.Module):
                 dtype=torch.float,
             )
 
-            # True (1) == vision, False (0) == text tokens
+            # True (1 or 2) == vision, False (0) == text tokens
             mm_token_type_ids = mm_token_type_ids.bool()
             token_type_ids_router = mm_token_type_ids.reshape(-1)[:, None].expand(-1, self.num_experts)
             token_type_ids_states = mm_token_type_ids[..., None].expand(-1, -1, hidden_dim)
@@ -450,7 +450,7 @@ class Ernie4_5_VLDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        mm_token_type_ids: Optional[torch.BoolTensor] = None,
+        mm_token_type_ids: Optional[torch.IntTensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -537,7 +537,7 @@ class Ernie4_5_VLTextModel(Ernie4_5_VLPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        mm_token_type_ids: Optional[torch.BoolTensor] = None,
+        mm_token_type_ids: Optional[torch.IntTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -545,7 +545,7 @@ class Ernie4_5_VLTextModel(Ernie4_5_VLPreTrainedModel):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> MoeModelOutputWithPast:
         r"""
-        mm_token_type_ids (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Token type ids matching image/video tokens in the inputs sequence to `True` and otherwise `False`.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -768,8 +768,8 @@ class Ernie4_5_VLVisionBlock(GradientCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
 
-        self.norm1 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps)
-        self.norm2 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps)
+        self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
+        self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
         self.attn = Ernie4_5_VLVisionAttention(config=config)
         self.mlp = Ernie4_5VLVisionMLP(
             dim=config.hidden_size,
@@ -818,7 +818,7 @@ class Ernie4_5_VLVisionTransformerPretrainedModel(Ernie4_5_VLPreTrainedModel):
         self.blocks = nn.ModuleList([Ernie4_5_VLVisionBlock(config) for _ in range(config.depth)])
         self.gradient_checkpointing = False
 
-        self.ln = nn.LayerNorm(config.hidden_size, eps=config.vision_rms_norm_eps)
+        self.ln = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
@@ -901,7 +901,7 @@ class Ernie4_5_VLVisionMLP(nn.Module):
         self.fc1 = nn.Linear(in_dim, out_dim)
         self.act_fn = nn.GELU()
         self.fc2 = nn.Linear(out_dim, out_dim)
-        self.ln = nn.LayerNorm(out_dim, eps=config.vision_rms_norm_eps)
+        self.ln = nn.LayerNorm(out_dim, eps=config.vision_config.rms_norm_eps)
 
     def forward(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
@@ -912,14 +912,14 @@ class Ernie4_5_VLVisionMLP(nn.Module):
 
 
 class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Ernie4_5_VLConfig):
         super().__init__()
         self.config = config
 
-        self.in_dim = config.hidden_size
-        self.out_dim = config.text_hidden_size
-        self.spatial_merge_size = config.spatial_merge_size
-        self.temporal_merge_size = config.temporal_merge_size
+        self.in_dim = config.vision_config.hidden_size
+        self.out_dim = config.text_config.hidden_size
+        self.spatial_merge_size = config.vision_config.spatial_merge_size
+        self.temporal_merge_size = config.vision_config.temporal_merge_size
 
         # compress 2d conv(picture) to 1d
         self.spatial_dim = self.in_dim * self.spatial_merge_size**2
@@ -930,9 +930,9 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
         self.temporal_linear = Ernie4_5_VLVisionMLP(config, self.temporal_dim, self.spatial_dim)
 
         self.mlp = nn.Linear(self.spatial_dim, self.out_dim)
-        self.after_norm = Ernie4_5_VLRMSNorm(self.out_dim, config.rms_norm_eps)
+        self.after_norm = Ernie4_5_VLRMSNorm(self.out_dim, config.text_config.rms_norm_eps)
 
-    def _temporal_slicing(self, x, grid_thw):
+    def _temporal_slicing(self, hidden_states, grid_thw):
         """
         Creates slices along the temporal dimension (usually if we have a video input).
 
@@ -983,31 +983,31 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
                         )
                     )
 
-        first_slice_offsets = torch.cat(first_slice_offsets, dim=-1).to(x.device)
-        second_slice_offsets = torch.cat(second_slice_offsets, dim=-1).to(x.device)
+        first_slice_offsets = torch.cat(first_slice_offsets, dim=-1).to(hidden_states.device)
+        second_slice_offsets = torch.cat(second_slice_offsets, dim=-1).to(hidden_states.device)
 
         return torch.concat(
             [
-                torch.index_select(x, dim=0, index=first_slice_offsets),
-                torch.index_select(x, dim=0, index=second_slice_offsets),
+                torch.index_select(hidden_states, dim=0, index=first_slice_offsets),
+                torch.index_select(hidden_states, dim=0, index=second_slice_offsets),
             ],
             dim=-1,
         )
 
-    def forward(self, x, grid_thw):
+    def forward(self, hidden_states, grid_thw):
         # image spatial
-        x = x.reshape([-1, x.shape[-1] * (self.spatial_merge_size**2)])
-        x = self.spatial_linear(x.to(self.mlp.weight.dtype))
+        hidden_states = hidden_states.reshape([-1, hidden_states.shape[-1] * (self.spatial_merge_size**2)])
+        hidden_states = self.spatial_linear(hidden_states.to(self.mlp.weight.dtype))  # TODO: check dtype
 
         # video temporal
-        x = self._temporal_slicing(x, grid_thw)
-        x = self.temporal_linear(x)
+        hidden_states = self._temporal_slicing(hidden_states, grid_thw)
+        hidden_states = self.temporal_linear(hidden_states)
 
         # final mlp
-        x = self.mlp(x)
-        x = self.after_norm(x)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.after_norm(hidden_states)
 
-        return x
+        return hidden_states
 
 
 @auto_docstring
@@ -1023,8 +1023,8 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         super().__init__(config)
         self.language_model = Ernie4_5_VLTextModel._from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
-        self.vision_tower = Ernie4_5_VLVisionTransformerPretrainedModel(config.vision_config)
-        self.resampler_model = Ernie4_5_VLVariableResolutionResamplerModel(config.vision_config)
+        self.vision_tower = Ernie4_5_VLVisionTransformerPretrainedModel._from_config(config.vision_config)
+        self.resampler_model = Ernie4_5_VLVariableResolutionResamplerModel(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1151,34 +1151,22 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
                 for modality_type, start_idx, end_idx in input_type_group:
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
 
-                    if modality_type == "image":
+                    if modality_type == "text":
+                        text_len = end_idx - start_idx
+                        llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
+
+                    else:
+                        grid_thw = image_grid_thw if modality_type == "image" else video_grid_thw
+                        mm_index = image_index if modality_type == "image" else video_index
+                        t_merge_size = 1 if modality_type == "image" else temporal_merge_size
+
                         t, h, w = (
-                            image_grid_thw[image_index][0],
-                            image_grid_thw[image_index][1],
-                            image_grid_thw[image_index][2],
+                            grid_thw[mm_index][0],
+                            grid_thw[mm_index][1],
+                            grid_thw[mm_index][2],
                         )
                         llm_grid_t, llm_grid_h, llm_grid_w = (
-                            t.item(),
-                            h.item() // spatial_merge_size,
-                            w.item() // spatial_merge_size,
-                        )
-
-                        t_index = torch.arange(llm_grid_t).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
-                        h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
-                        w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
-                        llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
-
-                        image_index += 1
-
-                    elif modality_type == "video":
-                        t, h, w = (
-                            video_grid_thw[video_index][0],
-                            video_grid_thw[video_index][1],
-                            video_grid_thw[video_index][2],
-                        )
-
-                        llm_grid_t, llm_grid_h, llm_grid_w = (
-                            t.item() // temporal_merge_size,
+                            t.item() // t_merge_size,
                             h.item() // spatial_merge_size,
                             w.item() // spatial_merge_size,
                         )
@@ -1189,11 +1177,10 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
                             w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
                             llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
 
-                        video_index += 1
-
-                    else:
-                        text_len = end_idx - start_idx
-                        llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
+                        if modality_type == "image":
+                            image_index += 1
+                        else:
+                            video_index += 1
 
                 llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
                 position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
@@ -1308,7 +1295,7 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        mm_token_type_ids: Optional[torch.BoolTensor] = None,
+        mm_token_type_ids: Optional[torch.IntTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1321,7 +1308,7 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, MoeModelOutputWithPast]:
         r"""
-        mm_token_type_ids (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Token type ids matching image/video tokens in the inputs sequence to `True` and otherwise `False`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
@@ -1381,6 +1368,8 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
             router_logits=outputs.router_logits,
         )
 
+    # TODO: Should be moved to generation loop instead in the future
+    # Relevant PR(s): https://github.com/huggingface/transformers/pull/42088
     def get_position_ids(
         self,
         input_ids: torch.LongTensor = None,
@@ -1559,10 +1548,6 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
     def language_model(self):
         return self.model.language_model
 
-    @property
-    def visual(self):
-        return self.model.vision_tower
-
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1570,7 +1555,7 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        mm_token_type_ids: Optional[torch.BoolTensor] = None,
+        mm_token_type_ids: Optional[torch.IntTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1586,7 +1571,7 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, MoeCausalLMOutputWithPast]:
         r"""
-        mm_token_type_ids (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Token type ids matching image/video tokens in the inputs sequence to `True` and otherwise `False`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1678,13 +1663,13 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
 
         # Using our own caching with rope delta
         model_inputs["position_ids"] = self.model.get_position_ids(
-            input_ids=model_inputs.get("input_ids", None),
-            attention_mask=model_inputs.get("attention_mask", None),
-            past_key_values=model_inputs.get("past_key_values", None),
-            inputs_embeds=model_inputs.get("inputs_embeds", None),
-            image_grid_thw=model_inputs.get("image_grid_thw", None),
-            video_grid_thw=model_inputs.get("video_grid_thw", None),
-            cache_position=model_inputs.get("cache_position", None),
+            input_ids=model_inputs.get("input_ids"),
+            attention_mask=model_inputs.get("attention_mask"),
+            past_key_values=model_inputs.get("past_key_values"),
+            inputs_embeds=model_inputs.get("inputs_embeds"),
+            image_grid_thw=model_inputs.get("image_grid_thw"),
+            video_grid_thw=model_inputs.get("video_grid_thw"),
+            cache_position=model_inputs.get("cache_position"),
         )
 
         if model_inputs["cache_position"][0] != 0:

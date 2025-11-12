@@ -608,7 +608,7 @@ def _compute_llama3_parameters(
     return inv_freq_llama, attention_factor
 
 
-def _comput_ernie_3d_parameters(
+def _compute_ernie_3d_parameters(
     config: PreTrainedConfig,
     device: "torch.device",
     seq_len: Optional[int] = None,
@@ -677,7 +677,7 @@ ROPE_INIT_FUNCTIONS = {
     "yarn": _compute_yarn_parameters,
     "longrope": _compute_longrope_parameters,
     "llama3": _compute_llama3_parameters,
-    "ernie_3d": _comput_ernie_3d_parameters,
+    "ernie_3d": _compute_ernie_3d_parameters,
 }
 
 

@@ -46,12 +46,8 @@ class Ernie4_5_VLVisionConfig(PreTrainedConfig):
             The size used for merging spatial dimensions.
         temporal_merge_size (`int`, *optional*, defaults to 2):
             The size used for merge along the temporal dimension.
-        text_hidden_size (`int`, *optional*, defaults to 2560):
-            Dimensionality of the subsequent text model.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
-        vision_rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers in certain vision portions.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
@@ -70,15 +66,12 @@ class Ernie4_5_VLVisionConfig(PreTrainedConfig):
         patch_size=14,
         spatial_merge_size=2,
         temporal_merge_size=2,
-        text_hidden_size=2560,
-        rms_norm_eps=1e-5,
-        vision_rms_norm_eps=1e-6,
+        rms_norm_eps=1e-6,
         initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        # vision projection
         self.depth = depth
         self.hidden_size = hidden_size
         self.hidden_act = hidden_act
@@ -87,13 +80,8 @@ class Ernie4_5_VLVisionConfig(PreTrainedConfig):
         self.in_channels = in_channels
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
-
-        # resampler
-        self.text_hidden_size = text_hidden_size
         self.temporal_merge_size = temporal_merge_size
         self.rms_norm_eps = rms_norm_eps
-        self.vision_rms_norm_eps = vision_rms_norm_eps
-
         self.initializer_range = initializer_range
 
 
@@ -186,7 +174,7 @@ class Ernie4_5_VLTextConfig(PreTrainedConfig):
         use_bias=False,
         tie_word_embeddings=True,
         rope_parameters=None,
-        moe_intermediate_size=[1536, 512],
+        moe_intermediate_size=None,
         moe_k=6,
         moe_num_experts=64,
         moe_num_shared_experts=2,
@@ -211,10 +199,11 @@ class Ernie4_5_VLTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.use_bias = use_bias
         self.rope_parameters = rope_parameters
-        rope_theta = kwargs.get("rope_theta", 500_000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
+        standardize_rope_params(self)
         rope_config_validation(self)
         self.moe_intermediate_size = moe_intermediate_size
+        if self.moe_intermediate_size is None:
+            self.moe_intermediate_size = [1536, 512]
         self.moe_k = moe_k
         self.moe_num_experts = moe_num_experts
         self.moe_num_shared_experts = moe_num_shared_experts

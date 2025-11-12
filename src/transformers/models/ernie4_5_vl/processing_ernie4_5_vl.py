@@ -144,7 +144,7 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
             - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
-            - **mm_token_type_ids** -- List of token type ids differentiating between image/vide and text input.
+            - **mm_token_type_ids** -- List of token type ids differentiating between image, video and text input.
               Returned when `text` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
@@ -199,12 +199,15 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
                 self.image_token_id,
                 self.image_start_token_id,
                 self.image_end_token_id,
+            ]:
+                mm_token_type_ids[array_ids == token_id] = 1
+            for token_id in [
                 self.video_token_id,
                 self.video_start_token_id,
                 self.video_end_token_id,
             ]:
-                mm_token_type_ids[array_ids == token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.astype(bool).tolist()
+                mm_token_type_ids[array_ids == token_id] = 2
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.astype(int).tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 

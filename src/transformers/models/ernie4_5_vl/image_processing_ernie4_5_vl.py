@@ -42,7 +42,6 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging
-from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
@@ -180,7 +179,7 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
 
     def _preprocess(
         self,
-        images: Union[ImageInput, VideoInput],
+        images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
@@ -239,6 +238,7 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.   - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
+        images = self.fetch_images(images)
         images = make_list_of_images(images)
 
         if do_convert_rgb:
