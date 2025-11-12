@@ -694,6 +694,8 @@ class IsaacVisionAttention(Siglip2Attention):
         cu_seqlens = kwargs.pop("cu_seqlens", None)
         max_seqlen = kwargs.pop("max_seqlen", None)
         kwargs.pop("output_attentions", None)
+        kwargs.pop("output_hidden_states", None)
+        kwargs.pop("return_dict", None)
         if kwargs:
             unexpected = ", ".join(sorted(kwargs))
             raise TypeError(f"Unexpected kwargs for IsaacVisionAttention.forward: {unexpected}")
