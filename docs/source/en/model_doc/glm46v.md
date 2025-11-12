@@ -85,8 +85,3 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] Glm46VTextModel
     - forward
-
-## Glm46VForConditionalGeneration
-
-[[autodoc]] Glm46VForConditionalGeneration
-    - forward
