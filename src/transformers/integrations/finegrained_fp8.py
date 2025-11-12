@@ -549,6 +549,8 @@ def replace_with_fp8_linear(
     quantization_config=None,
 ):
     """Helper function to replace model layers with FP8 versions."""
+    if modules_to_not_convert is None:
+        modules_to_not_convert = []
     modules_to_not_convert += ["lm_head"]
 
     if quantization_config.modules_to_not_convert is not None:
