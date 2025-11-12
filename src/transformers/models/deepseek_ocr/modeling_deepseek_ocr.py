@@ -1681,8 +1681,6 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         num_local_crops: Optional[torch.LongTensor] = None,
         image_sizes: Optional[torch.Tensor] = None,
         image_spatial_crops: Optional[torch.Tensor] = None,
-        vision_feature_layer: Optional[int] = None,
-        vision_feature_select_strategy: Optional[str] = None,
     ):
         """Wrapper for the two image feature stacks used in deepseek OCR."""
         image_spatial_crops = image_spatial_crops if image_spatial_crops is not None else image_sizes

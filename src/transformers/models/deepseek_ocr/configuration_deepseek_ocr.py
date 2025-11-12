@@ -346,12 +346,8 @@ class DeepseekOcrConfig(PreTrainedConfig):
             The config object or dictionary of the vision encoders (SAM and CLIP).
         projector_config (`DeepseekOcrProjectorConfig` or `dict`, *optional*):
             The config object or dictionary of the projector that maps vision features to text embedding space.
-        image_token_index (`int`, *optional*, defaults to 100015):
-            The index representing image tokens in the model's token vocabulary.
-        vision_feature_layer (`int`, *optional*):
-            Index of the vision layer to extract features from.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            Strategy for selecting vision features.
+        image_token_id (`int`, *optional*, defaults to 100015):
+            The id of the image token in the model's token vocabulary.
 
     Example:
 
@@ -380,18 +376,13 @@ class DeepseekOcrConfig(PreTrainedConfig):
         text_config=None,
         vision_config=None,
         projector_config=None,
-        image_token_index=100015,
-        vision_feature_layer=None,
-        vision_feature_select_strategy="default",
+        image_token_id=100015,
         **kwargs,
     ):
-        self.image_token_index = image_token_index
-        self.image_token_id = image_token_index
-        self.vision_feature_layer = vision_feature_layer
-        self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.image_token_id = image_token_id
 
         if text_config is None:
-            text_config = DeepseekOcrTextConfig(
+            self.text_config = DeepseekOcrTextConfig(
                 hidden_size=1280,
                 intermediate_size=6848,
                 num_hidden_layers=12,
@@ -406,9 +397,9 @@ class DeepseekOcrConfig(PreTrainedConfig):
                 max_position_embeddings=8192,
             )
         elif isinstance(text_config, dict):
-            text_config = DeepseekOcrTextConfig(**text_config)
-
-        self.text_config = text_config
+            self.text_config = DeepseekOcrTextConfig(**text_config)
+        else:
+            self.text_config = text_config
 
         if vision_config is None:
             self.vision_config = DeepseekOcrVisionConfig()
