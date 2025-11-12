@@ -44,7 +44,7 @@ def generate_simple(
         "eager": "eager",
         "paged_attention": "eager",  # TODO: this does not work on AMD docker
         "flash_paged": "flash_attention_2",  # TODO: this does not work on AMD docker
-        "kernels-community/flash-attn": "eager",
+        "kernels-community/flash-attn2": "eager",
     }[attn_impl]
 
     model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.bfloat16, attn_implementation=attn_impl)
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-blocks", "-n", type=int, default=None)
     parser.add_argument("--max-batch-tokens", "-b", type=int, default=None)
 
-    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn", help="Attention implementation")
+    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn2", help="Attention implementation")
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")

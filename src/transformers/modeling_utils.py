@@ -63,7 +63,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import is_kernel, load_and_register_attn_kernel
+from .integrations.hub_kernels import is_kernel
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -2372,31 +2372,35 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         applicable_attn_implementation = attn_implementation
 
         # If FA not installed, do not fail but use kernels instead
+        requested_original_flash_attn = attn_implementation is not None and (
+            attn_implementation == "flash_attention_2" or attn_implementation == "flash_attention_3"
+        )
         if (
-            attn_implementation is not None
-            and "flash" in attn_implementation
+            requested_original_flash_attn
             and self._supports_flash_attn
             and not (is_flash_attn_2_available() or is_flash_attn_3_available())
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
             if attn_implementation.endswith("2"):
-                applicable_attn_implementation = "kernels-community/flash-attn"
+                applicable_attn_implementation = "kernels-community/flash-attn2"
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
 
         if is_kernel(applicable_attn_implementation):
             try:
-                load_and_register_attn_kernel(applicable_attn_implementation)
+                # preload flash attention here to allow compile with fullgraph
+                lazy_import_flash_attention(applicable_attn_implementation)
+
                 # log that we used kernel fallback if successful
-                if "flash_" in attn_implementation:
+                if requested_original_flash_attn:
                     logger.warning_once(
                         f"You do not have `flash_attn` installed, using `{applicable_attn_implementation}` "
                         "from the `kernels` library instead!"
                     )
             except Exception as e:
                 # raise the proper exception for requested flash attention
-                if attn_implementation.startswith("flash_"):
+                if requested_original_flash_attn:
                     if attn_implementation.endswith("2"):
                         self._flash_attn_2_can_dispatch()
                     else:
@@ -2408,9 +2412,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             applicable_attn_implementation = self.get_correct_attn_implementation(
                 applicable_attn_implementation, is_init_check
             )
+
             # preload flash attention here to allow compile with fullgraph
-            if applicable_attn_implementation.startswith("flash_"):
-                lazy_import_flash_attention(applicable_attn_implementation, force_import=True)
+            if "flash" in applicable_attn_implementation:
+                lazy_import_flash_attention(applicable_attn_implementation)
+
         return applicable_attn_implementation
 
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
@@ -5392,6 +5398,7 @@ class AttentionInterface(GeneralInterface):
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
+        "paged|flash_attention_3": paged_attention_forward,
         "paged|flash_attention_2": paged_attention_forward,
         "paged|sdpa": sdpa_attention_paged_forward,
         "paged|eager": eager_paged_attention_forward,
