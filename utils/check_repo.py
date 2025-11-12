@@ -90,6 +90,8 @@ PRIVATE_MODELS = [
     "Kosmos2_5TextForCausalLM",
     "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
+    "SiglipVisionTransformer",
+    "Siglip2VisionTransformer",
     "AriaTextForCausalLM",
     "AriaTextModel",
     "MolmoAdapterModel",
@@ -364,7 +366,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
+    "SiglipVisionTransformer",
     "Siglip2VisionModel",
+    "Siglip2VisionTransformer",
     "Siglip2TextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
     "VitPoseForPoseEstimation",
