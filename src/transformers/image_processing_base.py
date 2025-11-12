@@ -32,6 +32,7 @@ from .utils import (
     is_offline_mode,
     is_remote_url,
     logging,
+    safe_load_json_file,
 )
 from .utils.hub import cached_file
 
@@ -333,26 +334,12 @@ class ImageProcessingMixin(PushToHubMixin):
         # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
         image_processor_dict = None
         if resolved_processor_file is not None:
-            try:
-                with open(resolved_processor_file, encoding="utf-8") as reader:
-                    text = reader.read()
-                processor_dict = json.loads(text)
-            except json.JSONDecodeError:
-                raise OSError(
-                    f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file."
-                )
+            processor_dict = safe_load_json_file(resolved_processor_file)
             if "image_processor" in processor_dict:
                 image_processor_dict = processor_dict["image_processor"]
 
         if resolved_image_processor_file is not None and image_processor_dict is None:
-            try:
-                with open(resolved_image_processor_file, encoding="utf-8") as reader:
-                    text = reader.read()
-                image_processor_dict = json.loads(text)
-            except json.JSONDecodeError:
-                raise OSError(
-                    f"It looks like the config file at '{resolved_image_processor_file}' is not a valid JSON file."
-                )
+            image_processor_dict = safe_load_json_file(resolved_image_processor_file)
 
         if image_processor_dict is None:
             raise OSError(

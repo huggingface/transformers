@@ -15,7 +15,6 @@
 """AutoImageProcessor class."""
 
 import importlib
-import json
 import os
 import warnings
 from collections import OrderedDict
@@ -36,6 +35,7 @@ from ...utils import (
     is_torchvision_available,
     is_vision_available,
     logging,
+    safe_load_json_file,
 )
 from ...utils.import_utils import requires
 from .auto_factory import _LazyAutoMapping
@@ -342,24 +342,12 @@ def get_image_processor_config(
     # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
     image_processor_dict = {}
     if resolved_processor_file is not None:
-        try:
-            with open(resolved_processor_file, encoding="utf-8") as reader:
-                text = reader.read()
-            processor_dict = json.loads(text)
-        except json.JSONDecodeError:
-            raise OSError(f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file.")
+        processor_dict = safe_load_json_file(resolved_processor_file)
         if "image_processor" in processor_dict:
             image_processor_dict = processor_dict["image_processor"]
 
     if resolved_image_processor_file is not None and image_processor_dict is None:
-        try:
-            with open(resolved_image_processor_file, encoding="utf-8") as reader:
-                text = reader.read()
-            image_processor_dict = json.loads(text)
-        except json.JSONDecodeError:
-            raise OSError(
-                f"It looks like the config file at '{resolved_image_processor_file}' is not a valid JSON file."
-            )
+        image_processor_dict = safe_load_json_file(resolved_image_processor_file)
 
     return image_processor_dict
 

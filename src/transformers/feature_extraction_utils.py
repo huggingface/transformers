@@ -39,6 +39,7 @@ from .utils import (
     is_torch_dtype,
     logging,
     requires_backends,
+    safe_load_json_file,
 )
 from .utils.hub import cached_file
 
@@ -481,26 +482,12 @@ class FeatureExtractionMixin(PushToHubMixin):
         # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
         feature_extractor_dict = None
         if resolved_processor_file is not None:
-            try:
-                with open(resolved_processor_file, encoding="utf-8") as reader:
-                    text = reader.read()
-                processor_dict = json.loads(text)
-            except json.JSONDecodeError:
-                raise OSError(
-                    f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file."
-                )
+            processor_dict = safe_load_json_file(resolved_processor_file)
             if "feature_extractor" in processor_dict or "audio_processor" in processor_dict:
                 feature_extractor_dict = processor_dict.get("feature_extractor", processor_dict.get("audio_processor"))
 
         if resolved_feature_extractor_file is not None and feature_extractor_dict is None:
-            try:
-                with open(resolved_feature_extractor_file, encoding="utf-8") as reader:
-                    text = reader.read()
-                feature_extractor_dict = json.loads(text)
-            except json.JSONDecodeError:
-                raise OSError(
-                    f"It looks like the config file at '{resolved_feature_extractor_file}' is not a valid JSON file."
-                )
+            feature_extractor_dict = safe_load_json_file(resolved_feature_extractor_file)
 
         if feature_extractor_dict is None:
             raise OSError(

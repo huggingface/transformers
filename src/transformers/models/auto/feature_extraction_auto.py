@@ -15,7 +15,6 @@
 """AutoFeatureExtractor class."""
 
 import importlib
-import json
 import os
 from collections import OrderedDict
 from typing import Optional, Union
@@ -24,7 +23,7 @@ from typing import Optional, Union
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging
+from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging, safe_load_json_file
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -203,25 +202,12 @@ def get_feature_extractor_config(
     # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
     feature_extractor_dict = {}
     if resolved_processor_file is not None:
-        try:
-            with open(resolved_processor_file, encoding="utf-8") as reader:
-                text = reader.read()
-            processor_dict = json.loads(text)
-        except json.JSONDecodeError:
-            raise OSError(f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file.")
+        processor_dict = safe_load_json_file(resolved_processor_file)
         if "feature_extractor" in processor_dict:
             feature_extractor_dict = processor_dict["feature_extractor"]
 
     if resolved_feature_extractor_file is not None and feature_extractor_dict is None:
-        try:
-            with open(resolved_feature_extractor_file, encoding="utf-8") as reader:
-                text = reader.read()
-            feature_extractor_dict = json.loads(text)
-        except json.JSONDecodeError:
-            raise OSError(
-                f"It looks like the config file at '{resolved_feature_extractor_file}' is not a valid JSON file."
-            )
-
+        feature_extractor_dict = safe_load_json_file(resolved_feature_extractor_file)
     return feature_extractor_dict
 
 

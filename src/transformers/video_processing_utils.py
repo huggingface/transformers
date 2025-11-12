@@ -50,6 +50,7 @@ from .utils import (
     is_torchcodec_available,
     is_torchvision_v2_available,
     logging,
+    safe_load_json_file,
 )
 from .utils.hub import cached_file
 from .utils.import_utils import requires
@@ -700,26 +701,12 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
         video_processor_dict = None
         if resolved_processor_file is not None:
-            try:
-                with open(resolved_processor_file, encoding="utf-8") as reader:
-                    text = reader.read()
-                processor_dict = json.loads(text)
-            except json.JSONDecodeError:
-                raise OSError(
-                    f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file."
-                )
+            processor_dict = safe_load_json_file(resolved_processor_file)
             if "video_processor" in processor_dict:
                 video_processor_dict = processor_dict["video_processor"]
 
         if resolved_video_processor_file is not None and video_processor_dict is None:
-            try:
-                with open(resolved_video_processor_file, encoding="utf-8") as reader:
-                    text = reader.read()
-                video_processor_dict = json.loads(text)
-            except json.JSONDecodeError:
-                raise OSError(
-                    f"It looks like the config file at '{resolved_video_processor_file}' is not a valid JSON file."
-                )
+            video_processor_dict = safe_load_json_file(resolved_video_processor_file)
 
         if video_processor_dict is None:
             raise OSError(
