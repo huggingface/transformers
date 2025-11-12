@@ -203,7 +203,7 @@ class T5Gemma2ModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
         )
-    
+
     def get_vision_config(self):
         return T5Gemma2VisionConfig(
             siglip_config=self.siglip_config,
