@@ -360,7 +360,8 @@ def get_loaded_parameter_class(base_cls):
                 inst = super().__new__(cls, from_existing.data, from_existing.requires_grad, **from_existing.__dict__)
             else:
                 inst = super().__new__(cls, from_existing)
-            inst._original_cls = base_cls
+            # we store the original object to get it back later on
+            inst._original = from_existing
             # Explicitly override all in-place methods per instance
             for method_name in inst._inplace_methods:
                 setattr(inst, method_name, MethodType(inst._skip, inst))
