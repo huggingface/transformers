@@ -411,8 +411,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         ) < packaging.version.parse("4.0.0"):
             import datasets.load
 
-            dynamic_modules_path = os.path.join(datasets.load.init_dynamic_modules(), "__init__.py")
-            # load dynamic_modules from path
+dynamic_modules_path = os.path.join(datasets_modules, "__init__.py")  # datasets_modules already set above            # load dynamic_modules from path
             spec = importlib.util.spec_from_file_location("datasets_modules", dynamic_modules_path)
             datasets_modules = importlib.util.module_from_spec(spec)
             sys.modules[spec.name] = datasets_modules
