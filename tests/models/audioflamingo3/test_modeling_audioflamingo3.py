@@ -261,15 +261,11 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "text",
-                        "text": "Why is the philosopher's name mentioned in the lyrics? "
-                        "(A) To express a sense of nostalgia "
-                        "(B) To indicate that language cannot express clearly, satirizing the inversion of black and white in the world "
-                        "(C) To add depth and complexity to the lyrics "
-                        "(D) To showcase the wisdom and influence of the philosopher",
+                        "text": "Transcribe the input speech.",
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
+                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Why_do_we_ask_questions_converted.wav",
                     },
                 ],
             }
@@ -278,12 +274,11 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
             self.checkpoint,
             device_map=torch_device,
-            dtype=torch.bfloat16,
         ).eval()
 
         batch = self.processor.apply_chat_template(
             conversation, tokenize=True, add_generation_prompt=True, return_dict=True
-        ).to(model.device, dtype=model.dtype)
+        ).to(model.device)
         seq = model.generate(**batch)
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
@@ -310,6 +305,21 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "text",
+                            "text": "Transcribe the input speech.",
+                        },
+                        {
+                            "type": "audio",
+                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Why_do_we_ask_questions_converted.wav",
+                        },
+                    ],
+                }
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
                             "text": "Why is the philosopher's name mentioned in the lyrics? "
                             "(A) To express a sense of nostalgia "
                             "(B) To indicate that language cannot express clearly, satirizing the inversion of black and white in the world "
@@ -323,32 +333,16 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     ],
                 }
             ],
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "What makes this combination of acoustic and ambient sounds unlikely to appear together?",
-                        },
-                        {
-                            "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/unlikely_existence_of_banjo_and_rain_sounds_at_the_same_time_in_the_training_data.wav",
-                        },
-                    ],
-                }
-            ],
         ]
 
         model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
             self.checkpoint,
             device_map=torch_device,
-            dtype=torch.bfloat16,
         ).eval()
 
         batch = self.processor.apply_chat_template(
             conversations, tokenize=True, add_generation_prompt=True, return_dict=True
-        ).to(model.device, dtype=model.dtype)
+        ).to(model.device)
         seq = model.generate(**batch)
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
