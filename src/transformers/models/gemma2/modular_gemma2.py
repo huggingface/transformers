@@ -47,7 +47,6 @@ from ..gemma.modeling_gemma import (
     GemmaRMSNorm,
     GemmaRotaryEmbedding,
     apply_rotary_pos_emb,
-    repeat_kv,
 )
 
 
@@ -282,24 +281,32 @@ def eager_attention_forward(
     if scaling is None:
         scaling = module.head_dim**-0.5
 
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if multi_head_attention := key.shape[1] != query.shape[1]:
+        query_states = query.view(query.shape[0], key.shape[1], -1, *query.shape[2:])
+        # Equivalent to (but faster than):
+        # attn_weights = query_states @ key.unsqueeze(2).transpose(-1, -2) * scaling
+        attn_weights = torch.einsum("bkgjd, bksd -> bkgjs", query_states, key) * scaling
+    else:
+        attn_weights = (query @ key.transpose(-1, -2)) * scaling
 
     if softcap is not None:
         attn_weights = attn_weights / softcap
         attn_weights = torch.tanh(attn_weights)
         attn_weights = attn_weights * softcap
-    if attention_mask is not None:  # no matter the length, we just slice it
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
+    if multi_head_attention:
+        # Equivalent to (but faster than):
+        # attn_output = (attn_weights @ value.unsqueeze(2)).flatten(1, 2).transpose(1, 2)
+        attn_output = torch.einsum("bkgjs, bksd -> bkgjd", attn_weights, value).flatten(1, 2).transpose(1, 2)
+        attn_weights = attn_weights.flatten(1, 2)
+    else:
+        attn_output = (attn_weights @ value).transpose(1, 2)
     return attn_output, attn_weights
 
 
