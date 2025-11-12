@@ -705,18 +705,6 @@ class ModelTesterMixin:
                 assert self.model_tester.text_config.num_hidden_layers <= target_num_hidden_layers
 
     def test_save_load(self):
-        def check_save_load(out1, out2):
-            # make sure we don't have nans
-            out_2 = out2.cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-            out_2 = out_2[~np.isneginf(out_2)]
-
-            out_1 = out1.cpu().numpy()
-            out_1[np.isnan(out_1)] = 0
-            out_1 = out_1[~np.isneginf(out_1)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -747,9 +735,9 @@ class ModelTesterMixin:
 
             if isinstance(first, tuple) and isinstance(second, tuple):
                 for tensor1, tensor2 in zip(first, second):
-                    check_save_load(tensor1, tensor2)
+                    torch.testing.assert_close(tensor1, tensor2, msg="Running save/load and forward yields different results")
             else:
-                check_save_load(first, second)
+                torch.testing.assert_close(first, second, msg="Running save/load and forward yields different results")
 
     def test_from_pretrained_no_checkpoint(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -765,7 +753,7 @@ class ModelTesterMixin:
             keys = state_dict.keys()
             for k in keys:
                 p1, p2 = new_state_dict[k], state_dict[k]
-                torch.testing.assert_close(p1, p2)
+                torch.testing.assert_close(p1, p2, msg=f"failed on {k}")
             new_params = dict(new_model.named_parameters())
             for k, v in list(model.named_parameters()):
                 with self.subTest(k):
@@ -1989,7 +1977,7 @@ class ModelTesterMixin:
                             torch.testing.assert_close(
                                 v,
                                 reloaded_state[k],
-                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}.\n"
+                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}.\n{v}\nvs\n{reloaded_state[k]}\n"
                                 "This probably means that it was not set with the correct value when tying.",
                             )
 
