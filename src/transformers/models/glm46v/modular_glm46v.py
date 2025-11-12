@@ -135,7 +135,7 @@ __all__ = [
     "Glm46VConfig",
     "Glm46VTextConfig",
     "Glm46VModel",
-    "Glm4vForConditionalGeneration",
+    "Glm46VForConditionalGeneration",
     "Glm46VPreTrainedModel",
     "Glm46VTextModel",
     "Glm46VProcessor",
