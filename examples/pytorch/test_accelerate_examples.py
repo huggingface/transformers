@@ -168,7 +168,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --seed 7
             --checkpointing_steps epoch
             --with_tracking
-            --report_to wandb
         """.split()
 
         run_command(self._launch_args + testargs)
