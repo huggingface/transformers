@@ -117,8 +117,6 @@ def flush_memory():
     # Clear CUDA cache
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-        torch.cuda.reset_max_memory_allocated()
-        torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
     gc.collect()
 
