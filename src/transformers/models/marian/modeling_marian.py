@@ -857,9 +857,7 @@ class MarianModel(MarianPreTrainedModel):
                 "encoder.embed_tokens.weight": "shared.weight",
             }
         else:
-            self._tied_weights_keys = {
-                "decoder.embed_tokens.weight": "encoder.embed_tokens.weight",
-            }
+            self._tied_weights_keys = None
 
         self.encoder = MarianEncoder(config)
         self.decoder = MarianDecoder(config)
