@@ -1400,7 +1400,7 @@ class MimiPreTrainedModel(PreTrainedModel):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, MimiLayerScale):
-            module.scale.fill_(self.config.layer_scale_initial_scale)
+            nn.init.constant_(module.scale, self.config.layer_scale_initial_scale)
 
 
 @auto_docstring(

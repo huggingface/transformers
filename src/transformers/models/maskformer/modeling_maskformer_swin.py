@@ -704,14 +704,8 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
-        elif isinstance(module, MaskFormerSwinEmbeddings):
+        super()._init_weights(module)
+        if isinstance(module, MaskFormerSwinEmbeddings):
             if module.position_embeddings is not None:
                 nn.init.zeros_(module.position_embeddings)
         elif isinstance(module, MaskFormerSwinSelfAttention):

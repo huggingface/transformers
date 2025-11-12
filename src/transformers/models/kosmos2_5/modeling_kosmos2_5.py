@@ -1250,7 +1250,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             if getattr(module, "bias", None) is not None:
                 nn.init.zeros_(module.bias)
         elif isinstance(module, Kosmos2_5ImageToTextProjection):
-            module.latent_query.normal_(mean=0.0, std=1.0)
+            nn.init.normal_(module.latent_query, mean=0.0, std=1.0)
 
 
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):

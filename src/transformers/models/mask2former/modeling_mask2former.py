@@ -2125,8 +2125,8 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+
+            nn.init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
 
             nn.init.constant_(module.attention_weights.weight, 0.0)
             nn.init.constant_(module.attention_weights.bias, 0.0)
@@ -2139,7 +2139,7 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             for p in module.parameters():
                 if p.dim() > 1:
                     nn.init.xavier_uniform_(p, gain=xavier_std)
-            module.cross_attn.in_proj_bias.zero_()
+            nn.init.zeros_(module.cross_attn.in_proj_bias)
 
         elif isinstance(module, Mask2FormerPixelDecoder):
             nn.init.normal_(module.level_embed, std=0)

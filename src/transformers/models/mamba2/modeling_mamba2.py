@@ -725,8 +725,8 @@ class Mamba2PreTrainedModel(PreTrainedModel):
             # S4D real initialization. These are not discretized!
             # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
             A = torch.arange(1, self.config.num_heads + 1)
-            module.A_log.copy_(torch.log(A))
-            module.D.fill_(1.0)
+            nn.init.copy_(module.A_log, torch.log(A))
+            nn.init.ones_(module.D)
 
             dt = torch.exp(
                 torch.rand(self.config.num_heads)
@@ -736,13 +736,11 @@ class Mamba2PreTrainedModel(PreTrainedModel):
 
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            module.dt_bias.copy_(inv_dt)
-            module.dt_bias._no_reinit = True
+            nn.init.copy_(module.dt_proj.bias, inv_dt)
 
             nn.init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
             if module.conv1d.bias is not None:
-                if not getattr(module.conv1d.bias, "_no_reinit", False):
-                    nn.init.zeros_(module.conv1d.bias)
+                nn.init.zeros_(module.conv1d.bias)
             nn.init.kaiming_uniform_(module.out_proj.weight, a=math.sqrt(5))
 
             if self.config.rescale_prenorm_residual:
@@ -760,11 +758,9 @@ class Mamba2PreTrainedModel(PreTrainedModel):
                 p /= math.sqrt(self.config.num_hidden_layers)
 
         if isinstance(module, nn.Linear):
-            if not getattr(module.weight, "_no_reinit", False):
-                nn.init.normal_(module.weight, std=std)
+            nn.init.normal_(module.weight, std=std)
             if module.bias is not None:
-                if not getattr(module.bias, "_no_reinit", False):
-                    nn.init.zeros_(module.bias)
+                nn.init.zeros_(module.bias)
         elif isinstance(module, (Mamba2RMSNorm, MambaRMSNormGated)):
             nn.init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):

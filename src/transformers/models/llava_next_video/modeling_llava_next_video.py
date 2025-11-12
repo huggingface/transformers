@@ -186,7 +186,7 @@ class LlavaNextVideoPreTrainedModel(PreTrainedModel):
                 nn.init.zeros_(module.bias)
         elif isinstance(module, LlavaNextVideoModel):
             embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            module.image_newline.normal_(mean=0.0, std=embed_std)
+            nn.init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
 
 def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):

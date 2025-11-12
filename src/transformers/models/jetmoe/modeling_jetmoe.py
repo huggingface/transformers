@@ -585,17 +585,8 @@ class JetMoePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, JetMoeRMSNorm):
-            nn.init.ones_(module.weight)
-        elif isinstance(module, JetMoeParallelExperts):
+        super()._init_weights(module)
+        if isinstance(module, JetMoeParallelExperts):
             nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, JetMoeMoA | JetMoeMoE):
             nn.init.zeros_(module.bias)

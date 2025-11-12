@@ -841,11 +841,11 @@ class MllamaPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.gate_attn, std=std)
             nn.init.normal_(module.gate_ffn, std=std)
         elif isinstance(module, MllamaCrossAttentionDecoderLayer):
-            module.cross_attn_attn_gate.zero_()
-            module.cross_attn_mlp_gate.zero_()
+            nn.init.zeros_(module.cross_attn_attn_gate)
+            nn.init.zeros_(module.cross_attn_mlp_gate)
         elif isinstance(module, MllamaPrecomputedAspectRatioEmbedding):
             if module.is_gated:
-                module.gate.zero_()
+                nn.init.zeros_(module.gate)
 
     # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
     def _update_causal_mask(

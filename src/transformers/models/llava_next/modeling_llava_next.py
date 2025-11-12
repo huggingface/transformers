@@ -245,7 +245,7 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
                 nn.init.zeros_(module.bias)
         elif isinstance(module, LlavaNextModel):
             embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            module.image_newline.normal_(mean=0.0, std=embed_std)
+            nn.init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
 
 @auto_docstring(
