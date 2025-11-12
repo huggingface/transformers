@@ -16,7 +16,7 @@
 
 import copy
 from collections.abc import Callable
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -54,15 +54,11 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(
-        batch, num_key_value_heads, n_rep, slen, head_dim
-    )
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def apply_rotary_pos_emb(
-    q, k, cos, sin, position_ids: Optional[torch.Tensor] = None, unsqueeze_dim: int = 1
-):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids: Optional[torch.Tensor] = None, unsqueeze_dim: int = 1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -88,12 +84,8 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
-        query.dtype
-    )
-    attn_weights = nn.functional.dropout(
-        attn_weights, p=dropout, training=module.training
-    )
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -133,7 +125,7 @@ class AfmoeMLP(LlamaMLP):
 class AfmoeTokenChoiceRouter(nn.Module):
     """
     Token-choice top-K router for MoE routing.
-    
+
     This router assigns each token to the top-K experts based on learned routing scores.
     It supports both sigmoid and softmax scoring functions.
     """
@@ -178,8 +170,8 @@ class AfmoeTokenChoiceRouter(nn.Module):
 class AfmoeMoE(nn.Module):
     """
     Mixture of Experts (MoE) module for AFMoE.
-    
-    This module implements a sparse MoE layer with both shared experts (always active) and 
+
+    This module implements a sparse MoE layer with both shared experts (always active) and
     routed experts (activated based on token-choice routing).
     """
 
@@ -190,18 +182,11 @@ class AfmoeMoE(nn.Module):
 
         self.shared_experts = None
         if config.num_shared_experts > 0:
-            self.shared_experts = AfmoeMLP(
-                config, config.moe_intermediate_size * config.num_shared_experts
-            )
+            self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
         self.experts = nn.ModuleList(
-            [
-                AfmoeMLP(config, intermediate_size=config.moe_intermediate_size)
-                for _ in range(config.num_experts)
-            ]
+            [AfmoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(config.num_experts)]
         )
-        self.expert_bias = nn.Parameter(
-            torch.zeros(config.num_experts, dtype=torch.float32), requires_grad=False
-        )
+        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts, dtype=torch.float32), requires_grad=False)
 
     def forward(self, hidden_states):
         batch_size, seq_len, hidden_dim = hidden_states.shape
@@ -223,12 +208,8 @@ class AfmoeMoE(nn.Module):
         token_indices_sorted = token_indices_sorted // self.config.num_experts_per_tok
 
         # Gather input tokens
-        token_indices_expanded = token_indices_sorted.unsqueeze(-1).expand(
-            -1, hidden_dim
-        )
-        routed_input = torch.gather(
-            hidden_states_flat, dim=0, index=token_indices_expanded
-        )
+        token_indices_expanded = token_indices_sorted.unsqueeze(-1).expand(-1, hidden_dim)
+        routed_input = torch.gather(hidden_states_flat, dim=0, index=token_indices_expanded)
 
         routed_output = torch.zeros_like(routed_input)
         for expert_id in range(self.config.num_experts):
@@ -238,14 +219,10 @@ class AfmoeMoE(nn.Module):
                 expert_out = self.experts[expert_id](expert_input)
                 routed_output[mask] = expert_out
 
-        routed_output = (
-            routed_output.to(torch.float32) * top_scores_sorted.unsqueeze(-1)
-        ).to(hidden_states.dtype)
+        routed_output = (routed_output.to(torch.float32) * top_scores_sorted.unsqueeze(-1)).to(hidden_states.dtype)
 
         # Scatter back to original positions
-        output = shared_output.scatter_add(
-            dim=0, index=token_indices_expanded, src=routed_output
-        )
+        output = shared_output.scatter_add(dim=0, index=token_indices_expanded, src=routed_output)
 
         return output.view(batch_size, seq_len, hidden_dim)
 
@@ -253,7 +230,7 @@ class AfmoeMoE(nn.Module):
 class AfmoeAttention(nn.Module):
     """
     Multi-headed attention module with optional sliding window and gating.
-    
+
     This attention mechanism supports both full attention and sliding window attention,
     and includes Q/K normalization and gating of the output.
     """
@@ -262,9 +239,7 @@ class AfmoeAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(
-            config, "head_dim", config.hidden_size // config.num_attention_heads
-        )
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
@@ -274,25 +249,15 @@ class AfmoeAttention(nn.Module):
         self.is_local_attention = config.layer_types[layer_idx] == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_local_attention else None
 
-        self.q_proj = nn.Linear(
-            config.hidden_size, self.num_heads * self.head_dim, bias=False
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False
-        )
-        self.o_proj = nn.Linear(
-            self.num_heads * self.head_dim, config.hidden_size, bias=False
-        )
+        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
 
         self.q_norm = AfmoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = AfmoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
-        self.gate_proj = nn.Linear(
-            config.hidden_size, self.num_heads * self.head_dim, bias=False
-        )
+        self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
 
     def forward(
         self,
@@ -320,21 +285,15 @@ class AfmoeAttention(nn.Module):
 
         if self.is_local_attention:
             cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(
-                query_states, key_states, cos, sin
-            )
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
             cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, cache_kwargs
-            )
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[
-                self.config._attn_implementation
-            ]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         output, _ = attention_interface(
             self,
@@ -356,7 +315,7 @@ class AfmoeAttention(nn.Module):
 class AfmoeDecoderLayer(GradientCheckpointingLayer):
     """
     AFMoE decoder layer with dual normalization.
-    
+
     This layer applies self-attention followed by either a dense MLP or MoE block,
     with dual normalization (pre and post) around each component.
     """
@@ -371,17 +330,11 @@ class AfmoeDecoderLayer(GradientCheckpointingLayer):
 
         # Dual normalization for attention
         self.input_layernorm = AfmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = AfmoeRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = AfmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         # Dual normalization for FFN
-        self.pre_mlp_layernorm = AfmoeRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
-        self.post_mlp_layernorm = AfmoeRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.pre_mlp_layernorm = AfmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_mlp_layernorm = AfmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         # MoE or dense FFN
         self.moe_enabled = layer_idx >= config.num_dense_layers
@@ -480,14 +433,9 @@ class AfmoeModel(AfmoePreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(
-            config.vocab_size, config.hidden_size, self.padding_idx
-        )
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [
-                AfmoeDecoderLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
-            ]
+            [AfmoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = AfmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = AfmoeRotaryEmbedding(config=config)
@@ -514,9 +462,7 @@ class AfmoeModel(AfmoePreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You must specify exactly one of input_ids or inputs_embeds"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
@@ -525,9 +471,7 @@ class AfmoeModel(AfmoePreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if cache_position is None:
-            past_seen_tokens = (
-                past_key_values.get_seq_length() if past_key_values is not None else 0
-            )
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens,
                 past_seen_tokens + inputs_embeds.shape[1],
@@ -635,7 +579,7 @@ class AfmoeForCausalLM(AfmoePreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
+    ) -> Union[tuple, MoeCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -672,11 +616,7 @@ class AfmoeForCausalLM(AfmoePreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits
-        slice_indices = (
-            slice(-logits_to_keep, None)
-            if isinstance(logits_to_keep, int)
-            else logits_to_keep
-        )
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None

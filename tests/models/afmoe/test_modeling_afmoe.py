@@ -14,11 +14,8 @@
 
 import unittest
 
-import pytest
-import torch
-
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch
 
 
 if is_torch_available():
@@ -28,6 +25,9 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class AfmoeModelTester(CausalLMModelTester):
+    if is_torch_available():
+        base_model_class = AfmoeModel
+
     def __init__(
         self,
         parent,
@@ -80,8 +80,8 @@ class AfmoeModelTester(CausalLMModelTester):
             hidden_act=hidden_act,
             max_position_embeddings=max_position_embeddings,
             initializer_range=initializer_range,
-            use_cache=use_cache,
         )
+        self.use_cache = use_cache
         self.head_dim = head_dim
         self.rms_norm_eps = rms_norm_eps
         self.rope_theta = rope_theta
@@ -99,18 +99,16 @@ class AfmoeModelTester(CausalLMModelTester):
         self.attention_dropout = attention_dropout
 
 
-if is_torch_available():
-    base_model_class = AfmoeModel
-
-
 @require_torch
 class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = AfmoeModelTester
     all_model_classes = (AfmoeModel, AfmoeForCausalLM) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": AfmoeModel, "text-generation": AfmoeForCausalLM} if is_torch_available() else {}
+    )
 
     def test_model_outputs_equivalence(self, **kwargs):
         # AFMoE uses MoE outputs, skip this test
         pass
 
     # TODO: Add integration tests once we have a checkpoint on the Hub
-

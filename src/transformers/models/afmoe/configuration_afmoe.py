@@ -196,9 +196,7 @@ class AfmoeConfig(PreTrainedConfig):
         self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
-                "sliding_attention"
-                if bool((i + 1) % global_attn_every_n_layers)
-                else "full_attention"
+                "sliding_attention" if bool((i + 1) % global_attn_every_n_layers) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
@@ -225,4 +223,3 @@ class AfmoeConfig(PreTrainedConfig):
 
 
 __all__ = ["AfmoeConfig"]
-
