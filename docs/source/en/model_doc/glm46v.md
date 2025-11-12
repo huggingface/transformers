@@ -27,6 +27,10 @@
 
 [[autodoc]] Glm46VProcessor
 
+## Glm46VVisionModel
+
+[[autodoc]] Glm46VVisionModel
+
 ## Glm46VTextModel
 
 [[autodoc]] Glm46VTextModel
