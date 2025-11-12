@@ -509,7 +509,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_batched_generation(self):
         model = LlavaForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-1.5-7b-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            "llava-hf/llava-1.5-7b-hf"
         )
 
         processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")

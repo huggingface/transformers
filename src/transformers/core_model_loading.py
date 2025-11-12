@@ -68,7 +68,7 @@ def _glob_to_regex_src(glob: str, *, digits_only: bool = True) -> str:
     '*' matches (\\d+) if digits_only else (.+). Inner groups are non-capturing.
     """
     star = r"(\d+)" if digits_only else r"(.+)"
-    return re.escape(glob).replace(r"\*", star)
+    return glob.replace(r"\*", star)
 
 
 def build_glob_alt(
@@ -96,15 +96,15 @@ def build_glob_alt(
     """
     name_map: dict[str, str] = {}
     parts: list[str] = []
-    prefix_src = r".*"
 
     for i, g in enumerate(globs):
         name = f"g{i}"
         name_map[name] = g
         pat_src = _glob_to_regex_src(g)
+        prefix_src = r".*" if not pat_src.startswith(r"\^") else ""
         parts.append(f"(?P<{name}>{prefix_src}{pat_src})")
 
-    alt_src = "|".join(parts)
+    alt_src = "|".join(parts).replace('\\^','^').replace('\\.',r'\.')
     return re.compile(alt_src), name_map
 
 
