@@ -510,7 +510,7 @@ def set_param_for_module(
                     shape=ref.size(),
                     stride=ref.stride(),
                 )
-            if not use_dtensor:
+                if not use_dtensor:
                     # we convert to local
                     param_value = param_value.to_local()
             
@@ -603,11 +603,8 @@ def convert_and_load_state_dict_in_model(
             empty_param = meta_model_state_dict.get(t)
             # If it does not exist, it's unexpected
             if empty_param is None:
-                if hf_quantizer is not None and hf_quantizer.is_valid_unexpected_keys(t):
-                    pass
-                else:
-                    unexpected_keys.add(t)
-                    continue
+                unexpected_keys.add(t)
+                continue
 
             if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, t):
                 converter.quantization_operation = hf_quantizer.get_quantize_ops()
@@ -680,7 +677,7 @@ def convert_and_load_state_dict_in_model(
                             if op := converter.quantization_operation:
                                 with log_to_misc(layer_name, misc, op=op):
                                     realized_value.update(
-                                        op.convert({k: realized_value.pop(k)}, model=model)
+                                        op.convert({k: realized_value.pop(k)}, model=model, missing_keys=missing_keys)
                                     )
 
                         for k, output_value in realized_value.items():

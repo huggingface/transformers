@@ -4885,6 +4885,9 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         try:
             param = model.get_parameter_or_buffer(param_name)
         except AttributeError:
+            # TODO: for now let's skip if we can't find the parameters
+            if hf_quantizer is not None:
+                continue
             raise AttributeError(f"Parameter {param_name} not found in model")
 
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
