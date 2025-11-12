@@ -1702,6 +1702,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("dinov2", "Dinov2Backbone"),
         ("dinov2_with_registers", "Dinov2WithRegistersBackbone"),
         ("dinov3_convnext", "DINOv3ConvNextBackbone"),
+        ("dinov3_vit", "DINOv3ViTBackbone"),
         ("focalnet", "FocalNetBackbone"),
         ("hgnet_v2", "HGNetV2Backbone"),
         ("hiera", "HieraBackbone"),

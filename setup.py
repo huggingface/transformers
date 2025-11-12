@@ -138,7 +138,7 @@ _deps = [
     "pyyaml>=5.1",
     "pydantic>=2",
     "pytest>=7.2.0",
-    "pytest-asyncio",
+    "pytest-asyncio>=1.2.0",
     "pytest-rerunfailures<16.0",
     "pytest-timeout",
     "pytest-xdist",

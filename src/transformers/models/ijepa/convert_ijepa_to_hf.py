@@ -253,7 +253,7 @@ def main():
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
-        help="Whether or not to push the model to the 🤗 Hub.",
+        help="Whether or not to push the model to the Hugging Face Hub.",
     )
     parser.add_argument(
         "--verify_logits", action="store_false", help="Whether or not to verify logits after conversion."
