@@ -112,7 +112,7 @@ from perceptron.tensorstream.tensorstream import (
     group_streams,
 )
 
-from ...cache_utils import Cache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, SlidingWindowCache, StaticCache, DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
@@ -1958,6 +1958,19 @@ class IsaacModel(Qwen3PreTrainedModel):
                 )
         elif inputs_embeds is None:
             raise ValueError("You have to specify either tensor_stream, input_ids or inputs_embeds")
+
+        # Ensure cache exists when requested
+        if use_cache and past_key_values is None:
+            cache_config = self.config.get_text_config() if hasattr(self.config, "get_text_config") else self.config
+            past_key_values = DynamicCache(config=cache_config)
+
+        if cache_position is None and (past_key_values is not None or use_cache):
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
+            )
 
         # Create default position_ids if not provided
         if position_ids is None:
