@@ -755,7 +755,9 @@ class ModelTesterMixin:
             keys = state_dict.keys()
             for k in keys:
                 p1, p2 = new_state_dict[k], state_dict[k]
-                torch.testing.assert_close(p1, p2, msg=f"failed on {k}")
+                with self.subTest(k):
+                    torch.testing.assert_close(p1, p2, msg=f"failed on {k}")
+
             new_params = dict(new_model.named_parameters())
             for k, v in list(model.named_parameters()):
                 with self.subTest(k):
