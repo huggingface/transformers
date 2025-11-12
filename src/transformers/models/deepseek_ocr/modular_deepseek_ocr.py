@@ -13,17 +13,15 @@
 # limitations under the License.
 
 import math
-from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -44,7 +42,12 @@ from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2RMSNorm,
 )
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
-from ..llava_next.modeling_llava_next import LlavaNextForConditionalGeneration, LlavaNextModel
+from ..llava_next.modeling_llava_next import (
+    LlavaNextCausalLMOutputWithPast,
+    LlavaNextForConditionalGeneration,
+    LlavaNextModel,
+    LlavaNextModelOutputWithPast,
+)
 from ..sam.modeling_sam import SamVisionAttention, SamVisionEncoder, SamVisionNeck
 
 
@@ -444,46 +447,12 @@ class DeepseekOcrSamVisionNeck(SamVisionNeck):
         super().__init__(config)
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Deepseek OCR model outputs with optional image hidden states.
-    """
-)
-class DeepseekOcrModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        Hidden states extracted from the visual encoder and projected into the language embedding space.
-    """
-
-    image_hidden_states: Optional[torch.FloatTensor] = None
+class DeepseekOcrModelOutputWithPast(LlavaNextModelOutputWithPast):
+    pass
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Deepseek OCR causal language model outputs with image hidden states.
-    """
-)
-class DeepseekOcrCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modelling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modelling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        Hidden states produced by the visual encoder after multimodal projection.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+class DeepseekOcrCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
+    pass
 
 
 class DeepseekOcrSamVisionEncoder(SamVisionEncoder):
@@ -928,23 +897,6 @@ class DeepseekOcrModel(LlavaNextModel):
         )  # TODO the typo is in the checkpoint
 
         self.post_init()
-
-    def get_placeholder_mask(self, input_ids, inputs_embeds, image_features):
-        if input_ids is None:
-            tok_embed = self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = (inputs_embeds == tok_embed).all(dim=-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
-            )
-        return special_image_mask
 
     def pack_image_features(
         self,
