@@ -42,8 +42,10 @@ class Glm46VConfig(Glm4vConfig):
 class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
     pass
 
+
 class Glm46VVisionModel(Glm4vVisionModel):
     pass
+
 
 class Glm46VTextModel(Glm4vTextModel):
     pass
