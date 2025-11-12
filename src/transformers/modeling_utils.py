@@ -4296,7 +4296,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model._move_missing_keys_from_meta_to_cpu(miss_and_mismatched, dtype, hf_quantizer)
 
         # correctly initialize the missing (and potentially mismatched) keys
-        model._initialize_missing_keys(miss_and_mismatched, is_quantized)
+        model._initialize_missing_keys(is_quantized)
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys, False)
 
         # We make sure we tie after _init_. We need the missing keys to remove the ones we do tie, and not random remove
@@ -4552,7 +4552,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
                     _load_parameter_into_model(self, key, value)
 
-    def _initialize_missing_keys(self, missing_keys: list[str], is_quantized: bool) -> None:
+    def _initialize_missing_keys(self, is_quantized: bool) -> None:
         """
         Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
         `_initialize_weights`. Indeed, since the corresponding weights are missing from the state dict, they will not be replaced and need to
@@ -4573,6 +4573,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             self.initialize_weights()
 
+        # Replace the loaded parameters class back to nn.Parameter (they were changed to easily skip initialization
+        # when performed in-place on the tensors)
         for name, p in list(self.named_parameters()) + list(self.named_buffers()):
             if hasattr(p, "_original_cls"):
                 if '.' in name:
