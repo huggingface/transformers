@@ -732,18 +732,13 @@ class DPTPreTrainedModel(PreTrainedModel):
         "attentions": DPTSelfAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        super()._init_weights(module)
         if isinstance(module, (DPTViTEmbeddings, DPTViTHybridEmbeddings)):
-            module.cls_token.data.zero_()
-            module.position_embeddings.data.zero_()
+            nn.init.zeros_(module.cls_token)
+            nn.init.zeros_(module.position_embeddings)
 
 
 @auto_docstring

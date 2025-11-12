@@ -318,6 +318,7 @@ class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
 
 
 class MMGroundingDinoPreTrainedModel(GroundingDinoPreTrainedModel):
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MMGroundingDinoContrastiveEmbedding):
@@ -397,12 +398,12 @@ class MMGroundingDinoMLPPredictionHead(GroundingDinoMLPPredictionHead):
 
 
 class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroundingDinoPreTrainedModel):
-    _tied_weights_keys = [
-        r"bbox_embed\.[1-9]\d*",
-        r"model\.decoder\.bbox_embed\.[0-9]\d*",
-        r"class_embed\.[1-9]\d*",
-        r"model\.decoder\.class_embed\.[0-9]\d*",
-    ]
+    _tied_weights_keys = {
+        r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
+        r"class_embed.(?![0])\d+": r"^class_embed.0",
+        "model.decoder.bbox_embed": "bbox_embed",
+        "model.decoder.class_embed": "class_embed",
+    }
 
     def __init__(self, config: MMGroundingDinoConfig):
         MMGroundingDinoPreTrainedModel.__init__(self, config)
@@ -421,13 +422,9 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
                 for _ in range(config.decoder_layers)
             ]
         )
-
-        # hack for box-refinement
-        self.model.decoder.bbox_embed = self.bbox_embed
-        # hack implementation for two-stage
-        self.model.decoder.class_embed = self.class_embed
-
         # Initialize weights and apply final processing
+        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
+        self.model.decoder.bbox_embed = self.bbox_embed
         self.post_init()
 
 

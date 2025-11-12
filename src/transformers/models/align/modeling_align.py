@@ -823,24 +823,25 @@ class AlignPreTrainedModel(PreTrainedModel):
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, AlignModel):
             nn.init.xavier_uniform_(module.text_projection.weight)
-            module.text_projection.bias.data.zero_()
-            module.temperature.data.fill_(self.config.temperature_init_value)
+            nn.init.zeros_(module.text_projection.bias)
+            nn.init.constant_(module.temperature, self.config.temperature_init_value)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         if isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
 
 
 @auto_docstring(

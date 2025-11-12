@@ -272,14 +272,15 @@ class UperNetPreTrainedModel(PreTrainedModel):
     input_modalities = "image"
     _no_split_modules = []
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.BatchNorm2d):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
 
 
 @auto_docstring(

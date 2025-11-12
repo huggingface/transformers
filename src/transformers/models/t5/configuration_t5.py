@@ -120,7 +120,6 @@ class T5Config(PreTrainedConfig):
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"
-
         if len(act_info) > 1 and act_info[0] != "gated" or len(act_info) > 2:
             raise ValueError(
                 f"`feed_forward_proj`: {feed_forward_proj} is not a valid activation function of the dense layer. "
@@ -138,6 +137,7 @@ class T5Config(PreTrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
+        self.tie_encoder_decoder = True  # T5 is always tied, has always been like that.
 
 
 __all__ = ["T5Config"]

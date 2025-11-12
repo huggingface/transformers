@@ -126,6 +126,14 @@ class MarianConfig(PreTrainedConfig):
         share_encoder_decoder_embeddings=True,
         **kwargs,
     ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
+            forced_eos_token_id=forced_eos_token_id,
+            **kwargs,
+        )
         self.vocab_size = vocab_size
         self.decoder_vocab_size = decoder_vocab_size or vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -147,14 +155,7 @@ class MarianConfig(PreTrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.share_encoder_decoder_embeddings = share_encoder_decoder_embeddings
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            forced_eos_token_id=forced_eos_token_id,
-            **kwargs,
-        )
+        self.tie_encoder_decoder = True
 
 
 __all__ = ["MarianConfig"]

@@ -191,18 +191,13 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     input_modalities = "image"
     _no_split_modules = ["DINOv3ConvNextLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, DINOv3ConvNextLayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, DINOv3ConvNextLayer):
+        super()._init_weights(module)
+        if isinstance(module, DINOv3ConvNextLayer):
             if module.gamma is not None:
-                module.gamma.data.fill_(self.config.layer_scale_init_value)
+                nn.init.constant_(module.gamma, self.config.layer_scale_init_value)
 
 
 @auto_docstring

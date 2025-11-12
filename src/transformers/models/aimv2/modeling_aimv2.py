@@ -406,13 +406,14 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if hasattr(module, "logit_scale"):
             if isinstance(module.logit_scale, nn.Parameter):
-                module.logit_scale.data.fill_(math.log(1 / 0.07))
+                nn.init.constant_(module.logit_scale, math.log(1 / 0.07))
         elif isinstance(module, Aimv2AttentionPoolingHead):
-            module.cls_token.data.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring(

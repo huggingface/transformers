@@ -17,7 +17,6 @@
 from typing import Optional, Union
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
@@ -32,13 +31,12 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..mixtral.modeling_mixtral import (
-    MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,
     MixtralPreTrainedModel,
     load_balancing_loss_func,
 )
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer, Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer, Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeTopKRouter
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
@@ -57,35 +55,24 @@ class Qwen3MoeMLP(Qwen2MoeMLP):
     pass
 
 
-class Qwen3MoeExperts(MixtralExperts, nn.ModuleList):
-    def __init__(self, config: Qwen3MoeConfig):
-        nn.ModuleList.__init__(self)
-        self.num_experts = config.num_experts
-        for _ in range(self.num_experts):
-            self.append(Qwen3MoeMLP(config, intermediate_size=config.moe_intermediate_size))
+class Qwen3MoeExperts(Qwen2MoeExperts):
+    pass
+
+
+class Qwen3MoeTopKRouter(Qwen2MoeTopKRouter):
+    pass
 
 
 class Qwen3MoeSparseMoeBlock(nn.Module):
     def __init__(self, config: Qwen3MoeConfig):
         super().__init__()
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = Qwen3MoeExperts(config)
-        self.num_experts_per_tok = config.num_experts_per_tok
-        self.norm_topk_prob = config.norm_topk_prob
-
-    def route_tokens_to_experts(self, hidden_states, router_logits):
-        routing_weights = F.softmax(router_logits, dim=-1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.num_experts_per_tok, dim=-1)
-        if self.norm_topk_prob:
-            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(router_logits.dtype)
-        return selected_experts, routing_weights
+        self.router = Qwen3MoeTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        router_logits = self.gate(hidden_states_reshaped)
-        selected_experts, routing_weights = self.route_tokens_to_experts(hidden_states_reshaped, router_logits)
+        routing_weights, selected_experts = self.router(hidden_states_reshaped)
         final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
@@ -100,7 +87,7 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
 
 class Qwen3MoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Qwen3MoeTopKRouter, layer_name="mlp.router", index=0),
         "hidden_states": Qwen3MoeDecoderLayer,
         "attentions": Qwen3MoeAttention,
     }

@@ -109,6 +109,7 @@ class FlexOlmoConfig(PreTrainedConfig):
 
     model_type = "flex_olmo"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_local_experts": "num_experts"}
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k

@@ -745,7 +745,7 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
 
 class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _can_compile_fullgraph = False
 
     def __init__(self, config: VideoLlama3Config):

@@ -289,15 +289,16 @@ class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
+                nn.init.zeros_(module.rel_pos_h)
+                nn.init.zeros_(module.rel_pos_w)
         elif isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
-                module.pos_embed.data.zero_()
+                nn.init.zeros_(module.pos_embed)
 
 
 class GotOcr2Model(LlavaModel):

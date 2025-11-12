@@ -1436,6 +1436,7 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "image"
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
@@ -1461,17 +1462,17 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
                     nn.init.xavier_uniform_(submodule.weight, gain=xavier_std)
                     nn.init.constant_(submodule.bias, 0)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         # copied from DETR
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
 
 
 @auto_docstring

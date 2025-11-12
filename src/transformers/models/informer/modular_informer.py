@@ -86,10 +86,11 @@ class InformerPreTrainedModel(PreTrainedModel):
     input_modalities = "time"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, InformerSinusoidalPositionalEmbedding):
-            module._init_weight()
+            nn.init.copy_(module.weight, module.create_weight())
 
 
 class InformerAttention(BartAttention):

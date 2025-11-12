@@ -417,28 +417,13 @@ class Idefics2PreTrainedModel(PreTrainedModel):
 
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, Idefics2RMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.MultiheadAttention):
-            module._reset_parameters()  # native torch init
-        elif isinstance(module, Idefics2MultiheadAttentionPoolingHead):
-            module.probe.data.normal_()
+        super()._init_weights(module)
+        if isinstance(module, Idefics2MultiheadAttentionPoolingHead):
+            nn.init.normal_(module.probe)
         elif isinstance(module, Idefics2PerceiverResampler):
-            module.latents.data.fill_(1.0)
+            nn.init.ones_(module.latents)
 
 
 @auto_docstring(
@@ -1010,7 +995,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
     """
 )
 class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)

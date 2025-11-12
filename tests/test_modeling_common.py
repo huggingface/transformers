@@ -24,6 +24,7 @@ import unittest.mock
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
+from copy import deepcopy
 
 import numpy as np
 import pytest
@@ -118,6 +119,7 @@ if is_accelerate_available():
 
 if is_torch_available():
     import torch
+    from safetensors import safe_open
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
     from torch import nn
@@ -262,7 +264,11 @@ def _test_eager_matches_sdpa_inference(
                 model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs)
             model_sdpa = model_sdpa.eval().to(torch_device)
 
-            model_eager = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="eager")
+            try:
+                model_eager = deepcopy(model_sdpa)
+                model_eager.set_attn_implementation("eager")
+            except Exception as _:
+                model_eager = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="eager")
             model_eager = model_eager.eval().to(torch_device)
 
         set_model_for_less_flaky_test(model_eager)
@@ -699,18 +705,6 @@ class ModelTesterMixin:
                 assert self.model_tester.text_config.num_hidden_layers <= target_num_hidden_layers
 
     def test_save_load(self):
-        def check_save_load(out1, out2):
-            # make sure we don't have nans
-            out_2 = out2.cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-            out_2 = out_2[~np.isneginf(out_2)]
-
-            out_1 = out1.cpu().numpy()
-            out_1[np.isnan(out_1)] = 0
-            out_1 = out_1[~np.isneginf(out_1)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -741,9 +735,11 @@ class ModelTesterMixin:
 
             if isinstance(first, tuple) and isinstance(second, tuple):
                 for tensor1, tensor2 in zip(first, second):
-                    check_save_load(tensor1, tensor2)
+                    torch.testing.assert_close(
+                        tensor1, tensor2, msg="Running save/load and forward yields different results"
+                    )
             else:
-                check_save_load(first, second)
+                torch.testing.assert_close(first, second, msg="Running save/load and forward yields different results")
 
     def test_from_pretrained_no_checkpoint(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -754,8 +750,18 @@ class ModelTesterMixin:
             new_model = model_class.from_pretrained(
                 pretrained_model_name_or_path=None, config=config, state_dict=state_dict
             )
-            for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                self.assertTrue(torch.equal(p1, p2))
+            new_state_dict = new_model.state_dict()
+            assert state_dict.keys() == new_state_dict.keys()
+            keys = state_dict.keys()
+            for k in keys:
+                p1, p2 = new_state_dict[k], state_dict[k]
+                with self.subTest(k):
+                    torch.testing.assert_close(p1, p2, msg=f"failed on {k}")
+
+            new_params = dict(new_model.named_parameters())
+            for k, v in list(model.named_parameters()):
+                with self.subTest(k):
+                    torch.testing.assert_close(v, new_params[k], msg=f"failed on {k}")
 
     def test_keep_in_fp32_modules(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -770,10 +776,11 @@ class ModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
 
                 for name, param in model.named_parameters():
-                    if any(n in model_class._keep_in_fp32_modules for n in name.split(".")):
-                        self.assertTrue(param.dtype == torch.float32)
-                    else:
-                        self.assertTrue(param.dtype == torch.float16, name)
+                    with self.subTest(name):
+                        if re.search("|".join(model_class._keep_in_fp32_modules), name):
+                            self.assertTrue(param.dtype == torch.float32)
+                        else:
+                            self.assertTrue(param.dtype == torch.float16, name)
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -801,7 +808,7 @@ class ModelTesterMixin:
                 load_result = model.load_state_dict(state_dict_saved, strict=False)
                 keys_to_ignore = set(model._keys_to_ignore_on_save)
 
-                if hasattr(model, "_tied_weights_keys"):
+                if getattr(model, "_tied_weights_keys", None):
                     keys_to_ignore.update(set(model._tied_weights_keys))
 
                 self.assertTrue(len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys_to_ignore)
@@ -907,7 +914,7 @@ class ModelTesterMixin:
         if match_object := re.search(r"^# Copyright (\d{4})", source_code, re.MULTILINE | re.IGNORECASE):
             addition_year = int(match_object.group(1))
 
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[::-1]:
             # For now, skip everything older than 2024 and "important models" (too much models to patch otherwise)
             # TODO: relax this as we patch more and more models
             if addition_year < 2023:
@@ -925,10 +932,10 @@ class ModelTesterMixin:
 
             # First, initialize the model from config -> this ensure everything is correctly initialized, even if
             # _init_weights() does not take all weights into account correctly
-            model_from_config = model_class(copy.deepcopy(config))
+            model_from_config = model_class(copy.deepcopy(config)).eval()
             # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
             # by _init_weights()
-            model_from_pretrained = model_class.from_pretrained(None, config=config, state_dict={})
+            model_from_pretrained = model_class.from_pretrained(None, config=config, state_dict={}).eval()
 
             # Back to original method to avoid issues if running several other tests
             PreTrainedModel._initialize_weights = original_initialize_weights
@@ -946,15 +953,12 @@ class ModelTesterMixin:
 
             # Everything must be exactly the same as we set the same seed for each init
             different_weights = []
-            for (k1, v1), (k2, v2) in zip(
-                model_from_config.state_dict().items(), model_from_pretrained.state_dict().items()
-            ):
-                self.assertEqual(k1, k2, "The keys from each model should be the same")
-
+            from_pre_state = dict(model_from_pretrained.state_dict())
+            for k1, v1 in model_from_config.state_dict().items():
                 # In case using torch.nn.utils.parametrizations on a module, we should skip the resulting keys
                 if re.search(r"\.parametrizations\..*?\.original[01]", k1):
                     continue
-
+                v2 = from_pre_state[k1]
                 # Since we added the seed, they should be exactly the same (i.e. using allclose maybe be wrong due
                 # to very low std in init function)
                 if not (v1 == v2).all():
@@ -1806,6 +1810,10 @@ class ModelTesterMixin:
 
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         original_config.tie_word_embeddings = False
+        try:
+            original_config.get_text_config().tie_word_embeddings = False
+        except Exception as _:
+            pass
         inputs_dict.pop("labels", None)
 
         # if model cannot untied embeddings -> leave test
@@ -1813,76 +1821,77 @@ class ModelTesterMixin:
             self.skipTest(reason="Model cannot untied embeddings")
 
         for model_class in self.all_model_classes:
-            config = copy.deepcopy(original_config)
-            if is_deepspeed_zero3_enabled():
-                with deepspeed.zero.Init():
-                    model = model_class(config)
-            else:
-                model = model_class(config).to(torch_device)
-            model.eval()
+            with self.subTest(model_class):
+                config = copy.deepcopy(original_config)
+                if is_deepspeed_zero3_enabled():
+                    with deepspeed.zero.Init():
+                        model = model_class(config)
+                else:
+                    model = model_class(config).to(torch_device)
+                model.eval()
 
-            # if no output embeddings -> leave test
-            if model.get_output_embeddings() is None:
-                continue
+                # if no output embeddings -> leave test
+                if model.get_output_embeddings() is None:
+                    continue
 
-            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_vocab_size = config.get_text_config().vocab_size
-            model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = model.config.get_text_config().vocab_size
-            self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
-            output_embeds = model.get_output_embeddings()
-            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
-            # Check bias if present
-            if output_embeds.bias is not None:
-                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            if not is_deepspeed_zero3_enabled():
-                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
-                model(**self._prepare_for_class(inputs_dict, model_class))
+                # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+                model_vocab_size = config.get_text_config().vocab_size
+                model.resize_token_embeddings(model_vocab_size + 10)
+                new_model_vocab_size = model.config.get_text_config().vocab_size
+                self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
+                output_embeds = model.get_output_embeddings()
+                self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
+                # Check bias if present
+                if output_embeds.bias is not None:
+                    self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
+                # Check that the model can still do a forward pass successfully (every parameter should be resized)
+                if not is_deepspeed_zero3_enabled():
+                    # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                    model(**self._prepare_for_class(inputs_dict, model_class))
 
-            # Test multivariate resizing.
-            model.resize_token_embeddings(model_vocab_size + 10)
-            output_embeds = model.get_output_embeddings()
-            # Check that added embeddings mean is close to the old embeddings mean
-            if is_deepspeed_zero3_enabled():
-                with deepspeed.zero.GatheredParameters(output_embeds.weight, modifier_rank=None):
+                # Test multivariate resizing.
+                model.resize_token_embeddings(model_vocab_size + 10)
+                output_embeds = model.get_output_embeddings()
+                # Check that added embeddings mean is close to the old embeddings mean
+                if is_deepspeed_zero3_enabled():
+                    with deepspeed.zero.GatheredParameters(output_embeds.weight, modifier_rank=None):
+                        old_embeddings_mean = torch.mean(output_embeds.weight.data[:-10, :], axis=0)
+                        new_embeddings_mean = torch.mean(output_embeds.weight.data[-10:, :], axis=0)
+                else:
                     old_embeddings_mean = torch.mean(output_embeds.weight.data[:-10, :], axis=0)
                     new_embeddings_mean = torch.mean(output_embeds.weight.data[-10:, :], axis=0)
-            else:
-                old_embeddings_mean = torch.mean(output_embeds.weight.data[:-10, :], axis=0)
-                new_embeddings_mean = torch.mean(output_embeds.weight.data[-10:, :], axis=0)
-            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
-            # check if the old bias mean close to added bias mean.
-            if output_embeds.bias is not None:
-                if is_deepspeed_zero3_enabled():
-                    with deepspeed.zero.GatheredParameters(output_embeds.bias, modifier_rank=None):
+                torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
+                # check if the old bias mean close to added bias mean.
+                if output_embeds.bias is not None:
+                    if is_deepspeed_zero3_enabled():
+                        with deepspeed.zero.GatheredParameters(output_embeds.bias, modifier_rank=None):
+                            old_bias_mean = torch.mean(output_embeds.bias.data[:-10], axis=0)
+                            new_bias_mean = torch.mean(output_embeds.bias.data[-10:], axis=0)
+                    else:
                         old_bias_mean = torch.mean(output_embeds.bias.data[:-10], axis=0)
                         new_bias_mean = torch.mean(output_embeds.bias.data[-10:], axis=0)
-                else:
-                    old_bias_mean = torch.mean(output_embeds.bias.data[:-10], axis=0)
-                    new_bias_mean = torch.mean(output_embeds.bias.data[-10:], axis=0)
 
-                torch.testing.assert_close(old_bias_mean, new_bias_mean, rtol=1e-5, atol=1e-5)
+                    torch.testing.assert_close(old_bias_mean, new_bias_mean, rtol=1e-5, atol=1e-5)
 
-            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
-            model.resize_token_embeddings(model_vocab_size - 15)
-            new_model_vocab_size = model.config.get_text_config().vocab_size
-            self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
-            # Check that it actually resizes the embeddings matrix
-            output_embeds = model.get_output_embeddings()
-            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
-            # Check bias if present
-            if output_embeds.bias is not None:
-                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            # Input ids should be clamped to the maximum size of the vocabulary
-            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            if not is_deepspeed_zero3_enabled():
-                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
-                model(**self._prepare_for_class(inputs_dict, model_class))
+                # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+                model.resize_token_embeddings(model_vocab_size - 15)
+                new_model_vocab_size = model.config.get_text_config().vocab_size
+                self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
+                # Check that it actually resizes the embeddings matrix
+                output_embeds = model.get_output_embeddings()
+                self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
+                # Check bias if present
+                if output_embeds.bias is not None:
+                    self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
+                # Check that the model can still do a forward pass successfully (every parameter should be resized)
+                # Input ids should be clamped to the maximum size of the vocabulary
+                inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+                if "decoder_input_ids" in inputs_dict:
+                    inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+                # Check that the model can still do a forward pass successfully (every parameter should be resized)
+                if not is_deepspeed_zero3_enabled():
+                    # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                    model(**self._prepare_for_class(inputs_dict, model_class))
 
     @require_deepspeed
     @require_torch_accelerator
@@ -1963,57 +1972,84 @@ class ModelTesterMixin:
                     model_tied.save_pretrained(d, safe_serialization=True)
                 except Exception as e:
                     raise Exception(f"Class {model_class.__name__} cannot be saved using safetensors: {e}")
+                with self.subTest(model_class):
+                    model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+                    # Checking the state dicts are correct
+                    reloaded_state = model_reloaded.state_dict()
+                    for k, v in model_tied.state_dict().items():
+                        with self.subTest(f"{model_class.__name__}.{k}"):
+                            torch.testing.assert_close(
+                                v,
+                                reloaded_state[k],
+                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}.\n{v}\nvs\n{reloaded_state[k]}\n"
+                                "This probably means that it was not set with the correct value when tying.",
+                            )
 
-                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
-                # Checking the state dicts are correct
-                reloaded_state = model_reloaded.state_dict()
-                for k, v in model_tied.state_dict().items():
-                    self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
-                    torch.testing.assert_close(
-                        v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
-                    )
-                # Checking there was no complain of missing weights
-                self.assertEqual(infos["missing_keys"], [])
+                    # Checking the tensor sharing are correct on the new model (weights are properly tied in both cases)
+                    ptrs = defaultdict(list)
+                    for k, v in model_tied.state_dict().items():
+                        ptrs[v.data_ptr()].append(k)
 
-                # Checking the tensor sharing are correct
-                ptrs = defaultdict(list)
-                for k, v in model_tied.state_dict().items():
-                    ptrs[v.data_ptr()].append(k)
+                    shared_ptrs = {k: v for k, v in ptrs.items() if len(v) > 1}
 
-                shared_ptrs = {k: v for k, v in ptrs.items() if len(v) > 1}
+                    for shared_names in shared_ptrs.values():
+                        reloaded_ptrs = {reloaded_state[k].data_ptr() for k in shared_names}
+                        self.assertEqual(
+                            len(reloaded_ptrs),
+                            1,
+                            f"The shared pointers are incorrect, found different pointers for keys {shared_names}. `__init__` and `from_pretrained` end up not tying the weights the same way.",
+                        )
 
-                for shared_names in shared_ptrs.values():
-                    reloaded_ptrs = {reloaded_state[k].data_ptr() for k in shared_names}
+                    # Checking there was no complain of missing weights
                     self.assertEqual(
-                        len(reloaded_ptrs),
-                        1,
-                        f"The shared pointers are incorrect, found different pointers for keys {shared_names}",
+                        infos["missing_keys"],
+                        set(),
+                        "These keys were removed when serializing, and were not properly loaded by `from_pretrained`.",
                     )
 
     def test_load_save_without_tied_weights(self):
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             config.tie_word_embeddings = False
-            model = model_class(config)
+            try:
+                config.get_text_config().tie_word_embeddings = False
+            except Exception as _:
+                pass
+
+            # config.tie_encoder_decoder = False
+            model = model_class(config)  # we init the model without tie
+            # if this test fails later on, it means init tied the weights
             with tempfile.TemporaryDirectory() as d:
                 model.save_pretrained(d)
+                with safe_open(f"{d}/model.safetensors", framework="pt") as f:
+                    serialized_keys = f.keys()
 
-                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
-                # Checking the state dicts are correct
-                reloaded_state = model_reloaded.state_dict()
-                for k, v in model.state_dict().items():
-                    self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
-                    torch.testing.assert_close(
-                        v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
-                    )
+                    model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+                    # Checking the state dicts are correct
+
+                    reloaded_state = model_reloaded.state_dict()
+                    for k, v in model.state_dict().items():
+                        with self.subTest(k):
+                            torch.testing.assert_close(
+                                v,
+                                reloaded_state[k],
+                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key",
+                            )
+
                 # Checking there was no complain of missing weights
-                self.assertEqual(infos["missing_keys"], [])
+                self.assertEqual(
+                    infos["missing_keys"],
+                    set(),
+                    "Given that the loaded weights are the same, the issue is in `tie_weights`: it tied these keys and removed them from serialization. But because of tiying (hardcoded or not) the previous check is fine.\
+                        This can happen if `save_pretrained` remove the targets and not the keys from serialiazation, or you hardcoded `self.xxx = yyy` thus forcing to always tie -> they are removed from serialization.",
+                )
 
     def test_tied_weights_keys(self):
         original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             copied_config = copy.deepcopy(original_config)
             copied_config.get_text_config().tie_word_embeddings = True
+            copied_config.tie_word_embeddings = True
             model_tied = model_class(copied_config)
 
             tied_weight_keys = _get_tied_weight_keys(model_tied)
@@ -2032,7 +2068,10 @@ class ModelTesterMixin:
             # Detect we get a hit for each key
             for key in tied_weight_keys:
                 is_tied_key = any(re.search(key, p) for group in tied_params for p in group)
-                self.assertTrue(is_tied_key, f"{key} is not a tied weight key for {model_class}.")
+                self.assertTrue(
+                    is_tied_key,
+                    f"{key} is not a tied weight key pattern for {model_class}: {is_tied_key}. With same patams: {tied_params}",
+                )
 
             # Removed tied weights found from tied params -> there should only be one left after
             for key in tied_weight_keys:
@@ -2066,7 +2105,7 @@ class ModelTesterMixin:
                 missing_keys = set(infos["missing_keys"])
 
                 extra_missing = missing_keys - param_names
-                # Remove tied weights from extra missing: they are normally not warned as missing if their tied
+                # IMPORTANT Remove tied weights from extra missing: they are normally not warned as missing if their tied
                 # counterpart is present but here there are no weights at all so we do get the warning.
                 ptrs = collections.defaultdict(list)
                 for name, tensor in model_reloaded.state_dict().items():
@@ -2521,7 +2560,6 @@ class ModelTesterMixin:
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     model = model_class(config)
                     model.save_pretrained(tmp_dir)
-
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(RuntimeError):
                         new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
@@ -2534,7 +2572,7 @@ class ModelTesterMixin:
                         new_model = AutoModelForSequenceClassification.from_pretrained(
                             tmp_dir, num_labels=42, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("Reinit due to size mismatch", cl.out)
                     new_model.to(torch_device)
                     inputs = self._prepare_for_class(inputs_dict, model_class)
                     logits = new_model(**inputs).logits
@@ -2544,7 +2582,7 @@ class ModelTesterMixin:
                         new_model_without_prefix = AutoModel.from_pretrained(
                             tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("Reinit due to size mismatch", cl.out)
                     input_ids = ids_tensor((2, 8), 10)
                     new_model_without_prefix.to(torch_device)
                     if self.is_encoder_decoder:
@@ -2585,7 +2623,7 @@ class ModelTesterMixin:
 
                     with CaptureLogger(logger) as cl:
                         new_model = model_class.from_pretrained(tmp_dir, num_labels=42, ignore_mismatched_sizes=True)
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("Reinit due to size mismatch", cl.out)
 
                     # Find the name of the module with the mismatched size
                     top_linear_modules = [
@@ -2619,18 +2657,21 @@ class ModelTesterMixin:
                         ]
                     # Usually we have only 1, but swiftformer and deit have 2 Linear layers using `num_labels`
                     mismatched_modules = [name for name, module in top_linear_modules if module.out_features == 42]
-
-                    for (k1, v1), (k2, v2) in zip(new_model.named_parameters(), model.named_parameters()):
-                        # Sanity check: params must have all the same name
-                        self.assertEqual(k1, k2)
+                    old = dict(model.named_parameters())
+                    new = dict(new_model.named_parameters())
+                    assert not set(old.keys()) - set(new.keys())
+                    for k1 in new.keys():
+                        k2 = k1
+                        v1 = old[k1]
+                        v2 = new[k2]
                         # Each param except the mismatched ones must be exactly similar
                         if not any(k1.startswith(mismatched_module) for mismatched_module in mismatched_modules):
-                            self.assertTrue((v1 == v2).all())
+                            torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
                         # Check that the dims are indeed mismatched between old and new models
                         else:
                             # The old model should have `num_labels=3` (here it's the first dim of shape, as Linear layers
                             # are transposed)
-                            self.assertEqual(v2.shape[0], 3)
+                            self.assertEqual(v2.shape[0], 42)
                             # Make sure the mean of the new Linear layer is correctly centered around 0 (we cannot use
                             # a lower value for the check as some models hardcode a std of 0.02 instead of using the
                             # config, which we set very small with `config_no_init`)
@@ -3944,7 +3985,125 @@ class ModelTesterMixin:
                     ):
                         self.assertEqual(k1, k2)
                         self.assertEqual(v1.dtype, v2.dtype)
-                        self.assertTrue((v1 == v2).all())
+                    torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
+
+
+@require_torch
+def test_weight_conversion_operations_roundtrip():
+    import torch
+
+    from transformers.core_model_loading import (
+        Chunk,
+        Concatenate,
+        Fp8Dequantize,
+        Fp8Quantize,
+        MergeModuleList,
+        Shard,
+        WeightConversion,
+        convert_state_dict,
+    )
+
+    state_dict = {
+        "experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
+        "experts.1.w1.weight": torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+        "experts.0.w3.weight": torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
+        "experts.1.w3.weight": torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
+        "self_attn.q_proj.weight": torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+        "self_attn.k_proj.weight": torch.tensor([[5.0, 6.0], [7.0, 8.0]]),
+        "self_attn.v_proj.weight": torch.tensor([[9.0, 10.0], [11.0, 12.0]]),
+        "self_attn.out_proj.weight": torch.arange(12.0).reshape(6, 2),
+        "mlp.w2.weight": torch.tensor([[1.0, 0.0], [0.0, 1.0]]),
+    }
+
+    forward_mapping = [
+        WeightConversion(
+            ["experts.*.w1.weight", "experts.*.w3.weight"],
+            "experts.gate_up_proj.weight",
+            [MergeModuleList(dim=0), Concatenate(dim=0), Fp8Quantize(block_size=(1, 1))],
+        ),
+        WeightConversion(
+            ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+            "self_attn.qkv_proj.weight",
+            Concatenate(dim=0),
+        ),
+        WeightConversion(
+            "self_attn.out_proj.weight",
+            ["self_attn.out_proj.weight.shard0", "self_attn.out_proj.weight.shard1"],
+            Shard(dim=0, world_size=2, return_all=True),
+        ),
+        WeightConversion("mlp.w2.weight", "mlp.down_proj.weight"),
+    ]
+
+    converted_state, _ = convert_state_dict(None, state_dict, forward_mapping, tp_plan=None, quantization_config=None)
+
+    expected_qkv = torch.cat(
+        (
+            state_dict["self_attn.q_proj.weight"],
+            state_dict["self_attn.k_proj.weight"],
+            state_dict["self_attn.v_proj.weight"],
+        ),
+        dim=0,
+    )
+    torch.testing.assert_close(converted_state["self_attn.qkv_proj.weight"], expected_qkv)
+
+    reconstructed_out_proj = torch.cat(
+        (converted_state["self_attn.out_proj.weight.shard0"], converted_state["self_attn.out_proj.weight.shard1"]),
+        dim=0,
+    )
+    torch.testing.assert_close(reconstructed_out_proj, state_dict["self_attn.out_proj.weight"])
+    torch.testing.assert_close(converted_state["mlp.down_proj.weight"], state_dict["mlp.w2.weight"])
+
+    inverse_mapping = [
+        WeightConversion(
+            ["experts.gate_up_proj.weight", "experts.gate_up_proj.scale"],
+            "experts.gate_up_proj.dequantized",
+            Fp8Dequantize(block_size=(1, 1)),
+        ),
+        WeightConversion(
+            "experts.gate_up_proj.dequantized",
+            ["experts.w1.concat", "experts.w3.concat"],
+            Chunk(dim=0, sizes=[4, 4]),
+        ),
+        WeightConversion(
+            "experts.w1.concat",
+            ["experts.0.w1.weight", "experts.1.w1.weight"],
+            Chunk(dim=0, sizes=[2, 2]),
+        ),
+        WeightConversion(
+            "experts.w3.concat",
+            ["experts.0.w3.weight", "experts.1.w3.weight"],
+            Chunk(dim=0, sizes=[2, 2]),
+        ),
+        WeightConversion(
+            "self_attn.qkv_proj.weight",
+            [
+                "self_attn.q_proj.weight",
+                "self_attn.k_proj.weight",
+                "self_attn.v_proj.weight",
+            ],
+            Chunk(dim=0, sizes=[2, 2, 2]),
+        ),
+        WeightConversion(
+            ["self_attn.out_proj.weight.shard0", "self_attn.out_proj.weight.shard1"],
+            "self_attn.out_proj.weight",
+            Concatenate(dim=0),
+        ),
+        WeightConversion("mlp.down_proj.weight", "mlp.w2.weight"),
+    ]
+
+    roundtrip_state, _ = convert_state_dict(
+        None, converted_state, inverse_mapping, tp_plan=None, quantization_config=None
+    )
+
+    torch.testing.assert_close(roundtrip_state["experts.0.w1.weight"], state_dict["experts.0.w1.weight"])
+    torch.testing.assert_close(roundtrip_state["experts.1.w1.weight"], state_dict["experts.1.w1.weight"])
+    torch.testing.assert_close(roundtrip_state["experts.0.w3.weight"], state_dict["experts.0.w3.weight"])
+    torch.testing.assert_close(roundtrip_state["experts.1.w3.weight"], state_dict["experts.1.w3.weight"])
+    torch.testing.assert_close(roundtrip_state["self_attn.q_proj.weight"], state_dict["self_attn.q_proj.weight"])
+    torch.testing.assert_close(roundtrip_state["self_attn.k_proj.weight"], state_dict["self_attn.k_proj.weight"])
+    torch.testing.assert_close(roundtrip_state["self_attn.v_proj.weight"], state_dict["self_attn.v_proj.weight"])
+    torch.testing.assert_close(roundtrip_state["self_attn.out_proj.weight"], state_dict["self_attn.out_proj.weight"])
+    torch.testing.assert_close(roundtrip_state["mlp.w2.weight"], state_dict["mlp.w2.weight"])
 
 
 global_rng = random.Random()

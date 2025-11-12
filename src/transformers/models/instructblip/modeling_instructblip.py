@@ -324,24 +324,16 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
         "InstructBlipQFormerSelfOutput",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_range
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=factor)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, InstructBlipVisionEmbeddings):
+        if isinstance(module, InstructBlipVisionEmbeddings):
             nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
         elif isinstance(module, (InstructBlipForConditionalGeneration, InstructBlipModel)):
-            module.query_tokens.data.zero_()
+            nn.init.zeros_(module.query_tokens)
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->InstructBlip
@@ -961,11 +953,6 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
-
     def _preprocess_accelerate(self):
         r"""
         Some pre-processing hacks to make the model `accelerate` compatible. Check
@@ -1159,12 +1146,6 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
     def get_decoder(self):
         return self.language_model.get_decoder()
-
-    # Copied from transformers.models.instructblip.modeling_instructblip.InstructBlipModel._tie_weights
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
 
     # Copied from transformers.models.instructblip.modeling_instructblip.InstructBlipModel._preprocess_accelerate
     def _preprocess_accelerate(self):

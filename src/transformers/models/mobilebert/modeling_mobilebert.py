@@ -500,13 +500,8 @@ class MobileBertLMPredictionHead(nn.Module):
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.dense = nn.Linear(config.vocab_size, config.hidden_size - config.embedding_size, bias=False)
-        self.decoder = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.embedding_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self) -> None:
-        self.decoder.bias = self.bias
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.transform(hidden_states)
@@ -551,21 +546,15 @@ class MobileBertPreTrainedModel(PreTrainedModel):
         "attentions": MobileBertSelfAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, NoNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        super()._init_weights(module)
+        if isinstance(module,  NoNorm):
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, MobileBertLMPredictionHead):
-            module.bias.data.zero_()
+            nn.init.zeros_(module.bias)
 
 
 @dataclass
@@ -670,7 +659,10 @@ class MobileBertModel(MobileBertPreTrainedModel):
     """
 )
 class MobileBertForPreTraining(MobileBertPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "mobilebert.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -766,7 +758,10 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
 
 @auto_docstring
 class MobileBertForMaskedLM(MobileBertPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "mobilebert.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)

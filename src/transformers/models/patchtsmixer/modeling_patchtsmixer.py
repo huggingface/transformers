@@ -685,6 +685,7 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
     input_modalities = "time"
     supports_gradient_checkpointing = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize weights"""
         if isinstance(module, PatchTSMixerPositionalEncoding):
@@ -692,15 +693,15 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
             if self.config.positional_encoding_type == "random":
                 nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, PatchTSMixerBatchNorm):
-            module.batchnorm.bias.data.zero_()
-            module.batchnorm.weight.data.fill_(1.0)
+            nn.init.zeros_(module.batchnorm.bias)
+            nn.init.ones_(module.batchnorm.weight)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                nn.init.zeros_(module.bias)
 
 
 class PatchTSMixerPretrainHead(nn.Module):

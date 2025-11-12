@@ -370,20 +370,21 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
 
     # todo: Resort to https://github.com/facebookresearch/msn/blob/main/src/deit.py#L200-#L211
     # when creating pre-training scripts.
+    @torch.no_grad()
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
         elif isinstance(module, ViTMSNEmbeddings):
-            module.cls_token.data.zero_()
-            module.position_embeddings.data.zero_()
+            nn.init.zeros_(module.cls_token)
+            nn.init.zeros_(module.position_embeddings)
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                nn.init.zeros_(module.mask_token)
 
 
 @auto_docstring

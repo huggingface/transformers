@@ -692,31 +692,22 @@ class BeitPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
     _supports_sdpa = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, BeitEmbeddings):
-            module.cls_token.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, BeitEmbeddings):
+            nn.init.zeros_(module.cls_token)
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                nn.init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
+                nn.init.zeros_(module.position_embeddings)
         elif isinstance(module, BeitRelativePositionBias):
-            module.relative_position_bias_table.data.zero_()
+            nn.init.zeros_(module.relative_position_bias_table)
         elif isinstance(module, BeitLayer):
             if module.lambda_1 is not None:
-                module.lambda_1.data.fill_(self.config.layer_scale_init_value)
-                module.lambda_2.data.fill_(self.config.layer_scale_init_value)
+                nn.init.constant_(module.lambda_1, self.config.layer_scale_init_value)
+                nn.init.constant_(module.lambda_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring
