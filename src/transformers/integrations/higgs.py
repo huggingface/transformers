@@ -448,7 +448,7 @@ class HiggsQuantize(ConversionOps):
     def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, **kwargs) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
-        
+
         flute_dict = quantize_with_higgs(
             value,
             self.hf_quantizer.quantization_config.bits,

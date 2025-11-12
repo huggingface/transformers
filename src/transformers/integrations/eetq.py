@@ -12,9 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ..utils import is_accelerate_available, is_eetq_available, logging
-from ..quantizers.quantizers_utils import get_module_from_name
 from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name
+from ..utils import is_accelerate_available, is_eetq_available, logging
+
 
 if is_eetq_available():
     import eetq
@@ -32,7 +33,7 @@ class EetqQuantize(ConversionOps):
     def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, **kwargs) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
-        
+
         from eetq import EetqLinear, quantize_and_preprocess_weights
 
         module, tensor_name = get_module_from_name(model, param_name)

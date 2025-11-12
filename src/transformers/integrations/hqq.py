@@ -21,8 +21,8 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
-from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name
+
 
 def HqqQuantize(ConversionOps):
     def __init__(self, hf_quantizer):

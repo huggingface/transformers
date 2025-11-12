@@ -278,7 +278,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             return config
 
         return config
-    
+
     def get_quantize_ops(self):
         from ..integrations.fbgemm_fp8 import FbgemmFp8Quantize
         return FbgemmFp8Quantize(self)

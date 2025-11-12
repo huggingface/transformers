@@ -13,9 +13,10 @@
 # limitations under the License.
 
 from ..activations import ACT2FN
-from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
-from ..quantizers.quantizers_utils import get_module_from_name
 from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name
+from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
+
 
 if is_torch_available():
     import torch
@@ -37,7 +38,7 @@ class FbgemmFp8Quantize(ConversionOps):
     def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, **kwargs) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
-        
+
         from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
         module, tensor_name = get_module_from_name(model, target_key)
         # Sanity checks
@@ -89,7 +90,7 @@ class FbgemmFp8Quantize(ConversionOps):
         else:
             new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(param_value)
             weight_scale = weight_scale.view(weight_scale.shape[0], 1)
-        
+
         return {target_key: new_value,
                 f"{target_key}_scale": weight_scale}
 
