@@ -67,10 +67,6 @@ class AriaProcessor(ProcessorMixin):
             A dictionary indicating size conversions for images.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AriaImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor=None,
