@@ -417,10 +417,11 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             # Handle prefill vs normal generation
             if is_prefill:
                 # First step: process speech inputs for conditioning
-                model_inputs.update({
-                    "input_features": input_features.to(device=input_ids.device),
-                    "input_features_mask": input_features_mask.to(input_ids.device),
-                })
+                if input_features is not None and input_features_mask is not None:
+                    model_inputs.update({
+                        "input_features": input_features.to(device=input_ids.device),
+                        "input_features_mask": input_features_mask.to(input_ids.device),
+                    })
                 is_prefill = False
             else:
                 # Subsequent steps: use embeddings from previous step
@@ -644,10 +645,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
             del outputs
-
-            # *************** VibeVoice specific ***************
-            del negative_outputs
-            # ============================================
 
         if streamer is not None:
             streamer.end()
