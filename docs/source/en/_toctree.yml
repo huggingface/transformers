@@ -1008,6 +1008,8 @@
         title: AltCLIP
       - local: model_doc/aria
         title: Aria
+      - local: model_doc/audioflamingo3
+        title: AudioFlamingo3
       - local: model_doc/aya_vision
         title: AyaVision
       - local: model_doc/blip
