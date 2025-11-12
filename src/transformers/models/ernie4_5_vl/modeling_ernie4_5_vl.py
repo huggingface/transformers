@@ -1546,6 +1546,10 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
     def language_model(self):
         return self.model.language_model
 
+    @property
+    def visual(self):
+        return self.model.vision_tower
+
     @auto_docstring
     @can_return_tuple
     def forward(

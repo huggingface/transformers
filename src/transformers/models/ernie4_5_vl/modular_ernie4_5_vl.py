@@ -1031,8 +1031,9 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
         self.num_experts = config.text_config.moe_num_experts
         self.num_experts_per_tok = config.text_config.moe_k
 
+    @property
     def visual(self):
-        raise AttributeError("Not used anymore, only for BC")
+        return self.model.vision_tower
 
     def prepare_inputs_for_generation(
         self,
