@@ -812,5 +812,7 @@ __all__ = [
     "LightOnOCRForConditionalGeneration",
     "LightOnOCRModel",
     "LightOnOCRConfig",
+    "LightOnOCRTextConfig",
+    "LightOnOCRVisionConfig",
     "LightOnOCRProcessor",
 ]

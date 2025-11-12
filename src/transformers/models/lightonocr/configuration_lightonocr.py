@@ -364,4 +364,4 @@ class LightOnOCRConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["LightOnOCRConfig"]
+__all__ = ["LightOnOCRConfig", "LightOnOCRTextConfig", "LightOnOCRVisionConfig"]
