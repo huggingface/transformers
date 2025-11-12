@@ -470,7 +470,9 @@ def _end_ptr(tensor: torch.Tensor) -> int:
 def _get_tied_weight_keys(module: nn.Module) -> list[str]:
     tied_weight_keys: list[str] = []
     for name, submodule in module.named_modules():
-        tied_weights_dict = list(getattr(submodule, "_tied_weights_keys", {}) or {})
+        tied = getattr(submodule, "_tied_weights_keys", {}) or {}
+        tied_weights_dict = list(tied.keys())
+        tied_weights_dict.extend(tied.values())
         tied_weight_keys.extend([f"{name}.{k}" if name else k for k in tied_weights_dict])
     return tied_weight_keys
 
@@ -3277,18 +3279,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         module_map[name + f".{key}"] = module
             state_dict = model_to_save.state_dict()
 
-        if (
-            any(
-                allowed_name in class_name.__name__.lower()
-                for class_name in self.__class__.__mro__[:-1]
-                for allowed_name in VLMS
-            )
-            or save_original_format
-        ):
-            # MEGA BIG TODO HERE: self._conversion_ops needs to be used to save the final ckpt
-            # using what was loaded. Actually self._conversion_ops wont work because we need it
-            # even if the files are not legacy -> thus no conversion happened
-            state_dict = revert_weight_conversion(self, state_dict)
+
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
@@ -3374,11 +3365,23 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 error_names.extend(shared_names)
 
             if len(error_names) > 0:
-                suggested_fix = {v: k for k, v in list(shared_ptrs.values())} if shared_ptrs else None
                 raise RuntimeError(
-                    f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined"
-                    f"as being shared in `_tied_weight_keys`. You should probably add: `_tied_weight_keys = {suggested_fix}. If a whole module is shared you can use it directly",
+                    f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined. We found `_tied_weights_keys` to be: {_tied_weights_keys}.\n"
+                    "This can also just mean that the module's tied weight keys are wrong vs the actual tied weights in the model.",
                 )
+
+        if (
+            any(
+                allowed_name in class_name.__name__.lower()
+                for class_name in self.__class__.__mro__[:-1]
+                for allowed_name in VLMS
+            )
+            or save_original_format
+        ):
+            # MEGA BIG TODO HERE: self._conversion_ops needs to be used to save the final ckpt
+            # using what was loaded. Actually self._conversion_ops wont work because we need it
+            # even if the files are not legacy -> thus no conversion happened
+            state_dict = revert_weight_conversion(self, state_dict)
 
         # Shard the model if it is too big.
         if not _hf_peft_config_loaded:
