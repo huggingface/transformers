@@ -117,13 +117,6 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
 
         BaseImageProcessorFast.__init__(self, **kwargs)
 
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[RTDetrImageProcessorKwargs],
-    ) -> BatchFeature:
-        return BaseImageProcessorFast.preprocess(self, images, **kwargs)
-
     def prepare_annotation(
         self,
         image: torch.Tensor,
