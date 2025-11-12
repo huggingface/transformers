@@ -14,19 +14,16 @@
 # limitations under the License.
 
 import copy
-import inspect
 from typing import TYPE_CHECKING
 
-from ..cache_utils import DynamicCache, EncoderDecoderCache
-from ..generation.utils import GenerationMixin
 from ..utils import logging
 from ..utils.export_config import DynamoConfig
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 from .base import HfExporter
 from .utils import (
-    UNSUPPORTED_CACHE_CLASS_MODEL_TYPES,
     get_auto_dynamic_shapes,
     patch_model_for_export,
+    prepare_inputs_for_export,
     raise_on_unsupported_model,
     register_dynamic_cache_for_export,
     register_encoder_decoder_cache_for_export,
@@ -71,29 +68,15 @@ class DynamoExporter(HfExporter):
             )
 
         sample_inputs = copy.deepcopy(self.export_config.sample_inputs)
-
-        if (
-            isinstance(model, GenerationMixin)
-            and getattr(model.config, "use_cache", False)
-            and "past_key_values" in inspect.signature(model.forward).parameters
-            and model.config.model_type not in UNSUPPORTED_CACHE_CLASS_MODEL_TYPES
-            and "past_key_values" not in sample_inputs
-        ):
-            logger.info(
-                f"{self.__class__.__name__} detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
-                "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
-                "You can also provide past_key_values in sample_inputs to avoid this step."
-            )
-            self.prepare_cache_inputs_for_export(model, sample_inputs)
+        model, sample_inputs = prepare_inputs_for_export(model, sample_inputs)
 
         dynamic_shapes = self.export_config.dynamic_shapes
         if self.export_config.dynamic and dynamic_shapes is None:
-            # assigns AUTO to all axes to let torch.onnx decide
+            # assigns AUTO to all axes to let torch dynamo decide
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
         register_dynamic_cache_for_export()
         register_encoder_decoder_cache_for_export()
-
         with patch_model_for_export(model):
             exported_program: ExportedProgram = torch.export.export(
                 model,
@@ -106,26 +89,3 @@ class DynamoExporter(HfExporter):
         model.exported_model = exported_program
 
         return exported_program
-
-    @staticmethod
-    def prepare_cache_inputs_for_export(model: "PreTrainedModel", sample_inputs: dict):
-        with torch.no_grad():
-            dummy_outputs = model(**copy.deepcopy(sample_inputs))
-
-        if hasattr(dummy_outputs, "past_key_values"):
-            if isinstance(dummy_outputs.past_key_values, DynamicCache):
-                sample_inputs["past_key_values"] = dummy_outputs.past_key_values
-                if model.config.model_type not in {"qwen2_vl", "qwen2_5_vl"}:
-                    seq_length = sample_inputs["input_ids"].shape[1]
-                    past_length = sample_inputs["past_key_values"].get_seq_length()
-                    sample_inputs["attention_mask"] = torch.ones(
-                        (sample_inputs["input_ids"].shape[0], past_length + seq_length),
-                        device=model.device,
-                        dtype=torch.long,
-                    )
-            elif isinstance(dummy_outputs.past_key_values, EncoderDecoderCache):
-                logger.warning(
-                    "The model seems to be returning an EncoderDecoderCache as past_key_values. "
-                    "DynamoExporter does not yet support cache in inputs for encoder-decoder models. "
-                    "The model will be exported as a monolithic graph with no cache inputs."
-                )

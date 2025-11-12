@@ -34,7 +34,6 @@ from transformers import (
     AutoModel,
     AutoModelForSequenceClassification,
     BitsAndBytesConfig,
-    GenerationMixin,
     PreTrainedConfig,
     PreTrainedModel,
     is_torch_available,
@@ -42,7 +41,7 @@ from transformers import (
     set_seed,
 )
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
-from transformers.exporters.utils import UNSUPPORTED_CACHE_CLASS_MODEL_TYPES
+from transformers.exporters.utils import prepare_inputs_for_export
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -3481,20 +3480,14 @@ class ModelTesterMixin:
 
             with self.subTest(model_class.__name__):
                 model = model_class(config).eval().to(torch_device)
-
-                if (
-                    isinstance(model, GenerationMixin)
-                    and getattr(model.config, "use_cache", False)
-                    and "past_key_values" in inspect.signature(model.forward).parameters
-                    and model.config.model_type not in UNSUPPORTED_CACHE_CLASS_MODEL_TYPES
-                ):
-                    # Only needed to get the cache and run the eager inference with it
-                    DynamoExporter.prepare_cache_inputs_for_export(model, inputs_dict)
+                # needed to prepare cache inputs for auto-regressive models
+                # and process output flags (use_cache, output_attentions, etc)
+                model, inputs_dict = prepare_inputs_for_export(model, inputs_dict)
 
                 with torch.no_grad():
                     set_seed(1234)
-                    # Running the eager inference before the export to catch model/inputs issues, also sometimes after the export,
-                    # the model used for export will return FakeTensors instead of real ones (torch cuda/inductor issue)
+                    # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
+                    # the export, the model used for export will return FakeTensors instead of real ones (torch cuda/inductor issue)
                     # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
                     eager_outputs = model(**copy.deepcopy(inputs_dict))
 
@@ -3512,7 +3505,10 @@ class ModelTesterMixin:
                     exported_outputs = exported_program.module().forward(**copy.deepcopy(inputs_dict))
 
                 if "lsh" in getattr(config, "attn_layers", []):
-                    self.skipTest("LSH attention is not deterministic, skipping the output comparison.")
+                    self.skipTest(
+                        "LSH attention is not deterministic (uses torch.randn). "
+                        "Skipping the exported vs eager outputs comparison."
+                    )
 
                 # Check if outputs are close:
                 # is_tested is a boolean flag indicating if we compare any outputs,

@@ -12,21 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
+import importlib
+import inspect
 from collections.abc import Callable
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 from ..cache_utils import Cache, DynamicCache, DynamicLayer, DynamicSlidingWindowLayer, EncoderDecoderCache
-from ..masking_utils import (
-    ALL_MASK_ATTENTION_FUNCTIONS,
-    _ignore_causal_mask_sdpa,
-    and_masks,
-    causal_mask_function,
-    eager_mask,
-    padding_mask_function,
-    prepare_padding_mask,
-    sdpa_mask,
-)
+from ..generation.utils import GenerationMixin
 from ..utils.import_utils import is_torch_available
 from ..utils.logging import get_logger
 
@@ -41,6 +35,7 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 
+# Pytree registration utilities
 def _get_dynamic_cache_dict(cache: DynamicCache):
     """Converts DynamicCache to dictionary format for pytree operations."""
     if any(not isinstance(layer, DynamicLayer | DynamicSlidingWindowLayer) for layer in cache.layers):
@@ -140,86 +135,96 @@ def register_encoder_decoder_cache_for_export():
             raise
 
 
-# TODO: won't be needed when it becomes the default in transformers
-# Custom vectorized implementation of sdpa_mask without using vmap
-def sdpa_mask_without_vmap(
-    batch_size: int,
-    cache_position: torch.Tensor,
-    kv_length: int,
-    kv_offset: int = 0,
-    mask_function: Callable | None = None,
-    attention_mask: torch.Tensor | None = None,
-    local_size: int | None = None,
-    allow_is_causal_skip: bool = True,
-    **kwargs,
-) -> torch.Tensor | None:
-    if mask_function is None:
-        mask_function = causal_mask_function
+# Inputs preparation utilities
+def prepare_inputs_for_export(
+    model: "PreTrainedModel", sample_inputs: dict[str, torch.Tensor | Cache]
+) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache]]:
+    for input_flag_name in ("use_cache", "return_loss", "output_attentions", "output_hidden_states"):
+        if input_flag_name in sample_inputs:
+            logger.info(
+                f"Detected input flag '{input_flag_name}' in sample_inputs. Setting model.config.{input_flag_name} accordingly."
+            )
+            setattr(model.config, input_flag_name, sample_inputs.pop(input_flag_name))
 
-    q_length = cache_position.shape[0]
-    # Potentially pad the 2D mask, and slice it correctly
-    padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset, _slice=False)
+    if (
+        isinstance(model, GenerationMixin)
+        and getattr(model.config, "use_cache", False)
+        and "past_key_values" in inspect.signature(model.forward).parameters
+        and model.config.model_type not in UNSUPPORTED_CACHE_CLASS_MODEL_TYPES
+        and "past_key_values" not in sample_inputs
+    ):
+        logger.info(
+            "Detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
+            "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
+            "You can also provide past_key_values in sample_inputs to avoid this step."
+        )
+        with torch.no_grad():
+            dummy_outputs = model(**copy.deepcopy(sample_inputs))
 
-    # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
-    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, kv_offset, local_size):
-        return None
+        if hasattr(dummy_outputs, "past_key_values"):
+            if isinstance(dummy_outputs.past_key_values, DynamicCache):
+                sample_inputs["past_key_values"] = dummy_outputs.past_key_values
+                if model.config.model_type not in {"qwen2_vl", "qwen2_5_vl"}:
+                    seq_length = sample_inputs["input_ids"].shape[1]
+                    past_length = sample_inputs["past_key_values"].get_seq_length()
+                    sample_inputs["attention_mask"] = torch.ones(
+                        (sample_inputs["input_ids"].shape[0], past_length + seq_length),
+                        device=model.device,
+                        dtype=torch.long,
+                    )
+            elif isinstance(dummy_outputs.past_key_values, EncoderDecoderCache):
+                logger.warning(
+                    "The model seems to be returning an EncoderDecoderCache as past_key_values. "
+                    "DynamoExporter does not yet support cache in inputs for encoder-decoder models. "
+                    "The model will be exported as a monolithic graph with no cache inputs."
+                )
 
-    # Potentially add the padding 2D mask
-    if padding_mask is not None:
-        mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
-
-    # Create broadcatable indices
-    device = cache_position.device
-    q_indices = cache_position[None, None, :, None]
-    head_indices = torch.arange(1, dtype=torch.long, device=device)[None, :, None, None]
-    batch_indices = torch.arange(batch_size, dtype=torch.long, device=device)[:, None, None, None]
-    kv_indices = torch.arange(kv_length, dtype=torch.long, device=device)[None, None, None, :] + kv_offset
-    # Apply mask function element-wise through broadcasting
-    causal_mask = mask_function(batch_indices, head_indices, q_indices, kv_indices)
-    # Expand the mask to match batch size and query length if they weren't used in the mask function
-    causal_mask = causal_mask.expand(batch_size, -1, q_length, kv_length)
-
-    return causal_mask
+    return model, sample_inputs
 
 
-# Adapted from https://github.com/huggingface/transformers/blob/v4.53.0/src/transformers/masking_utils.py#L433
-def eager_mask_without_vmap(*args, **kwargs) -> torch.Tensor:
-    kwargs.pop("allow_is_causal_skip", None)
-    dtype = kwargs.get("dtype", torch.float32)
-    mask = sdpa_mask_without_vmap(*args, allow_is_causal_skip=False, **kwargs)
-    mask = torch.where(mask, torch.tensor(0.0, device=mask.device, dtype=dtype), torch.finfo(dtype).min)
-    return mask
+# Dynamic shapes utilities
+def _auto_dynamic_shape(tensor: torch.Tensor) -> dict[int, torch.export.Dim]:
+    """
+    Utility function to generate a dynamic shape with all dimensions set to Dim.AUTO for a given tensor.
+    Args:
+        tensor (`torch.Tensor`):
+            The tensor for which to generate the dynamic shape.
+    Returns:
+        `dict[int, torch.export.Dim]`: A dictionary mapping dimension indices to Dim.AUTO.
+    """
+    from torch.export import Dim
+
+    return dict.fromkeys(range(len(tensor.shape)), Dim.AUTO)
 
 
 def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str, dict[int, torch.export.Dim]]:
     """
-    Utility function to automatically generate dynamic shapes for a dictionary of model inputs.
-
+    Utility function to automatically generate dynamic shapes for all tensor inputs and DynamicCache inputs.
     Args:
         inputs (`dict[str, torch.Tensor | Cache]`):
-            The inputs with which the model will be exported.
+            A dictionary of model inputs.
     Returns:
         `dict[str, dict[int, torch.export.Dim]]`: A dictionary mapping input names to their dynamic shapes.
     """
-    from torch.export import Dim
-
     dynamic_shapes = {}
     for name, input in inputs.items():
         if isinstance(input, DynamicCache):
             dynamic_shapes[name] = [
-                [dict.fromkeys(range(len(layer.keys.shape)), Dim.AUTO) for layer in input.layers],
-                [dict.fromkeys(range(len(layer.values.shape)), Dim.AUTO) for layer in input.layers],
+                [_auto_dynamic_shape(layer.keys) for layer in input.layers],
+                [_auto_dynamic_shape(layer.values) for layer in input.layers],
             ]
         elif isinstance(input, torch.Tensor):
-            dynamic_shapes[name] = dict.fromkeys(range(len(input.shape)), Dim.AUTO)
+            dynamic_shapes[name] = _auto_dynamic_shape(input)
         else:
             raise ValueError(
-                f"Input '{name}' is of unsupported type '{type(input)}'. Only 'torch.Tensor' and 'DynamicCache' are supported."
+                f"Input '{name}' is of unsupported type '{type(input)}'. "
+                "Only 'torch.Tensor' and 'DynamicCache' are supported. "
             )
 
     return dynamic_shapes
 
 
+# Model patching utilities
 def generate_masks_with_special_tokens_and_transfer_map(
     input_ids: torch.LongTensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -335,6 +340,12 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
     indices = ones.unsqueeze(-1) * last  # broadcasts to (*batch_shape, num_segments)
 
     return IndexMap(indices=indices, num_segments=num_segments, batch_dims=int(batch_shape.size(0)))
+
+
+FUNCTIONS_TO_EXPORTABLE_IMPLEMENTATION: dict[str, Callable] = {
+    "generate_masks_with_special_tokens_and_transfer_map": generate_masks_with_special_tokens_and_transfer_map,
+    "range_index_map": range_index_map,
+}
 
 
 def batched_experts_forward_with_split_expert_weights(
@@ -458,8 +469,6 @@ def batched_switch_transformers_experts_forward(
     P, H = hidden_states.shape
     device = hidden_states.device
     dtype = hidden_states.dtype
-
-    # shapes
     top_k = selected_experts.shape[1]
     E = selected_experts.shape[-1]
 
@@ -479,6 +488,7 @@ def batched_switch_transformers_experts_forward(
     # Gather inputs for all pairs
     x = hidden_states.index_select(0, token_idx)  # (P*top_k, H)
 
+    # TODO: instead of stacking here, patch the entire class to have its expert weights pre-stacked
     # Stack per-expert weights once, then select per pair
     W_i = torch.stack([self[f"expert_{i}"].wi.weight for i in range(self.num_experts)], dim=0)  # (E, d_ff, H)
     W_o = torch.stack([self[f"expert_{i}"].wo.weight for i in range(self.num_experts)], dim=0)  # (E, H, d_ff)
@@ -555,8 +565,7 @@ def idefics_embedding(self, x, seq_len=None):
     )
 
 
-TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD: dict[str, Callable] = {
-    # Expert MLPs with different weight storage schemes
+MODULES_TO_EXPORTABLE_FORWARD: dict[str, Callable] = {
     "AriaGroupedExpertsGemm": aria_grouped_experts_gemm,
     "AxialPositionEmbeddings": axial_position_embedding,
     "DbrxExperts": batched_experts_forward_with_grouped_expert_weights,
@@ -586,73 +595,34 @@ TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD: dict[str, Callable] = {
 
 @contextmanager
 def patch_model_for_export(model: "PreTrainedModel"):
-    # patch masking functions to use the non-vmap versions
-    ALL_MASK_ATTENTION_FUNCTIONS["sdpa"] = sdpa_mask_without_vmap
-    ALL_MASK_ATTENTION_FUNCTIONS["eager"] = eager_mask_without_vmap
-
     original_forwards = {}
     for module in model.modules():
         module_class_name = module.__class__.__name__
-        if module_class_name in TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD:
+        if module_class_name in MODULES_TO_EXPORTABLE_FORWARD:
             original_forwards[module_class_name] = module.forward
             # patch forward method with an exportable version (non data-dependent)
-            module.forward = TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD[module_class_name].__get__(module)
+            module.forward = MODULES_TO_EXPORTABLE_FORWARD[module_class_name].__get__(module)
 
-    # TODO: automate the helper methods patching process as well
     original_functions = {}
-    if model.config.model_type == "grounding-dino":
-        import transformers.models.grounding_dino.modeling_grounding_dino as grounding_dino_module
-
-        original_functions["generate_masks_with_special_tokens_and_transfer_map"] = (
-            grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map
-        )
-        grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map = (
-            generate_masks_with_special_tokens_and_transfer_map
-        )
-    elif model.config.model_type == "mm-grounding-dino":
-        import transformers.models.mm_grounding_dino.modeling_mm_grounding_dino as mm_grounding_dino_module
-
-        original_functions["generate_masks_with_special_tokens_and_transfer_map"] = (
-            mm_grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map
-        )
-        mm_grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map = (
-            generate_masks_with_special_tokens_and_transfer_map
-        )
-    elif model.config.model_type == "tapas":
-        import transformers.models.tapas.modeling_tapas as tapas_module
-
-        original_functions["range_index_map"] = tapas_module.range_index_map
-        tapas_module.range_index_map = range_index_map
+    modeling_module = importlib.import_module(model.__module__)
+    for function_name, exportable_function in FUNCTIONS_TO_EXPORTABLE_IMPLEMENTATION.items():
+        if hasattr(modeling_module, function_name):
+            original_functions[function_name] = getattr(modeling_module, function_name)
+            # patch function with an exportable version (non data-dependent)
+            setattr(modeling_module, function_name, exportable_function)
 
     try:
         yield
     finally:
-        # restore original masking functions and module forwards
-        ALL_MASK_ATTENTION_FUNCTIONS["sdpa"] = sdpa_mask
-        ALL_MASK_ATTENTION_FUNCTIONS["eager"] = eager_mask
-
         for module in model.modules():
             module_class_name = module.__class__.__name__
-            if module_class_name in TRANSFORMERS_MODULE_TO_EXPORTABLE_FORWARD:
+            if module_class_name in MODULES_TO_EXPORTABLE_FORWARD:
                 # restore original forward method
                 module.forward = original_forwards[module_class_name]
 
-        if model.config.model_type == "grounding-dino":
-            import transformers.models.grounding_dino.modeling_grounding_dino as grounding_dino_module
-
-            grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map = original_functions[
-                "generate_masks_with_special_tokens_and_transfer_map"
-            ]
-        elif model.config.model_type == "mm-grounding-dino":
-            import transformers.models.mm_grounding_dino.modeling_mm_grounding_dino as mm_grounding_dino_module
-
-            mm_grounding_dino_module.generate_masks_with_special_tokens_and_transfer_map = original_functions[
-                "generate_masks_with_special_tokens_and_transfer_map"
-            ]
-        elif model.config.model_type == "tapas":
-            import transformers.models.tapas.modeling_tapas as tapas_module
-
-            tapas_module.range_index_map = original_functions["range_index_map"]
+        for function_name, original_function in original_functions.items():
+            # restore original function
+            setattr(modeling_module, function_name, original_function)
 
 
 UNSUPPORTED_MODEL_TYPES: set[str] = {
@@ -677,7 +647,7 @@ UNSUPPORTED_MODEL_TYPES: set[str] = {
     "mistral3",  # PixtralVisionModel uses some data-dependent truncation
     "modernbert",  # Uses torch.compile directly on some module forward methods
     "nllb-moe",  # TODO: Moe implementation needs to be patched for export
-    "omdet-turbo",  #
+    "omdet-turbo",  # cryptic error AssertionError: assert len(kp) > 0
     "oneformer",  # torch.export is failing on multiple torch methods like torch.linspace and torch.meshgrid
     "pixtral",  # PixtralModel.forward does some data-dependent truncation
     "phi4_multimodal",  # I guess the model is just broken in its current state
