@@ -126,7 +126,7 @@ class Glm46VForConditionalGeneration(Glm4vForConditionalGeneration):
     pass
 
 
-class Glm46vProcessor(Glm4vProcessor):
+class Glm46VProcessor(Glm4vProcessor):
     def replace_frame_token_id(self, timestamp_sec):
         return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec:.1f} seconds"
 
@@ -138,5 +138,5 @@ __all__ = [
     "Glm46VModel",
     "Glm46VPreTrainedModel",
     "Glm46VTextModel",
-    "Glm46vProcessor",
+    "Glm46VProcessor",
 ]

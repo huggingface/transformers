@@ -45,7 +45,7 @@ class Glm46VProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class Glm46vProcessor(ProcessorMixin):
+class Glm46VProcessor(ProcessorMixin):
     r"""
     Constructs a GLM-4V processor which wraps a GLM-4V image processor and a GLM-4 tokenizer into a single processor.
     [`~Glm46VProcessor.__call__`] and [`~Glm46VProcessor.decode`] for more information.
@@ -276,4 +276,4 @@ class Glm46vProcessor(ProcessorMixin):
         return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec:.1f} seconds"
 
 
-__all__ = ["Glm46vProcessor"]
+__all__ = ["Glm46VProcessor"]

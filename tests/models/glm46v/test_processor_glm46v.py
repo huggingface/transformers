@@ -27,7 +27,7 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
-    from transformers import Glm46vProcessor
+    from transformers import Glm46VProcessor
 
 if is_torch_available():
     import torch
@@ -35,13 +35,13 @@ if is_torch_available():
 
 @require_vision
 @require_torch
-class Glm46vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = Glm46vProcessor
+class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Glm46VProcessor
 
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        processor = Glm46vProcessor.from_pretrained(
+        processor = Glm46VProcessor.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking", patch_size=4, size={"shortest_edge": 12 * 12, "longest_edge": 18 * 18}
         )
         processor.save_pretrained(cls.tmpdirname)

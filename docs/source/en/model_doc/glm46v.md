@@ -62,14 +62,14 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] Glm46VPreTrainedModel
     - forward
 
-## Glm46vVideoProcessor
+## Glm46VVideoProcessor
 
-[[autodoc]] Glm46vVideoProcessor
+[[autodoc]] Glm46VVideoProcessor
     - preprocess
 
-## Glm46vProcessor
+## Glm46VProcessor
 
-[[autodoc]] Glm46vProcessor
+[[autodoc]] Glm46VProcessor
 
 ## Glm46VTextModel
 

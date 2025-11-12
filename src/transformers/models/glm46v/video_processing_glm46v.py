@@ -35,7 +35,7 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ..glm4v.image_processing_glm4v import smart_resize
 
 
-class Glm46vVideoProcessorInitKwargs(VideosKwargs, total=False):
+class Glm46VVideoProcessorInitKwargs(VideosKwargs, total=False):
     max_image_size: dict[str, int]
     patch_size: int
     temporal_patch_size: int
@@ -55,7 +55,7 @@ class Glm46vVideoProcessorInitKwargs(VideosKwargs, total=False):
             The merge size of the vision encoder to llm encoder.
     """,
 )
-class Glm46vVideoProcessor(BaseVideoProcessor):
+class Glm46VVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 2 * 30000}
     max_image_size = {"longest_edge": 28 * 28 * 2 * 30000}
@@ -70,13 +70,13 @@ class Glm46vVideoProcessor(BaseVideoProcessor):
     temporal_patch_size = 2
     max_duration = 300
     merge_size = 2
-    valid_kwargs = Glm46vVideoProcessorInitKwargs
+    valid_kwargs = Glm46VVideoProcessorInitKwargs
     num_frames = 16
     fps = 2
 
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Glm46vVideoProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Glm46VVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
         if self.size is not None and (
             self.size.get("shortest_edge", None) is None or self.size.get("longest_edge", None) is None
@@ -105,7 +105,7 @@ class Glm46vVideoProcessor(BaseVideoProcessor):
     ):
         if metadata is None or getattr(metadata, "fps", None) is None:
             raise ValueError(
-                "Asked to sample frames per second but no video metadata was provided which is required when sampling in Glm46v. "
+                "Asked to sample frames per second but no video metadata was provided which is required when sampling in Glm46V. "
                 "Please pass in `VideoMetadata` object or set `do_sample_frames=False`"
             )
 
@@ -267,4 +267,4 @@ class Glm46vVideoProcessor(BaseVideoProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["Glm46vVideoProcessor"]
+__all__ = ["Glm46VVideoProcessor"]

@@ -29,11 +29,11 @@ if is_torch_available():
 
 if is_vision_available():
     if is_torchvision_available():
-        from transformers import Glm46vVideoProcessor
+        from transformers import Glm46VVideoProcessor
         from transformers.models.glm46v.video_processing_glm46v import smart_resize
 
 
-class Glm46vVideoProcessingTester:
+class Glm46VVideoProcessingTester:
     def __init__(
         self,
         parent,
@@ -151,13 +151,13 @@ class Glm46vVideoProcessingTester:
 
 @require_torch
 @require_vision
-class Glm46vVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
-    fast_video_processing_class = Glm46vVideoProcessor if is_torchvision_available() else None
+class Glm46VVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
+    fast_video_processing_class = Glm46VVideoProcessor if is_torchvision_available() else None
     input_name = "pixel_values_videos"
 
     def setUp(self):
         super().setUp()
-        self.video_processor_tester = Glm46vVideoProcessingTester(self)
+        self.video_processor_tester = Glm46VVideoProcessingTester(self)
 
     @property
     def video_processor_dict(self):
