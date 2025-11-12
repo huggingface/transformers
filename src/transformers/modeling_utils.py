@@ -2456,8 +2456,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif isinstance(module, nn.Embedding):
                 if getattr(module, "weight", None) is not None:
                     module.weight.normal_(mean=0.0, std=std)
-                if getattr(module, "padding_idx", None) is not None:
-                    module.weight[module.padding_idx].zero_()
+                if getattr(self.config, "pad_token_id", None) is not None:
+                    module.weight[self.config.pad_token_id].zero_()
             elif isinstance(module, nn.Parameter):
                 module.normal_(mean=0.0, std=std)
             elif isinstance(module, nn.MultiheadAttention):
@@ -2652,8 +2652,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.tie_weight_source_and_target(self, missing_keys, "")
         else:  # this is from_pretrained, so its not called on every sub module
             for module_prefix, module in self.named_modules():
-                # Additionally, if it has a custom `_tie_weights`, honor it
-                # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
                 if isinstance(module, PreTrainedModel):
                     module.tie_weight_source_and_target(self, missing_keys, module_prefix)
 
