@@ -71,6 +71,12 @@ try:
                     layer_name="RMSNorm",
                 )
             },
+            "npu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/liger_kernels",
+                    layer_name="LigerRMSNorm",
+                )
+            },
         },
         "MLP": {
             "cuda": LayerRepository(
