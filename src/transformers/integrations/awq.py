@@ -137,10 +137,12 @@ try:
             target_cls = WQLinear_GEMM
                     except (ImportError, ModuleNotFoundError, AttributeError) as e:
                         raise ImportError(
-                            f"Failed to import AWQ modules required for version {quantization_config.version}. "
-                            f"Error: {str(e)}. Please ensure 'autoawq' is properly installed and compatible. "
-                            f"See https://github.com/mit-han-lab/llm-awq for installation instructions."
-                        ) from e
+                            
+                    f"Failed to import AWQ modules required for version "
+                    f"{quantization_config.version}. Error: {str(e)}. "
+                    f"Please ensure 'autoawq' is properly installed and compatible. "
+                    f"See https://github.com/mit-han-lab/llm-awq for installation instructions."
+                ) from e
         elif quantization_config.version == AWQLinearVersion.GEMV:
             from awq.modules.linear.gemv import WQLinear_GEMV
 
