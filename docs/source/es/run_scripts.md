@@ -98,7 +98,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```
 
@@ -122,7 +121,6 @@ torchrun \
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```
 
@@ -144,7 +142,6 @@ python xla_spawn.py --num_cores 8 \
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```
 
@@ -201,7 +198,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --summary_column summary_column_name \
     --source_prefix "summarize: " \
     --output_dir /tmp/tst-summarization \
-    --overwrite_output_dir \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
     --predict_with_generate
@@ -229,7 +225,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```
 
@@ -243,8 +238,6 @@ examples/pytorch/summarization/run_summarization.py -h
 
 Otra opción útil para habilitar es reanudar el entrenamiento desde un punto de control anterior. Esto asegurará que puedas continuar donde lo dejaste sin comenzar de nuevo si tu entrenamiento se interrumpe. Hay dos métodos para reanudar el entrenamiento desde un punto de control.
 
-El primer método utiliza el argumento `output_dir previous_output_dir` para reanudar el entrenamiento desde el último punto de control almacenado en `output_dir`. En este caso, debes eliminar `overwrite_output_dir`:
-
 ```bash
 python examples/pytorch/summarization/run_summarization.py
     --model_name_or_path google-t5/t5-small \
@@ -256,24 +249,6 @@ python examples/pytorch/summarization/run_summarization.py
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --output_dir previous_output_dir \
-    --predict_with_generate
-```
-
-El segundo método utiliza el argumento `resume_from_checkpoint path_to_specific_checkpoint` para reanudar el entrenamiento desde una carpeta de punto de control específica.
-
-```bash
-python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path google-t5/t5-small \
-    --do_train \
-    --do_eval \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --source_prefix "summarize: " \
-    --output_dir /tmp/tst-summarization \
-    --per_device_train_batch_size=4 \
-    --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --resume_from_checkpoint path_to_specific_checkpoint \
     --predict_with_generate
 ```
@@ -305,6 +280,5 @@ python examples/pytorch/summarization/run_summarization.py
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```

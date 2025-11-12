@@ -32,13 +32,7 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torch_available,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
 from ..auto import AutoModel
 from .configuration_florence2 import Florence2Config, Florence2VisionConfig
 
@@ -491,6 +485,7 @@ class Florence2VisionBlock(nn.Module):
 class Florence2VisionPreTrainedModel(PreTrainedModel):
     config_class = Florence2VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -620,7 +615,8 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
 @auto_docstring
 class Florence2PreTrainedModel(PreTrainedModel):
     config: Florence2Config
-    base_model_prefix = ""
+    base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -641,10 +637,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
 )
 class Florence2Model(Florence2PreTrainedModel):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = [
-        "language_model.encoder.embed_tokens.weight",
-        "language_model.decoder.embed_tokens.weight",
-    ]
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
@@ -810,11 +802,9 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
 )
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = [
-        "model.language_model.encoder.embed_tokens.weight",
-        "model.language_model.decoder.embed_tokens.weight",
-        "lm_head.weight",
-    ]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.language_model.shared.weight",
+    }
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
@@ -888,8 +878,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         >>> import requests
         >>> from transformers import AutoProcessor, Florence2ForConditionalGeneration
 
-        >>> model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-large")
-        >>> processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large")
+        >>> model = Florence2ForConditionalGeneration.from_pretrained("florence-community/Florence-2-large")
+        >>> processor = AutoProcessor.from_pretrained("florence-community/Florence-2-large")
 
         >>> prompt = "<CAPTION>"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg"

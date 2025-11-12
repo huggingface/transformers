@@ -98,9 +98,6 @@ class LongT5ModelTester:
         self.decoder_layers = decoder_layers
         self.large_model_config_path = large_model_config_path
 
-    def get_large_model_config(self):
-        return LongT5Config.from_pretrained(self.large_model_config_path)
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
@@ -433,10 +430,6 @@ class LongT5ModelTester:
                 decoder_attention_mask=decoder_attention_mask,
             )
 
-            # check that models has less parameters
-            self.parent.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             # check that outputs are equal
@@ -453,10 +446,6 @@ class LongT5ModelTester:
                 tied_model.to(torch_device)
                 tied_model.eval()
 
-                # check that models has less parameters
-                self.parent.assertLess(
-                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-                )
                 random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
                 tied_model_result = tied_model(
@@ -509,9 +498,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
-    test_torchscript = True
     test_resize_embeddings = True
     is_encoder_decoder = True
 
@@ -936,9 +923,6 @@ class LongT5EncoderOnlyModelTester:
         self.is_training = is_training
         self.large_model_config_path = large_model_config_path
 
-    def get_large_model_config(self):
-        return LongT5Config.from_pretrained(self.large_model_config_path)
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
 
@@ -1007,7 +991,6 @@ class LongT5EncoderOnlyModelTester:
 class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (LongT5EncoderModel,) if is_torch_available() else ()
 
-    test_torchscript = True
     test_resize_embeddings = False
 
     def setUp(self):

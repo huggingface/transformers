@@ -23,7 +23,6 @@ import tempfile
 import unittest
 import warnings
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pytest
@@ -908,7 +907,7 @@ class GenerationTesterMixin:
 
     @pytest.mark.generate
     def test_left_padding_compatibility(
-        self, unpadded_custom_inputs: Optional[dict] = None, padded_custom_inputs: Optional[dict] = None
+        self, unpadded_custom_inputs: dict | None = None, padded_custom_inputs: dict | None = None
     ):
         """
         Tests that adding left-padding yields the same logits as the original input. Exposes arguments for custom
@@ -4665,7 +4664,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             value=1,
         )
         inputs_2b["past_key_values"] = outputs_1b.past_key_values
-        cache_length_1b = outputs_1b.past_key_values[0][0].shape[-2]
+        cache_length_1b = outputs_1b.past_key_values.get_seq_length()
         inputs_2b["cache_position"] = torch.arange(
             cache_length_1b,
             cache_length_1b + inputs_2b["input_ids"].shape[1],
@@ -4677,14 +4676,19 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # The two sets of generated text and past kv should be equal to each other
         self.assertTrue(has_similar_generate_outputs(traditional_outputs, incremental_outputs))
-        for layer_idx in range(len(traditional_outputs.past_key_values)):
-            for kv_idx in range(len(traditional_outputs.past_key_values[layer_idx])):
-                self.assertTrue(
-                    torch.allclose(
-                        traditional_outputs.past_key_values[layer_idx][kv_idx],
-                        incremental_outputs.past_key_values[layer_idx][kv_idx],
+        cache1, cache2 = traditional_outputs.past_key_values, incremental_outputs.past_key_values
+        for idx in range(len(cache1)):
+            if isinstance(cache1, EncoderDecoderCache):
+                for subcache in ["self_attention_cache", "cross_attention_cache"]:
+                    torch.testing.assert_close(
+                        getattr(cache1, subcache).layers[idx].keys, getattr(cache2, subcache).layers[idx].keys
                     )
-                )
+                    torch.testing.assert_close(
+                        getattr(cache1, subcache).layers[idx].values, getattr(cache2, subcache).layers[idx].values
+                    )
+            else:
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
 
     @pytest.mark.generate
     @parameterized.expand(

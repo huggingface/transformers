@@ -90,6 +90,7 @@ class PerceptionLMMultiModalProjector(nn.Module):
 class PerceptionLMPreTrainedModel(PreTrainedModel):
     config: PerceptionLMConfig
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -322,7 +323,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
 @auto_docstring
 class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)

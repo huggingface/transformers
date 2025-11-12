@@ -988,6 +988,7 @@ class DetaPreTrainedModel(PreTrainedModel):
     _no_split_modules = [r"DetaBackboneWithPositionalEncodings", r"DetaEncoderLayer", r"DetaDecoderLayer"]
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
 
@@ -997,16 +998,16 @@ class DetaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, DetaMultiscaleDeformableAttention):
             module._reset_parameters()
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         if hasattr(module, "reference_points") and not self.config.two_stage:
-            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
-            nn.init.constant_(module.reference_points.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            nn.init.constant_(module.reference_points.bias, 0.0)
         if hasattr(module, "level_embed"):
             nn.init.normal_(module.level_embed)
 
@@ -1793,13 +1794,12 @@ class DetaModel(DetaPreTrainedModel):
 )
 class DetaForObjectDetection(DetaPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = [r"bbox_embed\.\d+", r"class_embed\.\d+"]
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
 
     def __init__(self, config: DetaConfig):
         super().__init__(config)
-
+        self._tied_weights_keys = {}
         # Deformable DETR encoder-decoder model
         self.model = DetaModel(config)
 
@@ -1823,6 +1823,11 @@ class DetaForObjectDetection(DetaPreTrainedModel):
             nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
             # hack implementation for iterative bounding box refinement
             self.model.decoder.bbox_embed = self.bbox_embed
+            self._tied_weights_keys.update(
+                {
+                    "model.decoder.bbox_embed ": "bbox_embed",
+                }
+            )
         else:
             nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
             self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
@@ -1831,17 +1836,18 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         if config.two_stage:
             # hack implementation for two-stage
             self.model.decoder.class_embed = self.class_embed
+            self._tied_weights_keys.update(
+                {
+                    "model.decoder.class_embed ": "class_embed",
+                }
+            )
             for box_embed in self.bbox_embed:
                 nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
         aux_loss = [
             {"logits": logits, "pred_boxes": pred_boxes}
             for logits, pred_boxes in zip(outputs_class.transpose(0, 1)[:-1], outputs_coord.transpose(0, 1)[:-1])
@@ -2444,20 +2450,6 @@ def generalized_box_iou(boxes1, boxes2):
     return iou - (area - union) / area
 
 
-# from https://github.com/facebookresearch/detectron2/blob/cbbc1ce26473cb2a5cc8f58e8ada9ae14cb41052/detectron2/layers/wrappers.py#L100
-def nonzero_tuple(x):
-    """
-    A 'as_tuple=True' version of torch.nonzero to support torchscript. because of
-    https://github.com/pytorch/pytorch/issues/38718
-    """
-    if torch.jit.is_scripting():
-        if x.dim() == 0:
-            return x.unsqueeze(0).nonzero().unbind(1)
-        return x.nonzero().unbind(1)
-    else:
-        return x.nonzero(as_tuple=True)
-
-
 # from https://github.com/facebookresearch/detectron2/blob/9921a2caa585d4fa66c4b534b6fab6e74d89b582/detectron2/modeling/matcher.py#L9
 class DetaMatcher:
     """
@@ -2496,7 +2488,6 @@ class DetaMatcher:
             raise ValueError("Thresholds should be positive")
         thresholds.insert(0, -float("inf"))
         thresholds.append(float("inf"))
-        # Currently torchscript does not support all + generator
         if not all(low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])):
             raise ValueError("Thresholds should be sorted.")
         if not all(l in [-1, 0, 1] for l in labels):
@@ -2561,7 +2552,9 @@ class DetaMatcher:
         # Find the highest quality match available, even if it is low, including ties.
         # Note that the matches qualities must be positive due to the use of
         # `torch.nonzero`.
-        _, pred_inds_with_highest_quality = nonzero_tuple(match_quality_matrix == highest_quality_foreach_gt[:, None])
+        _, pred_inds_with_highest_quality = (match_quality_matrix == highest_quality_foreach_gt[:, None]).nonzero(
+            as_tuple=True
+        )
         # If an anchor was labeled positive only due to a low-quality match
         # with gt_A, but it has larger overlap with gt_B, it's matched index will still be gt_B.
         # This follows the implementation in Detectron, and is found to have no significant impact.
@@ -2593,8 +2586,8 @@ def subsample_labels(labels: torch.Tensor, num_samples: int, positive_fraction: 
         pos_idx, neg_idx (Tensor):
             1D vector of indices. The total length of both is `num_samples` or fewer.
     """
-    positive = nonzero_tuple((labels != -1) & (labels != bg_label))[0]
-    negative = nonzero_tuple(labels == bg_label)[0]
+    positive = ((labels != -1) & (labels != bg_label)).nonzero(as_tuple=True)[0]
+    negative = (labels == bg_label).nonzero(as_tuple=True)[0]
 
     num_pos = int(num_samples * positive_fraction)
     # protect against not enough positive examples

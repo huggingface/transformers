@@ -22,6 +22,7 @@ import requests
 
 from transformers import (
     CONFIG_MAPPING,
+    BitsAndBytesConfig,
     InstructBlipConfig,
     InstructBlipProcessor,
     InstructBlipQFormerConfig,
@@ -148,7 +149,6 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (InstructBlipVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -474,11 +474,9 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     )
     pipeline_model_mapping = {"image-text-to-text": InstructBlipForConditionalGeneration}
     additional_model_inputs = ["qformer_input_ids", "input_ids"]
-    fx_compatible = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -631,7 +629,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
     def test_inference_vicuna_7b(self):
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipForConditionalGeneration.from_pretrained(
-            "Salesforce/instructblip-vicuna-7b", load_in_8bit=True
+            "Salesforce/instructblip-vicuna-7b", quantization_config=BitsAndBytesConfig(load_in_8bit=True)
         )
 
         url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"

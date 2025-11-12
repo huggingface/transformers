@@ -30,12 +30,14 @@ from ...utils import is_torch_available
 if is_torch_available():
     import torch
 
+NestedList = list[Union[Optional[float | int], "NestedList"]]
+
 
 class SamHQImagesKwargs(ImagesKwargs, total=False):
     segmentation_maps: Optional[ImageInput]
-    input_points: Optional[list[list[float]]]
-    input_labels: Optional[list[list[int]]]
-    input_boxes: Optional[list[list[list[float]]]]
+    input_points: Optional[NestedList]
+    input_labels: Optional[NestedList]
+    input_boxes: Optional[NestedList]
     point_pad_value: Optional[int]
     mask_size: dict[str, int]
     mask_pad_size: dict[str, int]
@@ -62,9 +64,6 @@ class SamHQProcessor(ProcessorMixin):
         image_processor (`SamImageProcessor`):
             An instance of [`SamImageProcessor`]. The image processor is a required input.
     """
-
-    attributes = ["image_processor"]
-    image_processor_class = "SamImageProcessor"
 
     def __init__(self, image_processor):
         super().__init__(image_processor)

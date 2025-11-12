@@ -160,21 +160,14 @@ class GeLUFunction(torch.autograd.Function):
 
 class BloomGelu(nn.Module):
     """
-    BloomBiasGelu wrapper function that make use of the simple function on inference mode to make the model
-    torchscriptable and use the autograd function in training mode to get the accurate results of the gradients Partly
-    copied from Megatron-DeepSpeed code and adapted for our needs
-
-    See here why autograd functions are not torchscriptable: https://github.com/pytorch/pytorch/issues/22329
+    Partly copied from Megatron-DeepSpeed code and adapted for our needs
     """
 
     def __init__(self):
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.training:
-            return GeLUFunction.apply(x)
-        else:
-            return bloom_gelu_forward(x)
+        return GeLUFunction.apply(x)
 
 
 class BloomAttention(nn.Module):
@@ -432,19 +425,20 @@ class BloomPreTrainedModel(PreTrainedModel):
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 @auto_docstring
@@ -729,7 +723,7 @@ class BloomModel(BloomPreTrainedModel):
     """
 )
 class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "transformer.word_embeddings.weight"}
 
     def __init__(self, config: BloomConfig):
         super().__init__(config)
@@ -823,6 +817,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **deprecated_arguments,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
@@ -867,29 +862,28 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
             return_dict=return_dict,
             cache_position=cache_position,
         )
-        hidden_states = transformer_outputs[0]
 
-        lm_logits = self.lm_head(hidden_states)
+        hidden_states = transformer_outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            # move labels to correct device
-            labels = labels.to(lm_logits.device)
-            # Flatten the tokens
             loss = self.loss_function(
-                lm_logits,
+                logits,
                 labels,
                 vocab_size=self.config.vocab_size,
                 num_items_in_batch=num_items_in_batch,
             )
 
         if not return_dict:
-            output = (lm_logits,) + transformer_outputs[1:]
+            output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
-            logits=lm_logits,
+            logits=logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,

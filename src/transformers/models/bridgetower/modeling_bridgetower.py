@@ -25,8 +25,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN, QuickGELUActivation
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...masking_utils import create_causal_mask
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -38,13 +37,9 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging, torch_int
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -919,10 +914,12 @@ class BridgeTowerTextEmbeddings(nn.Module):
 class BridgeTowerPreTrainedModel(PreTrainedModel):
     config: BridgeTowerConfig
     base_model_prefix = "bridgetower"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
     _skip_keys_device_placement = "past_key_values"
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         std = self.config.initializer_factor
         if isinstance(module, BridgeTowerVisionTransformer):
@@ -931,7 +928,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             fc_std = (2 * self.config.hidden_size) ** -0.5
             for block in module.transformer.resblocks:
                 nn.init.normal_(block.attn.in_proj_weight, std=attn_std * std)
-                block.attn.in_proj_bias.data.zero_()
+                block.attn.in_proj_bias.zero_()
                 nn.init.normal_(block.attn.out_proj.weight, std=proj_std * std)
                 nn.init.normal_(block.mlp.c_fc.weight, std=fc_std * std)
                 nn.init.normal_(block.mlp.c_proj.weight, std=proj_std * std)
@@ -939,19 +936,20 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.embeddings.class_embedding, std=attn_std * std)
             nn.init.normal_(module.embeddings.position_embedding.weight, std=attn_std * std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.05 * std)
+            module.weight.normal_(mean=0.0, std=0.05 * std)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, BridgeTowerForContrastiveLearning):
-            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
+            module.logit_scale.fill_(self.config.logit_scale_init_value)
 
         if isinstance(module, (nn.Linear, BridgeTowerMLMHead)) and module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
 
 
 class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     config: BridgeTowerVisionConfig
+    input_modalities = "image"
 
     def __init__(self, config):
         super().__init__(config)
@@ -981,6 +979,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
 )
 class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     config: BridgeTowerTextConfig
+    input_modalities = "text"
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
@@ -1070,7 +1069,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         )
 
         attention_mask, encoder_attention_mask = self._create_attention_masks(
-            input_shape=input_shape,
             attention_mask=attention_mask,
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=embedding_output,
@@ -1107,7 +1105,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertModel._create_attention_masks
     def _create_attention_masks(
         self,
-        input_shape,
         attention_mask,
         encoder_attention_mask,
         embedding_output,
@@ -1115,100 +1112,30 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         cache_position,
         past_key_values,
     ):
-        if attention_mask is not None and attention_mask.dim() == 2:
-            if self.config.is_decoder:
-                attention_mask = create_causal_mask(
-                    config=self.config,
-                    input_embeds=embedding_output,
-                    attention_mask=attention_mask,
-                    cache_position=cache_position,
-                    past_key_values=past_key_values,
-                )
-            else:
-                attention_mask = self._update_full_mask(
-                    attention_mask,
-                    embedding_output,
-                )
-        elif attention_mask is not None and attention_mask.dim() == 3:
-            if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
-                raise ValueError(
-                    "Passing attention mask with a 3D/4D shape does not work with type "
-                    f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
-                )
-            attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+        if self.config.is_decoder:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
 
         if encoder_attention_mask is not None:
-            if encoder_attention_mask.dim() == 2:
-                encoder_attention_mask = self._update_cross_attn_mask(
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    embedding_output.shape[:2],
-                    embedding_output,
-                )
-            else:
-                if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
-                    raise ValueError(
-                        "Passing attention mask with a 3D/4D shape does not work with type "
-                        f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
-                    )
-                encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         return attention_mask, encoder_attention_mask
-
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
-
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_cross_attn_mask
-    def _update_cross_attn_mask(
-        self,
-        encoder_hidden_states: Union[torch.Tensor, None],
-        encoder_attention_mask: Union[torch.Tensor, None],
-        input_shape: torch.Size,
-        inputs_embeds: torch.Tensor,
-    ):
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    encoder_attention_mask,
-                    inputs_embeds.dtype,
-                    tgt_len=input_shape[-1],
-                )
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(encoder_attention_mask, torch.Tensor):
-                    encoder_attention_mask = make_flex_block_causal_mask(
-                        encoder_attention_mask,
-                        query_length=input_shape[-1],
-                        is_causal=False,
-                    )
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask(
-                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                )
-
-        return encoder_attention_mask
 
 
 @auto_docstring(
@@ -1571,7 +1498,7 @@ class BridgeTowerITMHead(nn.Module):
     """
 )
 class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
-    _tied_weights_keys = ["mlm_score.decoder.weight"]
+    _tied_weights_keys = {"mlm_score.decoder.weight": "bridgetower.text_model.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

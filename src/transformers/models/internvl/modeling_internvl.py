@@ -398,6 +398,7 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     config: InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
+    input_modalities = ["image", "video"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["InternVLVisionLayer"]
     _supports_sdpa = True
@@ -410,18 +411,19 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
         "attentions": InternVLVisionAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, InternVLVisionEmbeddings):
-            module.cls_token.data.zero_()
+            module.cls_token.zero_()
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                module.mask_token.zero_()
             if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
+                module.position_embeddings.zero_()
         elif isinstance(module, InternVLVisionLayer):
-            module.lambda_1.data.fill_(self.config.layer_scale_init_value)
-            module.lambda_2.data.fill_(self.config.layer_scale_init_value)
+            module.lambda_1.fill_(self.config.layer_scale_init_value)
+            module.lambda_2.fill_(self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -471,6 +473,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 class InternVLPreTrainedModel(PreTrainedModel):
     config: InternVLConfig
     base_model_prefix = ""
+    input_modalities = ["image", "text", "video"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -764,7 +767,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: InternVLConfig):
         super().__init__(config)

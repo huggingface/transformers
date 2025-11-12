@@ -2167,7 +2167,10 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
 
 class WhisperNoSpeechDetection(LogitsProcessor):
-    r"""This processor can be used to detect silence when using Whisper. It should take as input unprocessed logits to follow the original implementation"""
+    """
+    This processor can be used to detect silence when using Whisper. It should take as input unprocessed logits
+    to follow the original implementation
+    """
 
     def __init__(self, no_speech_token: int, begin_index: int, scores_is_logprobs: bool = False):
         self.no_speech_token = no_speech_token
@@ -2188,6 +2191,10 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self.model = model
 
     def set_inputs(self, inputs):
+        # build `cache_position` on the fly
+        seq_length = inputs["input_ids"].shape[1]
+        inputs = self.model._get_initial_cache_position(seq_length, self.model.device, inputs)
+        # prepare other inputs
         self.inputs = {**self.model.prepare_inputs_for_generation(**inputs), **inputs}
         self.inputs["input_features"] = self.inputs.pop("inputs")
 

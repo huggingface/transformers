@@ -119,9 +119,6 @@ class Mamba2ModelTester:
         self.pad_token_id = vocab_size - 1
         self.tie_word_embeddings = tie_word_embeddings
 
-    def get_large_model_config(self):
-        return Mamba2Config.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
@@ -241,8 +238,6 @@ class Mamba2ModelTester:
 class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
-    fx_compatible = False  # FIXME let's try to support this @molbap
-    test_torchscript = False  # FIXME I think this should be doable @molbap @ArthurZucker
     test_missing_keys = False
 
     pipeline_model_mapping = (

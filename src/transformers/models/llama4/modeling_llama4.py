@@ -32,7 +32,10 @@ from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import (
+    ROPE_INIT_FUNCTIONS,
+    dynamic_rope_update,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -51,7 +54,7 @@ class Llama4TextExperts(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
         self.expert_dim = self.intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
+        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size, 2 * self.expert_dim))
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
         self.act_fn = ACT2FN[config.hidden_act]
 
@@ -166,24 +169,58 @@ class Llama4TextMoe(nn.Module):
         return out, router_logits
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Llama4Text
 class Llama4TextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
+    # Ignore copy
     def __init__(self, config: Llama4TextConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        self.rope_type = "llama3" if config.rope_scaling is not None else "default"
-
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.original_inv_freq = inv_freq
 
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[Llama4TextConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    # Ignore copy
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
@@ -394,7 +431,7 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -426,6 +463,7 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Llama4PreTrainedModel(PreTrainedModel):
     config: Llama4Config
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
@@ -435,6 +473,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = (
             self.config.initializer_range
@@ -442,30 +481,31 @@ class Llama4PreTrainedModel(PreTrainedModel):
             else self.config.text_config.initializer_range
         )
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         elif isinstance(module, Llama4TextRMSNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, Llama4TextExperts):
-            module.gate_up_proj.data.normal_(mean=0.0, std=std)
-            module.down_proj.data.normal_(mean=0.0, std=std)
+            module.gate_up_proj.normal_(mean=0.0, std=std)
+            module.down_proj.normal_(mean=0.0, std=std)
         elif isinstance(module, Llama4VisionModel):
-            module.class_embedding.data.normal_(std=module.scale)
-            module.positional_embedding_vlm.data.normal_(std=module.scale)
+            module.class_embedding.normal_(std=module.scale)
+            module.positional_embedding_vlm.normal_(std=module.scale)
 
 
 @auto_docstring
 class Llama4TextModel(Llama4PreTrainedModel):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "model"
+    input_modalities = "text"
     config: Llama4TextConfig
     _can_record_outputs = {
         "attentions": Llama4TextAttention,
@@ -565,7 +605,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
 class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "language_model"
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     config: Llama4TextConfig
 
@@ -1002,6 +1042,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
 
 class Llama4VisionModel(Llama4PreTrainedModel):
     base_model_prefix = "vision_model"
+    input_modalities = "image"
     _no_split_modules = ["Llama4VisionEncoderLayer"]
     config: Llama4VisionConfig
 

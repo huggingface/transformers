@@ -466,6 +466,7 @@ class SiglipEncoderLayer(GradientCheckpointingLayer):
 class SiglipPreTrainedModel(PreTrainedModel):
     config: SiglipConfig
     base_model_prefix = "siglip"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
     _no_split_modules = [
@@ -484,6 +485,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
         "attentions": SiglipAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, SiglipVisionEmbeddings):
@@ -510,13 +512,13 @@ class SiglipPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.fc1.bias, std=1e-6)
             nn.init.normal_(module.fc2.bias, std=1e-6)
         elif isinstance(module, SiglipMultiheadAttentionPoolingHead):
-            nn.init.xavier_uniform_(module.probe.data)
-            nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
-            nn.init.zeros_(module.attention.in_proj_bias.data)
+            nn.init.xavier_uniform_(module.probe)
+            nn.init.xavier_uniform_(module.attention.in_proj_weight)
+            nn.init.zeros_(module.attention.in_proj_bias)
         elif isinstance(module, SiglipModel):
             logit_scale_init = torch.log(torch.tensor(1.0))
-            module.logit_scale.data.fill_(logit_scale_init)
-            module.logit_bias.data.zero_()
+            module.logit_scale.fill_(logit_scale_init)
+            module.logit_bias.zero_()
         elif isinstance(module, SiglipForImageClassification):
             nn.init.normal_(
                 module.classifier.weight,
@@ -527,8 +529,8 @@ class SiglipPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->Siglip
@@ -629,6 +631,7 @@ class SiglipTextTransformer(nn.Module):
 )
 class SiglipTextModel(SiglipPreTrainedModel):
     config: SiglipTextConfig
+    input_modalities = "text"
 
     def __init__(self, config: SiglipTextConfig):
         super().__init__(config)
@@ -746,6 +749,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
 class SiglipVisionModel(SiglipPreTrainedModel):
     config: SiglipVisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)
@@ -1005,6 +1009,7 @@ class SiglipModel(SiglipPreTrainedModel):
 )
 class SiglipForImageClassification(SiglipPreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: SiglipConfig) -> None:
         super().__init__(config)

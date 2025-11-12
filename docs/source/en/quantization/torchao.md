@@ -87,6 +87,7 @@ Create a [`TorchAoConfig`] and specify the quantization type and `group_size` of
 We'll show examples for recommended quantization methods based on hardwares, e.g. A100 GPU, H100 GPU, CPU.
 
 ### H100 GPU
+
 <hfoptions id="examples-H100-GPU">
 <hfoption id="float8-dynamic-and-weight-only">
 
@@ -182,6 +183,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoptions>
 
 ### A100 GPU
+
 <hfoptions id="examples-A100-GPU">
 <hfoption id="int8-dynamic-and-weight-only">
 
@@ -284,6 +286,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoptions>
 
 ### Intel XPU
+
 <hfoptions id="examples-Intel-XPU">
 <hfoption id="int8-dynamic-and-weight-only">
 
@@ -350,6 +353,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoptions>
 
 ### CPU
+
 <hfoptions id="examples-CPU">
 <hfoption id="int8-dynamic-and-weight-only">
 
@@ -415,7 +419,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoptions>
 
 ### Per Module Quantization
+
 #### 1. Skip quantization for certain layers
+
 With `ModuleFqnToConfig` we can specify a default configuration for all layers while skipping quantization for certain layers.
 
 ```py
@@ -485,6 +491,7 @@ print(output_text)
 ```
 
 #### 3. Quantizing different layers with different quantization configs (with regex)
+
 We can also use regex to specify the config for all modules that has `module_fqn` that
 matches the regex, all regex should start with `re:`, for example `re:layers\..*\.gate_proj` will
 match all layers like `layers.0.gate_proj`. See [here](https://github.com/pytorch/ao/blob/2fe0ca0899c730c528efdbec8886feaa38879f39/torchao/quantization/quant_api.py#L2392) for docs.

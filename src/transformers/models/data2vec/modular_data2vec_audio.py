@@ -138,11 +138,13 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
     config: Data2VecAudioConfig
     base_model_prefix = "data2vec_audio"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, Data2VecAudioFeatureProjection):
@@ -152,15 +154,15 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
         elif isinstance(module, Data2VecAudioPositionalConvLayer):
             nn.init.constant_(module.conv.bias, 0)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
             if module.weight is not None:
-                module.weight.data.fill_(1.0)
+                module.weight.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
 

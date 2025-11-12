@@ -124,6 +124,7 @@ class CsmDecoderLayer(LlamaDecoderLayer):
 class CsmPreTrainedModel(PreTrainedModel):
     config: CsmConfig
     base_model_prefix = "model"
+    input_modalities = ["audio", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["CsmDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -139,12 +140,13 @@ class CsmPreTrainedModel(PreTrainedModel):
         "attentions": CsmAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, CsmCodebooksHead):
             num_codebooks = module.num_codebooks
             for i in range(num_codebooks - 1):
-                module.weight.data[i].normal_(mean=0.0, std=self.config.initializer_range)
+                module.weight[i].normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -222,7 +224,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
 
         # create position embeddings to be shared across the decoder layers
         position_ids = cache_position.unsqueeze(0)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
@@ -419,10 +421,9 @@ class CsmBackboneModel(LlamaModel):
     """
 )
 class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
-    _tied_weights_keys = [
-        "backbone_model.embed_tokens.embed_audio_tokens.weight",
-        "depth_decoder.model.embed_tokens.weight",
-    ]
+    _tied_weights_keys = {
+        "backbone_model.embed_tokens.embed_audio_tokens.weight": "depth_decoder.model.embed_tokens.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -439,13 +440,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
 
     def set_input_embeddings(self, value):
         self.backbone_model.embed_tokens = value
-
-    def _tie_weights(self):
-        if self.config.tie_codebooks_embeddings:
-            self._tie_or_clone_weights(
-                self.backbone_model.embed_tokens.embed_audio_tokens,
-                self.depth_decoder.model.embed_tokens,
-            )
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):

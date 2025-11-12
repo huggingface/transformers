@@ -32,7 +32,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -45,12 +45,8 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_peft_available, is_torch_flex_attn_available
+from ...utils import TransformersKwargs, auto_docstring, is_peft_available
 from .configuration_data2vec_audio import Data2VecAudioConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 class Data2VecAudioConvLayer(GradientCheckpointingLayer):
@@ -378,9 +374,10 @@ class Data2VecAudioEncoder(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
 
-        attention_mask = self._update_full_mask(
-            attention_mask,
-            hidden_states,
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
         )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
@@ -421,26 +418,6 @@ class Data2VecAudioEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
 
 
 class Data2VecAudioAdapterLayer(nn.Module):
@@ -497,11 +474,13 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
     config: Data2VecAudioConfig
     base_model_prefix = "data2vec_audio"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, Data2VecAudioFeatureProjection):
@@ -511,15 +490,15 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Data2VecAudioPositionalConvLayer):
             nn.init.constant_(module.conv.bias, 0)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
             if module.weight is not None:
-                module.weight.data.fill_(1.0)
+                module.weight.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
 

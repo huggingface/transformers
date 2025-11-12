@@ -177,6 +177,7 @@ class Mistral3ModelOutputWithPast(BaseModelOutputWithPast):
 class Mistral3PreTrainedModel(PreTrainedModel):
     config: Mistral3Config
     base_model_prefix = ""
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -363,7 +364,7 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Mistral3Config):
         super().__init__(config)

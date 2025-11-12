@@ -20,7 +20,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -66,6 +66,7 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": True,
+            "truncation": False,
             "return_attention_mask": True,
         },
     }
@@ -101,12 +102,6 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             The Jinja template to use for formatting the conversation. If not provided, the default chat template is used.
     """
 
-    attributes = ["image_processor", "video_processor", "feature_extractor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-    feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
-
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
     ):
@@ -122,9 +117,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
     def __call__(
         self,
         text: TextInput = None,
-        images: ImageInput = None,
-        videos: VideoInput = None,
-        audio: AudioInput = None,
+        images: Optional[ImageInput] = None,
+        videos: Optional[VideoInput] = None,
+        audio: Optional[AudioInput] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -166,7 +161,6 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
 
         if audio is not None:
-            output_kwargs["audio_kwargs"]["padding"] = True  # Setting to True to avoid default truncation
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
@@ -340,11 +334,13 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
+        video_processor_input_names = self.video_processor.model_input_names
         return list(
             dict.fromkeys(
                 tokenizer_input_names
                 + feature_extractor_input_names
                 + image_processor_input_names
+                + video_processor_input_names
                 + ["feature_attention_mask"]
                 + ["video_second_per_grid"]
             )

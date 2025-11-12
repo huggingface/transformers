@@ -441,8 +441,10 @@ class DFinePreTrainedModel(PreTrainedModel):
     config: DFineConfig
     base_model_prefix = "d_fine"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = [r"DFineHybridEncoder", r"DFineDecoderLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         # initialize linear layer bias value according to a given probability value.
@@ -466,7 +468,7 @@ class DFinePreTrainedModel(PreTrainedModel):
                 module.up.fill_(self.config.up)
 
         if isinstance(module, DFineMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            nn.init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
                 2.0 * math.pi / module.n_heads
@@ -477,10 +479,10 @@ class DFinePreTrainedModel(PreTrainedModel):
             scaling = torch.concat([torch.arange(1, n + 1) for n in module.num_points_list]).reshape(1, -1, 1)
             grid_init *= scaling
             with torch.no_grad():
-                module.sampling_offsets.bias.data[...] = grid_init.flatten()
+                module.sampling_offsets.bias[...] = grid_init.flatten()
 
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
+            nn.init.constant_(module.attention_weights.weight, 0.0)
+            nn.init.constant_(module.attention_weights.bias, 0.0)
 
         if isinstance(module, DFineModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
@@ -489,9 +491,9 @@ class DFinePreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.enc_score_head.bias, bias)
 
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
 
         if isinstance(module, DFineGate):
             bias = float(-math.log((1 - 0.5) / 0.5))
@@ -503,8 +505,8 @@ class DFinePreTrainedModel(PreTrainedModel):
             init.constant_(module.reg_conf.layers[-1].weight, 0)
 
         if isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             nn.init.xavier_uniform_(module.weight_embedding.weight)
@@ -1546,9 +1548,14 @@ class DFineObjectDetectionOutput(ModelOutput):
 )
 class DFineForObjectDetection(DFinePreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = ["bbox_embed", "class_embed"]
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
+    _tied_weights_keys = {
+        r"bbox_embed.(?![0])\d+": "bbox_embed.0",
+        r"class_embed.(?![0])\d+": "class_embed.0",
+        "model.decoder.class_embed": "class_embed",
+        "model.decoder.bbox_embed": "bbox_embed",
+    }
 
     def __init__(self, config: DFineConfig):
         super().__init__(config)
@@ -1570,18 +1577,12 @@ class DFineForObjectDetection(DFinePreTrainedModel):
             ]
         )
 
-        # here self.model.decoder.bbox_embed is null, but not self.bbox_embed
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
-
         # Initialize weights and apply final processing
         self.post_init()
 
-    @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
     @auto_docstring
@@ -2064,7 +2065,7 @@ class DFineHybridEncoder(nn.Module):
     ):
         grid_w = torch.arange(torch_int(width), device=device).to(dtype)
         grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
+        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
         if embed_dim % 4 != 0:
             raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
         pos_dim = embed_dim // 4
@@ -2074,7 +2075,7 @@ class DFineHybridEncoder(nn.Module):
         out_w = grid_w.flatten()[..., None] @ omega[None]
         out_h = grid_h.flatten()[..., None] @ omega[None]
 
-        return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
+        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
 
     def forward(
         self,
@@ -2174,7 +2175,7 @@ class DFineHybridEncoder(nn.Module):
             new_fpn_feature_map = fpn_block(fused_feature_map)
             fpn_feature_maps.append(new_fpn_feature_map)
 
-        fpn_feature_maps = fpn_feature_maps[::-1]
+        fpn_feature_maps.reverse()
 
         # bottom-up PAN
         pan_feature_maps = [fpn_feature_maps[0]]

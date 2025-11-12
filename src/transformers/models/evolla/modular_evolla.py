@@ -21,8 +21,7 @@ from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -33,7 +32,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
     can_return_tuple,
-    is_torch_flex_attn_available,
     logging,
 )
 from ...utils.generic import OutputRecorder, check_model_inputs
@@ -57,10 +55,6 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
 )
 from .configuration_evolla import EvollaConfig, SaProtConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -208,20 +202,21 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
         ],
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
@@ -251,9 +246,10 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
             attention_mask = torch.ones(((batch_size, seq_length)), device=device)
         inputs_embeds = self.embeddings(input_ids=input_ids, attention_mask=attention_mask)
 
-        attention_mask = self._update_full_mask(
-            attention_mask,
-            inputs_embeds,
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
         )
 
         encoder_outputs = self.encoder(inputs_embeds, attention_mask=attention_mask, **kwargs)
@@ -265,27 +261,6 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
-
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
 
 
 class EvollaSequenceCompressorAttention(nn.Module):
@@ -695,7 +670,7 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -758,15 +733,16 @@ class EvollaPreTrainedModel(LlamaPreTrainedModel):
         "EvollaSequenceAlignerCrossAttention",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, EvollaSequenceAlignerCrossAttention):
             module.gate_attention.zero_()
             module.gate_ffw.zero_()
-            module.attention_norm.weight.data.fill_(1.0)
+            module.attention_norm.weight.fill_(1.0)
         elif isinstance(module, EvollaSequenceCompressorResampler):
-            module.latents.data.normal_(mean=0.0, std=std)
+            module.latents.normal_(mean=0.0, std=std)
 
 
 class EvollaModel(EvollaPreTrainedModel):
@@ -787,8 +763,8 @@ class EvollaModel(EvollaPreTrainedModel):
         )
 
         self.norm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = EvollaRotaryEmbedding(config=config)
         self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
+        self.rotary_emb = EvollaRotaryEmbedding(config=config)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -868,9 +844,7 @@ class EvollaModel(EvollaPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
@@ -880,7 +854,6 @@ class EvollaModel(EvollaPreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 protein_kv_states=protein_feats,
                 structure_kv_states=structure_feats,
                 msa_kv_states=msa_feats,
@@ -888,6 +861,7 @@ class EvollaModel(EvollaPreTrainedModel):
                 structure_batch_mask=structure_batch_mask,
                 msa_batch_mask=msa_batch_mask,
                 query_attn_mask=attention_mask,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -926,6 +900,7 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
         protein_input_ids: Optional[torch.LongTensor] = None,
         protein_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ):
         r"""
@@ -956,8 +931,7 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
 
         >>> print(processor.batch_decode(outputs, skip_special_tokens=True))
         ```"""
-
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
@@ -966,8 +940,11 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             **kwargs,
         )
-        hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:

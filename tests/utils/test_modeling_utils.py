@@ -58,7 +58,6 @@ from transformers import (
     logging,
 )
 from transformers.modeling_flash_attention_utils import is_flash_attn_available
-from transformers.modeling_utils import update_key_name
 from transformers.models.mistral.modeling_mistral import MistralModel
 from transformers.testing_utils import (
     TOKEN,
@@ -295,9 +294,7 @@ if is_torch_available():
                     hub.TRANSFORMERS_CACHE = tmpdir
                     # First offline load should fail
                     try:
-                        AutoModelForImageClassification.from_pretrained(
-                            TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None
-                        )
+                        AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main")
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
                     else:
@@ -310,9 +307,7 @@ if is_torch_available():
 
                     LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
 
-                    AutoModelForImageClassification.from_pretrained(
-                        TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None
-                    )
+                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main")
             finally:
                 # Tear down: reset env as it was before calling this test
                 hub._is_offline_mode = offlfine_env
@@ -340,7 +335,7 @@ if is_torch_available():
                     hub.TRANSFORMERS_CACHE = tmpdir
                     try:
                         AutoModelForImageClassification.from_pretrained(
-                            TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None, local_files_only=True
+                            TINY_IMAGE_CLASSIF, revision="main", local_files_only=True
                         )
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
@@ -354,7 +349,7 @@ if is_torch_available():
                     LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
 
                     AutoModelForImageClassification.from_pretrained(
-                        TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None, local_files_only=True
+                        TINY_IMAGE_CLASSIF, revision="main", local_files_only=True
                     )
             finally:
                 # Tear down: reset env as it was before calling this test
@@ -1690,22 +1685,6 @@ class ModelUtilsTest(TestCasePlus):
             torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
         )
 
-    def test_update_key_name(self):
-        model = AutoModel.from_pretrained("google-t5/t5-base", device_map="auto")
-
-        new_keys = "\n".join(sorted(update_key_name(model.state_dict().keys())))
-
-        EXPECTED_KEYS = """decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight\ndecoder.block.{0...11}.layer.0.SelfAttention.k.weight\ndecoder.block.{0...11}.layer.0.SelfAttention.o.weight\ndecoder.block.{0...11}.layer.0.SelfAttention.q.weight\ndecoder.block.{0...11}.layer.0.SelfAttention.v.weight\ndecoder.block.{0...11}.layer.1.EncDecAttention.k.weight\ndecoder.block.{0...11}.layer.1.EncDecAttention.o.weight\ndecoder.block.{0...11}.layer.1.EncDecAttention.q.weight\ndecoder.block.{0...11}.layer.1.EncDecAttention.v.weight\ndecoder.block.{0...11}.layer.2.DenseReluDense.wi.weight\ndecoder.block.{0...11}.layer.2.DenseReluDense.wo.weight\ndecoder.block.{0...11}.layer.{0, 1, 2}.layer_norm.weight\ndecoder.embed_tokens.weight\ndecoder.final_layer_norm.weight\nencoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight\nencoder.block.{0...11}.layer.0.SelfAttention.k.weight\nencoder.block.{0...11}.layer.0.SelfAttention.o.weight\nencoder.block.{0...11}.layer.0.SelfAttention.q.weight\nencoder.block.{0...11}.layer.0.SelfAttention.v.weight\nencoder.block.{0...11}.layer.1.DenseReluDense.wi.weight\nencoder.block.{0...11}.layer.1.DenseReluDense.wo.weight\nencoder.block.{0...11}.layer.{0, 1}.layer_norm.weight\nencoder.embed_tokens.weight\nencoder.final_layer_norm.weight\nshared.weight"""
-        self.assertEqual(new_keys, EXPECTED_KEYS)
-
-        EXPECTED_KEYS = """embed_tokens.weight\nlayers.{0, 1, 2}.mlp.down_proj.weight\nlayers.{0, 1, 2}.mlp.gate_proj.weight\nlayers.{0, 1, 2}.mlp.up_proj.weight\nlayers.{0...60}.input_layernorm.weight\nlayers.{0...60}.post_attention_layernorm.weight\nlayers.{0...60}.self_attn.kv_a_layernorm.weight\nlayers.{0...60}.self_attn.kv_a_proj_with_mqa.weight\nlayers.{0...60}.self_attn.kv_b_proj.weight\nlayers.{0...60}.self_attn.o_proj.weight\nlayers.{0...60}.self_attn.q_a_layernorm.weight\nlayers.{0...60}.self_attn.q_a_proj.weight\nlayers.{0...60}.self_attn.q_b_proj.weight\nlayers.{3...60}.mlp.experts.{0...255}.down_proj.weight\nlayers.{3...60}.mlp.experts.{0...255}.gate_proj.weight\nlayers.{3...60}.mlp.experts.{0...255}.up_proj.weight\nlayers.{3...60}.mlp.gate.e_score_correction_bias\nlayers.{3...60}.mlp.gate.weight\nlayers.{3...60}.mlp.shared_experts.down_proj.weight\nlayers.{3...60}.mlp.shared_experts.gate_proj.weight\nlayers.{3...60}.mlp.shared_experts.up_proj.weight\nnorm.weight"""
-        config = AutoConfig.from_pretrained("deepseek-ai/DeepSeek-V3.1")
-        with torch.device("meta"):
-            model = AutoModel.from_config(config)
-
-        new_keys = "\n".join(sorted(update_key_name(model.state_dict().keys())))
-        self.assertEqual(new_keys, EXPECTED_KEYS)
-
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
         logger = logging.get_logger("transformers.modeling_utils")
@@ -1806,7 +1785,10 @@ class ModelUtilsTest(TestCasePlus):
 
         # simulate injecting virtual tokens like in prefix tuning
         num_virtual_tokens = 3
-        past_key_values = [torch.randn(2, 1, 2, num_virtual_tokens, 8)] * 2
+        past_key_values = [
+            (torch.randn(1, 2, num_virtual_tokens, 8), torch.randn(1, 2, num_virtual_tokens, 8)),
+            (torch.randn(1, 2, num_virtual_tokens, 8), torch.randn(1, 2, num_virtual_tokens, 8)),
+        ]
         past_key_values = DynamicCache(past_key_values)
         model_inputs["attention_mask"] = torch.cat(
             (
@@ -2434,7 +2416,7 @@ The commit description supports markdown synthax see:
 ```
 """
             commit_details = model.push_to_hub(
-                tmp_repo.repo_id, use_auth_token=self._token, create_pr=True, commit_description=COMMIT_DESCRIPTION
+                tmp_repo.repo_id, create_pr=True, token=self._token, commit_description=COMMIT_DESCRIPTION
             )
             self.assertEqual(commit_details.commit_description, COMMIT_DESCRIPTION)
 

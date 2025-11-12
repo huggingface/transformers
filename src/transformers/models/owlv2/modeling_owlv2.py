@@ -563,15 +563,17 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
 class Owlv2PreTrainedModel(PreTrainedModel):
     config: Owlv2Config
     base_model_prefix = "owlv2"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["Owlv2EncoderLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, Owlv2TextEmbeddings):
-            module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            module.token_embedding.weight.normal_(mean=0.0, std=factor * 0.02)
+            module.position_embedding.weight.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, Owlv2VisionEmbeddings):
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
@@ -597,14 +599,14 @@ class Owlv2PreTrainedModel(PreTrainedModel):
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * factor,
             )
-            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
+            module.logit_scale.fill_(self.config.logit_scale_init_value)
         if isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=factor)
+            module.weight.normal_(mean=0.0, std=factor)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTEncoder with OwlViT->Owlv2
@@ -768,6 +770,7 @@ class Owlv2TextTransformer(nn.Module):
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextModel with google/owlvit-base-patch32->google/owlv2-base-patch16, OWLVIT->OWLV2,OwlViT->Owlv2
 class Owlv2TextModel(Owlv2PreTrainedModel):
     config: Owlv2TextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Owlv2TextConfig):
         super().__init__(config)
@@ -880,6 +883,7 @@ class Owlv2VisionTransformer(nn.Module):
 class Owlv2VisionModel(Owlv2PreTrainedModel):
     config: Owlv2VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: Owlv2VisionConfig):
         super().__init__(config)

@@ -57,7 +57,6 @@ from .integrations import (
     is_clearml_available,
     is_optuna_available,
     is_ray_available,
-    is_sigopt_available,
     is_swanlab_available,
     is_tensorboard_available,
     is_trackio_available,
@@ -103,6 +102,7 @@ from .utils import (
     is_huggingface_hub_greater_or_equal,
     is_ipex_available,
     is_jinja_available,
+    is_jmespath_available,
     is_jumanpp_available,
     is_kernels_available,
     is_levenshtein_available,
@@ -143,7 +143,6 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
-    is_torch_bf16_gpu_available,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
@@ -508,6 +507,13 @@ def require_jinja(test_case):
     Decorator marking a test that requires jinja. These tests are skipped when jinja isn't installed.
     """
     return unittest.skipUnless(is_jinja_available(), "test requires jinja")(test_case)
+
+
+def require_jmespath(test_case):
+    """
+    Decorator marking a test that requires jmespath. These tests are skipped when jmespath isn't installed.
+    """
+    return unittest.skipUnless(is_jmespath_available(), "test requires jmespath")(test_case)
 
 
 def require_onnx(test_case):
@@ -1099,14 +1105,6 @@ def require_torch_bf16(test_case):
     )(test_case)
 
 
-def require_torch_bf16_gpu(test_case):
-    """Decorator marking a test that requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0"""
-    return unittest.skipUnless(
-        is_torch_bf16_gpu_available(),
-        "test requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0",
-    )(test_case)
-
-
 def require_deterministic_for_xpu(test_case):
     @wraps(test_case)
     def wrapper(*args, **kwargs):
@@ -1158,16 +1156,6 @@ def require_ray(test_case):
 
     """
     return unittest.skipUnless(is_ray_available(), "test requires Ray/tune")(test_case)
-
-
-def require_sigopt(test_case):
-    """
-    Decorator marking a test that requires SigOpt.
-
-    These tests are skipped when SigOpt isn't installed.
-
-    """
-    return unittest.skipUnless(is_sigopt_available(), "test requires SigOpt")(test_case)
 
 
 def require_swanlab(test_case):
@@ -3533,8 +3521,15 @@ def _patched_tearDown(self, *args, **kwargs):
     # We still record those failures not handled by the patched methods, and add custom messages along with the usual
     # pytest failure report.
     regular_failures_info = []
-    if hasattr(self, "_outcome") and self._outcome.errors:
-        for error_entry in self._outcome.errors:
+
+    errors = None
+    if hasattr(self._outcome, "errors"):
+        errors = self._outcome.errors
+    elif hasattr(self._outcome, "result") and hasattr(self._outcome.result, "errors"):
+        errors = self._outcome.result.errors
+
+    if hasattr(self, "_outcome") and errors:
+        for error_entry in errors:
             test_instance, (exc_type, exc_obj, exc_tb) = error_entry
             # breakpoint()
             regular_failures_info.append(
@@ -3547,7 +3542,10 @@ def _patched_tearDown(self, *args, **kwargs):
             )
 
         # Clear the regular failure (i.e. that is not from any of our patched assertion methods) from pytest's records.
-        self._outcome.errors.clear()
+        if hasattr(self._outcome, "errors"):
+            self._outcome.errors.clear()
+        elif hasattr(self._outcome, "result") and hasattr(self._outcome.result, "errors"):
+            self._outcome.result.errors.clear()
 
     # reset back to the original tearDown method, so `_patched_tearDown` won't be run by the subsequent tests if they
     # have only test failures that are not handle by the patched methods (or no test failure at all).

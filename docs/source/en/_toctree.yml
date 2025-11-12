@@ -88,6 +88,8 @@
       title: Tool use
     - local: chat_templating_writing
       title: Writing a chat template
+    - local: chat_response_parsing
+      title: Response parsing
     title: Chat with models
   - sections:
     - local: serving
@@ -117,6 +119,8 @@
     title: Tools
   - local: transformers_as_backend
     title: Inference server backends
+  - local: continuous_batching
+    title: Continuous Batching
   title: Inference
 - isExpanded: false
   sections:
@@ -227,8 +231,6 @@
     title: ONNX
   - local: executorch
     title: ExecuTorch
-  - local: torchscript
-    title: TorchScript
   title: Export to production
 - isExpanded: false
   sections:
@@ -284,6 +286,8 @@
         title: Knowledge Distillation for Computer Vision
       - local: tasks/keypoint_matching
         title: Keypoint matching
+      - local: tasks/training_vision_backbone
+        title: Training vision models using Backbone API
       title: Computer vision
     - sections:
       - local: tasks/image_captioning
@@ -544,8 +548,6 @@
         title: Helium
       - local: model_doc/herbert
         title: HerBERT
-      - local: model_doc/hgnet_v2
-        title: HGNet-V2
       - local: model_doc/hunyuan_v1_dense
         title: HunYuanDenseV1
       - local: model_doc/hunyuan_v1_moe
@@ -1026,6 +1028,8 @@
         title: CLIPSeg
       - local: model_doc/clvp
         title: CLVP
+      - local: model_doc/cwm
+        title: Code World Model (CWM)
       - local: model_doc/cohere2_vision
         title: Cohere2Vision
       - local: model_doc/colpali
@@ -1186,6 +1190,8 @@
         title: TVP
       - local: model_doc/udop
         title: UDOP
+      - local: model_doc/video_llama_3
+        title: VideoLlama3
       - local: model_doc/video_llava
         title: VideoLlava
       - local: model_doc/vilt
@@ -1251,6 +1257,8 @@
       title: Importing Utilities
     - local: internal/time_series_utils
       title: Utilities for Time Series
+    - local: internal/rope_utils
+      title: Rotary Embeddings Utilities
     title: Internal helpers
   - sections:
     - local: reference/environment_variables

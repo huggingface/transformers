@@ -820,26 +820,28 @@ class AlignTextPooler(nn.Module):
 class AlignPreTrainedModel(PreTrainedModel):
     config: AlignConfig
     base_model_prefix = "align"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, AlignModel):
             nn.init.xavier_uniform_(module.text_projection.weight)
-            module.text_projection.bias.data.zero_()
-            module.temperature.data.fill_(self.config.temperature_init_value)
+            module.text_projection.bias.zero_()
+            module.temperature.fill_(self.config.temperature_init_value)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         if isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 @auto_docstring(
@@ -849,6 +851,7 @@ class AlignPreTrainedModel(PreTrainedModel):
 )
 class AlignTextModel(AlignPreTrainedModel):
     config: AlignTextConfig
+    input_modalities = "text"
     _no_split_modules = ["AlignTextEmbeddings"]
 
     def __init__(self, config: AlignTextConfig, add_pooling_layer: bool = True):
@@ -969,6 +972,7 @@ class AlignTextModel(AlignPreTrainedModel):
 class AlignVisionModel(AlignPreTrainedModel):
     config: AlignVisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = False
 
     def __init__(self, config: AlignVisionConfig):

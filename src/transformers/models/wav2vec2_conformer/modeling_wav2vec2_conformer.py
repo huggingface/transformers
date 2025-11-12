@@ -848,20 +848,20 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
     config: Wav2Vec2ConformerConfig
     base_model_prefix = "wav2vec2_conformer"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         # Wav2Vec2ForPreTraining last 2 linear layers need standard Linear init.
         if isinstance(module, Wav2Vec2ConformerForPreTraining):
             module.project_hid.reset_parameters()
             module.project_q.reset_parameters()
-            module.project_hid._is_hf_initialized = True
-            module.project_q._is_hf_initialized = True
         # gumbel softmax requires special init
         elif isinstance(module, Wav2Vec2ConformerGumbelVectorQuantizer):
-            module.weight_proj.weight.data.normal_(mean=0.0, std=1)
-            module.weight_proj.bias.data.zero_()
+            module.weight_proj.weight.normal_(mean=0.0, std=1)
+            module.weight_proj.bias.zero_()
             nn.init.uniform_(module.codevectors)
         elif isinstance(module, Wav2Vec2ConformerSelfAttention):
             if hasattr(module, "pos_bias_u"):
@@ -880,13 +880,13 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
 
@@ -1228,7 +1228,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         target_features: torch.FloatTensor,
         negative_features: torch.FloatTensor,
         predicted_features: torch.FloatTensor,
-        temperature: int = 0.1,
+        temperature: float = 0.1,
     ):
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between

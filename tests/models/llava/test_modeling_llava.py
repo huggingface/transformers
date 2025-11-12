@@ -22,6 +22,7 @@ from parameterized import parameterized
 from transformers import (
     AutoProcessor,
     AutoTokenizer,
+    BitsAndBytesConfig,
     LlavaConfig,
     LlavaForConditionalGeneration,
     LlavaModel,
@@ -151,10 +152,11 @@ class LlavaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
-        attention_mask = input_ids.ne(1).to(torch_device)
 
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -291,7 +293,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let's make sure we test the preprocessing to replace what is used
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/bakLlava-v1-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
@@ -317,7 +321,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let's make sure we test the preprocessing to replace what is used
         model_id = "llava-hf/llava-1.5-7b-hf"
 
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-1.5-7b-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
@@ -346,7 +352,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let's make sure we test the preprocessing to replace what is used
         model_id = "llava-hf/llava-1.5-7b-hf"
 
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-1.5-7b-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompts = [
@@ -394,7 +402,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let's make sure we test the preprocessing to replace what is used
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/bakLlava-v1-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
@@ -444,7 +454,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
         model = LlavaForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-1.5-7b-hf", load_in_4bit=True, attn_implementation="eager"
+            "llava-hf/llava-1.5-7b-hf",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            attn_implementation="eager",
         )
         processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
 
@@ -496,7 +508,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_vision
     @require_bitsandbytes
     def test_batched_generation(self):
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", device_map="auto")
 
         processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
@@ -569,7 +581,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_no_images(self):
         model_id = "llava-hf/llava-1.5-7b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         # Prepare inputs with no images
@@ -641,7 +655,9 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
     @require_bitsandbytes
     def test_pixtral_4bit(self):
         model_id = "mistral-community/pixtral-12b"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
@@ -668,7 +684,9 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
     @require_bitsandbytes
     def test_pixtral_batched(self):
         model_id = "mistral-community/pixtral-12b"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
         processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 

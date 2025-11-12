@@ -22,6 +22,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import (
     CONFIG_MAPPING,
+    BitsAndBytesConfig,
     InstructBlipVideoConfig,
     InstructBlipVideoProcessor,
     InstructBlipVideoQFormerConfig,
@@ -152,7 +153,6 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (InstructBlipVideoVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -489,11 +489,9 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
         (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel) if is_torch_available() else ()
     )
     additional_model_inputs = ["qformer_input_ids", "input_ids"]
-    fx_compatible = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -643,7 +641,7 @@ class InstructBlipVideoModelIntegrationTest(unittest.TestCase):
         processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipVideoForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-vicuna-7b",
-            load_in_8bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
 
         clip = prepare_video()

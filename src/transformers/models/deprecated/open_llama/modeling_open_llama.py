@@ -224,7 +224,6 @@ class OpenLlamaAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.dropout_prob = config.attention_dropout_prob
-        self.rope_theta = config.rope_theta
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -238,15 +237,15 @@ class OpenLlamaAttention(nn.Module):
         self._init_rope()
 
     def _init_rope(self):
-        if self.config.rope_scaling is None:
+        if self.config.rope_parameters is None:
             self.rotary_emb = OpenLlamaRotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
             )
         else:
-            scaling_type = self.config.rope_scaling["type"]
-            scaling_factor = self.config.rope_scaling["factor"]
+            scaling_type = self.config.rope_parameters["type"]
+            scaling_factor = self.config.rope_parameters["factor"]
             if scaling_type == "linear":
                 self.rotary_emb = OpenLlamaLinearScalingRotaryEmbedding(
                     self.head_dim,
@@ -440,19 +439,20 @@ class OpenLlamaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["OpenLlamaDecoderLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
             if self.config.use_stable_embedding:
-                torch.nn.init.xavier_normal_(module.weight.data)
+                torch.nn.init.xavier_normal_(module.weight)
             else:
-                module.weight.data.normal_(mean=0.0, std=std)
+                module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
 
 OPEN_LLAMA_INPUTS_DOCSTRING = r"""

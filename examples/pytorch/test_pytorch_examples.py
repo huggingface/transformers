@@ -104,7 +104,6 @@ class ExamplesTests(TestCasePlus):
             run_glue.py
             --model_name_or_path distilbert/distilbert-base-uncased
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
             --validation_file ./tests/fixtures/tests_samples/MRPC/dev.csv
             --do_train
@@ -140,7 +139,6 @@ class ExamplesTests(TestCasePlus):
             --per_device_eval_batch_size 5
             --num_train_epochs 2
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             """.split()
 
         if backend_device_count(torch_device) > 1:
@@ -188,7 +186,6 @@ class ExamplesTests(TestCasePlus):
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             --do_train
             --do_eval
             --prediction_loss_only
@@ -214,7 +211,6 @@ class ExamplesTests(TestCasePlus):
             --train_file tests/fixtures/tests_samples/conll/sample.json
             --validation_file tests/fixtures/tests_samples/conll/sample.json
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             --do_train
             --do_eval
             --warmup_steps=2
@@ -243,7 +239,6 @@ class ExamplesTests(TestCasePlus):
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             --max_steps=10
             --warmup_steps=2
             --do_train
@@ -271,7 +266,6 @@ class ExamplesTests(TestCasePlus):
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             --max_steps=10
             --warmup_steps=2
             --do_train
@@ -296,7 +290,6 @@ class ExamplesTests(TestCasePlus):
             --train_file tests/fixtures/tests_samples/swag/sample.json
             --validation_file tests/fixtures/tests_samples/swag/sample.json
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             --max_steps=20
             --warmup_steps=2
             --do_train
@@ -334,7 +327,6 @@ class ExamplesTests(TestCasePlus):
             --train_file tests/fixtures/tests_samples/xsum/sample.json
             --validation_file tests/fixtures/tests_samples/xsum/sample.json
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             --max_steps=50
             --warmup_steps=8
             --do_train
@@ -364,7 +356,6 @@ class ExamplesTests(TestCasePlus):
             --train_file tests/fixtures/tests_samples/wmt16/sample.json
             --validation_file tests/fixtures/tests_samples/wmt16/sample.json
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             --max_steps=50
             --warmup_steps=8
             --do_train
@@ -396,7 +387,6 @@ class ExamplesTests(TestCasePlus):
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1
             --remove_unused_columns False
-            --overwrite_output_dir True
             --dataloader_num_workers 16
             --metric_for_best_model accuracy
             --max_steps 10
@@ -429,7 +419,6 @@ class ExamplesTests(TestCasePlus):
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1
             --remove_unused_columns False
-            --overwrite_output_dir True
             --preprocessing_num_workers 16
             --max_steps 10
             --seed 42
@@ -459,7 +448,6 @@ class ExamplesTests(TestCasePlus):
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1
             --remove_unused_columns False
-            --overwrite_output_dir True
             --preprocessing_num_workers 16
             --max_steps 10
             --target_language tur
@@ -491,7 +479,6 @@ class ExamplesTests(TestCasePlus):
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 4
             --remove_unused_columns False
-            --overwrite_output_dir True
             --preprocessing_num_workers 16
             --max_steps 10
             --seed 42
@@ -523,7 +510,6 @@ class ExamplesTests(TestCasePlus):
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1
             --remove_unused_columns False
-            --overwrite_output_dir True
             --num_train_epochs 10
             --max_steps 50
             --seed 42
@@ -572,7 +558,6 @@ class ExamplesTests(TestCasePlus):
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1
             --remove_unused_columns False
-            --overwrite_output_dir True
             --dataloader_num_workers 16
             --metric_for_best_model accuracy
             --max_steps 10
@@ -597,7 +582,6 @@ class ExamplesTests(TestCasePlus):
             --do_train
             --do_eval
             --remove_unused_columns False
-            --overwrite_output_dir True
             --max_steps 10
             --learning_rate=2e-4
             --per_device_train_batch_size=2
@@ -624,7 +608,6 @@ class ExamplesTests(TestCasePlus):
             --do_train
             --do_eval
             --remove_unused_columns False
-            --overwrite_output_dir True
             --eval_do_concat_batches False
             --max_steps 10
             --learning_rate=1e-6

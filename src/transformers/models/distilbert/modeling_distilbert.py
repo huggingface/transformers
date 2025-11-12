@@ -29,7 +29,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import get_activation
 from ...configuration_utils import PreTrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -47,15 +47,10 @@ from ...pytorch_utils import (
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
-    is_torch_flex_attn_available,
     logging,
 )
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_distilbert import DistilBertConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -304,19 +299,20 @@ class DistilBertPreTrainedModel(PreTrainedModel):
         "attentions": DistilBertSelfAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, Embeddings) and self.config.sinusoidal_pos_embds:
             create_sinusoidal_embeddings(
                 self.config.max_position_embeddings, self.config.dim, module.position_embeddings.weight
@@ -416,9 +412,10 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         embeddings = self.embeddings(input_ids, inputs_embeds, position_ids)
 
-        attention_mask = self._update_full_mask(
-            attention_mask,
-            embeddings,
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=embeddings,
+            attention_mask=attention_mask,
         )
 
         return self.transformer(
@@ -427,27 +424,6 @@ class DistilBertModel(DistilBertPreTrainedModel):
             **kwargs,
         )
 
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
-
 
 @auto_docstring(
     custom_intro="""
@@ -455,7 +431,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
     """
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
-    _tied_weights_keys = ["vocab_projector.weight"]
+    _tied_weights_keys = {"vocab_projector.weight": "distilbert.embeddings.word_embeddings.weight"}
 
     def __init__(self, config: PreTrainedConfig):
         super().__init__(config)

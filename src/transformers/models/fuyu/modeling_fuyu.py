@@ -35,6 +35,7 @@ logger = logging.get_logger(__name__)
 class FuyuPreTrainedModel(PreTrainedModel):
     config: FuyuConfig
     base_model_prefix = "fuyu"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
@@ -43,16 +44,17 @@ class FuyuPreTrainedModel(PreTrainedModel):
     _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
 
 @auto_docstring(
@@ -256,7 +258,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         "^vision_embed_tokens": "model.vision_embed_tokens",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: FuyuConfig):
         super().__init__(config)

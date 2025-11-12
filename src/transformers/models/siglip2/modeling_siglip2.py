@@ -541,6 +541,7 @@ def default_flax_embed_init(tensor):
 class Siglip2PreTrainedModel(PreTrainedModel):
     config: Siglip2Config
     base_model_prefix = "siglip2"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
     _no_split_modules = [
@@ -559,6 +560,7 @@ class Siglip2PreTrainedModel(PreTrainedModel):
         "attentions": Siglip2Attention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, Siglip2VisionEmbeddings):
@@ -585,13 +587,13 @@ class Siglip2PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.fc1.bias, std=1e-6)
             nn.init.normal_(module.fc2.bias, std=1e-6)
         elif isinstance(module, Siglip2MultiheadAttentionPoolingHead):
-            nn.init.xavier_uniform_(module.probe.data)
-            nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
-            nn.init.zeros_(module.attention.in_proj_bias.data)
+            nn.init.xavier_uniform_(module.probe)
+            nn.init.xavier_uniform_(module.attention.in_proj_weight)
+            nn.init.zeros_(module.attention.in_proj_bias)
         elif isinstance(module, Siglip2Model):
             logit_scale_init = torch.log(torch.tensor(1.0))
-            module.logit_scale.data.fill_(logit_scale_init)
-            module.logit_bias.data.zero_()
+            module.logit_scale.fill_(logit_scale_init)
+            module.logit_bias.zero_()
         elif isinstance(module, Siglip2ForImageClassification):
             nn.init.normal_(
                 module.classifier.weight,
@@ -602,8 +604,8 @@ class Siglip2PreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 class Siglip2TextEmbeddings(nn.Module):
@@ -709,6 +711,7 @@ class Siglip2TextTransformer(nn.Module):
 )
 class Siglip2TextModel(Siglip2PreTrainedModel):
     config: Siglip2TextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Siglip2TextConfig):
         super().__init__(config)
@@ -795,6 +798,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
 class Siglip2VisionModel(Siglip2PreTrainedModel):
     config: Siglip2VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
@@ -1084,6 +1088,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
 )
 class Siglip2ForImageClassification(Siglip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: Siglip2Config) -> None:
         super().__init__(config)

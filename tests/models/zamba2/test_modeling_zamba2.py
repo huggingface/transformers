@@ -19,7 +19,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, Zamba2Config, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, Zamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -292,7 +292,6 @@ class Zamba2ModelTester:
 
 @require_torch
 class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_torchscript = False
     all_model_classes = (
         (
             Zamba2Model,
@@ -485,7 +484,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     tmpdirname,
                     dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    load_in_4bit=True,
+                    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
                 )
 
                 for _, param in model.named_parameters():

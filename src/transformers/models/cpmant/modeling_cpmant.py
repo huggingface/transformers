@@ -525,23 +525,24 @@ class CpmAntPreTrainedModel(PreTrainedModel):
     config: CpmAntConfig
     base_model_prefix = "cpmant"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, CpmAntLayerNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, CpmAntSegmentPositionEmbedding):
-            module.relative_attention_bias.data.normal_(mean=0.0, std=self.config.init_std)
+            module.relative_attention_bias.normal_(mean=0.0, std=self.config.init_std)
 
 
 @auto_docstring
@@ -698,7 +699,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
     """
 )
 class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "cpmant.input_embedding.weight"}
 
     def __init__(self, config: CpmAntConfig):
         super().__init__(config)
@@ -722,6 +723,7 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
@@ -763,8 +765,9 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
             cache_position,
         )
         hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
-
-        logits = self.lm_head(hidden_states)
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:

@@ -41,13 +41,13 @@ $$
 
 The query (`Q`), key (`K`), and value (`V`) matrices are projections from the input embeddings of shape `(b, h, T, d_head)`.
 
-For causal attention, the mask prevents the model from attending to future tokens. Once a token is processed, its representation never changes with respect to future tokens, which means \\( K_{\text{past}} \\) and \\( V_{\text{past}} \\) can be cached and reused to compute the last token's representation.
+For causal attention, the mask prevents the model from attending to future tokens. Once a token is processed, its representation never changes with respect to future tokens, which means $ K_{\text{past}} $ and $ V_{\text{past}} $ can be cached and reused to compute the last token's representation.
 
 $$
 \text{Attention}(q_t, [\underbrace{k_1, k_2, \dots, k_{t-1}}_{\text{cached}}, k_{t}], [\underbrace{v_1, v_2, \dots, v_{t-1}}_{\text{cached}}, v_{t}])
 $$
 
-At inference time, you only need the last token's query to compute the representation \\( x_t \\) that predicts the next token \\( t+1 \\). At each step, the new key and value vectors are **stored** in the cache and **appended** to the past keys and values.
+At inference time, you only need the last token's query to compute the representation $ x_t $ that predicts the next token $ t+1 $. At each step, the new key and value vectors are **stored** in the cache and **appended** to the past keys and values.
 
 $$
 K_{\text{cache}} \leftarrow \text{concat}(K_{\text{past}}, k_t), \quad V_{\text{cache}} \leftarrow \text{concat}(V_{\text{past}}, v_t)
@@ -59,7 +59,7 @@ Refer to the table below to compare how caching improves efficiency.
 
 | without caching | with caching |
 |---|---|
-| for each step, recompute all previous `K` and `V`  | for each step, only compute current `K` and `V`
+| for each step, recompute all previous `K` and `V`  | for each step, only compute current `K` and `V` |
 | attention cost per step is **quadratic** with sequence length | attention cost per step is **linear** with sequence length (memory grows linearly, but compute/token remains low) |
 
 ## Cache class
@@ -98,9 +98,10 @@ The example below demonstrates how to create a generation loop with [`DynamicCac
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache, infer_device
+from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+from accelerate import Accelerator
 
-device = f"{infer_device()}:0"
+device = Accelerator().device
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
 model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=device)
@@ -143,9 +144,10 @@ The generation loop usually takes care of the cache position, but if you're writ
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache, infer_device
+from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+from accelerate import Accelerator
 
-device = f"{infer_device()}:0"
+device = Accelerator().device
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
 model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=device)

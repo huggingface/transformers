@@ -662,33 +662,35 @@ class FlavaPooler(nn.Module):
 class FlavaPreTrainedModel(PreTrainedModel):
     config: FlavaConfig
     base_model_prefix = "flava"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, FlavaMaskedPredictionHead):
-            module.bias.data.zero_()
+            module.bias.zero_()
         elif isinstance(module, FlavaImageEmbeddings):
-            module.cls_token.data.zero_()
-            module.position_embeddings.data.zero_()
+            module.cls_token.zero_()
+            module.position_embeddings.zero_()
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                module.mask_token.zero_()
         elif isinstance(module, FlavaMultimodalModel):
             if module.use_cls_token:
-                module.cls_token.data.zero_()
+                module.cls_token.zero_()
         elif isinstance(module, FlavaModel):
-            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
+            module.logit_scale.fill_(self.config.logit_scale_init_value)
 
 
 @auto_docstring
@@ -697,6 +699,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
     # This override allows us to load FlavaImageModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.image_model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: FlavaImageConfig, add_pooling_layer: bool = True):
         r"""
@@ -776,6 +779,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
     config: FlavaTextConfig
     # This override allows us to load FlavaTextModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.text_model"
+    input_modalities = "text"
 
     def __init__(self, config: FlavaTextConfig, add_pooling_layer: bool = True):
         r"""
@@ -1306,6 +1310,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
     base_model_prefix = ""
     config: FlavaImageCodebookConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = False
 
     def __init__(
@@ -1441,16 +1446,10 @@ class FlavaMaskedPredictionHead(nn.Module):
         super().__init__()
         self.config = config
         self.transform = FlavaPredictionHeadTransform(config)
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
         if weight is not None:
             self.decoder.weight = weight
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
 
     def forward(self, x):
         x = self.transform(x)
@@ -1518,12 +1517,12 @@ class FlavaGlobalContrastiveHead(nn.Module):
 )
 class FlavaForPreTraining(FlavaPreTrainedModel):
     # Those are linked to xxx.bias
-    _tied_weights_keys = [
-        "mmm_text_head.decoder.bias",
-        "mmm_image_head.decoder.bias",
-        "mlm_head.decoder.bias",
-        "mim_head.decoder.bias",
-    ]
+    _tied_weights_keys = {
+        "mmm_text_head.bias": "mmm_text_head.decoder.bias",
+        "mim_head.bias": "mim_head.decoder.bias",
+        "mlm_head.bias": "mlm_head.decoder.bias",
+        "mmm_image_head.bias": "mmm_image_head.decoder.bias",
+    }
 
     def __init__(self, config: FlavaConfig, image_codebook: Optional[nn.Module] = None):
         r"""

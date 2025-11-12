@@ -277,6 +277,7 @@ class GotOcr2VisionLayer(GradientCheckpointingLayer):
 class GotOcr2PreTrainedModel(PreTrainedModel):
     config: GotOcr2Config
     base_model_prefix = ""
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = False
@@ -286,15 +287,16 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
+                module.rel_pos_h.zero_()
+                module.rel_pos_w.zero_()
         elif isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
-                module.pos_embed.data.zero_()
+                module.pos_embed.zero_()
 
 
 @dataclass
@@ -399,6 +401,7 @@ class GotOcr2VisionNeck(nn.Module):
 
 class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
     _can_record_outputs = {"hidden_states": GotOcr2VisionLayer, "attentions": GotOcr2VisionAttention}
+    input_modalities = "image"
 
     def __init__(self, config: GotOcr2VisionConfig):
         super().__init__(config)
@@ -661,7 +664,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: GotOcr2Config):
         super().__init__(config)
