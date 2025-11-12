@@ -107,7 +107,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         "vlm.multi_modal_projector": "vlm.model.multi_modal_projector",
         "vlm.language_model.lm_head": "vlm.lm_head",
     }
-    _tied_weights_keys = {"vlm.lm_head.weight": "vlm.model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)
@@ -186,6 +185,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
+
 
     def resize_token_embeddings(
         self,
