@@ -258,6 +258,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         r"^language_model.model": "language_model",
     }
     base_model_prefix = "model"
+
     def __init__(self, config: LlavaNextConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)

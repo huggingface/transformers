@@ -113,7 +113,7 @@ def build_glob_alt(
 
         parts.append(f"(?P<{name}>{prefix_src}{pat_src})")
 
-    alt_src = "|".join(parts).replace('\\^','^').replace('\\.',r'\.')
+    alt_src = "|".join(parts).replace("\\^", "^").replace("\\.", r"\.")
     try:
         reg = re.compile(alt_src)
     except re.error as e:

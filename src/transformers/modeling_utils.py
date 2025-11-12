@@ -909,7 +909,7 @@ def _get_dtype(
 
 @contextmanager
 def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
-    import torch.nn.init as I
+    import torch.nn.init as init
 
     originals = {}
 
@@ -927,13 +927,13 @@ def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
 
     try:
         for name in TORCH_INIT_FUNCTIONS:
-            if hasattr(I, name):
-                originals[name] = getattr(I, name)
-                setattr(I, name, make_wrapper(originals[name]))
+            if hasattr(init, name):
+                originals[name] = getattr(init, name)
+                setattr(init, name, make_wrapper(originals[name]))
         yield
     finally:
         for name, fn in originals.items():
-            setattr(I, name, fn)
+            setattr(init, name, fn)
 
 
 class PipelineParallel(Enum):
@@ -2284,46 +2284,38 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
-        try:
-            if isinstance(module, PreTrainedModel):
-                return
-            elif isinstance(
-                module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)
-            ):
-                if getattr(module, "weight", None) is not None:
-                    module.weight.normal_(mean=0.0, std=std)
-                if getattr(module, "bias", None) is not None:
-                    module.bias.zero_()
-            elif isinstance(module, nn.Embedding):
-                if getattr(module, "weight", None) is not None:
-                    module.weight.normal_(mean=0.0, std=std)
-                if getattr(self.config, "pad_token_id", None) is not None:
-                    module.weight[self.config.pad_token_id].zero_()
-            elif isinstance(module, nn.Parameter):
-                module.normal_(mean=0.0, std=std)
-            elif isinstance(module, nn.MultiheadAttention):
-                # This uses torch's original init
-                module._reset_parameters()
-            # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
-            # between modelings (because they are prefixed with the model name)
-            elif (
-                isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
-                or "LayerNorm" in module.__class__.__name__
-                or "RMSNorm" in module.__class__.__name__
-            ):
-                # Norms can exist without weights (in which case they are None from torch primitives)
-                if hasattr(module, "weight") and module.weight is not None:
-                    module.weight.fill_(1.0)
-                if hasattr(module, "bias") and module.bias is not None:
-                    module.bias.zero_()
-            if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
-                module.gate_up_proj.normal_(mean=0.0, std=std)
-            if isinstance(getattr(module, "down_proj", None), nn.Parameter):
-                module.down_proj.normal_(mean=0.0, std=std)
-            if isinstance(getattr(module, "gate", None), nn.Parameter):
-                module.gate.normal_(mean=0.0, std=std)
-        except Exception as e:
-            logger.warning(f"Failed to init: {str(e)}")
+
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
+            if getattr(module, "weight", None) is not None:
+                module.weight.normal_(mean=0.0, std=std)
+            if getattr(module, "bias", None) is not None:
+                module.bias.zero_()
+        elif isinstance(module, nn.Embedding):
+            if getattr(module, "weight", None) is not None:
+                module.weight.normal_(mean=0.0, std=std)
+            if getattr(self.config, "pad_token_id", None) is not None:
+                module.weight[self.config.pad_token_id].zero_()
+        elif isinstance(module, nn.MultiheadAttention):
+            # This uses torch's original init
+            module._reset_parameters()
+        # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
+        # between modelings (because they are prefixed with the model name)
+        elif (
+            isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
+            or "LayerNorm" in module.__class__.__name__
+            or "RMSNorm" in module.__class__.__name__
+        ):
+            # Norms can exist without weights (in which case they are None from torch primitives)
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.fill_(1.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.zero_()
+        if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
+            module.gate_up_proj.normal_(mean=0.0, std=std)
+        if isinstance(getattr(module, "down_proj", None), nn.Parameter):
+            module.down_proj.normal_(mean=0.0, std=std)
+        if isinstance(getattr(module, "gate", None), nn.Parameter):
+            module.gate.normal_(mean=0.0, std=std)
 
     def _initialize_weights(self, module):
         """
