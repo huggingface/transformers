@@ -510,10 +510,10 @@ def set_param_for_module(
                     shape=ref.size(),
                     stride=ref.stride(),
                 )
-            if not use_dtensor:
+                if not use_dtensor:
                     # we convert to local
                     param_value = param_value.to_local()
-            
+
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
