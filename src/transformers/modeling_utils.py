@@ -4575,7 +4575,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         for name, p in list(self.named_parameters()) + list(self.named_buffers()):
             if hasattr(p, "_original_cls"):
-                p.__class__ = p._original_cls
+                module, name = name.rsplit(".", 1)
+                module = self.get_submodule(module)
+                setattr(module, name, p._original_cls(p.data))
+
 
     def _adjust_missing_and_unexpected_keys(
         self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool
