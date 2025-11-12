@@ -664,6 +664,9 @@ def convert_and_load_state_dict_in_model(
             converter = group.weight_converter
             operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
             for layer_name, tensors_for_this_layer in group.collected_tensors.items():
+                pbar.update(1)
+                pbar.set_postfix({"Materializing param": layer_name})
+                pbar.refresh()
                 concrete_target_keys = layer_name.split("|")
                 try:
                     if bool(set(concrete_target_keys) - unexpected_keys):
@@ -701,13 +704,12 @@ def convert_and_load_state_dict_in_model(
                                 misc,
                                 converter.distributed_operation,
                             )
+
+
                 except SkipLayer:
                     continue
             del group
 
-            # Update progress bar
-            pbar.update()
-            pbar.refresh()
 
     model.inverse_converters = inverse_converters
     thread_pool.shutdown(wait=False)

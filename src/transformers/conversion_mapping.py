@@ -16,6 +16,7 @@
 from .core_model_loading import Concatenate, MergeModulelist, WeightConverter
 from .utils import is_torch_available
 
+from copy import deepcopy
 
 if is_torch_available():
     import torch
@@ -124,18 +125,11 @@ def _build_checkpoint_conversion_mapping():
     return mapping
 
 
+
+
 _checkpoint_conversion_mapping_cache = None
-
-
-def get_checkpoint_conversion_mapping():
+def get_checkpoint_conversion_mapping(model_type):
     global _checkpoint_conversion_mapping_cache
-    if _checkpoint_conversion_mapping_cache is None:
-        _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
-        globals()["_checkpoint_conversion_mapping"] = _checkpoint_conversion_mapping_cache
-    return _checkpoint_conversion_mapping_cache
-
-
-def __getattr__(name):
-    if name == "_checkpoint_conversion_mapping":
-        return get_checkpoint_conversion_mapping()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
+    globals()["_checkpoint_conversion_mapping"] = _checkpoint_conversion_mapping_cache
+    return deepcopy(_checkpoint_conversion_mapping_cache.get(model_type, None))
