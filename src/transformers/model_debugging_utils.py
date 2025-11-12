@@ -106,7 +106,7 @@ def _serialize_tensor_like_io(
     }
     if value.dtype in {torch.float16, torch.float32, torch.bfloat16}:
         if value.numel() == 0:
-            stats = {stat: "NaN" for stat in ("mean", "std", "min", "max")}
+            stats = dict.fromkeys(("mean", "std", "min", "max"), "NaN")
         else:
             stats = {
                 "mean": _sanitize_repr_for_diff(repr(value.mean())),

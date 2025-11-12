@@ -929,13 +929,22 @@ class DeepseekOcrModel(LlavaNextModel):
 
         self.post_init()
 
-    def get_placeholder_mask(self, input_ids, inputs_embeds, image_token_id):
+    def get_placeholder_mask(self, input_ids, inputs_embeds, image_features):
         if input_ids is None:
-            tok_embed = self.get_input_embeddings()(torch.tensor(image_token_id, device=inputs_embeds.device))
-            mask = (inputs_embeds == tok_embed).all(dim=-1)
+            tok_embed = self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = (inputs_embeds == tok_embed).all(dim=-1)
         else:
-            mask = input_ids == self.config.image_token_id
-        return mask.unsqueeze(-1).expand_as(inputs_embeds)
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+            )
+        return special_image_mask
 
     def pack_image_features(
         self,
@@ -1071,8 +1080,11 @@ class DeepseekOcrModel(LlavaNextModel):
         pixel_values_global: Optional[torch.FloatTensor] = None,
         pixel_values_local: Optional[torch.FloatTensor] = None,
         num_local_crops: Optional[torch.LongTensor] = None,
+        vision_feature_layer: Optional[int] = None,
+        vision_feature_select_strategy: Optional[str] = None,
     ):
         """Wrapper for the two image feature stacks used in deepseek OCR."""
+        image_spatial_crops = image_spatial_crops if image_spatial_crops is not None else image_sizes
 
         image_feature_groups: list[list[torch.Tensor]] = []
 
@@ -1128,78 +1140,53 @@ class DeepseekOcrModel(LlavaNextModel):
             view_sep = separator.unsqueeze(0).to(features.device, dtype=features.dtype)
             packed_features[i] = torch.cat([features, view_sep], dim=0)
 
-        return torch.cat(packed_features, dim=0)
+        return packed_features
 
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
         pixel_values_local: Optional[torch.FloatTensor] = None,
         pixel_values_global: Optional[torch.FloatTensor] = None,
         num_local_crops: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
-        r"""
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
-        pixel_values_local (`torch.FloatTensor`, *optional*):
-            Local high-resolution image crops of shape `(batch_size, num_crops, num_channels, height, width)`.
-        pixel_values_global (`torch.FloatTensor`, *optional*):
-            Global image views of shape `(batch_size, 1, num_channels, height, width)`.
-        num_local_crops (`torch.LongTensor`, *optional*):
-            Number of valid local crops per image of shape `(batch_size,)`.
-        """
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
         image_spatial_crop = kwargs.pop("image_spatial_crop", None)
-        image_sizes = kwargs.pop("image_sizes", None)
         pixel_values_local = kwargs.pop("pixel_values_local", pixel_values_local)
         pixel_values_global = kwargs.pop("pixel_values_global", pixel_values_global)
         num_local_crops = kwargs.pop("num_local_crops", num_local_crops)
-        if image_sizes is None:
-            if image_spatial_crop is not None:
-                image_sizes = image_spatial_crop
-            elif pixel_values_global is not None:
-                height, width = pixel_values_global.shape[-2:]
-                image_sizes = torch.tensor(
-                    [[height, width]] * pixel_values_global.shape[0],
-                    dtype=torch.long,
-                    device=pixel_values_global.device,
-                )
-            elif pixel_values is not None and pixel_values.dim() in (4, 5) and pixel_values.shape[0] > 0:
-                height, width = pixel_values.shape[-2:]
-                image_sizes = torch.tensor(
-                    [[height, width]] * pixel_values.shape[0],
-                    dtype=torch.long,
-                    device=pixel_values.device,
-                )
+
+        if image_sizes is None and image_spatial_crop is not None:
+            image_sizes = image_spatial_crop
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
         image_hidden_states = None
-
-        if pixel_values is not None and pixel_values.abs().sum().item() != 0 or pixel_values_global is not None:
-            if image_sizes is None:
-                raise ValueError("image_sizes must be provided when pixel values are passed to the model.")
-            image_hidden_states = self.get_image_features(
+        if pixel_values is not None and pixel_values.size(0) > 0 or pixel_values_global is not None:
+            image_features = self.get_image_features(
                 pixel_values=pixel_values,
                 image_sizes=image_sizes,
-                image_spatial_crops=image_spatial_crop,
+                image_spatial_crops=image_spatial_crop if image_spatial_crop is not None else image_sizes,
                 pixel_values_global=pixel_values_global,
                 pixel_values_local=pixel_values_local,
                 num_local_crops=num_local_crops,
             )
-
-            token_mask = self.get_placeholder_mask(input_ids, inputs_embeds, self.config.image_token_index)
-            inputs_embeds = inputs_embeds.masked_scatter(token_mask, image_hidden_states)
+            image_hidden_states = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
 
         outputs = self.language_model(
-            input_ids=None,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1207,22 +1194,11 @@ class DeepseekOcrModel(LlavaNextModel):
             **kwargs,
         )
 
-        if not isinstance(outputs, BaseModelOutputWithPast):
-            last_hidden_state = outputs[0]
-            past = outputs[1] if len(outputs) > 1 else None
-            hidden = outputs[2] if len(outputs) > 2 else None
-            attn = outputs[3] if len(outputs) > 3 else None
-        else:
-            last_hidden_state = outputs.last_hidden_state
-            past = outputs.past_key_values
-            hidden = outputs.hidden_states
-            attn = outputs.attentions
-
         return DeepseekOcrModelOutputWithPast(
-            last_hidden_state=last_hidden_state,
-            past_key_values=past,
-            hidden_states=hidden,
-            attentions=attn,
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
             image_hidden_states=image_hidden_states,
         )
 
@@ -1252,6 +1228,7 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
@@ -1262,24 +1239,23 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, DeepseekOcrCausalLMOutputWithPast]:
         image_spatial_crop = kwargs.pop("image_spatial_crop", None)
-        image_sizes = kwargs.pop("image_sizes", None)
         if image_sizes is None and image_spatial_crop is not None:
             image_sizes = image_spatial_crop
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
+            image_sizes=image_sizes,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
             image_spatial_crop=image_spatial_crop,
-            image_sizes=image_sizes,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
