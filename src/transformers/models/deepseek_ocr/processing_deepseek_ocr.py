@@ -138,7 +138,11 @@ class DeepseekOcrProcessor(ProcessorMixin):
         ]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(processed_text, **output_kwargs["text_kwargs"], return_tensors=None)
+        text_inputs = self.tokenizer(
+            processed_text,
+            **output_kwargs["text_kwargs"],
+            return_tensors=return_tensors,
+        )
 
         input_ids = text_inputs["input_ids"]
         if isinstance(input_ids, torch.Tensor):

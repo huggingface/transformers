@@ -1813,7 +1813,6 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
             token_mask = self.get_placeholder_mask(input_ids, inputs_embeds, self.config.image_token_index)
             inputs_embeds = inputs_embeds.masked_scatter(token_mask, image_hidden_states)
-
         outputs = self.language_model(
             input_ids=None,
             attention_mask=attention_mask,
