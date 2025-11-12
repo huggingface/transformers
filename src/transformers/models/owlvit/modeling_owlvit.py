@@ -26,7 +26,7 @@ from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     ModelOutput,
     auto_docstring,
@@ -441,7 +441,7 @@ class OwlViTAttention(nn.Module):
             # Eager attention implementation
             # Scale query
             query_states = query_states * self.scale
-            
+
             # Reshape for bmm: (bsz * num_heads, seq_len, head_dim)
             query_states = query_states.view(bsz * self.num_heads, tgt_len, self.head_dim)
             key_states = key_states.view(bsz * self.num_heads, tgt_len, self.head_dim)
@@ -467,7 +467,7 @@ class OwlViTAttention(nn.Module):
 
             # Softmax and dropout
             attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-            
+
             if output_attentions:
                 attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, tgt_len)
             else:
@@ -657,7 +657,6 @@ class OwlViTEncoder(nn.Module):
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask,
-                causal_attention_mask,
                 output_attentions=output_attentions,
             )
 
