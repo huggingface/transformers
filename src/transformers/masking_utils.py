@@ -280,12 +280,16 @@ def _ignore_causal_mask_sdpa(
         mask_indices += kv_offset
         padding_mask = padding_mask[:, mask_indices]
 
+    if _is_torch_xpu_available:
+        # XPU devices have special handling for mask skipping:
+        # - Single query tokens use the same logic as CUDA
+        # - Multi-query tokens can skip if padding_mask is provided and correctly structured
+        #   (all True in query window, all False after)
+        return _can_skip_causal_mask_xpu(padding_mask, query_length, kv_length, local_attention_size)
     # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
     # `ignore_causal_mask = True` if we are not tracing
-    if _is_torch_xpu_available:
-        return _can_skip_causal_mask_xpu(padding_mask, query_length, kv_length, local_attention_size)
     if (
         not is_tracing(padding_mask)
         # only cases when lower and upper diags are the same, see https://github.com/pytorch/pytorch/issues/108108
