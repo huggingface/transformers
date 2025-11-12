@@ -580,6 +580,7 @@ class ContinuousBatchProcessor:
                 self._maybe_send_output(state)
             #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING_SPLIT:
+                self.cache.mark_blocks_as_completed(state)
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
             # DEBUG: there is a dangling if, but idk if it ever happens. Adding an error to catch it.
             else:

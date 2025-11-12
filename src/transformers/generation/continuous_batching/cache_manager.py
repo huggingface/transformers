@@ -59,11 +59,8 @@ class BlockManager:
         self._uninit_block_ids = deque(range(num_blocks))
         self._init_block_ids: dict[int, None] = {}  # effectively act as an ordered set
         self._use_prefix_sharing = use_prefix_sharing
-        # TODO: handle de-allocation for those strutures
         self._hash_to_id: dict[int, int] = {}
         self._id_to_block: dict[int, Block] = {}
-        # NOTE: one of those may be redundant
-        # TODO: handle case where the last block of a finshed request is not complete
 
     @property
     def num_free_blocks(self) -> int:
@@ -95,7 +92,7 @@ class BlockManager:
         if self._use_prefix_sharing:
             for block_id in allocated_block_ids:
                 block = Block(block_id, last_block_id)
-                self._id_to_block[block_id] = block  # TODO: we can only store partial block here, and keep the parent referenced as a hash once the plck is complete
+                self._id_to_block[block_id] = block
                 last_block_id = block_id
         # In both cases, we return the allocated block ids
         return allocated_block_ids
@@ -369,22 +366,3 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
         seqlens_k = query_length + min(past_length, self.sliding_window - 1)
         return "sliding_attention", seqlens_k
-
-
-# TODO: test the impact of this
-# def get_read_indices(self, request_id: str, past_length: int) -> list[int]:
-#     # Retrieve the block table for the request and raise an error if it doesn't exist
-#     block_table = self._block_table.get(request_id)
-#     if block_table is None:
-#         raise ValueError(f"No block table found for request {request_id}")
-#     # Compute the physical indices
-#     physical_indices = []
-#     n_left = past_length
-#     for block_idx in block_table:
-#         block_physical_index = block_idx * self.block_size
-#         pages_used = min(self.block_size, n_left)
-#         physical_indices.extend(block_physical_index + i for i in range(pages_used))
-#         n_left -= pages_used
-#         if n_left == 0:
-#             return physical_indices
-#     raise ValueError(f"Request {request_id} required too many indices: {past_length = } and {len(block_table) = }")

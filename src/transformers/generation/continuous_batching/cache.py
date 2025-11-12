@@ -115,7 +115,6 @@ class PagedAttentionCache:
     for the sliding-attention group, although it is not needed.
     """
 
-    # TODO: this init is quite long, maybe a refactor is in order
     def __init__(
         self,
         config: PreTrainedConfig,
