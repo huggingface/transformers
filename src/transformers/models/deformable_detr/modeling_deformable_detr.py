@@ -1711,13 +1711,6 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         # Deformable DETR encoder-decoder model
         self.model = DeformableDetrModel(config)
         # Detection heads on top
-        self.class_embed = nn.Linear(config.d_model, config.num_labels)
-        self.bbox_embed = DeformableDetrMLPPredictionHead(
-            input_dim=config.d_model,
-            hidden_dim=config.d_model,
-            output_dim=4,
-            num_layers=3,
-        )
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = (config.decoder_layers + 1) if config.two_stage else config.decoder_layers
         self.class_embed = nn.ModuleList([nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)])
@@ -1733,8 +1726,10 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             ]
         )
         if config.with_box_refine:
+            self.model.decoder.bbox_embed = self.bbox_embed
             self._tied_weights_keys["model.decoder.bbox_embed"] = "bbox_embed"
         if config.two_stage:
+            self.model.decoder.class_embed = self.class_embed
             self._tied_weights_keys["model.decoder.class_embed"] = "class_embed"
         self.post_init()
 

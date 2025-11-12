@@ -1056,10 +1056,6 @@ class UdopStack(UdopPreTrainedModel):
     embeddings.
     """
 
-    _tied_weights_keys = {
-        r"relative_bias.biases.(\d+).relative_attention_bias.weight": "block.0.layer.0.SelfAttention.relative_attention_bias.weight",
-    }  # TODO IN THIS PR ARTHUR TODO support glob or re but better than iterating
-
     def __init__(self, config):
         super().__init__(config)
         # text and image embeddings
@@ -1441,12 +1437,12 @@ class UdopModel(UdopPreTrainedModel):
         encoder_config = deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
+        encoder_config.tie_word_embeddings = True
         self.encoder = UdopStack(encoder_config)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
+        decoder_config.tie_word_embeddings = True
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UdopStack(decoder_config)
 

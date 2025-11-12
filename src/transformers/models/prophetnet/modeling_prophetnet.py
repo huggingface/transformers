@@ -977,11 +977,6 @@ class ProphetNetDecoderLayer(GradientCheckpointingLayer):
 )
 class ProphetNetEncoder(ProphetNetPreTrainedModel):
     def __init__(self, config: ProphetNetConfig):
-        r"""
-        word_embeddings (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
-            The word embedding parameters. This can be used to initialize [`ProphetNetEncoder`] with pre-defined word
-            embeddings instead of randomly initialized word embeddings.
-        """
         super().__init__(config)
 
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -1088,11 +1083,6 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 )
 class ProphetNetDecoder(ProphetNetPreTrainedModel):
     def __init__(self, config: ProphetNetConfig):
-        r"""
-        word_embeddings (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
-            The word embedding parameters. This can be used to initialize [`ProphetNetEncoder`] with pre-defined word
-            embeddings instead of randomly initialized word embeddings.
-        """
         super().__init__(config)
 
         self.ngram = config.ngram
@@ -1404,12 +1394,10 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
         self.encoder = ProphetNetEncoder(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
         self.decoder = ProphetNetDecoder(decoder_config)
 
         # Initialize weights and apply final processing
@@ -1709,6 +1697,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "lm_head.weight": "prophetnet.word_embeddings.weight",
+        "prophetnet.decoder.word_embeddings.weight": "prophetnet.word_embeddings.weight",
     }
 
     def __init__(self, config: ProphetNetConfig):

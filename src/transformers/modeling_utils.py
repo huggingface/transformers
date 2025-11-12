@@ -23,7 +23,6 @@ import json
 import os
 import re
 import sys
-import time
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
@@ -31,6 +30,7 @@ from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
+from itertools import cycle
 from threading import Thread
 from typing import Any, Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
@@ -135,7 +135,6 @@ if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         extract_model_from_parallel,
-        offload_weight,
     )
     from accelerate.utils.modeling import get_state_dict_from_offload
 
@@ -537,137 +536,12 @@ def _find_identical(tensors: list[set[str]], state_dict: dict[str, torch.Tensor]
             shared_tensors.append(shared)
     return shared_tensors, identical
 
+
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
     """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
     module, param_type = get_module_from_name(model, param_name)
     # This will check potential shape mismatch if skipped before
     module.load_state_dict({param_type: tensor}, strict=False, assign=True)
-
-
-@torch.no_grad()
-def _load_state_dict_into_meta_model(
-    model: "PreTrainedModel",
-    state_dict: dict,
-    shard_file: str,
-    reverse_renaming_mapping: dict[str, str],
-    device_map: Optional[dict] = None,
-    disk_offload_folder: Optional[str] = None,
-    disk_offload_index: Optional[dict] = None,
-    hf_quantizer: Optional[HfQuantizer] = None,
-    device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
-) -> tuple[Optional[dict], Optional[dict]]:
-    """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
-    device in order to easily infer the shapes and dtypes that they will have. Then proper parameters are then loaded
-    from `shard_file`, which is the actual state dict file on disk.
-    This function takes care of correctly casting dtypes, devices, and sharding tensors in case of tensor parallelism.
-    """
-    tensor_device = "cpu"
-    if device_map is not None and device_map.get("", None) is not None:
-        if device_map[""] not in ("cpu", torch.device("cpu")):
-            tensor_device = device_map[""].index if isinstance(device_map[""], torch.device) else device_map[""]
-    if device_map is not None:
-        device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
-
-    is_quantized = hf_quantizer is not None
-    is_safetensors = shard_file.endswith(".safetensors")
-    is_meta_state_dict = is_safetensors
-    file_pointer = safe_open(shard_file, framework="pt", device=tensor_device) if is_meta_state_dict else None
-    params_to_load = list(state_dict.keys())
-
-    for param_name in params_to_load:
-        empty_param = state_dict[param_name]
-        # we need to use serialized_param_name as file pointer is untouched
-        if is_meta_state_dict:
-            # This is the name of the parameter as it appears on disk file
-            serialized_param_name = reverse_renaming_mapping[param_name]
-            param = file_pointer.get_slice(serialized_param_name)
-        else:
-            param = empty_param.to(tensor_device)  # It is actually not empty!
-        to_contiguous, casting_dtype = _infer_parameter_dtype(model, param_name, empty_param, hf_quantizer)
-
-        if device_mesh is not None:
-            if not is_quantized or not hf_quantizer.param_needs_quantization(model, param_name):
-                # In this case, the param is already on the correct device!
-                shard_and_distribute_module(
-                    model,
-                    param,
-                    empty_param,
-                    param_name,
-                    casting_dtype,
-                    to_contiguous,
-                    device_mesh.get_local_rank(),
-                    device_mesh,
-                )
-            else:
-                # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param
-                sharding_kwargs = {
-                    "empty_param": empty_param,
-                    "casting_dtype": casting_dtype,
-                    "to_contiguous": to_contiguous,
-                    "rank": device_mesh.get_local_rank(),
-                    "device_mesh": device_mesh,
-                }
-                hf_quantizer.create_quantized_param(
-                    model,
-                    param,
-                    param_name,
-                    device_mesh.get_local_rank(),
-                    **sharding_kwargs,
-                )
-        else:
-            param = param[...]
-            if casting_dtype is not None:
-                param = param.to(casting_dtype)
-            if to_contiguous:
-                param = param.contiguous()
-
-            if device_map is None:
-                param_device = "cpu"
-            else:
-                module_layer = re.search(device_map_regex, param_name)
-                if not module_layer:
-                    raise ValueError(f"{param_name} doesn't have any device set.")
-                else:
-                    param_device = device_map[module_layer.group()]
-
-            if param_device == "disk":
-                if not is_safetensors:
-                    disk_offload_index = offload_weight(param, param_name, disk_offload_folder, disk_offload_index)
-            elif not is_quantized or not hf_quantizer.param_needs_quantization(model, param_name):
-                if is_fsdp_enabled():
-                    param_device = "cpu" if is_local_dist_rank_0() else "meta"
-
-                _load_parameter_into_model(model, param_name, param.to(param_device))
-
-            else:
-                # TODO naming is stupid it loads it as well
-                hf_quantizer.create_quantized_param(model, param, param_name, param_device)
-
-                # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
-                # and then cast it to CPU to avoid excessive memory usage on each GPU
-                # in comparison to the sharded model across GPUs.
-                if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                    param_name = hf_quantizer.get_param_name(param_name)
-                    module, param_type = get_module_from_name(model, param_name)
-                    value = getattr(module, param_type)
-                    # We need to wait until the quantized value is created
-                    if value.device.type == "meta":
-                        continue
-                    val_kwargs = value.__dict__
-                    if not value.is_floating_point():
-                        val_kwargs["requires_grad"] = False
-                    device = "meta" if is_fsdp_enabled() and not is_local_dist_rank_0() else "cpu"
-                    value = type(value)(value.data.to(device), **val_kwargs)
-                    setattr(module, param_type, value)
-
-        # Remove the param from the state dict if it was not loaded on the fly to avoid wasting memory
-        if not is_meta_state_dict:
-            del state_dict[param_name]
-
-    if file_pointer is not None:
-        file_pointer.__exit__(None, None, None)
-
-    return disk_offload_index
 
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
@@ -1039,7 +913,7 @@ def _get_dtype(
 
 @contextmanager
 def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
-    import torch.nn.init as I
+    import torch.nn.init as init
 
     originals = {}
 
@@ -1057,13 +931,13 @@ def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
 
     try:
         for name in TORCH_INIT_FUNCTIONS:
-            if hasattr(I, name):
-                originals[name] = getattr(I, name)
-                setattr(I, name, make_wrapper(originals[name]))
+            if hasattr(init, name):
+                originals[name] = getattr(init, name)
+                setattr(init, name, make_wrapper(originals[name]))
         yield
     finally:
         for name, fn in originals.items():
-            setattr(I, name, fn)
+            setattr(init, name, fn)
 
 
 class PipelineParallel(Enum):
@@ -2414,46 +2288,38 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
-        try:
-            if isinstance(module, PreTrainedModel):
-                return
-            elif isinstance(
-                module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)
-            ):
-                if getattr(module, "weight", None) is not None:
-                    module.weight.normal_(mean=0.0, std=std)
-                if getattr(module, "bias", None) is not None:
-                    module.bias.zero_()
-            elif isinstance(module, nn.Embedding):
-                if getattr(module, "weight", None) is not None:
-                    module.weight.normal_(mean=0.0, std=std)
-                if getattr(module, "padding_idx", None) is not None:
-                    module.weight[module.padding_idx].zero_()
-            elif isinstance(module, nn.Parameter):
-                module.normal_(mean=0.0, std=std)
-            elif isinstance(module, nn.MultiheadAttention):
-                # This uses torch's original init
-                module._reset_parameters()
-            # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
-            # between modelings (because they are prefixed with the model name)
-            elif (
-                isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
-                or "LayerNorm" in module.__class__.__name__
-                or "RMSNorm" in module.__class__.__name__
-            ):
-                # Norms can exist without weights (in which case they are None from torch primitives)
-                if hasattr(module, "weight") and module.weight is not None:
-                    module.weight.fill_(1.0)
-                if hasattr(module, "bias") and module.bias is not None:
-                    module.bias.zero_()
-            if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
-                module.gate_up_proj.normal_(mean=0.0, std=std)
-            if isinstance(getattr(module, "down_proj", None), nn.Parameter):
-                module.down_proj.normal_(mean=0.0, std=std)
-            if isinstance(getattr(module, "gate", None), nn.Parameter):
-                module.gate.normal_(mean=0.0, std=std)
-        except Exception as e:
-            logger.warning(f"Failed to init: {str(e)}")
+
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
+            if getattr(module, "weight", None) is not None:
+                module.weight.normal_(mean=0.0, std=std)
+            if getattr(module, "bias", None) is not None:
+                module.bias.zero_()
+        elif isinstance(module, nn.Embedding):
+            if getattr(module, "weight", None) is not None:
+                module.weight.normal_(mean=0.0, std=std)
+            if getattr(self.config, "pad_token_id", None) is not None:
+                module.weight[self.config.pad_token_id].zero_()
+        elif isinstance(module, nn.MultiheadAttention):
+            # This uses torch's original init
+            module._reset_parameters()
+        # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
+        # between modelings (because they are prefixed with the model name)
+        elif (
+            isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
+            or "LayerNorm" in module.__class__.__name__
+            or "RMSNorm" in module.__class__.__name__
+        ):
+            # Norms can exist without weights (in which case they are None from torch primitives)
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.fill_(1.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.zero_()
+        if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
+            module.gate_up_proj.normal_(mean=0.0, std=std)
+        if isinstance(getattr(module, "down_proj", None), nn.Parameter):
+            module.down_proj.normal_(mean=0.0, std=std)
+        if isinstance(getattr(module, "gate", None), nn.Parameter):
+            module.gate.normal_(mean=0.0, std=std)
 
     def _initialize_weights(self, module):
         """
@@ -2479,7 +2345,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         `torch.nn.init` functions (which are all no_grad by default), but simply do in-place ops such as
         `module.weight.zero_()`.
         """
-        # Sort by depth (stable) then name for deterministic order.
         if not hasattr(torch.nn.Module, "smart_apply"):
             # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function
             # to apply as we go down the graph
@@ -2507,6 +2372,50 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
         and the encoder and decoder. This relies on the `_tied_weights_keys` dict.
+
+        This is very sensible! For many reasons and especially this one:
+        ```python
+        from torch import nn
+        import torch
+        class MyClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.proj = nn.Linear(8,8)
+                self.bias = nn.Parameter(torch.empty(8))
+                self.proj.bias = self.bias
+
+        c = MyClass()
+        print(list(c.named_parameters()))
+        ```
+        That's for a parameter, for a module, it will just remove the ones that are "shared" (that makes sense) and overwrite getattr for it.
+
+        ```python
+        from torch import nn
+        import torch
+        class Decoder(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.embedding = nn.Embedding(8,8)
+
+        class Encoder(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.embedding = nn.Embedding(8,8)
+
+        class EncoderDecoder(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.encoder = Encoder()
+                self.decoder = Decoder()
+                self.encoder.embedding = self.decoder.embedding # setattr is convenient
+
+        c = EncoderDecoder()
+        print(list(c.named_parameters()))
+        ```
+        Thus the order of the keys matters. If you tie `self.decoder.embedding` you can no longer tie anything inside it.
+
+        If you call this function, it will always tie. There is only 1 tricky case, if all weights are missing, you still want to mention that
+        the ones you tied were missing.
         """
         mapping = getattr(self, "_tied_weights_keys", None)
         if not isinstance(mapping, dict):
@@ -2517,78 +2426,45 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ):
             return
 
+        # TODO let's pray this is not too slow :)
+        top_level_params = dict(top_level.named_parameters(remove_duplicate=False)) | dict(
+            top_level.named_buffers(remove_duplicate=False)
+        )
         for target_name, source_name in mapping.items():
-            source_name = f"{module_prefix}.{source_name}" if module_prefix else source_name
+            source_name = f"^{module_prefix}.{source_name}" if module_prefix else "^" + source_name
+            target_name = f"^{module_prefix}.{target_name}" if module_prefix else "^" + target_name
 
-            # if there are missing keys but the source is also missing, we are out, _init_weights will init later and tie later.
-            # maybe we still need ot remove tied from missing just because you tie
-            source_is_there = missing_keys and not re.search(
-                rf"^{re.escape(source_name)}", "\n".join(missing_keys), flags=re.MULTILINE
+            source_is_there = bool(missing_keys) and not re.search(
+                source_name, "\n".join(missing_keys), flags=re.MULTILINE
             )
-
-            # if neither are here, we still want to the training to have same grads
-            target_is_not_there = (
-                missing_keys
-                and re.search(target_name, "\n".join(missing_keys), flags=re.MULTILINE)
-                and not source_is_there
-            )
-            if source_is_there or missing_keys is None or target_is_not_there:
-                try:
-                    if source_name.endswith(".bias") or source_name.endswith(".weight"):
-                        source_param_or_module = top_level.get_parameter_or_buffer(source_name)
+            source_params = sorted(filter(lambda x: re.search(source_name, x), top_level_params.keys()))
+            target_params = sorted(filter(lambda x: re.search(target_name, x), top_level_params.keys()))
+            if not len(source_params) > 0 or len(target_params) % len(source_params) != 0:
+                raise ValueError(
+                    f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. We found {source_params} to tie into {target_params}"
+                )
+            if len(target_params) > 0:
+                # we cycle source as it should be dispatch in many target if regex
+                for target_n, source_n in zip(target_params, cycle(source_params)):
+                    if "." in target_n:
+                        parent_path, last = target_n.rsplit(".", 1)
+                        parent = top_level.get_submodule(parent_path)
                     else:
-                        source_param_or_module = top_level.get_submodule(source_name)
-                except AttributeError:
-                    continue
-
-                target_name = f"{module_prefix}.{target_name}" if module_prefix else target_name
-
-                if "d+" in target_name:
-                    reg = re.compile(target_name)
-                    modules = dict(self.named_modules())
-                    params = dict(self.named_parameters())
-                    for target_n in modules.keys() | params.keys():
-                        if not reg.fullmatch(target_n):
-                            continue
-                        if "." in target_n:
-                            parent_path, last = target_n.rsplit(".", 1)
-                            parent = self.get_submodule(parent_path)
-                        else:
-                            parent_path, last = "", target_n
-                            parent = self  # top-level
-                        if last in parent._modules:
-                            parent._modules[last] = source_param_or_module
-                            if missing_keys:
-                                for k, _ in source_param_or_module.named_parameters():
-                                    missing_keys.discard(f"{parent_path}.{last}.{k}")
-                        else:
-                            setattr(parent, last, source_param_or_module)
-                            self._adjust_bias(parent, source_param_or_module)
-                            if missing_keys:
-                                missing_keys.discard(target_n)
-                else:
-                    if "." in target_name:
-                        submodule, weight = target_name.rsplit(".", 1)
-                        submodule = top_level.get_submodule(submodule)
-                        setattr(submodule, weight, source_param_or_module)
-                        self._adjust_bias(submodule, source_param_or_module)
-                    else:
-                        setattr(top_level, target_name, source_param_or_module)
-
-                    if missing_keys:
-                        missing_keys.discard(target_name)
-
-            # source and target are missing, but we don't need to warn about target missing as we are prob gonna tie
-            elif (
-                source_is_there
-                and missing_keys
-                and (self.config.tie_word_embeddings or self.config.tie_encoder_decoder)
-            ):
-                if "d+" in target_name:
-                    for target_n, _ in self.named_parameters():
+                        parent_path, last = "", target_n
+                        parent = top_level  # top-level
+                    setattr(parent, last, top_level_params[source_n])
+                    self._adjust_bias(parent, top_level_params[source_n])
+                    if missing_keys and source_is_there:  # test_model_weights_reload_no_missing_tied_weights
                         missing_keys.discard(target_n)
-                else:
-                    missing_keys.discard(target_name)
+            else:
+                target_is_not_there = missing_keys and re.search(
+                    target_name, "\n".join(missing_keys), flags=re.MULTILINE
+                )
+                raise ValueError(
+                    "There is a problem in the way you tie your keys or the way they were saved.\n"
+                    f"source_is_there={source_is_there}, target_is_there={not target_is_not_there}, missing_keys={missing_keys},"
+                    "tie_word_embeddings/tie_encoder_decoder={(self.config.tie_word_embeddings or self.config.tie_encoder_decoder)}"
+                )
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
         if getattr(output_embeddings, "bias", None) is not None and hasattr(output_embeddings, "weight"):
@@ -2610,14 +2486,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if missing_keys is None:
             # called from `post_init`
             self.tie_weight_source_and_target(self, missing_keys, "")
-        else: # this is from_pretrained, so its not called on every sub module
+        else:  # this is from_pretrained, so its not called on every sub module
             for module_prefix, module in self.named_modules():
-                # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
                 if isinstance(module, PreTrainedModel):
                     module.tie_weight_source_and_target(self, missing_keys, module_prefix)
-                # Additionally, if it has a custom `_tie_weights`, honor it
-                if hasattr(module, "_tie_weights"):
-                    module._tie_weights()
 
     def _get_no_split_modules(self, device_map: str):
         """
@@ -3514,7 +3386,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 error_names.extend(shared_names)
 
             if len(error_names) > 0:
-                suggested_fix = {v: k for k, v in list(shared_ptrs.values())}
+                suggested_fix = {v: k for k, v in list(shared_ptrs.values())} if shared_ptrs else None
                 raise RuntimeError(
                     f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined"
                     f"as being shared in `_tied_weight_keys`. You should probably add: `_tied_weight_keys = {suggested_fix}. If a whole module is shared you can use it directly",
@@ -3839,7 +3711,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         local_files_only: bool = False,
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
-        use_safetensors: Optional[bool] = None,
+        use_safetensors: Optional[bool] = True,
         weights_only: bool = True,
         **kwargs,
     ) -> SpecificPreTrainedModelType:
@@ -4173,6 +4045,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weight_conversions = get_checkpoint_conversion_mapping().get(model_type)
             if weight_conversions is None:
                 weight_conversions = get_checkpoint_conversion_mapping()["legacy"]
+            if key_mapping is not None:
+                weight_conversions.extend([WeightConverter(k, v) for k, v in key_mapping.items()])
 
         if gguf_file:
             if hf_quantizer is not None:
@@ -4367,10 +4241,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model, expanded_device_map, hf_quantizer)
 
-        # Now we read all the files to get a pointer on each physical weights
-        merged_state_dict = {}
-        all_pointer = set()
-
         if device_map is None:
             device_map = {"": "cpu"}
         keys = sorted(device_map.keys(), key=len, reverse=True)
@@ -4381,6 +4251,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_deepspeed_zero3_enabled() and not is_quantized:
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
         else:
+            all_pointer = set()
             if checkpoint_files is not None:
                 pattern = re.compile(r"(" + "|".join(map(re.escape, keys)) + r")")
                 if sharded_metadata is None:
@@ -4390,6 +4261,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 else:
                     k_v_iterator = sharded_metadata["weight_map"].items()
 
+                merged_state_dict = {}
                 for k, v in k_v_iterator:
                     match = pattern.match(k)
                     if match and match.group(1) != "":
@@ -4409,7 +4281,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 merged_state_dict = state_dict
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
-            start = time.perf_counter()
+
             missing_keys, unexpected_keys, mismatched_keys, misc = convert_and_load_state_dict_in_model(
                 model,
                 merged_state_dict,
@@ -4421,10 +4293,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 model.dtype_plan,
                 device_mesh,
             )
-            end = time.perf_counter()
 
-        for k in all_pointer:  # finally close all opened file pointers TODO async
-            k.__exit__(None, None, None)
+            # finally close all opened file pointers
+            for k in all_pointer:
+                k.__exit__(None, None, None)
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
@@ -4434,11 +4306,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(miss_and_mismatched, is_quantized)
-        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
-            missing_keys, unexpected_keys, False, model
-        )
+        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys, False)
 
-        # We make sure we TIE after _init_
+        # We make sure we tie after _init_. We need the missing keys to remove the ones we do tie, and not random remove
         model.tie_weights(missing_keys)
 
         # Post-processing for tensor parallelism
@@ -4453,30 +4323,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # In this case, the top-most task module weights were not moved to device and parallelized as they
             # were not part of the loaded weights: do it now
-            if loading_task_model_from_base_state_dict:
-                parameters_to_initialize = {
-                    name: param
-                    for name, param in model.named_parameters()
-                    if not name.startswith(model.base_model_prefix)
-                }
-                for name, param in parameters_to_initialize.items():
-                    # If it is still on meta here, it means that it's a tied weight that will be tied later anyway -> skip it
-                    if param.device.type == "meta":
-                        continue
+            if missing_keys:
+                state_dict = model.state_dict()
+                for name in missing_keys:
+                    param = state_dict[name]
                     # Shard the param
-                    to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param)
                     shard_and_distribute_module(
                         model,
                         param.to(tp_device),
                         param,
                         name,
-                        casting_dtype,
-                        to_contiguous,
+                        None,
+                        False,
                         device_mesh.get_local_rank(),
                         device_mesh,
                     )
 
-        logger.warning(f"Loading the checkpoint files into the model took {end - start}")
         log_state_dict_report(
             model=model,
             pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -4720,12 +4582,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             self.initialize_weights()
 
-        for p in self.parameters():  # TODO @Cyrilvallez if we are able to do this while we smart apply my be better
-            setattr(p, "__class__", nn.Parameter)
-            setattr(p, "_is_hf_initialized", True)
+        for name, p in list(self.named_parameters()) + list(self.named_buffers()):
+            if hasattr(p, "_original_cls"):
+                if '.' in name:
+                    module, name = name.rsplit(".", 1)
+                    module = self.get_submodule(module)
+                else:
+                    module = self
+                setattr(module, name, p._original_cls(p.data))
+
 
     def _adjust_missing_and_unexpected_keys(
-        self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool, model
+        self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool
     ) -> tuple[set[str], set[str]]:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors.

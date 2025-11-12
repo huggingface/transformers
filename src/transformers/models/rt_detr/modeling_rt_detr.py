@@ -17,7 +17,6 @@
 import math
 import warnings
 from dataclasses import dataclass
-from functools import partial
 from typing import Optional, Union
 
 import torch
@@ -342,10 +341,10 @@ def replace_batch_norm(model):
             new_module = RTDetrFrozenBatchNorm2d(module.num_features)
 
             if module.weight.device != torch.device("meta"):
-                new_module.weight.data.copy_(module.weight)
-                new_module.bias.data.copy_(module.bias)
-                new_module.running_mean.data.copy_(module.running_mean)
-                new_module.running_var.data.copy_(module.running_var)
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
 
             model._modules[name] = new_module
 
@@ -1013,16 +1012,16 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (RTDetrForObjectDetection, RTDetrDecoder)):
-            if module.class_embed is not None:
-                for layer in module.class_embed:
+        if isinstance(module, RTDetrForObjectDetection):
+            if module.model.decoder.class_embed is not None:
+                for layer in module.model.decoder.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
                     bias = float(-math.log((1 - prior_prob) / prior_prob))
                     nn.init.xavier_uniform_(layer.weight)
                     nn.init.constant_(layer.bias, bias)
 
-            if module.bbox_embed is not None:
-                for layer in module.bbox_embed:
+            if module.model.decoder.bbox_embed is not None:
+                for layer in module.model.decoder.bbox_embed:
                     nn.init.constant_(layer.layers[-1].weight, 0)
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
@@ -1040,7 +1039,8 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
+
+            if not getattr(module.sampling_offsets.bias, "_is_hf_initialized", False):
                 module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
             nn.init.constant_(module.attention_weights.weight, 0.0)
             nn.init.constant_(module.attention_weights.bias, 0.0)
@@ -1814,8 +1814,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
 )
 class RTDetrForObjectDetection(RTDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = {"model.decoder.bbox_embed": "bbox_embed", "model.decoder.class_embed": "class_embed"}
-    
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
 
@@ -1823,18 +1821,13 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         super().__init__(config)
         self.model = RTDetrModel(config)
         num_pred = config.decoder_layers
-        self.class_embed = nn.ModuleList([torch.nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)])
-        self.bbox_embed = nn.ModuleList([RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3) for _ in range(num_pred)])
-
+        self.model.decoder.class_embed = nn.ModuleList(
+            [torch.nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)]
+        )
+        self.model.decoder.bbox_embed = nn.ModuleList(
+            [RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3) for _ in range(num_pred)]
+        )
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
-        if config.with_box_refine:
-            self._tied_weights_keys[r"bbox_embed.(?![0])\d+"] = "bbox_embed.0"
-            self._tied_weights_keys[r"class_embed.(?![0])\d+"] = "class_embed.0"
-                # hack implementation for iterative bounding box refinement
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     def _set_aux_loss(self, outputs_class, outputs_coord):

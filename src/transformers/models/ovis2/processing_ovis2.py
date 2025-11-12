@@ -54,10 +54,6 @@ class Ovis2Processor(ProcessorMixin):
             The number of image tokens to be used for each image in the input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor=None,

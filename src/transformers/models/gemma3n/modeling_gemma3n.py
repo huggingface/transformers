@@ -1237,6 +1237,7 @@ class Gemma3nTextAttention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = 1.0
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = True
 
@@ -1335,7 +1336,7 @@ class Gemma3nTextAttention(nn.Module):
             value_states,
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
-            scaling=1.0,
+            scaling=self.scaling,
             sliding_window=self.sliding_window,
             **kwargs,
         )
@@ -1584,7 +1585,7 @@ class Gemma3nDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Gemma3nPreTrainedModel(PreTrainedModel):
     config: Gemma3nConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]

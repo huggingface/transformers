@@ -32,6 +32,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -639,7 +640,7 @@ class ZambaAttentionDecoderLayer(nn.Module):
         return outputs
 
 
-class ZambaMambaDecoderLayer(nn.Module):
+class ZambaMambaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ZambaConfig, layer_idx: int):
         super().__init__()
         self.mamba = ZambaMambaMixer(config=config, layer_idx=layer_idx)
@@ -708,7 +709,7 @@ class ZambaMambaDecoderLayer(nn.Module):
         return outputs
 
 
-class ZambaHybridLayer(nn.Module):
+class ZambaHybridLayer(GradientCheckpointingLayer):
     def __init__(self, shared_transf: ZambaAttentionDecoderLayer, linear: nn.Linear, mamba: ZambaMambaDecoderLayer):
         super().__init__()
         self.shared_transf = shared_transf
@@ -841,38 +842,20 @@ class ZambaModel(ZambaPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        block = ZambaAttentionDecoderLayer(config)
-        mamba_layers = []
-        linear_layers = []
         self.layers_block_type = config.layers_block_type
-        for i in range(config.num_hidden_layers):
-            if config.layers_block_type[i] == "mamba":
-                mamba_layers.append(ZambaMambaDecoderLayer(config, layer_idx=i))
-            elif config.layers_block_type[i] == "hybrid":
-                linear_layers.append(nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False))
-                mamba_layers.append(ZambaMambaDecoderLayer(config, layer_idx=i))
-        mamba_layers = iter(mamba_layers)
-        linear_layers = iter(linear_layers)
         layers = []
-        self._tied_weights_keys = {}
+        self._tied_weights_keys = None
         for layer_id, layer_type in enumerate(self.layers_block_type):
+            mamba = ZambaMambaDecoderLayer(config, layer_idx=layer_id)
             if layer_type == "hybrid":
-                prefix_name = f"layers.{layer_id}."
-                tied_keys = [
-                    "shared_transf.self_attn.q_proj.weight",
-                    "shared_transf.self_attn.k_proj.weight",
-                    "shared_transf.self_attn.v_proj.weight",
-                    "shared_transf.self_attn.o_proj.weight",
-                    "shared_transf.feed_forward.gate_proj.weight",
-                    "shared_transf.feed_forward.up_proj.weight",
-                    "shared_transf.feed_forward.down_proj.weight",
-                    "shared_transf.input_layernorm.weight",
-                    "shared_transf.pre_ff_layernorm.weight",
-                ]
-                self._tied_weights_keys.update({prefix_name + key: f"layers.0.{key}" for key in tied_keys})
-                layers.append(ZambaHybridLayer(block, next(linear_layers), next(mamba_layers)))
+                linear = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
+                layers.append(ZambaHybridLayer(ZambaAttentionDecoderLayer(config), linear, mamba))
+                if self._tied_weights_keys is None:
+                    self._tied_weights_keys = {
+                        rf"layers.(?![{layer_id}])\d+.shared_transf": f"layers.{layer_id}.shared_transf"
+                    }
             else:
-                layers.append(next(mamba_layers))
+                layers.append(mamba)
         self.layers = nn.ModuleList(layers)
 
         self._attn_implementation = config._attn_implementation
@@ -943,31 +926,18 @@ class ZambaModel(ZambaPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer.__call__,
-                    hidden_states,
-                    original_hidden_states,
-                    layer_idx,
-                    attention_mask,
-                    causal_mask,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = layer(
-                    hidden_states,
-                    original_hidden_states=original_hidden_states,
-                    layer_idx=layer_idx,
-                    attention_mask=attention_mask,
-                    causal_mask=causal_mask,
-                    past_key_values=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+            layer_outputs = layer(
+                hidden_states,
+                original_hidden_states,
+                layer_idx,
+                attention_mask,
+                causal_mask,
+                past_key_values=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
+
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -1212,7 +1182,6 @@ class ZambaForSequenceClassification(ZambaPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = ZambaModel(config)
-        self._tied_weights_keys = self.model._tied_weights_keys
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing

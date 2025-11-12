@@ -415,6 +415,7 @@ class DFineConfig(PreTrainedConfig):
                 f"Embedded dimension {self.d_model} must be divisible by decoder_attention_heads {self.decoder_attention_heads}"
             )
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        self.tie_encoder_decoder = True
 
 
 class DFineMultiscaleDeformableAttention(nn.Module):
@@ -875,7 +876,17 @@ class DFineModel(RTDetrModel):
         self.decoder = DFineDecoder(config)
 
 
-class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
+class DFineForObjectDetection(RTDetrForObjectDetection):
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    # We can't initialize the model on meta device as some weights are modified during the initialization
+    _no_split_modules = None
+    _tied_weights_keys = {
+        r"bbox_embed.(?![0])\d+": "bbox_embed.0",
+        r"class_embed.(?![0])\d+": "class_embed.0",
+        "model.decoder.class_embed": "class_embed",
+        "model.decoder.bbox_embed": "bbox_embed",
+    }
+
     def __init__(self, config: DFineConfig):
         DFinePreTrainedModel.__init__(self, config)
 
@@ -896,10 +907,8 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
             ]
         )
 
-        # here self.model.decoder.bbox_embed is null, but not self.bbox_embed
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
-
         # Initialize weights and apply final processing
         self.post_init()
 

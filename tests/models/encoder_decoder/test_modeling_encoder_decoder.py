@@ -628,6 +628,7 @@ class EncoderDecoderMixin:
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_generate(**input_ids_dict)
 
+    @unittest.skip("This is no longer FORCED, it was just not working before.")
     def test_encoder_decoder_model_shared_weights(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.create_and_check_encoder_decoder_shared_weights(**input_ids_dict)

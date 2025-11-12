@@ -840,11 +840,6 @@ class MarianDecoder(MarianPreTrainedModel):
 
 @auto_docstring
 class MarianModel(MarianPreTrainedModel):
-    _tied_weights_keys = {
-        "decoder.embed_tokens.weight": "shared.weight",
-        "encoder.embed_tokens.weight": "shared.weight",
-    }
-
     def __init__(self, config: MarianConfig):
         super().__init__(config)
 
@@ -853,6 +848,14 @@ class MarianModel(MarianPreTrainedModel):
         # We always use self.shared for token embeddings to ensure compatibility with all marian models
         if self.config.share_encoder_decoder_embeddings:
             self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
+            self._tied_weights_keys = {
+                "decoder.embed_tokens.weight": "shared.weight",
+                "encoder.embed_tokens.weight": "shared.weight",
+            }
+        else:
+            self._tied_weights_keys = {
+                "decoder.embed_tokens.weight": "encoder.embed_tokens.weight",
+            }
 
         self.encoder = MarianEncoder(config)
         self.decoder = MarianDecoder(config)
@@ -1036,11 +1039,13 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
         "decoder.embed_positions.weight",
     ]
     _keys_to_ignore_on_save = ["model.encoder.embed_positions.weight", "model.decoder.embed_positions.weight"]
-    _tied_weights_keys = {"lm_head.weight": "model.shared.weight"}
+    _tied_weight_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config: MarianConfig):
         super().__init__(config)
         self.model = MarianModel(config)
+        if self.config.share_encoder_decoder_embeddings:
+            self._tied_weights_keys = {"lm_head.weight": "model.shared.weight"}
 
         target_vocab_size = config.vocab_size if config.share_encoder_decoder_embeddings else config.decoder_vocab_size
         self.register_buffer("final_logits_bias", torch.zeros((1, target_vocab_size)))

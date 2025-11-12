@@ -27,47 +27,22 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from types import MethodType
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 
-from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer, DTensor, Replicate
-from .quantizers import HfQuantizer
+from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, DTensor, Replicate, TensorParallelLayer
 from .utils import is_torch_greater_or_equal, logging
 from .utils.quantization_config import QuantizationMethod
-
 
 _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 if _is_dtensor_available:
     from torch.distributed.tensor import DTensor
 
-
-import itertools
-import os
-import re
-from abc import abstractmethod
-from collections import defaultdict
-from collections.abc import MutableMapping, MutableSet, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor
-from contextlib import contextmanager
-from dataclasses import dataclass, field
-from functools import partial
-from types import MethodType
-from typing import Any, Optional, Union
-
-import torch
-
-from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer
-from .quantizers import HfQuantizer
-from .utils import is_torch_greater_or_equal, logging
-from .utils.quantization_config import QuantizationMethod
-
-
-_torch_distributed_available = torch.distributed.is_available()
-_is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
-if _is_dtensor_available:
-    from torch.distributed.tensor import DTensor
+if TYPE_CHECKING:
+    from .modeling_utils import PreTrainedModel
+    from .quantizers import HfQuantizer
 
 
 logger = logging.get_logger(__name__)
@@ -112,7 +87,7 @@ def _glob_to_regex_src(glob: str, *, digits_only: bool = True) -> str:
     '*' matches (\\d+) if digits_only else (.+). Inner groups are non-capturing.
     """
     star = r"(\d+)" if digits_only else r"(.+)"
-    return re.escape(glob).replace(r"\*", star)
+    return glob.replace(r"\*", star)
 
 
 def build_glob_alt(
@@ -140,16 +115,27 @@ def build_glob_alt(
     """
     name_map: dict[str, str] = {}
     parts: list[str] = []
-    prefix_src = r".*"
 
     for i, g in enumerate(globs):
         name = f"g{i}"
         name_map[name] = g
         pat_src = _glob_to_regex_src(g)
+        prefix_src = ""
+        if pat_src.startswith("*"):
+            prefix_src = "."
+        elif not pat_src.startswith(r"\^") and not pat_src.startswith(r".*"):
+            prefix_src = ".*"
+
         parts.append(f"(?P<{name}>{prefix_src}{pat_src})")
 
-    alt_src = "|".join(parts)
-    return re.compile(alt_src), name_map
+    alt_src = "|".join(parts).replace("\\^", "^").replace("\\.", r"\.")
+    try:
+        reg = re.compile(alt_src)
+    except re.error as e:
+        logger.error(f"Error compiling regex for alternation: {alt_src}")
+        raise e
+
+    return reg, name_map
 
 
 def match_glob(key: str, alt: re.Pattern, name_map: dict[str, str]) -> Optional[str]:
@@ -306,6 +292,8 @@ class WeightConverter:
     - source_keys: str | list[str] (wildcards '*' match digits)
     - target_keys: str | list[str] | None
     - distributed_operation / operations / quantization_operations are ALWAYS lists.
+
+    TODO: for BNB we need to collect model.weight.quant_state_keys
     """
 
     source_keys: Union[str, list[str]]
@@ -331,13 +319,6 @@ class WeightConverter:
                 f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
             )
 
-        for pattern in self.source_keys:
-            if any(ch in pattern for ch in set("^$+?{}[]|()")):
-                raise AssertionError(f"'{pattern}' is not glob")
-        for pattern in self.target_keys:
-            if any(ch in pattern for ch in set("^$+?{}[]|()")):
-                raise AssertionError(f"'{pattern}' is not glob")
-
 
 @dataclass(slots=True)
 class ConversionEntry:
@@ -347,6 +328,7 @@ class ConversionEntry:
 
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
+
 # Factory function to create LoadedParameter subclasses dynamically
 def get_loaded_parameter_class(base_cls):
     """
@@ -354,17 +336,31 @@ def get_loaded_parameter_class(base_cls):
     Returns a new class that combines the base_cls with LoadedParameterMixin
 
     """
+
     class LoadedParam(base_cls):
         _inplace_methods = [
-                'add_', 'mul_', 'clamp_', 'zero_', 'fill_', 'normal_', 'uniform_',
-                'copy_', 'erfinv_', 'log_', "__getitem__", "neg_", "exp_", "sub_"
-            ]
+            "add_",
+            "mul_",
+            "clamp_",
+            "zero_",
+            "fill_",
+            "normal_",
+            "uniform_",
+            "copy_",
+            "erfinv_",
+            "log_",
+            "__getitem__",
+            "neg_",
+            "exp_",
+            "sub_",
+        ]
+
         def __new__(cls, from_existing, **kwargs):
             if isinstance(from_existing, torch.nn.Parameter):
                 inst = super().__new__(cls, from_existing.data, from_existing.requires_grad, **from_existing.__dict__)
             else:
                 inst = super().__new__(cls, from_existing)
-            inst._original_type = from_existing
+            inst._original_cls = base_cls
             # Explicitly override all in-place methods per instance
             for method_name in inst._inplace_methods:
                 setattr(inst, method_name, MethodType(inst._skip, inst))
@@ -386,27 +382,65 @@ def get_loaded_parameter_class(base_cls):
         def data(self, new):
             pass
 
-    def __lt__(self, other):  return torch.Tensor.__lt__(self, other)
-    def __le__(self, other):  return torch.Tensor.__le__(self, other)
-    def __gt__(self, other):  return torch.Tensor.__gt__(self, other)
-    def __ge__(self, other):  return torch.Tensor.__ge__(self, other)
-    def __eq__(self, other):  return torch.Tensor.__eq__(self, other)
-    def __ne__(self, other):  return torch.Tensor.__ne__(self, other)
-    def __iadd__(self, *args, **kwargs): return self
-    def __isub__(self, *args, **kwargs): return self
-    def __imul__(self, *args, **kwargs): return self
-    def __imatmul__(self, *args, **kwargs): return self
-    def __itruediv__(self, *args, **kwargs): return self
-    def __ifloordiv__(self, *args, **kwargs): return self
-    def __imod__(self, *args, **kwargs): return self
-    def __ipow__(self, *args, **kwargs): return self
-    def __iand__(self, *args, **kwargs): return self
-    def __ior__(self, *args, **kwargs): return self
-    def __ixor__(self, *args, **kwargs): return self
-    def __ilshift__(self, *args, **kwargs): return self
-    def __irshift__(self, *args, **kwargs): return self
+    def __lt__(self, other):
+        return torch.Tensor.__lt__(self, other)
+
+    def __le__(self, other):
+        return torch.Tensor.__le__(self, other)
+
+    def __gt__(self, other):
+        return torch.Tensor.__gt__(self, other)
+
+    def __ge__(self, other):
+        return torch.Tensor.__ge__(self, other)
+
+    def __eq__(self, other):
+        return torch.Tensor.__eq__(self, other)
+
+    def __ne__(self, other):
+        return torch.Tensor.__ne__(self, other)
+
+    def __iadd__(self, *args, **kwargs):
+        return self
+
+    def __isub__(self, *args, **kwargs):
+        return self
+
+    def __imul__(self, *args, **kwargs):
+        return self
+
+    def __imatmul__(self, *args, **kwargs):
+        return self
+
+    def __itruediv__(self, *args, **kwargs):
+        return self
+
+    def __ifloordiv__(self, *args, **kwargs):
+        return self
+
+    def __imod__(self, *args, **kwargs):
+        return self
+
+    def __ipow__(self, *args, **kwargs):
+        return self
+
+    def __iand__(self, *args, **kwargs):
+        return self
+
+    def __ior__(self, *args, **kwargs):
+        return self
+
+    def __ixor__(self, *args, **kwargs):
+        return self
+
+    def __ilshift__(self, *args, **kwargs):
+        return self
+
+    def __irshift__(self, *args, **kwargs):
+        return self
 
     return LoadedParam
+
 
 def _materialize_copy(tensor, dtype=None):
     tensor = tensor[...]
@@ -478,11 +512,9 @@ def log_to_misc(
 
 
 def set_param_for_module(
-    model: torch.nn.Module,
+    model: PreTrainedModel,
     layer_name: str,
     param_value: torch.Tensor,
-    meta_model_state_dict: MutableMapping[str, Any],
-    empty_param: torch.Tensor,
     mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
     missing_keys: MutableSet[str],
     misc: MutableMapping[str, Any],
@@ -496,8 +528,7 @@ def set_param_for_module(
             param_value = param_value[0]
         elif not isinstance(param_value, torch.nn.Parameter):
             param_value = param_value[...]
-        ref = meta_model_state_dict.get(layer_name, empty_param)
-
+        ref = getattr(module_obj, param_name)
 
         use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
         if not isinstance(param_value, torch.nn.Parameter):
@@ -520,13 +551,12 @@ def set_param_for_module(
         # to skip any inplace method that modifies the param data
         param_value = get_loaded_parameter_class(param_value.__class__)(from_existing=param_value)
 
-        # skip mismatch for hf_quantizer for now
+        # Remove from missing keys (it's either mismatched, or all good)
+        missing_keys.discard(layer_name)
         if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
-            setattr(module_obj._parameters[param_name], "_is_hf_initialized", False) # Needs to be initialized
-            missing_keys.discard(layer_name)
+            module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
         else:
-            missing_keys.discard(layer_name)
             param_value._is_hf_initialized = True  # super important otherwise _init_weight re-initi if bias is missing
             setattr(module_obj, param_name, param_value)
 
@@ -538,17 +568,15 @@ class SkipLayer(Exception):
 
 
 def convert_and_load_state_dict_in_model(
-    model,
-    state_dict,
-    weight_mapping,
-    tp_plan,
-    hf_quantizer,
-    dtype=None,
-    device_map=None,
-    dtype_plan=None,
-    device_mesh=None,
-    loading_task_model_from_base_state_dict: bool = False,
-    loading_base_model_from_task_state_dict: bool = False,
+    model: PreTrainedModel,
+    state_dict: dict[str, Any],
+    weight_mapping: dict[str, WeightConverter] | None,
+    tp_plan: dict[str, str] | None,
+    hf_quantizer: HfQuantizer | None,
+    dtype: torch.dtype | None = None,
+    device_map: dict | None = None,
+    dtype_plan: dict | None = None,
+    device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
 ):
     """
     Convert a state dict according to a weight mapping (one WeightConverter per glob pattern),
@@ -687,8 +715,6 @@ def convert_and_load_state_dict_in_model(
                                 model,
                                 k,
                                 output_value,
-                                meta_model_state_dict,
-                                empty_param,
                                 mismatch_keys,
                                 missing_keys,
                                 misc,

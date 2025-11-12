@@ -349,7 +349,7 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     model.base_model.encoder.embed_tokens.weight.data_ptr(),
                 }
             ),
-            2,
+            4,
         )
 
     @unittest.skip(

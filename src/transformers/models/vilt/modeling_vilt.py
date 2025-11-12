@@ -690,8 +690,7 @@ class ViltPooler(nn.Module):
 )
 class ViltForMaskedLM(ViltPreTrainedModel):
     _tied_weights_keys = {
-        "mlm_score.decoder.weight": "vilt.embeddings.text_embeddings.weight",
-        "mlm_score.decoder.bias": "mlm_score.bias",
+        "mlm_score.decoder.weight": "vilt.embeddings.text_embeddings.word_embeddings.weight",
     }
 
     def __init__(self, config):
@@ -841,14 +840,11 @@ class ViltPredictionHeadTransform(nn.Module):
 
 
 class ViltMLMHead(nn.Module):
-    def __init__(self, config, weight=None):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.transform = ViltPredictionHeadTransform(config)
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        if weight is not None:
-            self.decoder.weight = weight
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
 
     def forward(self, x):
         x = self.transform(x)

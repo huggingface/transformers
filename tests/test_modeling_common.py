@@ -20,6 +20,7 @@ import os.path
 import random
 import re
 import tempfile
+import unittest.mock
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
@@ -47,6 +48,7 @@ from transformers.integrations.deepspeed import (
     is_deepspeed_zero3_enabled,
     unset_hf_deepspeed_config,
 )
+from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_utils import _get_tied_weight_keys
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
@@ -703,18 +705,6 @@ class ModelTesterMixin:
                 assert self.model_tester.text_config.num_hidden_layers <= target_num_hidden_layers
 
     def test_save_load(self):
-        def check_save_load(out1, out2):
-            # make sure we don't have nans
-            out_2 = out2.cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-            out_2 = out_2[~np.isneginf(out_2)]
-
-            out_1 = out1.cpu().numpy()
-            out_1[np.isnan(out_1)] = 0
-            out_1 = out_1[~np.isneginf(out_1)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -745,9 +735,11 @@ class ModelTesterMixin:
 
             if isinstance(first, tuple) and isinstance(second, tuple):
                 for tensor1, tensor2 in zip(first, second):
-                    check_save_load(tensor1, tensor2)
+                    torch.testing.assert_close(
+                        tensor1, tensor2, msg="Running save/load and forward yields different results"
+                    )
             else:
-                check_save_load(first, second)
+                torch.testing.assert_close(first, second, msg="Running save/load and forward yields different results")
 
     def test_from_pretrained_no_checkpoint(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -763,7 +755,9 @@ class ModelTesterMixin:
             keys = state_dict.keys()
             for k in keys:
                 p1, p2 = new_state_dict[k], state_dict[k]
-                torch.testing.assert_close(p1, p2)
+                with self.subTest(k):
+                    torch.testing.assert_close(p1, p2, msg=f"failed on {k}")
+
             new_params = dict(new_model.named_parameters())
             for k, v in list(model.named_parameters()):
                 with self.subTest(k):
@@ -814,7 +808,7 @@ class ModelTesterMixin:
                 load_result = model.load_state_dict(state_dict_saved, strict=False)
                 keys_to_ignore = set(model._keys_to_ignore_on_save)
 
-                if hasattr(model, "_tied_weights_keys"):
+                if getattr(model, "_tied_weights_keys", None):
                     keys_to_ignore.update(set(model._tied_weights_keys))
 
                 self.assertTrue(len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys_to_ignore)
@@ -841,6 +835,12 @@ class ModelTesterMixin:
             # at init model should have gradient checkpointing disabled
             model = model_class(copy.deepcopy(config))
             self.assertFalse(model.is_gradient_checkpointing)
+
+            # Gradient checkpointing is implemented via GradientCheckpointingLayer, if none is present this is likely
+            # an implementation issue. Note we exclude clvp for now since they are still not using
+            # GradientCheckpointingLayer.
+            if config.model_type not in ["clvp", "clvp_decoder"]:
+                self.assertTrue([m for m in model.modules() if isinstance(m, GradientCheckpointingLayer)])
 
             # check enable works
             model.gradient_checkpointing_enable()
@@ -954,8 +954,7 @@ class ModelTesterMixin:
             # Everything must be exactly the same as we set the same seed for each init
             different_weights = []
             from_pre_state = dict(model_from_pretrained.state_dict())
-            for (k1, v1) in    model_from_config.state_dict().items():
-
+            for k1, v1 in model_from_config.state_dict().items():
                 # In case using torch.nn.utils.parametrizations on a module, we should skip the resulting keys
                 if re.search(r"\.parametrizations\..*?\.original[01]", k1):
                     continue
@@ -1164,22 +1163,63 @@ class ModelTesterMixin:
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
                 config.use_cache = False
                 config.return_dict = True
-                model = model_class(config)
 
+                # make sure that test runs are consistent by disabling dropout
+                #
+                # Note: attention_probs_dropout_prob seem to influence classifier.bias in BertForMultipleChoice
+                # (and other Bert derived models). Sometimes classifier.bias is None when
+                # attention_probs_dropout_prob > 0. This might indicate a bug somewhere.
+                if hasattr(config, "hidden_dropout_prob"):
+                    config.hidden_dropout_prob = 0.0
+                if hasattr(config, "attention_probs_dropout_prob"):
+                    config.attention_probs_dropout_prob = 0.0
+
+                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+                torch.manual_seed(0)
+                model = model_class(config)
                 model.to(torch_device)
-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
                 model.train()
 
                 # unfreeze additional layers
                 for p in model.parameters():
                     p.requires_grad_(True)
 
+                # do a non-checkpointing run, so we can compare the set of non-zero gradients later. we skip None
+                # grads here to collect a reference set of modules that have non-zero gradients (to filter layers like
+                # MoE that drop out parts of the model).
                 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-
-                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                torch.manual_seed(0)
                 loss = model(**inputs).loss
                 loss.backward()
-                optimizer.step()
+                grad_expected_params = [(n, p) for n, p in model.named_parameters() if p.grad is not None]
+                non_zero_grads_normal = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
+
+                # reset all gradients to zero for the comparison with the gradient checkpointing run
+                optimizer.zero_grad()
+
+                # now enable gradient checkpointing and compare the gradients
+                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+
+                checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
+
+                optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+                with unittest.mock.patch.object(
+                    checkpointing_layer, "forward", wraps=checkpointing_layer.forward
+                ) as forward_mock:
+                    torch.manual_seed(0)
+                    loss = model(**inputs).loss
+                    loss.backward()
+                    optimizer.step()
+
+                    # test that gradient checkpointing is active as it would call the gradient checkpointing layer's
+                    # forward more than once.
+                    self.assertGreater(forward_mock.call_count, 1)
+
+                # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
+                # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
+                non_zero_grads_gradcp = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
+                self.assertEqual(non_zero_grads_gradcp, non_zero_grads_normal)
 
                 if self.test_all_params_have_gradient:
                     for k, v in model.named_parameters():
@@ -1188,10 +1228,6 @@ class ModelTesterMixin:
                                 print(
                                     f"None for {k}, Probaby running a MOE, make sure grad is not NONE on EVERY layer. At LEAST 1 of the expert layer should have grads!"
                                 )
-                            if "shared" in k:
-                                print(
-                                    f"None for {k}, Probaby a model that does not default to tie the encoder and decoder!"
-                            )
                             else:
                                 with self.subTest(f"{k}"):
                                     self.assertTrue(
@@ -1774,6 +1810,10 @@ class ModelTesterMixin:
 
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         original_config.tie_word_embeddings = False
+        try:
+            original_config.get_text_config().tie_word_embeddings = False
+        except Exception as _:
+            pass
         inputs_dict.pop("labels", None)
 
         # if model cannot untied embeddings -> leave test
@@ -1939,8 +1979,10 @@ class ModelTesterMixin:
                     for k, v in model_tied.state_dict().items():
                         with self.subTest(f"{model_class.__name__}.{k}"):
                             torch.testing.assert_close(
-                                v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}.\n"
-                                "This probably means that it was not set with the correct value when tying."
+                                v,
+                                reloaded_state[k],
+                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}.\n{v}\nvs\n{reloaded_state[k]}\n"
+                                "This probably means that it was not set with the correct value when tying.",
                             )
 
                     # Checking the tensor sharing are correct on the new model (weights are properly tied in both cases)
@@ -1959,7 +2001,11 @@ class ModelTesterMixin:
                         )
 
                     # Checking there was no complain of missing weights
-                    self.assertEqual(infos["missing_keys"], set(), "These keys were removed when serializing, and were not properly loaded by `from_pretrained`.")
+                    self.assertEqual(
+                        infos["missing_keys"],
+                        set(),
+                        "These keys were removed when serializing, and were not properly loaded by `from_pretrained`.",
+                    )
 
     def test_load_save_without_tied_weights(self):
         for model_class in self.all_model_classes:
@@ -1995,7 +2041,7 @@ class ModelTesterMixin:
                     infos["missing_keys"],
                     set(),
                     "Given that the loaded weights are the same, the issue is in `tie_weights`: it tied these keys and removed them from serialization. But because of tiying (hardcoded or not) the previous check is fine.\
-                        This can happen if `save_pretrained` remove the targets and not the keys from serialiazation",
+                        This can happen if `save_pretrained` remove the targets and not the keys from serialiazation, or you hardcoded `self.xxx = yyy` thus forcing to always tie -> they are removed from serialization.",
                 )
 
     def test_tied_weights_keys(self):
@@ -2003,6 +2049,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             copied_config = copy.deepcopy(original_config)
             copied_config.get_text_config().tie_word_embeddings = True
+            copied_config.tie_word_embeddings = True
             model_tied = model_class(copied_config)
 
             tied_weight_keys = _get_tied_weight_keys(model_tied)
@@ -2021,7 +2068,10 @@ class ModelTesterMixin:
             # Detect we get a hit for each key
             for key in tied_weight_keys:
                 is_tied_key = any(re.search(key, p) for group in tied_params for p in group)
-                self.assertTrue(is_tied_key, f"{key} is not a tied weight key for {model_class}.")
+                self.assertTrue(
+                    is_tied_key,
+                    f"{key} is not a tied weight key pattern for {model_class}: {is_tied_key}. With same patams: {tied_params}",
+                )
 
             # Removed tied weights found from tied params -> there should only be one left after
             for key in tied_weight_keys:
@@ -2510,7 +2560,6 @@ class ModelTesterMixin:
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     model = model_class(config)
                     model.save_pretrained(tmp_dir)
-                    num_labels = config.num_labels
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(RuntimeError):
                         new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)

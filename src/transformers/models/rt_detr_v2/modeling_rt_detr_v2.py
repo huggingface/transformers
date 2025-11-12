@@ -21,7 +21,6 @@
 import math
 import warnings
 from dataclasses import dataclass
-from functools import partial
 from typing import Optional, Union
 
 import torch
@@ -460,16 +459,16 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (RTDetrV2ForObjectDetection, RTDetrV2Decoder)):
-            if module.class_embed is not None:
-                for layer in module.class_embed:
+        if isinstance(module, RTDetrV2ForObjectDetection):
+            if module.model.decoder.class_embed is not None:
+                for layer in module.model.decoder.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
                     bias = float(-math.log((1 - prior_prob) / prior_prob))
                     nn.init.xavier_uniform_(layer.weight)
                     nn.init.constant_(layer.bias, bias)
 
-            if module.bbox_embed is not None:
-                for layer in module.bbox_embed:
+            if module.model.decoder.bbox_embed is not None:
+                for layer in module.model.decoder.bbox_embed:
                     nn.init.constant_(layer.layers[-1].weight, 0)
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
@@ -487,7 +486,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
+            if not getattr(module.sampling_offsets.bias, "_is_hf_initialized", False):
                 module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
             nn.init.constant_(module.attention_weights.weight, 0.0)
             nn.init.constant_(module.attention_weights.bias, 0.0)
@@ -1811,7 +1810,6 @@ class RTDetrV2ObjectDetectionOutput(ModelOutput):
 )
 class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = {"model.decoder.bbox_embed": "bbox_embed", "model.decoder.class_embed": "class_embed"}
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
 
@@ -1819,16 +1817,15 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         super().__init__(config)
         # RTDETR encoder-decoder model
         self.model = RTDetrV2Model(config)
-
-        # Detection heads on top
-        class_embed = partial(nn.Linear, config.d_model, config.num_labels)
-        bbox_embed = partial(RTDetrV2MLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
-
-        self.class_embed = nn.ModuleList([class_embed() for _ in range(config.decoder_layers)])
-        self.bbox_embed = nn.ModuleList([bbox_embed() for _ in range(config.decoder_layers)])
-
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = nn.ModuleList(
+            [torch.nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
+        )
+        self.model.decoder.bbox_embed = nn.ModuleList(
+            [
+                RTDetrV2MLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+                for _ in range(config.decoder_layers)
+            ]
+        )
 
         # Initialize weights and apply final processing
         self.post_init()

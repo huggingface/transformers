@@ -802,7 +802,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "text_decoder.cls.predictions.decoder.bias": "text_decoder.cls.predictions.bias",
         "text_decoder.cls.predictions.decoder.weight": "text_decoder.bert.embeddings.word_embeddings.weight",
-    } # TODO @arthurzucker check why we need this when for other models, their subPreTrainedModel handle it themselves.
+    }  # TODO @arthurzucker check why we need this when for other models, their subPreTrainedModel handle it themselves.
 
     def __init__(self, config: BlipConfig):
         super().__init__(config)

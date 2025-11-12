@@ -2414,17 +2414,16 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # the bbox_embed in the decoder are all clones though
     _tied_weights_keys = {
-        "model.decoder.bbox_embed":"bbox_embed",
-        "model.decoder.class_embed":"class_embed",
-        r"class_embed.(?![0])\d+": "class_embed.0",
+        r"bbox_embed.(?![0])\d+": "bbox_embed.0",
+        "model.decoder.bbox_embed": "bbox_embed",
     }
 
     def __init__(self, config: GroundingDinoConfig):
         super().__init__(config)
 
         self.model = GroundingDinoModel(config)
-        if config.decoder_bbox_embed_share:
-            self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]= "bbox_embed.0"
+        if not config.decoder_bbox_embed_share:
+            del self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]
 
         self.bbox_embed = nn.ModuleList(
             [
@@ -2438,13 +2437,12 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             ]
         )
 
-        self.class_embed = nn.ModuleList([GroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)])
+        self.class_embed = nn.ModuleList(
+            [GroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
+        )
         # hack for box-refinement
+        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
         self.model.decoder.bbox_embed = self.bbox_embed
-        # hack implementation for two-stage
-        self.model.decoder.class_embed = self.class_embed
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     @auto_docstring

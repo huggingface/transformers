@@ -254,7 +254,10 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
     """
 )
 class LlavaNextModel(LlavaNextPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {
+        r"^language_model.model": "language_model",
+    }
+    base_model_prefix = "model"
 
     def __init__(self, config: LlavaNextConfig):
         super().__init__(config)
@@ -535,13 +538,13 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
 )
 class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^image_newline": "model.image_newline",
-        "^language_model.lm_head": "lm_head",
+        r"^language_model.model": "model.language_model",
+        r"^vision_tower": "model.vision_tower",
+        r"^multi_modal_projector": "model.multi_modal_projector",
+        r"^image_newline": "model.image_newline",
+        r"^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: LlavaNextConfig):
         super().__init__(config)

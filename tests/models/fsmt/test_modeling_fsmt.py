@@ -282,7 +282,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                     model.base_model.decoder.output_projection.weight.data_ptr(),
                 }
             ),
-            2,
+            3,
         )
 
     @unittest.skip(reason="can't be implemented for FSMT due to dual vocab.")

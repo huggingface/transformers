@@ -28,7 +28,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3ForCausalLM,
@@ -41,6 +41,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     eager_attention_forward,
 )
 from .configuration_longcat_flash import LongcatFlashConfig
+
 
 logger = logging.get_logger(__name__)
 
