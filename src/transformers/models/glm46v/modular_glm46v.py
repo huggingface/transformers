@@ -83,17 +83,26 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
         timestamps = [i * duration_per_frame for i in range(total_frames)]
         max_second = int(duration)
 
-        frame_indices = []
-        current_second = 0
-        inv_fps = 1 / (self.temporal_patch_size * target_fps)
-        for frame_index in range(total_frames):
-            if timestamps[frame_index] >= current_second:
-                current_second += inv_fps
-                frame_indices.append(frame_index)
-                if current_second >= max_second:
-                    break
+        if total_frames < extract_t:
+            frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
+        else:
+            frame_indices = []
+            current_second = 0
+            inv_fps = 1 / (self.temporal_patch_size * target_fps)
+            for frame_index in range(total_frames):
+                if timestamps[frame_index] >= current_second:
+                    current_second += inv_fps
+                    frame_indices.append(frame_index)
+                    if current_second >= max_second:
+                        break
 
-        if len(frame_indices) > extract_t:
+        if len(frame_indices) < extract_t:
+            if len(frame_indices) == 0:
+                start, end = 0, max(total_frames - 1, 0)
+            else:
+                start, end = frame_indices[0], frame_indices[-1]
+            frame_indices = np.linspace(start, end, extract_t, dtype=int).tolist()
+        elif len(frame_indices) > extract_t:
             frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
 
         seen, uniq = set(), []
