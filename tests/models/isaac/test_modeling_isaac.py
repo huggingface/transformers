@@ -1,7 +1,31 @@
+import base64
+import hashlib
+import io
+import json
+import os
 import unittest
+from functools import lru_cache
+from pathlib import Path
 
-from transformers import IsaacConfig, IsaacForConditionalGeneration, IsaacModel, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+import pytest
+
+from transformers import (
+    AutoProcessor,
+    IsaacConfig,
+    IsaacForConditionalGeneration,
+    IsaacModel,
+    PreTrainedTokenizer,
+    is_torch_available,
+)
+from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
+from transformers.models.isaac.processing_isaac import IsaacProcessor
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import is_offline_mode, is_vision_available
+
+if is_vision_available():
+    from PIL import Image
+else:
+    Image = None
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ids_tensor
@@ -9,6 +33,229 @@ from ...test_modeling_common import ids_tensor
 
 if is_torch_available():
     import torch
+
+try:
+    from perceptron.tensorstream.tensorstream import TensorStream
+except Exception:
+    TensorStream = None
+
+
+tensorstream_required = pytest.mark.skipif(TensorStream is None, reason="TensorStream backend is not available")
+
+MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1-Base")
+LOCAL_CHECKPOINT = os.environ.get("ISAAC_TEST_MODEL_PATH")
+HASH_FILE = Path(__file__).with_name("isaac_checkpoint_hashes.json")
+GENERATION_GOLDEN_FILE = Path(__file__).with_name("isaac_generation_golden.json")
+HASH_FILTERS = {
+    "full_model": {"include": None, "exclude": None},
+    "core_model": {"include": None, "exclude": {"vision_embedding", "audio_embedding", "inv_freq"}},
+    "vision_modules": {"include": {"vision_embedding"}, "exclude": None},
+}
+RED_DOT_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="
+)
+
+
+def _tensor_to_bytes(tensor):
+    cpu_tensor = tensor.detach().cpu().contiguous()
+    if cpu_tensor.is_floating_point():
+        cpu_tensor = cpu_tensor.to(dtype=torch.float32)
+    return cpu_tensor.numpy().tobytes()
+
+
+def _iter_filtered_items(state_dict, include=None, exclude=None):
+    for name, tensor in state_dict.items():
+        if include and not any(token in name for token in include):
+            continue
+        if exclude and any(token in name for token in exclude):
+            continue
+        yield name, tensor
+
+
+def _hash_state_dict(state_dict, *, include=None, exclude=None):
+    hasher = hashlib.sha256()
+    items = sorted(_iter_filtered_items(state_dict, include=include, exclude=exclude), key=lambda kv: kv[0])
+    for name, tensor in items:
+        hasher.update(name.encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update(_tensor_to_bytes(tensor))
+    return hasher.hexdigest()
+
+
+def _hash_tensor(tensor):
+    hasher = hashlib.sha256()
+    hasher.update(_tensor_to_bytes(tensor))
+    return hasher.hexdigest()
+
+
+@lru_cache(maxsize=1)
+def _load_expected_hashes():
+    if not HASH_FILE.exists():
+        return None
+    with HASH_FILE.open("r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+@lru_cache(maxsize=1)
+def _load_generation_golden():
+    if not GENERATION_GOLDEN_FILE.exists():
+        return None
+    with GENERATION_GOLDEN_FILE.open("r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def safe_decode(tokenizer, token_ids):
+    if isinstance(token_ids, torch.Tensor):
+        token_ids = token_ids.tolist()
+    try:
+        text = tokenizer.decode(token_ids, skip_special_tokens=True)
+    except Exception:
+        tokens = tokenizer.convert_ids_to_tokens(token_ids, skip_special_tokens=True)
+        tokens = [tok for tok in tokens if tok is not None]
+        text = tokenizer.convert_tokens_to_string(tokens)
+    return text.strip() if isinstance(text, str) else text
+
+
+@lru_cache(maxsize=1)
+def _load_red_dot_image():
+    if Image is None:
+        return None
+    data = base64.b64decode(RED_DOT_B64)
+    return Image.open(io.BytesIO(data)).convert("RGB")
+
+
+def _reference_checkpoint_or_skip():
+    if TensorStream is None:
+        pytest.skip("TensorStream dependency is required for Isaac integration tests.")
+    if LOCAL_CHECKPOINT:
+        resolved = Path(LOCAL_CHECKPOINT).expanduser()
+        if not resolved.exists():
+            pytest.skip(f"Local checkpoint path {resolved} does not exist.")
+        return str(resolved)
+    if is_offline_mode():
+        pytest.skip("Offline mode: set ISAAC_TEST_MODEL_PATH to a local checkpoint to run these tests.")
+    return MODEL_ID
+
+
+class SimpleIsaacTokenizer(PreTrainedTokenizer):
+    vocab_files_names = {}
+    model_input_names = ["input_ids"]
+
+    def __init__(self):
+        self._vocab = {
+            "<pad>": 0,
+            "<bos>": 1,
+            "<eos>": 2,
+            "<unk>": 3,
+            "<image>": 4,
+        }
+        self._ids_to_tokens = {idx: tok for tok, idx in self._vocab.items()}
+        super().__init__(
+            bos_token="<bos>",
+            eos_token="<eos>",
+            pad_token="<pad>",
+            unk_token="<unk>",
+            additional_special_tokens=["<image>"],
+            model_max_length=512,
+        )
+        self.chat_template = (
+            "{% for message in messages %}"
+            "{{ message['role'] }}: {{ message['content'] | trim }}\n"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}assistant:{% endif %}"
+        )
+
+    def get_vocab(self):
+        return dict(self._vocab)
+
+    def _tokenize(self, text):
+        clean = text.replace("\n", " ").strip()
+        if not clean:
+            return []
+        return [token for token in clean.split(" ") if token]
+
+    def _convert_token_to_id(self, token):
+        if token not in self._vocab:
+            next_id = len(self._vocab)
+            self._vocab[token] = next_id
+            self._ids_to_tokens[next_id] = token
+        return self._vocab[token]
+
+    def _convert_id_to_token(self, index):
+        return self._ids_to_tokens.get(index, self.unk_token)
+
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        if token_ids_1 is not None:
+            token_ids_0 = token_ids_0 + token_ids_1
+        return [self.bos_token_id] + list(token_ids_0) + [self.eos_token_id]
+
+    def save_vocabulary(self, save_directory, filename_prefix=None):
+        return ()
+
+
+def _make_dummy_image(size=(32, 32), color=(255, 0, 0)):
+    if Image is None:
+        raise RuntimeError("PIL.Image is not available in this environment.")
+    return Image.new("RGB", size, color=color)
+
+
+@pytest.fixture
+def isaac_tiny_config():
+    tester = IsaacModelTester(parent=None)
+    return tester.get_config()
+
+
+@pytest.fixture
+def isaac_tokenizer():
+    return SimpleIsaacTokenizer()
+
+
+@pytest.fixture
+def isaac_processor(isaac_tokenizer, isaac_tiny_config):
+    vision_config = isaac_tiny_config.vision_config
+    image_processor = IsaacImageProcessorFast(
+        patch_size=vision_config.patch_size,
+        max_num_patches=vision_config.num_patches,
+        pixel_shuffle_scale=vision_config.pixel_shuffle_scale_factor,
+        rescale_factor=isaac_tiny_config.vision_rescale_factor,
+    )
+    return IsaacProcessor(
+        image_processor=image_processor,
+        tokenizer=isaac_tokenizer,
+        config=isaac_tiny_config,
+    )
+
+
+@pytest.fixture(scope="session")
+def isaac_reference_checkpoint():
+    return _reference_checkpoint_or_skip()
+
+
+@pytest.fixture(scope="session")
+def isaac_reference_model(isaac_reference_checkpoint):
+    try:
+        model = IsaacForConditionalGeneration.from_pretrained(
+            isaac_reference_checkpoint,
+            attn_implementation="sdpa",
+            torch_dtype=torch.float32,
+        )
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f"Unable to load reference Isaac checkpoint from {isaac_reference_checkpoint}") from error
+    model.to("cpu")
+    model.eval()
+    return model
+
+
+@pytest.fixture(scope="session")
+def isaac_reference_processor(isaac_reference_checkpoint):
+    try:
+        processor = AutoProcessor.from_pretrained(isaac_reference_checkpoint)
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f"Unable to load reference Isaac processor from {isaac_reference_checkpoint}") from error
+    print(f"[Isaac tests] Loaded processor type: {type(processor)} from {isaac_reference_checkpoint}")
+    if not isinstance(processor, IsaacProcessor):
+        pytest.skip("Loaded processor is not an IsaacProcessor instance.")
+    return processor
 
 
 class IsaacModelTester:
@@ -143,3 +390,232 @@ class IsaacModelTest(unittest.TestCase):
         self.assertIn("input_ids", prepared_inputs)
         self.assertIn("position_ids", prepared_inputs)
         self.assertIsNone(prepared_inputs["position_ids"])
+
+
+def test_isaac_config_extends_qwen3_defaults(isaac_tiny_config):
+    assert isaac_tiny_config.hidden_size == isaac_tiny_config.text_config.hidden_size
+    assert isaac_tiny_config.num_attention_heads == isaac_tiny_config.text_config.num_attention_heads
+    assert isaac_tiny_config.model_type == "isaac"
+    assert isaac_tiny_config.vision_config is not None
+    assert isaac_tiny_config.vision_config.patch_size == 4
+    assert isaac_tiny_config.vision_config.num_patches == 64
+    assert isaac_tiny_config.max_sequence_length == 16384
+    assert isaac_tiny_config.vision_rescale_factor == pytest.approx(1 / 255)
+    assert isaac_tiny_config.vision_token == "<image>"
+
+
+@require_torch
+def test_isaac_for_conditional_generation_initialization(isaac_tiny_config):
+    model = IsaacForConditionalGeneration(isaac_tiny_config)
+    model.to(torch_device)
+    assert hasattr(model, "model")
+    assert hasattr(model, "lm_head")
+    assert hasattr(model.model, "vision_embedding")
+    assert hasattr(model.model, "embed_fns")
+
+    input_ids = torch.randint(
+        0, isaac_tiny_config.vocab_size, (1, 10), device=torch_device, dtype=torch.long
+    )
+    with torch.no_grad():
+        outputs = model(input_ids=input_ids, return_dict=True)
+    assert outputs.logits.shape == (1, 10, isaac_tiny_config.vocab_size)
+
+
+@require_torch
+def test_isaac_for_conditional_generation_loss_and_generate_flag(isaac_tiny_config):
+    model = IsaacForConditionalGeneration(isaac_tiny_config).to(torch_device)
+    assert model.can_generate()
+
+    batch_size, seq_len = 1, 8
+    input_ids = torch.randint(0, isaac_tiny_config.vocab_size, (batch_size, seq_len), device=torch_device)
+    labels = torch.randint(0, isaac_tiny_config.vocab_size, (batch_size, seq_len), device=torch_device)
+    with torch.no_grad():
+        outputs = model(input_ids=input_ids, labels=labels, return_dict=True)
+    assert outputs.loss is not None
+    assert outputs.loss.ndim == 0
+    assert outputs.logits.shape == (batch_size, seq_len, isaac_tiny_config.vocab_size)
+
+
+@require_torch
+@require_vision
+@tensorstream_required
+def test_isaac_processor_matches_config_defaults(isaac_processor, isaac_tiny_config):
+    assert isaac_processor.vision_token == isaac_tiny_config.vision_token
+    assert isaac_processor.max_sequence_length == isaac_tiny_config.max_sequence_length
+    assert isaac_processor.config is isaac_tiny_config
+    assert isinstance(isaac_processor.image_processor, IsaacImageProcessorFast)
+    assert isaac_processor.image_processor.rescale_factor == pytest.approx(isaac_tiny_config.vision_rescale_factor)
+
+
+@require_torch
+@require_vision
+@tensorstream_required
+def test_isaac_processor_text_only_round_trip(isaac_processor):
+    messages = [{"role": "user", "content": "Hello, how are you?"}]
+    prompt = isaac_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    outputs = isaac_processor(text=prompt, images=None, return_tensors="pt")
+
+    assert "input_ids" in outputs
+    assert "tensor_stream" in outputs
+    assert isinstance(outputs["tensor_stream"], TensorStream)
+    assert outputs["input_ids"].shape[0] == 1
+
+
+@require_torch
+@require_vision
+@tensorstream_required
+def test_isaac_processor_with_single_image(isaac_processor):
+    vision_token = isaac_processor.vision_token
+    text = f"Look at this {vision_token} and describe it."
+    image = _make_dummy_image()
+
+    outputs = isaac_processor(text=text, images=[image], return_tensors="pt")
+    assert isinstance(outputs["tensor_stream"], TensorStream)
+    assert outputs["input_ids"].ndim == 2
+
+
+@require_torch
+@require_vision
+@tensorstream_required
+def test_isaac_processor_with_multiple_images(isaac_processor):
+    vision_token = isaac_processor.vision_token
+    text = f"First {vision_token} then {vision_token}"
+    images = [_make_dummy_image(color=(255, 0, 0)), _make_dummy_image(color=(0, 255, 0))]
+
+    outputs = isaac_processor(text=text, images=images, return_tensors="pt")
+    assert isinstance(outputs["tensor_stream"], TensorStream)
+    assert outputs["input_ids"].shape[0] == 1
+
+
+@require_torch
+@require_vision
+@tensorstream_required
+def test_isaac_processor_error_on_image_mismatch(isaac_processor):
+    vision_token = isaac_processor.vision_token
+    text = f"{vision_token} {vision_token}"
+    image = _make_dummy_image()
+
+    with pytest.raises(ValueError, match="must match number of images"):
+        isaac_processor(text=text, images=[image], return_tensors="pt")
+
+
+@require_torch
+@require_vision
+@tensorstream_required
+def test_isaac_processor_consistent_tensor_stream_types(isaac_processor):
+    text_only = "Simple question?"
+    text_with_image = f"Describe this {isaac_processor.vision_token}"
+    image = _make_dummy_image()
+
+    outputs_text = isaac_processor(text=text_only, images=None, return_tensors="pt")
+    outputs_image = isaac_processor(text=text_with_image, images=[image], return_tensors="pt")
+
+    assert isinstance(outputs_text["tensor_stream"], TensorStream)
+    assert isinstance(outputs_image["tensor_stream"], TensorStream)
+    assert outputs_text["input_ids"].shape[0] == outputs_image["input_ids"].shape[0] == 1
+
+
+@require_torch
+@require_vision
+@tensorstream_required
+def test_isaac_generation_with_tensor_stream(isaac_processor, isaac_tiny_config):
+    model = IsaacForConditionalGeneration(isaac_tiny_config).to(torch_device)
+    model.eval()
+
+    messages = [{"role": "user", "content": "Hello there!"}]
+    prompt = isaac_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    processed = isaac_processor(text=prompt, images=None, return_tensors="pt")
+
+    input_ids = processed["input_ids"].to(torch_device)
+    generated = model.generate(
+        input_ids=input_ids,
+        tensor_stream=processed["tensor_stream"],
+        max_new_tokens=5,
+        do_sample=False,
+        pad_token_id=isaac_processor.tokenizer.pad_token_id,
+        eos_token_id=isaac_processor.tokenizer.eos_token_id,
+    )
+
+    assert generated.shape[0] == 1
+    assert generated.shape[1] >= input_ids.shape[1]
+    decoded_prompt = isaac_processor.tokenizer.decode(generated[0], skip_special_tokens=True)
+    assert isinstance(decoded_prompt, str)
+    assert decoded_prompt.strip() != ""
+
+
+@require_torch
+@slow
+@tensorstream_required
+def test_isaac_checkpoint_hashes(isaac_reference_model):
+    expected_hashes = _load_expected_hashes()
+    if not expected_hashes:
+        pytest.skip(f"Missing golden hashes file at {HASH_FILE}.")
+
+    missing = [subset for subset in HASH_FILTERS if subset not in expected_hashes]
+    if missing:
+        pytest.skip(f"Golden hashes missing entries for: {', '.join(missing)}")
+
+    isaac_reference_model.to("cpu")
+    state_dict = isaac_reference_model.state_dict()
+    for subset, filters in HASH_FILTERS.items():
+        current_hash = _hash_state_dict(state_dict, include=filters["include"], exclude=filters["exclude"])
+        assert current_hash == expected_hashes[subset], f"Hash mismatch for subset '{subset}'"
+
+
+@require_torch
+@require_vision
+@slow
+@tensorstream_required
+def test_hf_generate_vs_training_generate_logits(isaac_reference_model, isaac_reference_processor):
+    golden = _load_generation_golden()
+    if not golden:
+        pytest.skip(f"Missing generation golden file at {GENERATION_GOLDEN_FILE}.")
+
+    image = _load_red_dot_image()
+    if image is None:
+        pytest.skip("PIL.Image is required for Isaac generation tests.")
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe this image:"},
+                {"type": "image", "image": image},
+            ],
+        }
+    ]
+    prompt = isaac_reference_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    batch = isaac_reference_processor(text=prompt, images=[image], return_tensors="pt")
+
+    input_ids = batch["input_ids"]
+    tensor_stream = batch["tensor_stream"]
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    isaac_reference_model.to(device)
+    input_ids = input_ids.to(device)
+    if tensor_stream is not None and hasattr(tensor_stream, "to"):
+        tensor_stream = tensor_stream.to(device)
+
+    torch.manual_seed(0)
+    with torch.no_grad():
+        outputs = isaac_reference_model.generate(
+            input_ids=input_ids,
+            tensor_stream=tensor_stream,
+            max_new_tokens=10,
+            do_sample=False,
+            pad_token_id=isaac_reference_processor.tokenizer.eos_token_id,
+            eos_token_id=isaac_reference_processor.tokenizer.eos_token_id,
+            return_dict_in_generate=True,
+            output_logits=True,
+        )
+
+    logits = torch.cat(outputs.logits, dim=0).to(torch.float32).cpu()
+    logits_hash = _hash_tensor(logits)
+    generated_ids = outputs.sequences[0].tolist()
+    decoded_text = safe_decode(isaac_reference_processor.tokenizer, outputs.sequences[0])
+
+    assert logits_hash == golden["logits_hash"], "Generated logits hash mismatch"
+    assert generated_ids == golden["token_ids"], "Generated token ids changed"
+    assert decoded_text == golden["decoded_text"], "Decoded text changed"
+
+    isaac_reference_model.to("cpu")
