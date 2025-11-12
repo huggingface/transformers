@@ -731,11 +731,6 @@ class PackedColwiseParallel(ColwiseParallel):
         rank = rank if rank is not None else self.rank
         return get_packed_weights(param, empty_param, device_mesh, rank, -2).to(param_casting_dtype), [Shard(-2)]
 
-    def create_nn_parameter(
-        self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh
-    ):
-        return nn.Parameter(param, requires_grad=param.is_floating_point())
-
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where

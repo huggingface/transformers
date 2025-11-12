@@ -4235,7 +4235,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         keys = sorted(device_map.keys(), key=len, reverse=True)
         tp_plan = getattr(model, "_tp_plan", None)
         error_msgs = []
-        misc = {}
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
