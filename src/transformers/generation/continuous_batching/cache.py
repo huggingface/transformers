@@ -359,7 +359,7 @@ class PagedAttentionCache:
         return len(allocated_blocks) * self.block_size
 
     def mark_blocks_as_completed(self, state: RequestState) -> None:
-        """Marks the blocks that have been computed in the forward pass as such. If prefix sharing is off, this is a
+        """Marks the blocks that have been computed in the forward pass as completed. If prefix sharing is off, this is a
         no-op."""
         num_completed_blocks = 0 if not self.use_prefix_sharing else self.blocks_to_complete.pop(state.request_id)
         if num_completed_blocks == 0:
