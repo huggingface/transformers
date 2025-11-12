@@ -573,14 +573,14 @@ class ContinuousBatchProcessor:
                 # Update the request and stop if it is complete
                 is_finished = state.update_and_check_completion(token)
                 # We mark the completed blocks as such
-                self.cache.mark_blocks_as_completed(state)
+                self.cache.mark_blocks_as_complete(state)
                 if is_finished:
                     self.metrics.record_request_completion(state.created_time, state.request_id)
                     self.scheduler.finish_request(state.request_id, evict_from_cache=(not self.manual_eviction))
                 self._maybe_send_output(state)
             #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING_SPLIT:
-                self.cache.mark_blocks_as_completed(state)
+                self.cache.mark_blocks_as_complete(state)
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
             # DEBUG: there is a dangling if, but idk if it ever happens. Adding an error to catch it.
             else:

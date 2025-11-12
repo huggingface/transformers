@@ -30,10 +30,10 @@ def reverse_enumerate(xs: list[T]) -> Iterator[tuple[int, T]]:
 
 
 class Block:
-    """A class to represent a block in the hash table of the block manager. We say that a block is completed when the KV
-    cache it points to is fully computed, otherwise it is partial. A block can have a parent, which is the block that
-    came before in the sequence. Once a block is computed, it is given a hash, which takes into account the tokens ids 
-    of the block and its parent's hash."""
+    """A class to represent a block managed by the block manager. We say that a block is complete when the physical KV
+    cache it points to is fully computed. A block can have a parent, which is the block that came before in the
+    sequence. Once a block is complete, it is given a hash, which takes into account the tokens ids of the block and 
+    its parent's hash (if there is a parent)."""
 
     def __init__(self, id_: int, parent_id: int | None) -> None:
         self.id: int = id_
@@ -50,10 +50,25 @@ class Block:
 
 
 class BlockManager:
-    """A class to manage the number of free blocks and block re-use."""
+    """A class to manage the number of free blocks and block re-use. If prefix sharing is off, the block manager is a
+    simple FIFO structure where blocks are either free or in use. If prefix sharing is on, blocks can have 3 states:
+      - in use: one or more requests references this block, thus it cannot be written over. The number of requests
+        referencing this block is stored as ref_count in the Block object.
+      - un-initialized: the block points to a space in the KV cache tensor that contains no data yet. Those blocks can
+        be given as free blocks to new requests without any overhead.
+      - initialized: the block is complete and was used by one or more request that are finished. It contains KV cache
+        data and its hash is stored in the hash table. If a new request needs a block with the same hash, we increase
+        the ref_count of the block and remove it from the list of initialized blocks, because it is now in use.
+        Still, the block can be freed if no un-initialized blocks are left. In that case, we remove its hash from the
+        hash table.
+    There is no structure to keep track of the blocks in use: if a block is neither un-initialized nor initialized,
+    it is in use.
+    """
 
     def __init__(self, num_blocks: int, block_size: int, use_prefix_sharing: bool) -> None:
-        """Initializes the block manager with a given number of blocks (num_blocks)"""
+        """Initializes the block manager with a given number of blocks (num_blocks) of size (block_size). Prefix sharing
+        can be turned on with the (use_prefix_sharing) flag, which only happens if the model has only full attention
+        layers."""
         self.num_blocks = num_blocks
         self.block_size = block_size
         self._uninit_block_ids = deque(range(num_blocks))
@@ -64,10 +79,12 @@ class BlockManager:
 
     @property
     def num_free_blocks(self) -> int:
-        """Returns the number of free blocks left."""
+        """Returns the number of free blocks left. Both initialized and uninitialized blocks are considered free."""
         return len(self._uninit_block_ids) + len(self._init_block_ids)
 
     def is_enough_free_blocks(self, n_blocks: int) -> bool:
+        """Checks if there are enough free blocks to allocate the requested number of blocks (n_blocks). If there are
+        not enough uninitialized blocks, we uninitialize the required number of initialized blocks."""
         # Exit early if there are enough uninitialized blocks
         if len(self._uninit_block_ids) >= n_blocks:
             return True
@@ -84,7 +101,9 @@ class BlockManager:
         return True
 
     def get_free_blocks(self, n_blocks: int, last_block_id: int | None) -> list[int] | None:
-        """Returns a free block and mark it as used by removing it from the free blocks queue."""
+        """Returns a list of (n_blocks) free block and mark them as no longuer free in the internal data structures. One
+        can also pass a (last_block_id) to indicate the last block id in the sequence, which is used to keep track of
+        the parent block. If the manager cannot find enough free blocks, it returns None."""
         if not self.is_enough_free_blocks(n_blocks):
             return None
         allocated_block_ids = [self._uninit_block_ids.popleft() for _ in range(n_blocks)]
@@ -98,14 +117,15 @@ class BlockManager:
         return allocated_block_ids
 
     def increase_ref_count(self, block_id: int) -> None:
-        """Increases the reference count of a block."""
+        """Increases the reference count of a given (block_id)."""
         block = self._id_to_block[block_id]
         block.ref_count += 1
         if block.ref_count == 1:
             self._init_block_ids.pop(block_id)
 
     def decrease_ref_count(self, block_id: int) -> None:
-        """Decreases the reference count of a block."""
+        """Decreases the reference count of a given (block_id). If the reference count reaches 0, the block is no longer
+        in use, and becomes initialized (if it was complete) or uninitialized (if it was incomplete)."""
         block = self._id_to_block[block_id]
         block.ref_count -= 1
         if block.ref_count == 0:
@@ -116,8 +136,8 @@ class BlockManager:
                 self._uninit_block_ids.append(block_id)
 
     def free_blocks(self, blocks: list[int]) -> None:
-        """Marks a list of blocks as free. If there is no prefix sharing, we simply add them to the uninitialized blocks
-        queue. Otherwise, we mark them as initalized but they can be freed in no uninitialized blocks are lefts."""
+        """Marks a list of (blocks) as free. If there is no prefix sharing, we simply add them to the uninitialized
+        blocks queue. Otherwise, their new state depends on whether they are complete."""
         if self._use_prefix_sharing:
             for block_id in blocks:
                 self.decrease_ref_count(block_id)
@@ -125,13 +145,12 @@ class BlockManager:
             self._uninit_block_ids.extend(blocks)
 
 
-    def mark_blocks_as_computed(
-        self,
-        num_completed_blocks: int,
-        allocated_blocks: list[int],
-        prompt_ids: list[int]
+    def mark_blocks_as_complete(
+        self, num_complete_blocks: int, allocated_blocks: list[int], prompt_ids: list[int]
     ) -> None:
-        # Look for the first complete block, starting from the last block
+        """Among the list of (allocated_blocks), mark (num_complete_blocks) incomplete blocks as now complete. The list
+        of (prompt_ids) is used to compute the hash of the new block."""
+        # Look for the first complete block, starting from the last block in the sequence
         parent_hash = None
         incomplete_blocks: list[Block] = []
         for i, block_id in reverse_enumerate(allocated_blocks):
@@ -152,11 +171,11 @@ class BlockManager:
                 new_parent_id = None
 
             # If we have set the hash for all complete blocks, we can stop
-            if num_completed_blocks == 0:
+            if num_complete_blocks == 0:
                 break
 
             # Otherwise, we compute the hash
-            num_completed_blocks -= 1
+            num_complete_blocks -= 1
             tokens = prompt_ids[i * self.block_size : (i + 1) * self.block_size]
             block.hash = self.compute_hash(parent_hash, tokens)
 
@@ -177,6 +196,8 @@ class BlockManager:
             parent_hash = block.hash
 
     def compute_hash(self, parent_hash: int | None, tokens: list[int]) -> int:
+        """Computes the hash of a block containing the given (tokens) with a given (parent_hash). If the block has no
+        parent, the parent hash is None."""
         return hash((parent_hash, tuple(tokens)))
 
 class CacheAllocator(ABC):
@@ -188,11 +209,11 @@ class CacheAllocator(ABC):
 
     @abstractmethod
     def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
-        """Allocates n_blocks for a given request_id. Returns the num of blocks allocated if successful and None
-        otherwise."""
+        """Allocates (n_blocks) for a given (request_id) using the (block_manager). Returns the num of blocks allocated
+        if successful and None otherwise."""
 
     def free_blocks(self, request_id: str, block_manager: BlockManager) -> None:
-        """Frees all blocks associated with a request_id."""
+        """Frees all blocks associated with a (request_id) using the (block_manager)."""
         if request_id in self.block_table:
             blocks_to_free = self.block_table.pop(request_id)
             block_manager.free_blocks(blocks_to_free)
@@ -227,8 +248,9 @@ class FullAttentionCacheAllocator(CacheAllocator):
         self.block_table = {}
 
     def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
-        """Allocate blocks for a given request_id. Returns the number of blocks allocated if successful and None
-        otherwise. For group of full attention layers, we always allocate the number of requested blocks."""
+        """Allocate (n_blocks) for a given (request_id) using the (block_manager). Returns the number of blocks
+        allocated if successful and None otherwise. For group of full attention layers, we always allocate the number of
+        requested blocks."""
         # Make sure the request_id is in the block table and get the first block id
         if request_id not in self.block_table:
             self.block_table[request_id] = []  # TODO: check the impact of making this a deque
@@ -296,9 +318,9 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         self.block_table = {}
 
     def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
-        """Allocate blocks for a given request_id. Returns the number of blocks allocated if successful and None
-        otherwise. For group of sliding window attention layers, we only allocate up to the point where we can fit an
-        entire sliding window in the cache tensor."""
+        """Allocate (n_blocks) for a given (request_id) using the (block_manager). Returns the number of blocks
+        allocated otherwise. For group of sliding window attention layers, we only allocate up to the point where we can
+        fit an entire sliding window in the cache tensor."""
         if request_id not in self.block_table:
             self.block_table[request_id] = []
         # Early return if we are already at the max number of blocks per request

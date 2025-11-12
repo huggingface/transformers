@@ -123,7 +123,8 @@ class PagedAttentionCache:
         dtype: torch.dtype = torch.float16,
         tp_size: Optional[int] = None,
     ) -> None:
-        """Initialize a paged attention cache for efficient memory usage.
+        """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
+        only full attention layers.
 
         Args:
             config: Model configuration
@@ -340,6 +341,9 @@ class PagedAttentionCache:
         return key_states_with_cache, value_states_with_cache
 
     def search_prefix_match(self, request_id: str, prompt_ids: list[int]) -> int:
+        """Searches for a prefix match in the cache for the given (prompts_ids). If one is found, we reference the
+        matching blocks in the (request_id), increase the reference count of the blocks and return the number of blocks
+        that match. If no prefix match is found, we return 0."""
         current_hash = None
         allocated_blocks = []
         for b in range(len(prompt_ids) // self.block_size):
@@ -358,15 +362,15 @@ class PagedAttentionCache:
             cm.block_table[request_id] = allocated_blocks
         return len(allocated_blocks) * self.block_size
 
-    def mark_blocks_as_completed(self, state: RequestState) -> None:
-        """Marks the blocks that have been computed in the forward pass as completed. If prefix sharing is off, this is a
-        no-op."""
-        num_completed_blocks = 0 if not self.use_prefix_sharing else self.blocks_to_complete.pop(state.request_id)
-        if num_completed_blocks == 0:
+    def mark_blocks_as_complete(self, state: RequestState) -> None:
+        """Marks the blocks that have been computed in the forward pass as complete. If prefix sharing is off, this is
+        a no-op."""
+        num_complete_blocks = 0 if not self.use_prefix_sharing else self.blocks_to_complete.pop(state.request_id)
+        if num_complete_blocks == 0:
             return None
         cm = self.group_cache_managers[0]  # if prefix sharing is on, there is only one group
-        self._block_manager.mark_blocks_as_computed(
-            num_completed_blocks=num_completed_blocks,
+        self._block_manager.mark_blocks_as_complete(
+            num_complete_blocks=num_complete_blocks,
             allocated_blocks=cm.block_table[state.request_id],
             prompt_ids=(state.full_prompt_ids + state.static_outputs),
         )

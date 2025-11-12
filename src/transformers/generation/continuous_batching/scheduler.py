@@ -127,7 +127,8 @@ class Scheduler(ABC):
     def _prepare_request_for_processing(
         self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: set[str]
     ) -> None:
-        """Prepares a request for processing in the current batch."""
+        """Prepares a request for processing in the current batch. If prefix sharing is enabled, and the request was
+        pending, this is where we look for a prefix match and split the request if found."""
         # If prefix sharing is enabled, we look for a prefix match and split the request if found
         if self.cache.use_prefix_sharing and state.status == RequestStatus.PENDING:
             prefill_length = self.cache.search_prefix_match(state.request_id, state.prompt_ids)
@@ -228,8 +229,8 @@ class FIFOScheduler(Scheduler):
             if self.cache.use_prefix_sharing:
                 tokens_in_current_block = state.current_len() % self.cache.block_size
                 tokens_after_forward = tokens_in_current_block + request_len
-                computed_blocks = tokens_after_forward // self.cache.block_size
-                self.cache.blocks_to_complete[state.request_id] = computed_blocks
+                complete_blocks = tokens_after_forward // self.cache.block_size
+                self.cache.blocks_to_complete[state.request_id] = complete_blocks
 
             # Remove the request from the waiting queue and mark it as removed
             req_id = state.request_id
@@ -294,8 +295,8 @@ class PrefillFirstScheduler(Scheduler):
             if self.cache.use_prefix_sharing:
                 tokens_in_current_block = state.current_len() % self.cache.block_size
                 tokens_after_forward = tokens_in_current_block + request_len
-                computed_blocks = tokens_after_forward // self.cache.block_size
-                self.cache.blocks_to_complete[state.request_id] = computed_blocks
+                complete_blocks = tokens_after_forward // self.cache.block_size
+                self.cache.blocks_to_complete[state.request_id] = complete_blocks
 
             # Remove the request from the waiting queue and mark it as removed
             req_id = state.request_id
