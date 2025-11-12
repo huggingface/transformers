@@ -174,7 +174,6 @@ class BridgeTowerTextConfig(PreTrainedConfig):
         use_cache=True,
         **kwargs,
     ):
-
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

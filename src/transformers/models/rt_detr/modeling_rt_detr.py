@@ -1040,7 +1040,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
 
-            if not getattr(module.sampling_offsets.bias, "_is_hf_initialized", False) :
+            if not getattr(module.sampling_offsets.bias, "_is_hf_initialized", False):
                 module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
             nn.init.constant_(module.attention_weights.weight, 0.0)
             nn.init.constant_(module.attention_weights.bias, 0.0)
@@ -1821,7 +1821,9 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         super().__init__(config)
         self.model = RTDetrModel(config)
         num_pred = config.decoder_layers
-        self.model.decoder.class_embed = nn.ModuleList([torch.nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)])
+        self.model.decoder.class_embed = nn.ModuleList(
+            [torch.nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)]
+        )
         self.model.decoder.bbox_embed = nn.ModuleList(
             [RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3) for _ in range(num_pred)]
         )
