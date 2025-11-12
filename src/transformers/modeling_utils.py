@@ -472,7 +472,7 @@ def _get_tied_weight_keys(module: nn.Module) -> list[str]:
     for name, submodule in module.named_modules():
         tied = getattr(submodule, "_tied_weights_keys", {}) or {}
         tied_weights_dict = list(tied.keys())
-        tied_weights_dict.extend(tied.values())
+        # tied_weights_dict.extend(tied.values())
         tied_weight_keys.extend([f"{name}.{k}" if name else k for k in tied_weights_dict])
     return tied_weight_keys
 
