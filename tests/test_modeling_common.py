@@ -810,9 +810,10 @@ class ModelTesterMixin:
 
                 if getattr(model, "_tied_weights_keys", None):
                     keys_to_ignore.update(set(model._tied_weights_keys))
-
-                self.assertTrue(len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys_to_ignore)
-                self.assertTrue(len(load_result.unexpected_keys) == 0)
+                with self.subTest(model=model_class.__name__):
+                    self.assertTrue(len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys_to_ignore, msg=
+                                    f"Missing keys: {load_result.missing_keys}\nKeys to ignore: {keys_to_ignore}")
+                    self.assertTrue(len(load_result.unexpected_keys) == 0)
 
     def test_gradient_checkpointing_backward_compatibility(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

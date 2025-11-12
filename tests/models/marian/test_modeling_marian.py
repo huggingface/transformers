@@ -271,6 +271,7 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
         # check if embeddings are shared by default
         for model_class in self.all_model_classes:
+            config.share_encoder_decoder_embeddings = True
             model = model_class(config)
             self.assertIs(model.get_encoder().embed_tokens, model.get_decoder().embed_tokens)
             self.assertIs(model.get_encoder().embed_tokens.weight, model.get_decoder().embed_tokens.weight)
