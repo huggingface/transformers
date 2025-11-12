@@ -510,10 +510,10 @@ def set_param_for_module(
                     shape=ref.size(),
                     stride=ref.stride(),
                 )
-            if not use_dtensor:
+                if not use_dtensor:
                     # we convert to local
                     param_value = param_value.to_local()
-            
+
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
@@ -680,7 +680,7 @@ def convert_and_load_state_dict_in_model(
                             if op := converter.quantization_operation:
                                 with log_to_misc(layer_name, misc, op=op):
                                     realized_value.update(
-                                        op.convert({k: realized_value.pop(k)}, model=model)
+                                        op.convert({k: realized_value.pop(k)}, model=model, missing_keys=missing_keys)
                                     )
 
                         for k, output_value in realized_value.items():

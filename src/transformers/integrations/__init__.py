@@ -123,6 +123,7 @@ _import_structure = {
         "quantize_to_mxfp4",
         "replace_with_mxfp4_linear",
         "swizzle_mxfp4",
+        "Mxfp4Quantize",
     ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
@@ -258,6 +259,7 @@ if TYPE_CHECKING:
     )
     from .mxfp4 import (
         Mxfp4GptOssExperts,
+        Mxfp4Quantize,
         dequantize,
         load_and_swizzle_mxfp4,
         quantize_to_mxfp4,
