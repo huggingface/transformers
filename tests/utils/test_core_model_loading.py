@@ -80,7 +80,7 @@ class TestWeightGlobMatching(unittest.TestCase):
             "model.layers.*.mlp.*.weight",  # broader (first)
             "model.layers.0.mlp.gate_up_proj.weight",  # more specific (second)
         ]
-        alt, mapping = build_glob_alt(globs, digits_only=False)
+        alt, mapping = build_glob_alt(globs)
 
         # Both branches match; Python's regex picks the leftmost alternative → index 0
         self.assertEqual(
@@ -111,8 +111,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         )
 
     def test_anchor_full_match_only(self):
-        # Make sure partial strings don't match—anchors ^...$ are in each branch
-        self.assertIsNone(match_glob("foo.model.layers.0.mlp.gate_up_proj.weight.bar", self.alt_any, self.map_any))
+        self.assertIsNone(match_glob("model.layers.0.mlp.gate_up_proj.weight.bar", self.alt_any, self.map_any))
 
     def test_large_batch_performance_smoke(self):
         # Not a perf benchmark, but ensures building and matching a larger alternation is OK
@@ -122,18 +121,6 @@ class TestWeightGlobMatching(unittest.TestCase):
         )
         key = "model.layers.123.mlp.block57.weight"
         self.assertEqual(match_glob(key, alt, mapping), "model.layers.*.mlp.block57.weight")
-
-
-class TestGlobRegexHelpers(unittest.TestCase):
-    def test_glob_to_regex_src_digits_only(self):
-        pattern = _glob_to_regex_src(
-            "model.layers.*.mlp.weight",
-        )
-        self.assertEqual(pattern, r"model\.layers\.(\d+)\.mlp\.weight")
-
-    def test_glob_to_regex_src_any_chars(self):
-        pattern = _glob_to_regex_src("model.layers.*.mlp.weight", digits_only=False)
-        self.assertEqual(pattern, r"model\.layers\.(.+)\.mlp\.weight")
 
 
 class DummyParamModule(nn.Module):
@@ -210,13 +197,13 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         weight_mapping = [
             WeightConverter(
-                ["model.layers.*.experts.*.w1.weight", "model.layers.*.experts.*.w3.weight"],
-                "model.layers.*.experts.gate_up_proj.weight",
+                ["experts.*.w1.weight", "experts.*.w3.weight"],
+                "experts.gate_up_proj.weight",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                "model.layers.*.experts.*.w2.weight",
-                "model.layers.*.experts.down_proj.weight",
+                "experts.*.w2.weight",
+                "experts.down_proj.weight",
                 operations=[MergeModulelist(dim=0)],
             ),
             WeightConverter(
