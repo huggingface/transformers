@@ -48,7 +48,7 @@ jobs:
             - run: mkdir -p test_preparation
             - run: git branch
             - run: git log -n 2
-            - run: uv venv && uv pip install .[dev]
+#            - run: uv venv && uv pip install .[dev]
 #            - run: python3 -m pytest --collect-only --no-header --no-summary -q tests > all_tests.txt
 #            - run: ls -l all_tests.txt
 #            - run: tail -10 all_tests.txt
