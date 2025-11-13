@@ -601,8 +601,8 @@ def convert_and_load_state_dict_in_model(
         _dtype = dtype
         new_target_key = []  # test_load_with_mismatched_shapes for AutoModel.from_pretrained(AutoForCausal, vocab=10)
         for t in target_key.split("|"):
-            if t.startswith(prefix) and meta_model_state_dict.get(t.replace(f"{prefix}.", "")) is not None:
-                t = t.replace(f"{prefix}.", "")
+            if t.startswith(prefix) and meta_model_state_dict.get(re.sub(f"^{prefix}.", "", t, count=1)) is not None:
+                t = re.sub(f"^{prefix}.", "", t, count=1)
             elif meta_model_state_dict.get(f"{prefix}.{t}") is not None:
                 t = f"{prefix}.{t}"
             new_target_key.append(t)
