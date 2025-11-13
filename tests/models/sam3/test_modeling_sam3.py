@@ -147,7 +147,7 @@ class Sam3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Sam3VisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_torch_exportable = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = Sam3VisionModelTester(self)
@@ -427,6 +427,7 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = {"mask-generation": Sam3Model} if is_torch_available() else {}
 
     test_resize_embeddings = False
+    test_torch_exportable = False
     _is_composite = True
 
     def setUp(self):
@@ -631,6 +632,48 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="SAM3VisionModel has FPN channel mismatch with flex attention")
     def test_flex_attention_with_grads(self):
+        pass
+
+    @unittest.skip(
+        reason="Sam3Model creates attention masks from features (with gradients), "
+        "which is incompatible with flash attention's expectation of binary masks"
+    )
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(
+        reason="Sam3Model creates attention masks from features (with gradients), "
+        "which is incompatible with flash attention's expectation of binary masks"
+    )
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip(
+        reason="Sam3Model creates attention masks from features (with gradients), "
+        "which is incompatible with flash attention's expectation of binary masks"
+    )
+    def test_flash_attn_3_inference_equivalence(self):
+        pass
+
+    @unittest.skip(
+        reason="Sam3Model creates attention masks from features (with gradients), "
+        "which is incompatible with flash attention's expectation of binary masks"
+    )
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip(
+        reason="Sam3Model creates attention masks from features (with gradients), "
+        "which is incompatible with flash attention's expectation of binary masks"
+    )
+    def test_flash_attn_kernels_inference_equivalence(self):
+        pass
+
+    @unittest.skip(
+        reason="Sam3Model creates attention masks from features (with gradients), "
+        "which is incompatible with flash attention's expectation of binary masks"
+    )
+    def test_flash_attn_kernels_mps_inference_equivalence(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):

@@ -137,30 +137,6 @@ Use multiple boxes with positive and negative labels to refine segmentation:
 ... )[0]
 ```
 
-### Point Prompts
-
-Segment objects using point clicks:
-
-```python
->>> # Points in image coordinates
->>> img_width, img_height = image.size
->>> point1 = [img_width * 0.3, img_height * 0.3]  # Click on object
->>> point2 = [img_width * 0.4, img_height * 0.35]  # Refine with second click
-
->>> input_points = [[point1, point2]]
->>> input_points_labels = [[1, 1]]  # Both positive clicks
-
->>> inputs = processor(
-...     images=image,
-...     input_points=input_points,
-...     input_points_labels=input_points_labels,
-...     return_tensors="pt"
-... ).to(device)
-
->>> with torch.no_grad():
-...     outputs = model(**inputs)
-```
-
 ### Combined Prompts (Text + Negative Box)
 
 Use text prompts with negative visual prompts to exclude specific regions:
@@ -288,7 +264,6 @@ SAM3 uses the following label conventions:
 
 **Coordinate formats:**
 - **Input boxes**: `[x1, y1, x2, y2]` (xyxy format) in pixel coordinates
-- **Input points**: `[x, y]` in image pixel coordinates
 - **Output boxes** (raw): `[x1, y1, x2, y2]` (xyxy format), normalized to [0, 1]
 - **Output boxes** (post-processed): `[x1, y1, x2, y2]` (xyxy format) in absolute pixel coordinates
 
