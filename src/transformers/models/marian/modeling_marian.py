@@ -844,6 +844,7 @@ class MarianModel(MarianPreTrainedModel):
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]
+
     def __init__(self, config: MarianConfig):
         super().__init__(config)
 
@@ -1052,7 +1053,6 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
                 "model.decoder.embed_tokens.weight": "model.shared.weight",
                 "model.encoder.embed_tokens.weight": "model.shared.weight",
             }
-
 
         target_vocab_size = config.vocab_size if config.share_encoder_decoder_embeddings else config.decoder_vocab_size
         self.register_buffer("final_logits_bias", torch.zeros((1, target_vocab_size)))

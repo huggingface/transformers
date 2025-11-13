@@ -16,6 +16,7 @@ import unittest
 import torch
 import torch.nn as nn
 
+from transformers import PretrainedConfig
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
@@ -25,7 +26,6 @@ from transformers.core_model_loading import (
     convert_and_load_state_dict_in_model,
     match_glob,
 )
-from transformers import PretrainedConfig
 
 
 class TestWeightGlobMatching(unittest.TestCase):
@@ -222,8 +222,15 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model, state_dict, weight_mapping, tp_plan=None, quantizer=None
         )
 
-        self.assertEqual(missing, set(['model.layers.1.self_attn.k_proj.weight', 'model.layers.1.self_attn.v_proj.weight', 'model.layers.1.self_attn.q_proj.weight']))
-        self.assertEqual(unexpected, set(['model.layers.1.self_attn.qkv_proj.weight']))
+        self.assertEqual(
+            missing,
+            {
+                    "model.layers.1.self_attn.k_proj.weight",
+                    "model.layers.1.self_attn.v_proj.weight",
+                    "model.layers.1.self_attn.q_proj.weight",
+                },
+        )
+        self.assertEqual(unexpected, {"model.layers.1.self_attn.qkv_proj.weight"})
         self.assertEqual(mismatch, set())
         self.assertEqual(misc, {})
 

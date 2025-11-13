@@ -175,7 +175,7 @@ if is_torch_available():
         def forward(self, x):
             return self.linear_2(self.linear(x))
 
-        def tie_weights(self):
+        def tie_weights(self, missing_keys=None):
             self.linear_2.weight = self.linear.weight
 
     class ModelWithHead(PreTrainedModel):

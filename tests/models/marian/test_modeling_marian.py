@@ -274,7 +274,11 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             config.share_encoder_decoder_embeddings = True
             config.tie_encoder_decoder = True
             model = model_class(config)
-            self.assertIs(model.get_encoder().embed_tokens.weight, model.get_decoder().embed_tokens.weight, msg=f"Failed for {model_class}")
+            self.assertIs(
+                model.get_encoder().embed_tokens.weight,
+                model.get_decoder().embed_tokens.weight,
+                msg=f"Failed for {model_class}",
+            )
 
         # check if embeddings are not shared when config.share_encoder_decoder_embeddings = False
         config.share_encoder_decoder_embeddings = False
@@ -282,8 +286,14 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config.tie_word_embeddings = False
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsNot(model.get_encoder().embed_tokens, model.get_decoder().embed_tokens,  msg=f"Failed for {model_class}")
-            self.assertIsNot(model.get_encoder().embed_tokens.weight, model.get_decoder().embed_tokens.weight,  msg=f"Failed for {model_class}")
+            self.assertIsNot(
+                model.get_encoder().embed_tokens, model.get_decoder().embed_tokens, msg=f"Failed for {model_class}"
+            )
+            self.assertIsNot(
+                model.get_encoder().embed_tokens.weight,
+                model.get_decoder().embed_tokens.weight,
+                msg=f"Failed for {model_class}",
+            )
 
         # check if a model with shared embeddings can be saved and loaded with share_encoder_decoder_embeddings = False
         config, _ = self.model_tester.prepare_config_and_inputs()

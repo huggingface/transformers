@@ -162,11 +162,10 @@ class Chunk(ConversionOps):
         self.reverse_op = Concatenate
 
     def convert(self, value: torch.Tensor, *args, **kwargs) -> list[torch.Tensor]:
-        if not isinstance(value, torch.Tensor):
-            raise TypeError("Chunk expects a torch.Tensor as input.")
-        if self.sizes is not None:
-            return list(torch.split(value, self.sizes, dim=self.dim))
-        return list(torch.chunk(value, self.chunks, dim=self.dim))
+        # chunk requires a single tensor input
+        if len(value) != 1 or len(value[0]) != 1:
+            raise ValueError("Chunk operation requires a single tensor input.")
+        return list(torch.chunk(value[0][0], self.chunks, dim=self.dim))
 
 
 class Concatenate(ConversionOps):
