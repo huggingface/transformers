@@ -481,9 +481,28 @@ class TestTensorParallelDense4Proc(TestTensorParallelDenseBase):
 
 
 # ====== MOE MODEL TEST FUNCTIONS ======
+def _get_tiny_moe_config():
+    """Create a tiny MoE config for testing."""
+    from transformers import Qwen3MoeConfig
+
+    model_id = "Qwen/Qwen3-30B-A3B-Base"
+    
+    # Create a tiny MoE config to reduce model size for testing
+    config = Qwen3MoeConfig.from_pretrained(model_id)
+    config.num_hidden_layers = 2  # Reduce from 24 to 2
+    config.num_experts = 4  # Reduce from 128 to 4
+    config.num_experts_per_tok = 2  # Reduce from 8 to 2
+    config.hidden_size = 512  # Reduce from 2048 to 512
+    config.intermediate_size = 1536  # Reduce from 6144 to 1536
+    config.moe_intermediate_size = 256  # Reduce from 768 to 256
+    config.num_attention_heads = 8  # Reduce from 32 to 8
+    config.num_key_value_heads = 2  # Reduce from 4 to 2
+    
+    return config
+
 def _test_model_moe_forward_impl(rank, mode):
     """Implementation for comparing TP and non-TP MoE model outputs."""
-    model_id = "Qwen/Qwen3-0.6B"
+    model_id = "Qwen/Qwen3-30B-A3B-Base"
 
     # Ensure same random seed for reproducibility
     torch.manual_seed(0)
@@ -493,8 +512,11 @@ def _test_model_moe_forward_impl(rank, mode):
     prompt = "Can I help"
     inputs = tokenizer(prompt, return_tensors="pt")
 
+    # Create a tiny MoE config for testing
+    config = _get_tiny_moe_config()
+
     # Load TP model first to determine device
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
+    model_tp = AutoModelForCausalLM.from_config(config, dtype="auto", tp_plan="auto")
     dist.barrier()
     if mode == "eval":
         model_tp.eval()
@@ -503,7 +525,7 @@ def _test_model_moe_forward_impl(rank, mode):
 
     # Load non-TP model and move to same device as TP model
     device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+    model = AutoModelForCausalLM.from_config(config, dtype="auto")
     model = model.to(device)
 
     if mode == "eval":
@@ -534,16 +556,17 @@ def _test_model_moe_forward_impl(rank, mode):
 
 def _test_model_moe_backward_pass_impl(rank):
     """Implementation for comparing TP and non-TP MoE model backward passes."""
-    model_id = "Qwen/Qwen3-0.6B"
-
     torch.manual_seed(0)
 
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
+    # Create a tiny MoE config for testing
+    config = _get_tiny_moe_config()
+
+    model_tp = AutoModelForCausalLM.from_config(config, dtype="auto", tp_plan="auto")
     dist.barrier()
     model_tp.train()
 
     device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
+    model = AutoModelForCausalLM.from_config(config, dtype="auto")
     model = model.to(device)
     model.train()
 
@@ -590,7 +613,7 @@ def _test_model_moe_backward_pass_impl(rank):
 
 def _test_model_moe_forward_compile_impl(rank, mode):
     """Implementation for comparing TP and non-TP MoE model outputs with torch.compile."""
-    model_id = "Qwen/Qwen3-0.6B"
+    model_id = "Qwen/Qwen3-30B-A3B-Base"
 
     torch.manual_seed(0)
 
@@ -598,7 +621,10 @@ def _test_model_moe_forward_compile_impl(rank, mode):
     prompt = "Can I help"
     inputs = tokenizer(prompt, return_tensors="pt")
 
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
+    # Create a tiny MoE config for testing
+    config = _get_tiny_moe_config()
+
+    model_tp = AutoModelForCausalLM.from_config(config, dtype="auto", tp_plan="auto")
     dist.barrier()
     if mode == "eval":
         model_tp.eval()
@@ -606,7 +632,7 @@ def _test_model_moe_forward_compile_impl(rank, mode):
         model_tp.train()
 
     device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+    model = AutoModelForCausalLM.from_config(config, dtype="auto")
     model = model.to(device)
 
     if mode == "eval":
@@ -636,16 +662,16 @@ def _test_model_moe_forward_compile_impl(rank, mode):
 
 def _test_model_moe_save_impl(rank, tmp_dir):
     """Implementation of test_model_save for MoE model distributed execution."""
-    model_id = "Qwen/Qwen3-0.6B"
-
+    # Create a tiny MoE config for testing
+    config = _get_tiny_moe_config()
+    
     if dist.is_initialized():
         kwargs = {"tp_plan": "auto"}
         result_dir = f"{tmp_dir}/tp"
     else:
         kwargs = {}
         result_dir = f"{tmp_dir}/nontp"
-
-    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
+    model = AutoModelForCausalLM.from_config(config, dtype="auto", **kwargs)
     model.save_pretrained(result_dir)
 
 
