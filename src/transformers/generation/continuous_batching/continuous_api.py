@@ -1058,6 +1058,7 @@ class ContinuousMixin:
         max_queue_size: int = 0,
         num_q_cuda_graphs: int = 0,
         num_kv_cuda_graphs: int = 0,
+        allow_prefix_sharing: bool = True,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
 
@@ -1090,6 +1091,7 @@ class ContinuousMixin:
             max_queue_size=max_queue_size,
             num_q_cuda_graphs=num_q_cuda_graphs,
             num_kv_cuda_graphs=num_kv_cuda_graphs,
+            allow_prefix_sharing=allow_prefix_sharing,
         )
 
     # TODO: support streaming

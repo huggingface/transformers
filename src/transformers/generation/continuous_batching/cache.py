@@ -235,6 +235,7 @@ class PagedAttentionCache:
         self.use_prefix_sharing = allow_prefix_sharing and group_types == ["full_attention"]
         self._block_manager = BlockManager(num_blocks, self.block_size, self.use_prefix_sharing)
         self.blocks_to_complete: dict[str, int] = {}
+        self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
 
     @traced
     def allocate_blocks(self, n_blocks: int, state: RequestState) -> int:
@@ -364,7 +365,10 @@ class PagedAttentionCache:
             logger.debug(f"Found prefix match for request {request_id} with {len(allocated_blocks)} blocks")
             cm = self.group_cache_managers[0]
             cm.block_table[request_id] = allocated_blocks
-        return len(allocated_blocks) * self.block_size
+
+        prefix_length = len(allocated_blocks) * self.block_size
+        self._total_prefix_length += prefix_length
+        return prefix_length
 
     def mark_blocks_as_complete(self, state: RequestState) -> None:
         """Marks the blocks that have been computed in the forward pass as complete. If prefix sharing is off, this is
