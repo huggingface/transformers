@@ -206,7 +206,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "Glm4vMoe_text"
+    model_type = "glm4v_moe_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `Glm4vMoe`
     base_model_tp_plan = {
