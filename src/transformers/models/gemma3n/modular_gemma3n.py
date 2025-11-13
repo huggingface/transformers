@@ -187,7 +187,7 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         sliding_window: int = 512,
@@ -1703,7 +1703,7 @@ class Gemma3nTextAttention(Gemma3Attention):
         super().__init__(config, layer_idx)
         self.is_causal = True
         del self.attn_logit_softcapping
-        del self.scaling
+        self.scaling = 1.0
         self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
         first_kv_shared_layer_idx = self.config.num_hidden_layers - self.config.num_kv_shared_layers
@@ -1782,7 +1782,7 @@ class Gemma3nTextAttention(Gemma3Attention):
             value_states,
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
-            scaling=1.0,
+            scaling=self.scaling,
             sliding_window=self.sliding_window,
             **kwargs,
         )
@@ -1872,18 +1872,18 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
 
 class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     config: Gemma3nConfig
-    base_model_prefix = ""
     input_modalities = ["image", "text", "audio"]
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, Gemma3nAudioAttention):
-            module.per_dim_scale.data.zero_()
+            module.per_dim_scale.zero_()
         elif isinstance(module, Gemma3nTextAltUp):
-            module.correct_output_scale.data.zero_()
+            module.correct_output_scale.zero_()
 
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")

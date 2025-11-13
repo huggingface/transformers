@@ -245,19 +245,20 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
     input_modalities = "image"
     _no_split_modules = ["PoolFormerLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.GroupNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, PoolFormerLayer):
             if hasattr(module, "layer_scale_1"):
-                module.layer_scale_1.data.fill_(self.config.layer_scale_init_value)
-                module.layer_scale_2.data.fill_(self.config.layer_scale_init_value)
+                module.layer_scale_1.fill_(self.config.layer_scale_init_value)
+                module.layer_scale_2.fill_(self.config.layer_scale_init_value)
 
 
 @auto_docstring

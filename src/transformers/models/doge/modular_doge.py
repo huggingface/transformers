@@ -146,9 +146,9 @@ class DogeConfig(PreTrainedConfig):
         "layers.*.self_attn.dt_proj": "rowwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.input_layernorm.weight": "sequence_parallel",
-        "layers.*.input_residual.weight": "sequence_parallel",
+        "layers.*.input_residual": "sequence_parallel",
         "layers.*.post_attention_layernorm.weight": "sequence_parallel",
-        "layers.*.post_attention_residual.weight": "sequence_parallel",
+        "layers.*.post_attention_residual": "sequence_parallel",
         "norm.weight": "sequence_parallel",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
@@ -176,7 +176,7 @@ class DogeConfig(PreTrainedConfig):
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
         max_position_embeddings: Optional[int] = 2048,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         num_attention_heads: Optional[int] = 8,
         num_key_value_heads: Optional[int] = None,
         attention_bias: Optional[bool] = False,
@@ -540,17 +540,18 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
         "attentions": DogeAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DogeAttention):
             if hasattr(module, "A"):
-                module.A.data.zero_()
+                module.A.zero_()
         elif isinstance(module, DogeDecoderLayer):
             if hasattr(module, "input_residual"):
-                module.input_residual.data.fill_(1.0)
+                module.input_residual.fill_(1.0)
             if hasattr(module, "post_attention_residual"):
-                module.post_attention_residual.data.fill_(1.0)
+                module.post_attention_residual.fill_(1.0)
 
 
 class DogeModel(MixtralModel):

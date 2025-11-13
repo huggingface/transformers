@@ -399,13 +399,14 @@ class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DiffLlamaAttention):
-            module.lambda_q1.data.normal_(0, self.config.lambda_std_dev)
-            module.lambda_k1.data.normal_(0, self.config.lambda_std_dev)
-            module.lambda_q2.data.normal_(0, self.config.lambda_std_dev)
-            module.lambda_k2.data.normal_(0, self.config.lambda_std_dev)
+            module.lambda_q1.normal_(0, self.config.lambda_std_dev)
+            module.lambda_k1.normal_(0, self.config.lambda_std_dev)
+            module.lambda_q2.normal_(0, self.config.lambda_std_dev)
+            module.lambda_k2.normal_(0, self.config.lambda_std_dev)
 
 
 class DiffLlamaModel(LlamaModel):

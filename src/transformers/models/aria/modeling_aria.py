@@ -585,10 +585,11 @@ class AriaTextPreTrainedModel(PreTrainedModel):
         "attentions": AriaTextAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, AriaGroupedExpertsGemm):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -608,6 +609,7 @@ class AriaPreTrainedModel(PreTrainedModel):
         "attentions": AriaTextAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, AriaProjector):
@@ -760,7 +762,7 @@ class AriaTextModel(AriaTextPreTrainedModel):
 
 @auto_docstring
 class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
@@ -890,8 +892,6 @@ class AriaModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class AriaModel(AriaPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
-
     def __init__(self, config: AriaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -1048,12 +1048,12 @@ class AriaModel(AriaPreTrainedModel):
 )
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^language_model.lm_head": "lm_head",
+        r"^language_model.model": "model.language_model",
+        r"^vision_tower": "model.vision_tower",
+        r"^multi_modal_projector": "model.multi_modal_projector",
+        r"^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)

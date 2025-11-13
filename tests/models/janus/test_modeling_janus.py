@@ -396,6 +396,10 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    @unittest.skip("Janus VQ module has no gradient checkpointing layers")
+    def test_gradient_checkpointing_enable_disable(self):
+        pass
+
 
 class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -509,6 +513,12 @@ class JanusIntegrationTest(unittest.TestCase):
                     897, 4044, 1762, 4676
                 ],
                 ("cuda", None): [
+                    4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
+                    13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
+                    15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,
+                    897, 4044, 1762, 4676
+                ],
+                ("xpu", None): [
                     4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
                     13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
                     15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,

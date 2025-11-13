@@ -265,7 +265,7 @@ class Qwen3VLMoeTextExperts(nn.Module):
         self.intermediate_size = config.moe_intermediate_size
         self.hidden_size = config.hidden_size
         self.expert_dim = self.intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
+        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size, 2 * self.expert_dim))
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
         self.act_fn = ACT2FN[config.hidden_act]
 
@@ -358,6 +358,7 @@ class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
     config: Qwen3VLMoeConfig
     _no_split_modules = ["Qwen3VLMoeTextDecoderLayer", "Qwen3VLMoeVisionBlock"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         PreTrainedModel._init_weights(self, module)
@@ -366,8 +367,8 @@ class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
         else:
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
         if isinstance(module, Qwen3VLMoeTextExperts):
-            module.gate_up_proj.data.normal_(mean=0.0, std=std)
-            module.down_proj.data.normal_(mean=0.0, std=std)
+            module.gate_up_proj.normal_(mean=0.0, std=std)
+            module.down_proj.normal_(mean=0.0, std=std)
 
 
 class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):
