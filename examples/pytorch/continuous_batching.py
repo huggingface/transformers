@@ -251,7 +251,7 @@ if __name__ == "__main__":
             "Math and reasonning problems are very important to the world. This is a problem, and then you will find the answer.\n",
             "We all know that reasonning can be taught by answering questions, often illustrated with examples. Here is one and its solution, hopefully you will enjoy it!\n",
             "Reasonning a very good metric of intelligence, hence it is regularly trained and tested in both children and AI model like LLMs. This test can look like a math or a logical problem, a riddle or pattern detection task. For instance, this is one of those test. You will find it and the solution associated after. Here it goes:\n",
-        ] # fmt: skip
+        ]  # fmt: skip
         return random.choice(prefixes)
 
     random.seed(0)

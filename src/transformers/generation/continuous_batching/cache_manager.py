@@ -21,7 +21,9 @@ from typing import Optional, TypeVar
 from .requests import logger
 
 
-T = TypeVar('T')
+T = TypeVar("T")
+
+
 def reverse_enumerate(xs: list[T]) -> Iterator[tuple[int, T]]:
     index = len(xs) - 1
     for x in xs[::-1]:
@@ -32,7 +34,7 @@ def reverse_enumerate(xs: list[T]) -> Iterator[tuple[int, T]]:
 class Block:
     """A class to represent a block managed by the block manager. We say that a block is complete when the physical KV
     cache it points to is fully computed. A block can have a parent, which is the block that came before in the
-    sequence. Once a block is complete, it is given a hash, which takes into account the tokens ids of the block and 
+    sequence. Once a block is complete, it is given a hash, which takes into account the tokens ids of the block and
     its parent's hash (if there is a parent)."""
 
     def __init__(self, id_: int, parent_id: int | None) -> None:
@@ -144,7 +146,6 @@ class BlockManager:
         else:
             self._uninit_block_ids.extend(blocks)
 
-
     def mark_blocks_as_complete(
         self, num_complete_blocks: int, allocated_blocks: list[int], prompt_ids: list[int]
     ) -> None:
@@ -200,6 +201,7 @@ class BlockManager:
         parent, the parent hash is None."""
         return hash((parent_hash, tuple(tokens)))
 
+
 class CacheAllocator(ABC):
     """Abstract base class for cache managers. Cache managers keep track of per-request cache allocations, determine
     when a new physical block needs to be allocated and compute physical indices for reading or writing to the cache."""
@@ -233,6 +235,7 @@ class CacheAllocator(ABC):
     @abstractmethod
     def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
         """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
+
 
 class FullAttentionCacheAllocator(CacheAllocator):
     """Cache manager for a group of full attention layers."""

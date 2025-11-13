@@ -563,7 +563,6 @@ class ContinuousBatchProcessor:
         """Update request states based on generated tokens."""
         out_tokens = self._sync()
         for i, state in enumerate(self.requests_in_batch):
-
             # If the request has no remaining prompt ids, it means prefill has already ended or just finished
             if len(state.remaining_prompt_ids) == 0:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
@@ -584,7 +583,6 @@ class ContinuousBatchProcessor:
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
             else:
                 raise ValueError(f"Request {state.request_id} is in an unexpected state: {state.status}")
-
 
         if self.cache.get_num_free_blocks() == 0:
             raise ValueError("No more free blocks")

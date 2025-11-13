@@ -228,7 +228,7 @@ class PagedAttentionCache:
             self.group_cache_managers.append(cm)
 
         # We only use prefix sharing if the whole model has only full attention layers
-        self.use_prefix_sharing = (group_types == ["full_attention"])
+        self.use_prefix_sharing = group_types == ["full_attention"]
         self._block_manager = BlockManager(num_blocks, self.block_size, self.use_prefix_sharing)
         self.blocks_to_complete: dict[str, int] = {}
 
