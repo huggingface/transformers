@@ -17,9 +17,9 @@ from typing import Optional, Union
 
 import numpy as np
 
+from ...configuration_utils import PreTrainedConfig
 from ...video_utils import VideoMetadata
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ...configuration_utils import PreTrainedConfig
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
 from ..glm4v.image_processing_glm4v_fast import Glm4vImageProcessorFast
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vModel, Glm4vPreTrainedModel
@@ -62,6 +62,7 @@ class Glm46VConfig(PreTrainedConfig):
         self.image_end_token_id = image_end_token_id
 
         super().__init__(**kwargs)
+
 
 class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
     _can_record_outputs = None
