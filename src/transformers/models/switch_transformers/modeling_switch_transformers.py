@@ -943,9 +943,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
             self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1102,9 +1099,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
             self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1251,9 +1245,6 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
             self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     @check_model_inputs()

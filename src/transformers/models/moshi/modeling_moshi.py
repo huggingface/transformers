@@ -1624,9 +1624,6 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         self.num_codebooks = config.num_codebooks
         self.post_init()
 
-    def get_audio_encoder(self):
-        return self.audio_encoder
-
     def get_depth_decoder(self):
         return self.depth_decoder
 

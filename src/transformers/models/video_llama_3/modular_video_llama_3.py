@@ -750,13 +750,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
     def __init__(self, config: VideoLlama3Config):
         super().__init__(config)  # just to add type hint on config
 
-    def visual(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
-    @property
-    def vision_model(self):
-        return self.model.vision_model
-
     @can_return_tuple
     @auto_docstring
     def forward(

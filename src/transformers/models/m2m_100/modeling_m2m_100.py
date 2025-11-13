@@ -948,9 +948,6 @@ class M2M100Model(M2M100PreTrainedModel):
             self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
             self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1054,12 +1051,6 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @auto_docstring
     def forward(

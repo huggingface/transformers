@@ -1520,9 +1520,6 @@ class Florence2Model(LlavaModel):
     def get_encoder(self):
         return self.language_model.get_encoder()
 
-    def get_decoder(self):
-        return self.language_model.get_decoder()
-
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -1629,9 +1626,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         "model.language_model.decoder.embed_tokens.weight",
         "lm_head.weight",
     ]
-
-    def get_encoder(self):
-        return self.model.get_encoder()
 
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)

@@ -1441,9 +1441,6 @@ class DetaModel(DetaPreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     def freeze_backbone(self):
         for name, param in self.backbone.model.named_parameters():
             param.requires_grad_(False)

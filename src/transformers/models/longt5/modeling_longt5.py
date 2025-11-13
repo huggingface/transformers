@@ -1633,9 +1633,6 @@ class LongT5Model(LongT5PreTrainedModel):
             self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
             self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1800,9 +1797,6 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         if self.config.tie_word_embeddings:
             self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
             self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     def forward(
@@ -1977,9 +1971,6 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
             self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     def forward(
