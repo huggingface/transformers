@@ -329,7 +329,7 @@ from torchao.dtypes import Int4XPULayout
 from torchao.quantization.quant_primitives import ZeroPointDomain
 
 
-quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4XPULayout(), zero_point_domain=ZeroPointDomain.INT)
+quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4XPULayout(), zero_point_domain=ZeroPointDomain.INT, int4_packing_format="plain_int32")
 quantization_config = TorchAoConfig(quant_type=quant_config)
 
 # Load and quantize the model
@@ -342,7 +342,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -395,7 +395,7 @@ from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 from torchao.quantization import Int4WeightOnlyConfig
 from torchao.dtypes import Int4CPULayout
 
-quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4CPULayout())
+quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4CPULayout(), int4_packing_format="opaque")
 quantization_config = TorchAoConfig(quant_type=quant_config)
 
 # Load and quantize the model

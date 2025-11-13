@@ -177,6 +177,42 @@ def prepare_padding_mask(
     return local_padding_mask
 
 
+def _can_skip_causal_mask_xpu(
+    padding_mask: Optional[torch.Tensor],
+    query_length: int,
+    kv_length: int,
+    local_attention_size: Optional[int],
+) -> bool:
+    """
+    XPU-specific logic for determining if we can skip causal mask creation.
+
+    For XPU devices, we have special handling:
+    - Single query tokens (query_length == 1) use the same logic as CUDA
+    - Multi-query tokens can skip if padding_mask is provided and correctly structured
+      The mask must have all True values in the query window and all False after
+    """
+
+    if is_tracing(padding_mask):
+        return False
+
+    # Check local attention constraint (same as CUDA)
+    if local_attention_size is not None and kv_length >= local_attention_size:
+        return False
+
+    if padding_mask is None:
+        # Without padding mask, can skip if single query token or full causal attention
+        return query_length == 1 or kv_length == query_length
+
+    # XPU allows skipping under additional conditions when padding_mask is provided
+    if query_length == 1:
+        # Single query token: skip only if no padding tokens present
+        return padding_mask.all()
+
+    # XPU-specific: check if query window is all True and rest is all False
+    # This allows XPU to optimize the 1st token in static cache
+    return padding_mask[:, :query_length].all() and not padding_mask[:, query_length:].any()
+
+
 def _ignore_causal_mask_sdpa(
     padding_mask: Optional[torch.Tensor],
     query_length: int,
@@ -197,6 +233,12 @@ def _ignore_causal_mask_sdpa(
         mask_indices += kv_offset
         padding_mask = padding_mask[:, mask_indices]
 
+    if _is_torch_xpu_available:
+        # XPU devices have special handling for mask skipping:
+        # - Single query tokens use the same logic as CUDA
+        # - Multi-query tokens can skip if padding_mask is provided and correctly structured
+        #   (all True in query window, all False after)
+        return _can_skip_causal_mask_xpu(padding_mask, query_length, kv_length, local_attention_size)
     # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
@@ -204,18 +246,11 @@ def _ignore_causal_mask_sdpa(
     if (
         not is_tracing(padding_mask)
         # only cases when lower and upper diags are the same, see https://github.com/pytorch/pytorch/issues/108108
-        and (query_length == 1 or (kv_length == query_length or _is_torch_xpu_available))
+        and (query_length == 1 or kv_length == query_length)
         # in this case we need to add special patterns to the mask so cannot be skipped otherwise
         and (local_attention_size is None or kv_length < local_attention_size)
         # In this case, we need to add padding to the mask, so cannot be skipped otherwise
-        and (
-            padding_mask is None
-            or (
-                padding_mask.all()
-                if not _is_torch_xpu_available or query_length == 1
-                else padding_mask[:, :query_length].all()
-            )
-        )
+        and (padding_mask is None or padding_mask.all())
     ):
         return True
 
@@ -698,9 +733,19 @@ def _preprocess_mask_arguments(
     # If using a cache, it can give all information about mask sizes based on seen tokens
     if past_key_values is not None:
         kv_length, kv_offset = past_key_values.get_mask_sizes(cache_position, layer_idx)
-    # Otherwise, the sizes are simply the input sizes
+    # Otherwise, we infer based on our input
     else:
-        kv_length, kv_offset = input_embeds.shape[1], 0
+        # 1. Rely on input directly
+        if attention_mask is None:
+            kv_length, kv_offset = input_embeds.shape[1], 0
+        # 2. Rely on the mask instead - needed for special cases like prefix tuning in PEFT
+        #
+        # This is a very unique and special case where an encoder utilizes a cache and expects its length
+        # to be accounted for (usually, they should never use a cache). In general, the mask should always
+        # match with the input sizes nonetheless (i.e. it does not affect others).
+        # Conclusion: "prefix tuning is evil"
+        else:
+            kv_length, kv_offset = attention_mask.shape[-1], 0
 
     # We check the position_ids for potential packed sequence format (only if the 2D attention mask is explicitly None,
     # and we don't have past_key_values, i.e. generally a training setup)
