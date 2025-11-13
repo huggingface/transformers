@@ -178,3 +178,7 @@ class FPQuantHfQuantizer(HfQuantizer):
             return True
         else:
             return False
+
+    def get_quantize_ops(self):
+        from ..integrations.fp_quant import FpQuantQuantize
+        return FpQuantQuantize(self)

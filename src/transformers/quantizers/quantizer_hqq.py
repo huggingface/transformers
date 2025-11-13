@@ -269,3 +269,7 @@ class HqqHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return True
+
+    def get_quantize_ops(self):
+        from ..integrations.hqq import HqqQuantize
+        return HqqQuantize(self)

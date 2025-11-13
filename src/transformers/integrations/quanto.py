@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name
 from ..utils import is_optimum_quanto_available, is_torch_available, logging
 
 
@@ -20,6 +22,20 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+class QuantoQuantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, **kwargs) -> dict[str, torch.Tensor]:
+        target_key, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+
+        from ..modeling_utils import _load_parameter_into_model
+        _load_parameter_into_model(model, target_key, param_value)
+        module, _ = get_module_from_name(model, param_name)
+        module.freeze()
+        module.weight.requires_grad = False
+        return {target_key: module.weight}
 
 def replace_with_quanto_layers(
     model,

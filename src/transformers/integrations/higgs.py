@@ -35,6 +35,8 @@ if is_flute_available():
 if is_hadamard_available():
     from fast_hadamard_transform import hadamard_transform
 
+from ..core_model_loading import ConversionOps
+
 
 def pad_to_block(tensor, dims, had_block_size, value=0):
     pad_dims = [0 for _ in range(2 * len(tensor.shape))]
@@ -438,6 +440,38 @@ def get_higgs_grid(p: int, n: int) -> "torch.Tensor":
     else:
         raise NotImplementedError(f"Unsupported p={p}, n={n}")
 
+
+class HiggsQuantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, **kwargs) -> dict[str, torch.Tensor]:
+        target_key, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+
+        flute_dict = quantize_with_higgs(
+            value,
+            self.hf_quantizer.quantization_config.bits,
+            self.hf_quantizer.quantization_config.p,
+            self.hf_quantizer.quantization_config.group_size,
+            self.hf_quantizer.quantization_config.hadamard_size,
+        )
+        del value
+
+        quantized_dict = {}
+        module, _ = get_module_from_name(model, target_key)
+        module_name = target_key.rsplit(".", 1)[0]
+        for key, value in flute_dict.items():
+            if key in module._parameters:
+                quantized_dict[module_name + "." + key] = torch.nn.Parameter(value, requires_grad=False)
+            elif key in module._buffers:
+                quantized_dict[module_name + "." + key] = torch.nn.Buffer(value)
+            elif key == "tune_metadata":
+                module.tune_metadata = value
+                self.hf_quantizer.quantization_config.tune_metadata[module_name] = value.to_dict()
+            else:
+                raise ValueError(f"Unexpected key {key} in module {module}")
+        return quantized_dict
 
 def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256, hadamard_size: int = 1024):
     assert len(weight.shape) == 2, "Only 2D weights are supported for now"
