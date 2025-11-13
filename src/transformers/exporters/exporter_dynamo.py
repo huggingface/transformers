@@ -26,7 +26,6 @@ from .utils import (
     raise_on_unsupported_model,
     register_dynamic_cache_for_export,
     register_encoder_decoder_cache_for_export,
-    warn_on_unsupported_cache_class,
 )
 
 
@@ -65,7 +64,6 @@ class DynamoExporter(HfExporter):
             `ExportedProgram`: The exported model.
         """
         raise_on_unsupported_model(model)
-        warn_on_unsupported_cache_class(model)
         model, sample_inputs = prepare_inputs_for_export(model, sample_inputs)
 
         dynamic_shapes = self.export_config.dynamic_shapes

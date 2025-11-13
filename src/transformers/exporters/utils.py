@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 import importlib
 import inspect
 from collections.abc import Callable
@@ -134,7 +133,22 @@ def register_encoder_decoder_cache_for_export():
             raise
 
 
-# Inputs preparation utilities
+# Inputs utilities
+MODEL_TYPES_WITH_UNSUPPORTED_CACHE_CLASS: set[str] = {
+    "falcon_mamba",
+    "jamba",
+    "lfm2",
+    "lfm2_moe",
+    "mamba",
+    "mamba2",
+    "minimax",
+    "qwen3_next",
+    "reformer",
+    "xlstm",
+    "zamba2",
+}
+
+
 def prepare_inputs_for_export(
     model: "PreTrainedModel", sample_inputs: dict[str, torch.Tensor | Cache]
 ) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache]]:
@@ -145,21 +159,27 @@ def prepare_inputs_for_export(
             )
             setattr(model.config, output_flag, sample_inputs.pop(output_flag))
 
+    if model.config.model_type in MODEL_TYPES_WITH_UNSUPPORTED_CACHE_CLASS:
+        if getattr(model.config, "use_cache", False):
+            logger.warning(
+                f"Model type '{model.config.model_type}' is known to use a cache class that is not supported for export. "
+                "We will set 'use_cache=False' for the export but the exported model won't support kv caching functionalities."
+            )
+            setattr(model.config, "use_cache", False)
+
     if (
         getattr(model.config, "use_cache", False)
         and not getattr(model.config, "is_encoder_decoder", False)
         and "past_key_values" in inspect.signature(model.forward).parameters
-        and model.config.model_type not in UNSUPPORTED_CACHE_CLASS_MODEL_TYPES
         and "past_key_values" not in sample_inputs
     ):
         logger.info(
             "Detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
             "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
-            "You can also provide past_key_values in sample_inputs to avoid this step."
+            "You can also provide past_key_values in sample_inputs to skip this step."
         )
         with torch.no_grad():
-            # to avoid any in-place modifications of sample_inputs
-            dummy_outputs = model(**copy.deepcopy(sample_inputs))
+            dummy_outputs = model(**sample_inputs)
 
         if hasattr(dummy_outputs, "past_key_values"):
             if isinstance(dummy_outputs.past_key_values, DynamicCache):
@@ -672,27 +692,3 @@ def raise_on_unsupported_model(model: "PreTrainedModel"):
         raise NotImplementedError(
             f"Dynamo export is not supported for model class '{model.__class__.__name__}' with model_type '{model.config.model_type}'."
         )
-
-
-UNSUPPORTED_CACHE_CLASS_MODEL_TYPES: set[str] = {
-    "falcon_mamba",
-    "jamba",
-    "lfm2",
-    "lfm2_moe",
-    "mamba",
-    "mamba2",
-    "minimax",
-    "qwen3_next",
-    "reformer",
-    "xlstm",
-    "zamba2",
-}
-
-
-def warn_on_unsupported_cache_class(model: "PreTrainedModel"):
-    if model.config.model_type in UNSUPPORTED_CACHE_CLASS_MODEL_TYPES:
-        logger.warning(
-            f"Model class '{model.__class__.__name__}' with model_type '{model.config.model_type}' uses a cache class that is not yet fully supported for export. "
-            "We will set 'use_cache=False' during export, but some functionalities may be limited."
-        )
-        model.config.use_cache = False
