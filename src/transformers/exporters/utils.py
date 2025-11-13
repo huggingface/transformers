@@ -221,8 +221,6 @@ def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str
                 "Only torch.Tensor, DynamicCache, int, float, bool, str, dict, list, tuple, and set are supported."
             )
 
-    print("final dynamic_shapes:", dynamic_shapes)
-
     return dynamic_shapes
 
 
