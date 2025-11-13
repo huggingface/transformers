@@ -21,6 +21,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from .... import initialization as init
 from ....activations import ACT2FN
 from ....cache_utils import Cache
 from ....modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
@@ -28,7 +29,6 @@ from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ....modeling_utils import PreTrainedModel
 from ....utils import add_start_docstrings, logging, replace_return_docstrings
-from .... import initialization as init
 from .configuration_speech_to_text_2 import Speech2Text2Config
 
 

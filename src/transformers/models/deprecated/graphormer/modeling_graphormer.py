@@ -22,6 +22,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from .... import initialization as init
 from ....activations import ACT2FN
 from ....modeling_outputs import (
     BaseModelOutputWithNoAttention,
@@ -29,7 +30,6 @@ from ....modeling_outputs import (
 )
 from ....modeling_utils import PreTrainedModel
 from ....utils import logging
-from .... import initialization as init
 from .configuration_graphormer import GraphormerConfig
 
 

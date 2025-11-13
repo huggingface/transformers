@@ -22,6 +22,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from .... import initialization as init
 from ....activations import ACT2FN
 from ....cache_utils import Cache
 from ....modeling_outputs import (
@@ -41,7 +42,6 @@ from ....utils import (
     logging,
     replace_return_docstrings,
 )
-from .... import initialization as init
 from .configuration_mega import MegaConfig
 
 
