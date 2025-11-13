@@ -104,6 +104,7 @@ from transformers.utils import (
     CONFIG_NAME,
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
+    WEIGHTS_NAME,
     is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
@@ -3945,6 +3946,109 @@ class ModelTesterMixin:
                         self.assertEqual(k1, k2)
                         self.assertEqual(v1.dtype, v2.dtype)
                         self.assertTrue((v1 == v2).all())
+
+
+class TestMissingKeyInitialization:
+    @require_torch
+    def test_missing_linear_bias_does_not_override_weight(self):
+        from transformers import BertConfig, BertForSequenceClassification
+
+        config = BertConfig(
+            hidden_size=8, num_attention_heads=2, num_hidden_layers=1, num_labels=2, intermediate_size=16
+        )
+        model = BertForSequenceClassification(config)
+        with torch.no_grad():
+            sentinel = torch.arange(model.classifier.weight.numel(), dtype=torch.float32).view_as(
+                model.classifier.weight
+            )
+            model.classifier.weight.copy_(sentinel)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname, safe_serialization=False)
+            weights_file = os.path.join(tmpdirname, WEIGHTS_NAME)
+
+            state_dict = torch.load(weights_file)
+            expected_weight = state_dict["classifier.weight"].clone()
+            state_dict.pop("classifier.bias")
+            torch.save(state_dict, weights_file)
+
+            reloaded = BertForSequenceClassification.from_pretrained(tmpdirname)
+
+        torch.testing.assert_close(reloaded.classifier.weight, expected_weight)
+        torch.testing.assert_close(reloaded.classifier.bias, torch.zeros_like(reloaded.classifier.bias))
+
+    @require_torch
+    def test_missing_tied_decoder_weight_preserves_embeddings(self):
+        from transformers import BertConfig, BertForMaskedLM, BertModel
+
+        config = BertConfig(
+            hidden_size=8, num_attention_heads=2, num_hidden_layers=1, num_labels=2, intermediate_size=16
+        )
+        base_model = BertModel(config)
+        with torch.no_grad():
+            sentinel = torch.arange(base_model.embeddings.word_embeddings.weight.numel(), dtype=torch.float32).view_as(
+                base_model.embeddings.word_embeddings.weight
+            )
+            base_model.embeddings.word_embeddings.weight.copy_(sentinel)
+            expected_embeddings = base_model.embeddings.word_embeddings.weight.detach().clone()
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            base_model.save_pretrained(tmpdirname)
+            mlm_model = BertForMaskedLM.from_pretrained(tmpdirname)
+
+        decoder_weight = mlm_model.cls.predictions.decoder.weight
+        word_embeddings = mlm_model.bert.embeddings.word_embeddings.weight
+
+        torch.testing.assert_close(decoder_weight, expected_embeddings)
+        torch.testing.assert_close(word_embeddings, expected_embeddings)
+        assert decoder_weight.data_ptr() == word_embeddings.data_ptr()
+
+    @require_torch
+    def test_missing_linear_bias_preserves_weight_custom_model(self):
+        import torch
+        from torch import nn
+
+        from transformers import PreTrainedConfig, PreTrainedModel
+
+        class _CustomConfig(PreTrainedConfig):
+            model_type = "custom-missing-bias"
+
+            def __init__(self, hidden_size=4, **kwargs):
+                super().__init__(**kwargs)
+                self.hidden_size = hidden_size
+
+        class _CustomModel(PreTrainedModel):
+            config_class = _CustomConfig
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.linear = nn.Linear(config.hidden_size, config.hidden_size)
+                self.post_init()
+
+            def forward(self, x):
+                return self.linear(x)
+
+        config = _CustomConfig(hidden_size=4)
+        model = _CustomModel(config)
+        with torch.no_grad():
+            sentinel = torch.arange(model.linear.weight.numel(), dtype=torch.float32).view_as(model.linear.weight)
+            model.linear.weight.copy_(sentinel)
+            model.linear.bias.zero_()
+
+        reloaded = _CustomModel(config)
+        with torch.no_grad():
+            reloaded.linear.weight.copy_(sentinel)
+            reloaded.linear.bias.zero_()
+
+        reloaded.linear.weight._is_hf_initialized = True
+        if hasattr(reloaded.linear.bias, "_is_hf_initialized"):
+            delattr(reloaded.linear.bias, "_is_hf_initialized")
+        reloaded.linear._is_hf_initialized = False
+
+        reloaded._initialize_missing_keys(["linear.bias"], is_quantized=False)
+
+        torch.testing.assert_close(reloaded.linear.weight, sentinel)
+        torch.testing.assert_close(reloaded.linear.bias, torch.zeros_like(reloaded.linear.bias))
 
 
 global_rng = random.Random()
