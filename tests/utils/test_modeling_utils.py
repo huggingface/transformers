@@ -1818,6 +1818,8 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue(model.training)
 
         # We can also disable the cache to skip a few operations, if the training loop doesn't need cache
+        # NOTE: after #41900, we need to pass the correct attention mask size
+        model_inputs["attention_mask"] = model_inputs["attention_mask"][:, :-num_virtual_tokens]
         model_outputs = model(**model_inputs, use_cache=False)
         self.assertIsNone(model_outputs.past_key_values)
         self.assertTrue(model.training)
