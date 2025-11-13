@@ -336,24 +336,25 @@ class DbrxPreTrainedModel(PreTrainedModel):
         "attentions": DbrxAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, DbrxExpertGLU):
-            module.w1.data.normal_(mean=0.0, std=std)
-            module.v1.data.normal_(mean=0.0, std=std)
-            module.w2.data.normal_(mean=0.0, std=std)
+            module.w1.normal_(mean=0.0, std=std)
+            module.v1.normal_(mean=0.0, std=std)
+            module.w2.normal_(mean=0.0, std=std)
 
 
 @auto_docstring
@@ -451,7 +452,7 @@ class DbrxModel(DbrxPreTrainedModel):
 
 
 class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

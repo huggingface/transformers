@@ -455,6 +455,7 @@ class TimesformerPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["TimesformerLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)

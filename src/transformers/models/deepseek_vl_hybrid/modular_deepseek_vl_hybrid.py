@@ -216,21 +216,22 @@ class DeepseekVLHybridAligner(nn.Module):
 
 
 class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.text_config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.text_config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, DeepseekVLHybridLayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         elif isinstance(module, DeepseekVLHybridModel):
-            module.high_res_vision_alpha.data.zero_()
+            module.high_res_vision_alpha.zero_()
 
 
 class DeepseekVLHybridModel(DeepseekVLModel):

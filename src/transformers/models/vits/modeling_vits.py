@@ -1201,33 +1201,34 @@ class VitsPreTrainedModel(PreTrainedModel):
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, VitsAttention):
             if self.config.window_size:
                 head_dim = self.config.hidden_size // self.config.num_attention_heads
                 nn.init.normal_(module.emb_rel_k, std=head_dim**-0.5)
                 nn.init.normal_(module.emb_rel_v, std=head_dim**-0.5)
         elif isinstance(module, VitsElementwiseAffine):
-            module.translate.data.zero_()
-            module.log_scale.data.zero_()
+            module.translate.zero_()
+            module.log_scale.zero_()
 
 
 @auto_docstring(

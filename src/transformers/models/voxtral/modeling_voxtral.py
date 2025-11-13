@@ -231,6 +231,7 @@ class VoxtralPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_compile_fullgraph = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         # important: this ported version of Voxtral isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed
@@ -241,16 +242,16 @@ class VoxtralPreTrainedModel(PreTrainedModel):
         )
 
         if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
 
 @auto_docstring(
@@ -391,9 +392,6 @@ class VoxtralMultiModalProjector(nn.Module):
     """
 )
 class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["embed_positions"]
 
     def __init__(self, config):

@@ -136,16 +136,12 @@ class AudioFlamingo3MultiModalProjector(VoxtralMultiModalProjector):
     """
 )
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
-    _tied_weights_keys = None
     _tp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 
     def __init__(self, config):
         super().__init__(config)
-        # Similar to Qwen2Audio
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
     def get_audio_features(
         self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor

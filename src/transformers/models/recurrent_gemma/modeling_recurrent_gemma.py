@@ -553,6 +553,7 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False  # we can't compare with eager for now
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = math.sqrt(self.config.w_init_variance_scale / self.config.conv1d_width)
         if isinstance(module, nn.Conv1d):
@@ -584,21 +585,21 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
             torch.nn.init.zeros_(module.input_gate_bias)
             torch.nn.init.zeros_(module.recurrent_gate_bias)
 
-            module.recurrent_param.data.uniform_(0.9**2 + 1e-8, 0.999**2 + 1e-8)
-            module.recurrent_param.data.log_().mul_(0.5)
-            module.recurrent_param.data.neg_().exp_().sub_(1.0).log_()
+            module.recurrent_param.uniform_(0.9**2 + 1e-8, 0.999**2 + 1e-8)
+            module.recurrent_param.log_().mul_(0.5)
+            module.recurrent_param.neg_().exp_().sub_(1.0).log_()
         elif isinstance(module, nn.Linear):
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
             if getattr(module, "bias", None) is not None:
                 torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif isinstance(module, RecurrentGemmaRMSNorm):
-            module.weight.data.zero_()
+            module.weight.zero_()
 
     def _setup_cache(self, config, batch, device, dtype):
         layers = getattr(self, "model", self).layers
@@ -728,7 +729,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 # TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
 @auto_docstring
 class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)

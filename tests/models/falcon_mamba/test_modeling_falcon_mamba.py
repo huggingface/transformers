@@ -66,7 +66,7 @@ class FalconMambaModelTester:
         num_labels=3,
         num_choices=4,
         scope=None,
-        tie_word_embeddings=True,
+        tie_word_embeddings=False,
     ):
         self.parent = parent
         self.batch_size = batch_size

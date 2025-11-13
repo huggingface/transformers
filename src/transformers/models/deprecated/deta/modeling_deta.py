@@ -988,6 +988,7 @@ class DetaPreTrainedModel(PreTrainedModel):
     _no_split_modules = [r"DetaBackboneWithPositionalEncodings", r"DetaEncoderLayer", r"DetaDecoderLayer"]
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
 
@@ -997,16 +998,16 @@ class DetaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, DetaMultiscaleDeformableAttention):
             module._reset_parameters()
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         if hasattr(module, "reference_points") and not self.config.two_stage:
-            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
-            nn.init.constant_(module.reference_points.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            nn.init.constant_(module.reference_points.bias, 0.0)
         if hasattr(module, "level_embed"):
             nn.init.normal_(module.level_embed)
 
@@ -1793,13 +1794,12 @@ class DetaModel(DetaPreTrainedModel):
 )
 class DetaForObjectDetection(DetaPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = [r"bbox_embed\.\d+", r"class_embed\.\d+"]
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
 
     def __init__(self, config: DetaConfig):
         super().__init__(config)
-
+        self._tied_weights_keys = {}
         # Deformable DETR encoder-decoder model
         self.model = DetaModel(config)
 
@@ -1823,6 +1823,11 @@ class DetaForObjectDetection(DetaPreTrainedModel):
             nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
             # hack implementation for iterative bounding box refinement
             self.model.decoder.bbox_embed = self.bbox_embed
+            self._tied_weights_keys.update(
+                {
+                    "model.decoder.bbox_embed ": "bbox_embed",
+                }
+            )
         else:
             nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
             self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
@@ -1831,6 +1836,11 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         if config.two_stage:
             # hack implementation for two-stage
             self.model.decoder.class_embed = self.class_embed
+            self._tied_weights_keys.update(
+                {
+                    "model.decoder.class_embed ": "class_embed",
+                }
+            )
             for box_embed in self.bbox_embed:
                 nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
 

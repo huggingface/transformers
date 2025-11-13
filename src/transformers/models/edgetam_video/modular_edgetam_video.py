@@ -1025,7 +1025,9 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
 
 @auto_docstring
 class EdgeTamVideoModel(Sam2VideoModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _keys_to_ignore_on_load_unexpected = []

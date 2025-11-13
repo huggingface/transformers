@@ -467,6 +467,7 @@ class Siglip2PreTrainedModel(PreTrainedModel):
         "attentions": Siglip2Attention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, Siglip2VisionEmbeddings):
@@ -493,13 +494,13 @@ class Siglip2PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.fc1.bias, std=1e-6)
             nn.init.normal_(module.fc2.bias, std=1e-6)
         elif isinstance(module, Siglip2MultiheadAttentionPoolingHead):
-            nn.init.xavier_uniform_(module.probe.data)
-            nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
-            nn.init.zeros_(module.attention.in_proj_bias.data)
+            nn.init.xavier_uniform_(module.probe)
+            nn.init.xavier_uniform_(module.attention.in_proj_weight)
+            nn.init.zeros_(module.attention.in_proj_bias)
         elif isinstance(module, Siglip2Model):
             logit_scale_init = torch.log(torch.tensor(1.0))
-            module.logit_scale.data.fill_(logit_scale_init)
-            module.logit_bias.data.zero_()
+            module.logit_scale.fill_(logit_scale_init)
+            module.logit_bias.zero_()
         elif isinstance(module, Siglip2ForImageClassification):
             nn.init.normal_(
                 module.classifier.weight,
@@ -510,8 +511,8 @@ class Siglip2PreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 class Siglip2Encoder(nn.Module):

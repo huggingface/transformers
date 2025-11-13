@@ -20,7 +20,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-import re
 from collections.abc import Callable
 from itertools import cycle
 from typing import Any, Optional, Union
@@ -1216,6 +1215,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     # Note: only supports Zamba2HybridDynamicCache
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Zamba2MambaMixer):
@@ -1226,11 +1226,11 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            module.dt_bias.data.copy_(inv_dt)
+            module.dt_bias.copy_(inv_dt)
 
             A = torch.arange(1, module.num_heads + 1)
-            module.A_log.data.copy_(torch.log(A))
-            module.D.data.fill_(1.0)
+            module.A_log.copy_(torch.log(A))
+            module.D.fill_(1.0)
 
 
 @auto_docstring
@@ -1423,47 +1423,14 @@ class Zamba2Model(Zamba2PreTrainedModel):
 
     def get_layers(self, blocks, linear_layers, mamba_layers):
         layers = []
-        self._tied_weights_keys = []
+        self._tied_weights_keys = {}
         self.first_transformer_layer_id = 0
         for layer_id, layer_type in enumerate(self.layers_block_type):
             if layer_type == "hybrid":
-                if self.first_transformer_layer_id == 0:
-                    self.first_transformer_layer_id = layer_id
                 block = next(blocks)
                 if self.config.num_mem_blocks * len(self.config.hybrid_layer_ids) > 1:
-                    prefix_pattern = rf"^layers\.{layer_id}\.shared_transformer\."
-                    main_keys_pattern = re.compile(
-                        prefix_pattern
-                        + r"(?:"
-                        + r"self_attn\.(?:q_proj|k_proj|v_proj|o_proj)\.weight|"
-                        + r"feed_forward\.(?:gate_up_proj|down_proj)\.weight|"
-                        + r"(?:input_layernorm|pre_ff_layernorm)\.weight"
-                        + r")$"
-                    )
-                    self._tied_weights_keys.append(main_keys_pattern)
-
-                    adapter_id = 0
-                    for _layer_type in self.layers_block_type:
-                        if _layer_type == "hybrid" and adapter_id % self.config.num_mem_blocks == block.block_id:
-                            adapter_pattern = re.compile(
-                                r"^shared_transformer\.feed_forward\.gate_up_proj_adapter_list\."
-                                + str(adapter_id)
-                                + r"\.(?:0|1)\.weight$"
-                            )
-                            self._tied_weights_keys.append(adapter_pattern)
-                        adapter_id += 1
-                    if self.config.use_shared_attention_adapter:
-                        adapter_id = 0
-                        for _layer_type in self.layers_block_type:
-                            if _layer_type == "hybrid" and adapter_id % self.config.num_mem_blocks == block.block_id:
-                                attn_adapter_pattern = re.compile(
-                                    r"^shared_transformer\.self_attn\."
-                                    + r"(?:linear_q_adapter_list|linear_k_adapter_list|linear_v_adapter_list)\."
-                                    + str(adapter_id)
-                                    + r"\.(?:0|1)\.weight$"
-                                )
-                                self._tied_weights_keys.append(attn_adapter_pattern)
-                            adapter_id += 1
+                    prefix_pattern = f"layers.{layer_id}.shared_transformer"
+                    self._tied_weights_keys.update({prefix_pattern: "layers.0.shared_transformer"})
                 layers.append(Zamba2HybridLayer(block, next(linear_layers), next(mamba_layers)))
             else:
                 layers.append(next(mamba_layers))
@@ -1472,10 +1439,11 @@ class Zamba2Model(Zamba2PreTrainedModel):
 
 # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->Zamba2, JAMBA->ZAMBA2
 class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+
     def __init__(self, config: Zamba2Config):
         super().__init__(config)
         self.model = Zamba2Model(config)
-        self._tied_weights_keys = ["lm_head.weight", *self.model._tied_weights_keys]
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1649,7 +1617,6 @@ class Zamba2ForSequenceClassification(Zamba2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Zamba2Model(config)
-        self._tied_weights_keys = self.model._tied_weights_keys
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing

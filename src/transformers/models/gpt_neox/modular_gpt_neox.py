@@ -390,7 +390,7 @@ class GPTNeoXModel(LlamaModel):
     """
 )
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["embed_out.weight"]
+    _tied_weights_keys = {"embed_out.weight": "gpt_neox.embed_in.weight"}
     _tp_plan = {"embed_out": "colwise_rep"}
     _pp_plan = {"embed_out": (["hidden_states"], ["logits"])}
 

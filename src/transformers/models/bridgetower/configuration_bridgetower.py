@@ -175,7 +175,6 @@ class BridgeTowerTextConfig(PreTrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -298,7 +297,7 @@ class BridgeTowerConfig(PreTrainedConfig):
 
         self.text_config = text_config
         self.vision_config = vision_config
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 __all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]

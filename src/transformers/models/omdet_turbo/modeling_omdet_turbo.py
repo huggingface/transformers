@@ -987,6 +987,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         def linear_init_(module_to_init):
             bound = 1 / math.sqrt(module_to_init.weight.shape[0])
@@ -1014,12 +1015,12 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
         elif isinstance(module, OmDetTurboLanguageBackbone):
             nn.init.normal_(module.text_projection, std=self.config.text_projection_in_dim**-0.5)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, OmDetTurboDecoder):

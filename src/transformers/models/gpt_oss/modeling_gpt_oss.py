@@ -71,10 +71,10 @@ class GptOssExperts(nn.Module):
         self.num_experts = config.num_local_experts
         self.hidden_size = config.hidden_size
         self.expert_dim = self.intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
-        self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.expert_dim))
+        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size, 2 * self.expert_dim))
+        self.gate_up_proj_bias = nn.Parameter(torch.zeros(self.num_experts, 2 * self.expert_dim))
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
-        self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.hidden_size))
+        self.down_proj_bias = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size))
         self.alpha = 1.702
         self.limit = 7.0
 
@@ -146,8 +146,8 @@ class GptOssTopKRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
-        self.bias = nn.Parameter(torch.empty(self.num_experts))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.bias = nn.Parameter(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
@@ -440,30 +440,31 @@ class GptOssPreTrainedModel(PreTrainedModel):
     _supports_flash_attention = False
     _supports_flex_attention = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Parameter):
-            module.data.normal_(mean=0.0, std=std)
+            module.normal_(mean=0.0, std=std)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, GptOssRMSNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, GptOssExperts):
-            module.gate_up_proj.data.normal_(mean=0.0, std=std)
-            module.gate_up_proj_bias.data.zero_()
-            module.down_proj.data.normal_(mean=0.0, std=std)
-            module.down_proj_bias.data.zero_()
+            module.gate_up_proj.normal_(mean=0.0, std=std)
+            module.gate_up_proj_bias.zero_()
+            module.down_proj.normal_(mean=0.0, std=std)
+            module.down_proj_bias.zero_()
         elif isinstance(module, GptOssAttention):
-            module.sinks.data.normal_(mean=0.0, std=std)
+            module.sinks.normal_(mean=0.0, std=std)
         elif isinstance(module, GptOssTopKRouter):
-            module.weight.data.normal_(mean=0.0, std=std)
-            module.bias.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
+            module.bias.normal_(mean=0.0, std=std)
 
 
 @auto_docstring
@@ -635,7 +636,7 @@ def load_balancing_loss_func(
 
 @auto_docstring
 class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

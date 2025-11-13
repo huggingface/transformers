@@ -358,6 +358,7 @@ class RTDetrV2Config(PreTrainedConfig):
         self.decoder_offset_scale = decoder_offset_scale
         self.decoder_method = decoder_method
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        self.tie_encoder_decoder = True
 
 
 __all__ = ["RTDetrV2Config"]

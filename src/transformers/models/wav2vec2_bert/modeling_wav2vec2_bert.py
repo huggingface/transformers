@@ -711,6 +711,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     input_modalities = "audio"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, Wav2Vec2BertSelfAttention):
@@ -723,13 +724,13 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
 
@@ -738,15 +739,15 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, Wav2Vec2BertModel):
             if hasattr(module, "masked_spec_embed"):
-                module.masked_spec_embed.data.uniform_()
+                module.masked_spec_embed.uniform_()
         elif isinstance(
             module,
             (Wav2Vec2BertForSequenceClassification, Wav2Vec2BertForAudioFrameClassification, Wav2Vec2BertForXVector),
         ):
             if hasattr(module, "layer_weights"):
-                module.layer_weights.data.fill_(1.0 / (self.config.num_hidden_layers + 1))
+                module.layer_weights.fill_(1.0 / (self.config.num_hidden_layers + 1))
         elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
-            module.weight.data.normal_()
+            module.weight.normal_()
 
     # Ignore copy
     def _get_feat_extract_output_lengths(

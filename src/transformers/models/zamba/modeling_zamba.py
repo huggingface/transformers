@@ -793,20 +793,21 @@ class ZambaPreTrainedModel(PreTrainedModel):
     # Note: only supports ZambaHybridDynamicCache
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, ZambaRMSNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, ZambaMambaMixer):
-            module.x_proj_weight.data.normal_(mean=0.0, std=std)
+            module.x_proj_weight.normal_(mean=0.0, std=std)
             dt_init_std = self.config.mamba_dt_rank**-0.5
             nn.init.uniform_(module.dt_proj_weight, -dt_init_std, dt_init_std)
 
@@ -818,12 +819,12 @@ class ZambaPreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            module.dt_proj_bias.data.copy_(inv_dt)
+            module.dt_proj_bias.copy_(inv_dt)
 
             A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
             A = A.expand(module.intermediate_size, -1).contiguous()
-            module.A_log.data.copy_(torch.log(A).reshape(module.n_mamba_heads, module.mamba_head_dim, -1))
-            module.D.data.fill_(1.0)
+            module.A_log.copy_(torch.log(A).reshape(module.n_mamba_heads, module.mamba_head_dim, -1))
+            module.D.fill_(1.0)
 
 
 @auto_docstring
@@ -841,38 +842,20 @@ class ZambaModel(ZambaPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        block = ZambaAttentionDecoderLayer(config)
-        mamba_layers = []
-        linear_layers = []
         self.layers_block_type = config.layers_block_type
-        for i in range(config.num_hidden_layers):
-            if config.layers_block_type[i] == "mamba":
-                mamba_layers.append(ZambaMambaDecoderLayer(config, layer_idx=i))
-            elif config.layers_block_type[i] == "hybrid":
-                linear_layers.append(nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False))
-                mamba_layers.append(ZambaMambaDecoderLayer(config, layer_idx=i))
-        mamba_layers = iter(mamba_layers)
-        linear_layers = iter(linear_layers)
         layers = []
-        self._tied_weights_keys = []
+        self._tied_weights_keys = None
         for layer_id, layer_type in enumerate(self.layers_block_type):
+            mamba = ZambaMambaDecoderLayer(config, layer_idx=layer_id)
             if layer_type == "hybrid":
-                prefix_name = f"layers.{layer_id}."
-                tied_keys = [
-                    "shared_transf.self_attn.q_proj.weight",
-                    "shared_transf.self_attn.k_proj.weight",
-                    "shared_transf.self_attn.v_proj.weight",
-                    "shared_transf.self_attn.o_proj.weight",
-                    "shared_transf.feed_forward.gate_proj.weight",
-                    "shared_transf.feed_forward.up_proj.weight",
-                    "shared_transf.feed_forward.down_proj.weight",
-                    "shared_transf.input_layernorm.weight",
-                    "shared_transf.pre_ff_layernorm.weight",
-                ]
-                self._tied_weights_keys = [*self._tied_weights_keys, *[prefix_name + key for key in tied_keys]]
-                layers.append(ZambaHybridLayer(block, next(linear_layers), next(mamba_layers)))
+                linear = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
+                layers.append(ZambaHybridLayer(ZambaAttentionDecoderLayer(config), linear, mamba))
+                if self._tied_weights_keys is None:
+                    self._tied_weights_keys = {
+                        rf"layers.(?![{layer_id}])\d+.shared_transf": f"layers.{layer_id}.shared_transf"
+                    }
             else:
-                layers.append(next(mamba_layers))
+                layers.append(mamba)
         self.layers = nn.ModuleList(layers)
 
         self._attn_implementation = config._attn_implementation
@@ -1021,10 +1004,11 @@ class ZambaModel(ZambaPreTrainedModel):
 
 # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->Zamba, JAMBA->ZAMBA
 class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+
     def __init__(self, config: ZambaConfig):
         super().__init__(config)
         self.model = ZambaModel(config)
-        self._tied_weights_keys = ["lm_head.weight", *self.model._tied_weights_keys]
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1198,7 +1182,6 @@ class ZambaForSequenceClassification(ZambaPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = ZambaModel(config)
-        self._tied_weights_keys = self.model._tied_weights_keys
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing

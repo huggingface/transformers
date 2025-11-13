@@ -310,6 +310,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
     "VaultGemmaConfig": ["tie_word_embeddings"],
     "GemmaConfig": ["tie_word_embeddings"],
+    "CsmConfig": ["tie_codebooks_embeddings"],
 }
 
 
