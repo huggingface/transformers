@@ -33,8 +33,12 @@ from transformers import (
     AutoFeatureExtractor,
     AutoProcessor,
     AutoTokenizer,
+    BaseVideoProcessor,
     BertTokenizer,
+    FeatureExtractionMixin,
+    ImageProcessingMixin,
     LlamaTokenizer,
+    LlavaOnevisionVideoProcessor,
     LlavaProcessor,
     ProcessorMixin,
     SiglipImageProcessor,
@@ -42,6 +46,9 @@ from transformers import (
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
 )
+from transformers.models.auto.feature_extraction_auto import get_feature_extractor_config
+from transformers.models.auto.image_processing_auto import get_image_processor_config
+from transformers.models.auto.video_processing_auto import get_video_processor_config
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
@@ -106,6 +113,48 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             processor = AutoProcessor.from_pretrained(tmpdirname)
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
+
+    def test_subcomponent_get_config_dict_saved_as_nested_config(self):
+        """
+        Tests that we can get config dict of a subcomponents of a processor,
+        even if they were saved as nested dict in `processor_config.json`
+        """
+        # Test feature extractor first
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
+            processor.save_pretrained(tmpdirname)
+
+            config_dict_1 = get_feature_extractor_config(tmpdirname)
+            feature_extractor_1 = Wav2Vec2FeatureExtractor(**config_dict_1)
+            self.assertIsInstance(feature_extractor_1, Wav2Vec2FeatureExtractor)
+
+            config_dict_2, _ = FeatureExtractionMixin.get_feature_extractor_dict(tmpdirname)
+            feature_extractor_2 = Wav2Vec2FeatureExtractor(**config_dict_2)
+            self.assertIsInstance(feature_extractor_2, Wav2Vec2FeatureExtractor)
+            self.assertEqual(config_dict_1, config_dict_2)
+
+        # Test image and video processors next
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
+            processor.save_pretrained(tmpdirname)
+
+            config_dict_1 = get_image_processor_config(tmpdirname)
+            image_processor_1 = SiglipImageProcessor(**config_dict_1)
+            self.assertIsInstance(image_processor_1, SiglipImageProcessor)
+
+            config_dict_2, _ = ImageProcessingMixin.get_image_processor_dict(tmpdirname)
+            image_processor_2 = SiglipImageProcessor(**config_dict_2)
+            self.assertIsInstance(image_processor_2, SiglipImageProcessor)
+            self.assertEqual(config_dict_1, config_dict_2)
+
+            config_dict_1 = get_video_processor_config(tmpdirname)
+            video_processor_1 = LlavaOnevisionVideoProcessor(**config_dict_1)
+            self.assertIsInstance(video_processor_1, LlavaOnevisionVideoProcessor)
+
+            config_dict_2, _ = BaseVideoProcessor.get_video_processor_dict(tmpdirname)
+            video_processor_2 = LlavaOnevisionVideoProcessor(**config_dict_2)
+            self.assertIsInstance(video_processor_2, LlavaOnevisionVideoProcessor)
+            self.assertEqual(config_dict_1, config_dict_2)
 
     def test_processor_from_processor_class(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
