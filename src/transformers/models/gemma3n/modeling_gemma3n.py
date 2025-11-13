@@ -2532,10 +2532,6 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
 
         return model_inputs
 
-    @property
-    def audio_tower(self):
-        return self.model.audio_tower
-
 
 __all__ = [
     "Gemma3nAudioEncoder",

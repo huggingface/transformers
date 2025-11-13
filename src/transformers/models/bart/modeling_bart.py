@@ -1523,9 +1523,6 @@ class BartForCausalLM(BartPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
     @auto_docstring
     def forward(
         self,
