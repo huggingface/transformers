@@ -59,7 +59,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     #  text + audio kwargs testing
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
         feature_extractor = self.get_component("feature_extractor")
         if hasattr(self, "get_tokenizer"):
@@ -70,7 +70,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertTrue(False, "Processor doesn't have get_tokenizer or get_component defined")
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         video_processor = self.get_component("video_processor")
@@ -92,7 +92,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_structured_kwargs_audio_nested(self):
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
         feature_extractor = self.get_component("feature_extractor")
         if hasattr(self, "get_tokenizer"):
@@ -101,7 +101,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer = self.get_component("tokenizer")
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         video_processor = self.get_component("video_processor")
@@ -130,7 +130,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_unstructured_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
         feature_extractor = self.get_component("feature_extractor")
         if hasattr(self, "get_tokenizer"):
@@ -139,7 +139,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer = self.get_component("tokenizer", max_length=117)
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         video_processor = self.get_component("video_processor")
@@ -168,7 +168,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_doubly_passed_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
         feature_extractor = self.get_component("feature_extractor")
         if hasattr(self, "get_tokenizer"):
@@ -177,7 +177,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer = self.get_component("tokenizer")
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         video_processor = self.get_component("video_processor")
@@ -190,7 +190,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
         feature_extractor = self.get_component("feature_extractor")
         if hasattr(self, "get_tokenizer"):
@@ -199,7 +199,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer = self.get_component("tokenizer", max_length=117)
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[TEST_PAD]"
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         video_processor = self.get_component("video_processor")
@@ -335,7 +335,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        if processor_name not in self.processor_class.attributes:
+        if processor_name not in self.processor_class.get_attributes():
             self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
 
         batch_messages = [
@@ -557,7 +557,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ):
             self.skipTest(f"{self.processor_class} does not support video inputs")
 
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
         video_file_path = hf_hub_download(

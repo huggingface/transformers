@@ -608,7 +608,7 @@ class GenerationMixin(ContinuousMixin):
         use_cache = kwargs.get("use_cache")
         if use_cache is None:
             use_cache = getattr(self.config, "use_cache", False)
-        if past_key_values is None or use_cache:
+        if past_key_values is not None or use_cache:
             # TODO (joao): handle the case where cache length == input_ids length. The function below results in an
             # exception because we get empty input_ids after slicing. In essence, we need to roll back the cache 1
             # token to recompute the logits for the first token to be generated (but not all caches support roll backs)
@@ -2170,7 +2170,7 @@ class GenerationMixin(ContinuousMixin):
             return False
 
         # Base logic
-        valid_hardware = self.device.type == "cuda" or bool(
+        valid_hardware = self.device.type in ["cuda", "xpu"] or bool(
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
         using_compilable_cache = (
