@@ -529,7 +529,7 @@ class PerceiverPreTrainedModel(PreTrainedModel):
     config: PerceiverConfig
     base_model_prefix = "perceiver"
     main_input_name = "inputs"
-    input_modalities = "image"  # techinically can be anything but HF impl has only image processor
+    input_modalities = ("image",)  # techinically can be anything but HF impl has only image processor
 
     def _init_weights(self, module):
         """Initialize the weights"""

@@ -785,7 +785,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
     """
 )
 class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
-    output_modalities = "audio"
+    output_modalities = ("audio",)
 
     def __init__(self, config: MusicgenDecoderConfig):
         super().__init__(config)
@@ -1287,7 +1287,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
 )
 class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin):
     config: MusicgenConfig
-    output_modalities = "audio"
+    output_modalities = ("audio",)
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True

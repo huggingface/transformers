@@ -19,6 +19,7 @@ from typing import Optional, Union
 
 import numpy as np
 
+from .audio_utils import is_valid_audio, load_audio
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from .utils import PaddingStrategy, TensorType, is_torch_tensor, logging, to_numpy
 
@@ -366,3 +367,19 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             )
 
         return padding_strategy
+
+    def fetch_audio(self, audio_url_or_urls: Union[str, list[str], list[list[str]]]):
+        """
+        Convert a single or a list of urls into the corresponding `np.ndarray` objects.
+
+        If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
+        returned.
+        """
+        if isinstance(audio_url_or_urls, list):
+            return [self.fetch_audio(x) for x in audio_url_or_urls]
+        elif isinstance(audio_url_or_urls, str):
+            return load_audio(audio_url_or_urls)
+        elif is_valid_audio(audio_url_or_urls):
+            return audio_url_or_urls
+        else:
+            raise TypeError(f"only a single or a list of entries is supported but got type={type(audio_url_or_urls)}")

@@ -1464,14 +1464,15 @@ class MistralCommonTokenizer(PushToHubMixin):
         def _maybe_adapt_message(message: dict[str, Any]) -> None:
             """Adapt message to `mistral-common` format and leave validation to `mistral-common`."""
             if not isinstance(message, dict):
-                return
+                return message
             maybe_list_content: Optional[Union[str, list[dict[str, Union[str, dict[str, Any]]]]]] = message.get(
                 "content"
             )
             if not maybe_list_content or isinstance(maybe_list_content, str):
-                return
+                return message
 
             normalized_content: list[dict[str, Union[str, dict[str, Any]]]] = []
+            message = message.copy()
             for content in maybe_list_content:
                 content_type = content.get("type", None)
                 if not content_type:
@@ -1507,6 +1508,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 else:
                     normalized_content.append(content)
             message["content"] = normalized_content
+            return message
 
         outputs = []
         images: list[np.ndarray] = []
@@ -1515,7 +1517,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         for conversation in conversations:
             messages: list[dict[str, Union[str, list[dict[str, Union[str, dict[str, Any]]]]]]] = []
             for message in conversation:
-                _maybe_adapt_message(message)
+                message = _maybe_adapt_message(message)
                 messages.append(message)
 
             chat_request = ChatCompletionRequest.from_openai(
@@ -1767,12 +1769,11 @@ class MistralCommonTokenizer(PushToHubMixin):
         if init_inputs:
             raise ValueError("`init_inputs` are not supported by `MistralCommonTokenizer.from_pretrained`.")
 
-        # Handle kwargs and AutoTokenizer case
-        ignore_subset = {"_from_auto", "trust_remote_code"}
-        if kwargs and not (set_kwargs := set(kwargs.keys())).issubset(ignore_subset):
-            raise ValueError(
-                f"Kwargs {list(set_kwargs - ignore_subset)} are not supported by `MistralCommonTokenizer.from_pretrained`."
-            )
+        # Handle kwargs and AutoTokenizer/AutoProcessor case
+        if kwargs and not set(kwargs.keys()).issubset(
+            {"trust_remote_code", "_from_pipeline", "_commit_hash", "dtype", "_from_auto"}
+        ):
+            raise ValueError(f"Some kwargs in {kwargs} are not supported by `MistralCommonTokenizer.from_pretrained`.")
 
         if not os.path.isdir(pretrained_model_name_or_path):
             tokenizer_path = download_tokenizer_from_hf_hub(

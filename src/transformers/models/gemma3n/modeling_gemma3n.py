@@ -1599,7 +1599,7 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
         "hidden_states": Gemma3nDecoderLayer,
         "attentions": Gemma3nAttention,
     }
-    input_modalities = ["image", "text", "audio"]
+    input_modalities = ("image", "text", "audio")
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -1695,7 +1695,7 @@ class Gemma3nRotaryEmbedding(nn.Module):
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")
 class Gemma3nTextModel(Gemma3nPreTrainedModel):
     config: Gemma3nTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: Gemma3nTextConfig):
         super().__init__(config)

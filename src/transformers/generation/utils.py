@@ -367,7 +367,7 @@ class GenerationMixin(ContinuousMixin):
     """
 
     # Should be overwritten by models that can generate non-text output
-    output_modalities = "text"
+    output_modalities = ("text",)
 
     def adjust_generation_fn(
         self,

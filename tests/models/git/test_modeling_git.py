@@ -376,6 +376,7 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             "image-to-text": GitForCausalLM,
             "text-generation": GitForCausalLM,
             "image-text-to-text": GitForCausalLM,
+            "any-to-any": GitForCausalLM,
         }
         if is_torch_available()
         else {}

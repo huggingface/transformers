@@ -260,7 +260,7 @@ class LlavaNextVideoMultiModalProjector(LlavaNextMultiModalProjector):
 
 
 class LlavaNextVideoPreTrainedModel(LlavaNextPreTrainedModel):
-    input_modalities = ["image", "video", "text"]
+    input_modalities = ("image", "video", "text")
 
 
 class LlavaNextVideoModel(LlavaNextModel):
