@@ -94,7 +94,6 @@ EXTRA_TAGS_MAPPING = {
     "gpt2": ["cpm", "dialogpt", "gpt-sw3", "megatron_gpt2"],
     "glm4v_moe": ["glm4v_moe_text"],
     "glm4v": ["glm4v_text"],
-    "glm46v": ["glm46v_text"],
     "idefics3": ["idefics3_vision"],
     "internvl": ["internvl_vision"],
     "layoutlmv2": ["layoutxlm"],
