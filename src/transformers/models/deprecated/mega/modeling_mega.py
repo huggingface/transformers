@@ -1332,6 +1332,7 @@ class MegaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["MegaMovingAverageGatedAttention"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, MegaMultiDimensionDampedEma):
@@ -1365,16 +1366,16 @@ class MegaPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.qk_bias, 0.0)
         elif isinstance(module, nn.Linear):
             # initializes all linear layers in the entire network
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 MEGA_START_DOCSTRING = r"""
@@ -1638,7 +1639,7 @@ class MegaModel(MegaPreTrainedModel):
     """MEGA Model with a `language modeling` head on top for CLM fine-tuning.""", MEGA_START_DOCSTRING
 )
 class MegaForCausalLM(MegaPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "mega.embedding_layer.word_embeddings.weight"}
 
     def __init__(self, config: MegaConfig):
         super().__init__(config)
@@ -1785,7 +1786,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
 
 @add_start_docstrings("""MEGA Model with a `language modeling` head on top.""", MEGA_START_DOCSTRING)
 class MegaForMaskedLM(MegaPreTrainedModel):
-    _tied_weights_keys = ["mlm_head.weight"]
+    _tied_weights_keys = {"mlm_head.weight": "mega.embedding_layer.word_embeddings.weight"}
 
     def __init__(self, config: MegaConfig):
         super().__init__(config)

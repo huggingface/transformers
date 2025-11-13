@@ -164,7 +164,7 @@ class BartConfig(PreTrainedConfig):
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
-
+        self.tie_encoder_decoder = True
         # ensure backward compatibility for BART CNN models
         if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):
             self.forced_bos_token_id = self.bos_token_id

@@ -621,6 +621,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = False
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
@@ -669,9 +670,9 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         ):
             init_weight(module.classifier, stds["final_out"])
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
 
     def _check_and_adjust_attn_implementation(
         self, attn_implementation: Optional[str], is_init_check: bool = False
@@ -1020,7 +1021,7 @@ class ModernBertPredictionHead(nn.Module):
     """
 )
 class ModernBertForMaskedLM(ModernBertPreTrainedModel):
-    _tied_weights_keys = ["decoder.weight"]
+    _tied_weights_keys = {"decoder.weight": "model.embeddings.tok_embeddings.weight"}
 
     def __init__(self, config: ModernBertConfig):
         super().__init__(config)

@@ -608,19 +608,20 @@ class DepthProPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["DepthProPreActResidualLayer"]
     _keys_to_ignore_on_load_unexpected = ["fov_model.*"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
 
 
 @auto_docstring

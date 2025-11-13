@@ -776,6 +776,7 @@ class HieraPreTrainedModel(PreTrainedModel):
     input_modalities = "image"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
         std = self.config.initializer_range

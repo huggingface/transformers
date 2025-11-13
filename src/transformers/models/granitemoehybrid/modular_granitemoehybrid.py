@@ -176,14 +176,15 @@ class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeHybridMambaLayer):
-            module.dt_bias.data.fill_(1.0)
-            module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
-            module.D.data.fill_(1.0)
+            module.dt_bias.fill_(1.0)
+            module.A_log.copy_(torch.log(torch.arange(1, module.num_heads + 1)))
+            module.D.fill_(1.0)
         elif isinstance(module, GraniteMoeHybridRMSNormGated):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
 
 
 class GraniteMoeHybridModel(GraniteMoeSharedModel):
@@ -273,7 +274,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
 
 class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: GraniteMoeHybridConfig):
         super().__init__(config)

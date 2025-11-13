@@ -870,7 +870,7 @@ def check_model_inputs(tie_last_hidden_states=True):
 
             # Check attention implementation is properly set for capturing attention outputs
             if recordable_keys.get("output_attentions", False):
-                supported_attn = ["eager", "eager_paged", "flex_attention"]
+                supported_attn = ["eager", "eager_paged", "flex_attention", "sdpa"]
                 config_attn = getattr(self.config, "_attn_implementation", None)
                 sub_configs = [getattr(self.config, key, None) for key in self.config.sub_configs]
                 sub_configs_attn = [
@@ -888,13 +888,7 @@ def check_model_inputs(tie_last_hidden_states=True):
                 def wrapped_forward(*args, **kwargs):
                     if key == "hidden_states" and len(collected_outputs[key]) == 0:
                         collected_outputs[key] += (args[0],)
-                    if kwargs.get("debug_io", False):
-                        with model_addition_debugger_context(
-                            module, kwargs.get("debug_io_dir", "~/model_debug"), kwargs.get("prune_layers")
-                        ):
-                            output = orig_forward(*args, **kwargs)
-                    else:
-                        output = orig_forward(*args, **kwargs)
+                    output = orig_forward(*args, **kwargs)
                     if not isinstance(output, tuple):
                         collected_outputs[key] += (output,)
                     elif output[index] is not None:
@@ -935,7 +929,13 @@ def check_model_inputs(tie_last_hidden_states=True):
                             monkey_patched_layers.append((module, original_forward))
 
             try:
-                outputs = func(self, *args, **kwargs)
+                if kwargs.get("debug_io", False):
+                    with model_addition_debugger_context(
+                        self, kwargs.get("debug_io_dir", "model_debug"), kwargs.get("prune_layers")
+                    ):
+                        outputs = func(self, *args, **kwargs)
+                else:
+                    outputs = func(self, *args, **kwargs)
             except TypeError as original_exception:
                 # If we get a TypeError, it's possible that the model is not receiving the recordable kwargs correctly.
                 # Get a TypeError even after removing the recordable kwargs -> re-raise the original exception
