@@ -220,6 +220,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
 
+        missing_keys = super().update_missing_keys(model, missing_keys, prefix)
+
         not_missing_keys = []
         for name, module in model.named_modules():
             if isinstance(module, (FbgemmFp8Linear, FbgemmFp8Llama4TextExperts)):

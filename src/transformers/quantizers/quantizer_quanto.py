@@ -88,6 +88,8 @@ class QuantoHfQuantizer(HfQuantizer):
         if is_optimum_quanto_available():
             from optimum.quanto import QModuleMixin
 
+        missing_keys = super().update_missing_keys(model, missing_keys, prefix)
+
         not_missing_keys = []
         for name, module in model.named_modules():
             if isinstance(module, QModuleMixin):

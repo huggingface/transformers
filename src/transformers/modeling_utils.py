@@ -640,6 +640,7 @@ def _load_state_dict_into_meta_model(
                     device_mesh.get_local_rank(),
                     **sharding_kwargs,
                 )
+                hf_quantizer.register_loaded_quantized_param(model, param_name)
         else:
             param = param[...]
             if casting_dtype is not None:
@@ -668,6 +669,7 @@ def _load_state_dict_into_meta_model(
             else:
                 # TODO naming is stupid it loads it as well
                 hf_quantizer.create_quantized_param(model, param, param_name, param_device)
+                hf_quantizer.register_loaded_quantized_param(model, param_name)
 
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
