@@ -2638,13 +2638,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
+            # Skip initialization for quantized weights (int8, uint8)
+            if hasattr(module, "weight") and module.weight.dtype in (torch.int8, torch.uint8):
+                logger.debug(f"Skipping weight initialization for quantized module {module.__class__.__name__} with dtype {module.weight.dtype}")
+            else:
+                module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None and module.bias.dtype not in (torch.int8, torch.uint8):
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            # Skip initialization for quantized embeddings
+            if hasattr(module, "weight") and module.weight.dtype in (torch.int8, torch.uint8):
+                logger.debug(f"Skipping weight initialization for quantized embedding with dtype {module.weight.dtype}")
+            else:
+                module.weight.data.normal_(mean=0.0, std=std)
+                if module.padding_idx is not None:
+                    module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
             module._reset_parameters()
