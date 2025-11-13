@@ -120,9 +120,13 @@ class DeepseekOcrModelTester:
         self.hidden_size = text_config["hidden_size"]
         self.num_attention_heads = text_config["num_attention_heads"]
         self.image_size = sam_config["image_size"]
-        self.num_image_tokens = 16
+        self.num_image_tokens = 7
         self.pad_token_id = text_config["pad_token_id"]
         self.image_token_id = 95
+        self.projector_config = projector_config if projector_config is not None else {
+            "input_dim": 32,
+            "n_embed": text_config["hidden_size"],
+        }
 
     def get_config(self):
         vision_config = {
@@ -133,7 +137,7 @@ class DeepseekOcrModelTester:
             text_config=self.text_config,
             vision_config=vision_config,
             projector_config=self.projector_config,
-            image_token_index=self.image_token_id,
+            image_token_id=self.image_token_id,
         )
 
     def prepare_config_and_inputs(self):
@@ -149,7 +153,7 @@ class DeepseekOcrModelTester:
                 self.image_size,
             ]
         )
-        input_ids[input_ids == self.num_image_tokens] = config.text_config.pad_token_id
+        input_ids[input_ids == self.image_token_id] = config.text_config.pad_token_id
         input_ids[:, : self.num_image_tokens] = self.image_token_id
 
         return config, input_ids, attention_mask, pixel_values
