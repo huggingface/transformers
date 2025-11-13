@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch OWL-ViT model."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Optional, Union
@@ -23,18 +24,21 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...masking_utils import create_bidirectional_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     filter_out_non_signature_kwargs,
     is_vision_available,
     logging,
     torch_int,
 )
+from ...utils.generic import check_model_inputs
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 
 
@@ -373,10 +377,31 @@ class OwlViTTextEmbeddings(nn.Module):
         return embeddings
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
 class OwlViTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config):
+    def __init__(self, config: Union[OwlViTVisionConfig, OwlViTTextConfig]):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -389,7 +414,7 @@ class OwlViTAttention(nn.Module):
             )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
-        self.is_causal = False  # OWL-ViT uses bidirectional attention
+        self.is_causal = False  # <-- THIS IS REQUIRED
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
@@ -400,102 +425,37 @@ class OwlViTAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Time x Channel"""
+        batch_size, seq_length, _ = hidden_states.shape
 
-        bsz, tgt_len, embed_dim = hidden_states.size()
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
 
-        # Get query, key, value projections
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        queries = queries.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
 
-        # Reshape to (bsz, num_heads, seq_len, head_dim)
-        query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # Prepare attention mask - OWL-ViT uses bidirectional (non-causal) attention
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            input_embeds=hidden_states,
-            attention_mask=attention_mask,
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+            **kwargs,
         )
 
-        # Select attention implementation
-        if self.config._attn_implementation != "eager":
-            # Use unified attention backend (SDPA, FlashAttention, etc.)
-            attn_output, attn_weights = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation](
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask,
-                is_causal=self.is_causal,
-                scaling=self.scale,
-                dropout=self.dropout if self.training else 0.0,
-            )
-        else:
-            # Eager attention implementation
-            # Scale query
-            query_states = query_states * self.scale
-
-            # Reshape for bmm: (bsz * num_heads, seq_len, head_dim)
-            query_states = query_states.view(bsz * self.num_heads, tgt_len, self.head_dim)
-            key_states = key_states.view(bsz * self.num_heads, tgt_len, self.head_dim)
-            value_states = value_states.view(bsz * self.num_heads, tgt_len, self.head_dim)
-
-            # Compute attention scores
-            attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-            if attn_weights.size() != (bsz * self.num_heads, tgt_len, tgt_len):
-                raise ValueError(
-                    f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, tgt_len)}, but is"
-                    f" {attn_weights.size()}"
-                )
-
-            # Apply attention mask
-            if attention_mask is not None:
-                if attention_mask.size() != (bsz, 1, tgt_len, tgt_len):
-                    raise ValueError(
-                        f"Attention mask should be of size {(bsz, 1, tgt_len, tgt_len)}, but is {attention_mask.size()}"
-                    )
-                attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, tgt_len) + attention_mask
-                attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, tgt_len)
-
-            # Softmax and dropout
-            attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-            if output_attentions:
-                attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, tgt_len)
-            else:
-                attn_weights_reshaped = None
-
-            attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-            attn_probs = attn_probs.to(value_states.dtype)
-
-            # Apply attention to values
-            attn_output = torch.bmm(attn_probs, value_states)
-
-            if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-                raise ValueError(
-                    f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
-                    f" {attn_output.size()}"
-                )
-
-            attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-            attn_weights = attn_weights_reshaped
-
-        # Reshape output: (bsz, seq_len, embed_dim)
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
-
-        # Final projection
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights if output_attentions else None
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->OwlViT
@@ -528,6 +488,7 @@ class OwlViTEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
 
@@ -535,6 +496,7 @@ class OwlViTEncoderLayer(GradientCheckpointingLayer):
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -553,6 +515,13 @@ class OwlViTPreTrainedModel(PreTrainedModel):
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": OwlViTEncoderLayer,
+        "attentions": OwlViTAttention,
+    }
     _no_split_modules = ["OwlViTEncoderLayer"]
 
     @torch.no_grad()
@@ -597,17 +566,18 @@ class OwlViTPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.bias)
 
 
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->OwlViT
 class OwlViTEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`OwlViTEncoderLayer`].
-
     Args:
         config: OwlViTConfig
     """
 
     def __init__(self, config: OwlViTConfig):
         super().__init__()
+        self.config = config
         self.layers = nn.ModuleList([OwlViTEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
@@ -615,63 +585,18 @@ class OwlViTEncoder(nn.Module):
         self,
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`).
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-                [What are attention masks?](../glossary#attention-mask)
-            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Causal mask for the text model. Mask values selected in `[0, 1]`:
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-                [What are attention masks?](../glossary#attention-mask)
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
-                output_attentions=output_attentions,
+                **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
         )
 
 
@@ -690,9 +615,7 @@ class OwlViTTextTransformer(nn.Module):
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
@@ -700,32 +623,25 @@ class OwlViTTextTransformer(nn.Module):
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
-        # num_samples, seq_len = input_shape  where num_samples = batch_size * num_max_text_queries
-        # OWLVIT's text model uses causal mask, prepare it here.
-        # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        # OWL-ViT uses a bidirectional (non-causal) encoder.
-        attention_mask = create_bidirectional_mask(
+        attention_mask = create_causal_mask(
             config=self.config,
             input_embeds=hidden_states,
             attention_mask=attention_mask,
+            cache_position=torch.arange(hidden_states.shape[1], device=hidden_states.device),
+            past_key_values=None,
         )
+        kwargs.pop("is_causal", None)
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            is_causal=True,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -737,9 +653,6 @@ class OwlViTTextTransformer(nn.Module):
             torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
             input_ids.to(torch.int).argmax(dim=-1).to(last_hidden_state.device),
         ]
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -765,14 +678,13 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
@@ -798,9 +710,7 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
 
@@ -818,17 +728,9 @@ class OwlViTVisionTransformer(nn.Module):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPooling]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         # Cast the input to the expected `dtype`
         expected_input_dtype = self.embeddings.patch_embedding.weight.dtype
         pixel_values = pixel_values.to(expected_input_dtype)
@@ -838,18 +740,13 @@ class OwlViTVisionTransformer(nn.Module):
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
 
         pooled_output = self.post_layernorm(pooled_output)
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -873,14 +770,13 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -902,10 +798,8 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         ```"""
         return self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
+            **kwargs,
         )
 
 
@@ -1017,6 +911,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         return image_features
 
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -1024,11 +919,9 @@ class OwlViTModel(OwlViTPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_base_image_embeds: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, OwlViTOutput]:
         r"""
         return_loss (`bool`, *optional*):
@@ -1051,28 +944,18 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use OWL-ViT model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         # Get embeddings for all text queries in all batch samples
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         text_embeds = text_outputs[1]
@@ -1095,10 +978,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
             loss = owlvit_loss(logits_per_text)
 
         text_embeds = text_embeds_norm
-
-        if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
 
         return OwlViTOutput(
             loss=loss,
@@ -1294,19 +1173,16 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         input_ids: torch.Tensor,
         pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
         # Encode text and image
         outputs = self.owlvit(
             pixel_values=pixel_values,
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=True,
+            **kwargs,
         )
 
         if interpolate_pos_encoding:
@@ -1343,13 +1219,14 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def image_embedder(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
         # Get OwlViTModel vision embeddings (same as CLIP)
         vision_outputs = self.owlvit.vision_model(
-            pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
+            pixel_values=pixel_values,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
 
         if interpolate_pos_encoding:
@@ -1431,10 +1308,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         query_pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> OwlViTImageGuidedObjectDetectionOutput:
         r"""
         query_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -1470,11 +1345,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         Detected similar object with confidence 0.856 at location [10.94, 50.4, 315.8, 471.39]
         Detected similar object with confidence 1.0 at location [334.84, 25.33, 636.16, 374.71]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Compute feature maps for the input and query images
         query_feature_map = self.image_embedder(
@@ -1482,9 +1352,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         )[0]
         feature_map, vision_outputs = self.image_embedder(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
 
         batch_size, num_patches_height, num_patches_width, hidden_dim = feature_map.shape
@@ -1505,19 +1374,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Predict object boxes
         target_pred_boxes = self.box_predictor(image_feats, feature_map, interpolate_pos_encoding)
 
-        if not return_dict:
-            output = (
-                feature_map,
-                query_feature_map,
-                target_pred_boxes,
-                query_pred_boxes,
-                pred_logits,
-                class_embeds,
-                vision_outputs.to_tuple(),
-            )
-            output = tuple(x for x in output if x is not None)
-            return output
-
         return OwlViTImageGuidedObjectDetectionOutput(
             image_embeds=feature_map,
             query_image_embeds=query_feature_map,
@@ -1529,16 +1385,15 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor,
         pixel_values: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> OwlViTObjectDetectionOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
@@ -1581,20 +1436,14 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         Detected a photo of a cat with confidence 0.707 at location [324.97, 20.44, 640.58, 373.29]
         Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Embed images and text queries
         query_embeds, feature_map, outputs = self.image_text_embedder(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
 
         # Text and vision model outputs
@@ -1617,19 +1466,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map, interpolate_pos_encoding)
-
-        if not return_dict:
-            output = (
-                pred_logits,
-                pred_boxes,
-                query_embeds,
-                feature_map,
-                class_embeds,
-                text_outputs.to_tuple(),
-                vision_outputs.to_tuple(),
-            )
-            output = tuple(x for x in output if x is not None)
-            return output
 
         return OwlViTObjectDetectionOutput(
             image_embeds=feature_map,
