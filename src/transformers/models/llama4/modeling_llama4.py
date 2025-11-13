@@ -54,7 +54,7 @@ class Llama4TextExperts(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
         self.expert_dim = self.intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
+        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size, 2 * self.expert_dim))
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
         self.act_fn = ACT2FN[config.hidden_act]
 
@@ -473,6 +473,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = (
             self.config.initializer_range
@@ -480,24 +481,24 @@ class Llama4PreTrainedModel(PreTrainedModel):
             else self.config.text_config.initializer_range
         )
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         elif isinstance(module, Llama4TextRMSNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, Llama4TextExperts):
-            module.gate_up_proj.data.normal_(mean=0.0, std=std)
-            module.down_proj.data.normal_(mean=0.0, std=std)
+            module.gate_up_proj.normal_(mean=0.0, std=std)
+            module.down_proj.normal_(mean=0.0, std=std)
         elif isinstance(module, Llama4VisionModel):
-            module.class_embedding.data.normal_(std=module.scale)
-            module.positional_embedding_vlm.data.normal_(std=module.scale)
+            module.class_embedding.normal_(std=module.scale)
+            module.positional_embedding_vlm.normal_(std=module.scale)
 
 
 @auto_docstring
@@ -604,7 +605,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
 class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "language_model"
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     config: Llama4TextConfig
 

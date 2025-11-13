@@ -166,24 +166,7 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         # tie encoder, decoder weights if config set accordingly
         self.tie_weights()
 
-    def tie_weights(self):
-        self.encoder.tie_weights()
-        self.decoder.tie_weights()
-        # tie encoder & decoder if needed
-        if self.config.tie_encoder_decoder:
-            # tie encoder and decoder base model
-            decoder_base_model_prefix = self.decoder.base_model_prefix
-            tied_weights = self._tie_encoder_decoder_weights(
-                self.encoder,
-                self.decoder._modules[decoder_base_model_prefix],
-                self.decoder.base_model_prefix,
-                "encoder",
-            )
-            # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
-            # attributed not an instance member, therefore modifying it will modify the entire class
-            # Leading to issues on subsequent calls by different tests or subsequent calls.
-            self._dynamic_tied_weights_keys = tied_weights
-
+    @torch.no_grad()
     def _init_weights(self, module):
         if module in self.encoder.modules():
             self.encoder._init_weights(module)

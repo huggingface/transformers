@@ -354,6 +354,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
         "attentions": MLCDAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
@@ -380,10 +381,10 @@ class MLCDPreTrainedModel(PreTrainedModel):
             pos_emb_std = (module.config.hidden_size // module.config.num_attention_heads // 2) ** -0.5 * factor
             nn.init.normal_(module.class_pos_emb, mean=0.0, std=pos_emb_std)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
 
 
 class MLCDVisionTransformer(CLIPVisionTransformer):

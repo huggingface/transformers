@@ -302,21 +302,22 @@ class AlbertPreTrainedModel(PreTrainedModel):
         "attentions": AlbertAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, AlbertMLMHead):
-            module.bias.data.zero_()
+            module.bias.zero_()
 
 
 @dataclass
@@ -425,7 +426,10 @@ class AlbertModel(AlbertPreTrainedModel):
     """
 )
 class AlbertForPreTraining(AlbertPreTrainedModel):
-    _tied_weights_keys = ["predictions.decoder.bias", "predictions.decoder.weight"]
+    _tied_weights_keys = {
+        "predictions.decoder.weight": "albert.embeddings.word_embeddings.weight",
+        "predictions.decoder.bias": "predictions.bias",
+    }
 
     def __init__(self, config: AlbertConfig):
         super().__init__(config)
@@ -525,7 +529,6 @@ class AlbertMLMHead(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.embedding_size)
         self.decoder = nn.Linear(config.embedding_size, config.vocab_size)
         self.activation = ACT2FN[config.hidden_act]
-        self.decoder.bias = self.bias
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -536,14 +539,6 @@ class AlbertMLMHead(nn.Module):
         prediction_scores = hidden_states
 
         return prediction_scores
-
-    def _tie_weights(self) -> None:
-        # For accelerate compatibility and to not break backward compatibility
-        if self.decoder.bias.device.type == "meta":
-            self.decoder.bias = self.bias
-        else:
-            # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-            self.bias = self.decoder.bias
 
 
 class AlbertSOPHead(nn.Module):
@@ -561,7 +556,10 @@ class AlbertSOPHead(nn.Module):
 
 @auto_docstring
 class AlbertForMaskedLM(AlbertPreTrainedModel):
-    _tied_weights_keys = ["predictions.decoder.bias", "predictions.decoder.weight"]
+    _tied_weights_keys = {
+        "predictions.decoder.weight": "albert.embeddings.word_embeddings.weight",
+        "predictions.decoder.bias": "predictions.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)

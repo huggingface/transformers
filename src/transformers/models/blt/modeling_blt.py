@@ -447,7 +447,6 @@ class BltCrossAttention(nn.Module):
 @auto_docstring
 class BltPreTrainedModel(PreTrainedModel):
     config: BltConfig
-    base_model_prefix = ""
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["BltTransformerLayer"]
@@ -1231,7 +1230,7 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
     config: BltConfig
     _can_compile_fullgraph = False
     base_model_prefix = "model"
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"model.local_encoder.embed_tokens.weight": "lm_head.weight"}
 
     def __init__(self, config: BltConfig):
         super().__init__(config.get_text_config())

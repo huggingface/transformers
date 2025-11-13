@@ -140,6 +140,17 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_torch_compile_for_training(self):
         pass
 
+    def test_tp_plan_matches_params(self):
+        """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
+        be valid all at the same time"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # The key is valid but not always used based on the flag
+        if config.q_lora_rank is not None:
+            config.base_model_tp_plan.pop("layers.*.self_attn.q_proj")
+        super().test_tp_plan_matches_params()
+        # Put them back in class attribute
+        config.base_model_tp_plan.update({"layers.*.self_attn.q_proj": "colwise"})
+
 
 @slow
 @require_read_token

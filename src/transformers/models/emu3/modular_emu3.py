@@ -688,6 +688,7 @@ class Emu3VQVAE(PreTrainedModel):
         "Emu3VQVAEVectorQuantizer",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
@@ -705,9 +706,9 @@ class Emu3VQVAE(PreTrainedModel):
             nn.init.constant_(module.weight, 1.0)
             nn.init.constant_(module.bias, 0.0)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_()
+            module.weight.normal_()
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
     def __init__(self, config: Emu3VQVAEConfig):
         super().__init__(config)
@@ -1043,7 +1044,7 @@ class Emu3Model(Emu3PreTrainedModel):
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     base_model_prefix = ""
     output_modalities = ["image", "text"]
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
     _checkpoint_conversion_mapping = {
         "^text_model.model": "model.text_model",
         "^vqmodel": "model.vqmodel",

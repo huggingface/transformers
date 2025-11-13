@@ -84,14 +84,15 @@ class TrajectoryTransformerPreTrainedModel(PreTrainedModel):
     main_input_name = "trajectories"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if isinstance(module, nn.Linear) and module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, EinLinear):
             for i in range(module.n_models):
                 nn.init.kaiming_uniform_(module.weight[i], a=math.sqrt(5) / self.config.kaiming_initializer_range)

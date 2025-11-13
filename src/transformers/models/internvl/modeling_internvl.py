@@ -411,18 +411,19 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
         "attentions": InternVLVisionAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, InternVLVisionEmbeddings):
-            module.cls_token.data.zero_()
+            module.cls_token.zero_()
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                module.mask_token.zero_()
             if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
+                module.position_embeddings.zero_()
         elif isinstance(module, InternVLVisionLayer):
-            module.lambda_1.data.fill_(self.config.layer_scale_init_value)
-            module.lambda_2.data.fill_(self.config.layer_scale_init_value)
+            module.lambda_1.fill_(self.config.layer_scale_init_value)
+            module.lambda_2.fill_(self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -471,7 +472,6 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 @auto_docstring
 class InternVLPreTrainedModel(PreTrainedModel):
     config: InternVLConfig
-    base_model_prefix = ""
     input_modalities = ["image", "text", "video"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -529,8 +529,6 @@ class InternVLModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class InternVLModel(InternVLPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
-
     def __init__(self, config: InternVLConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -761,12 +759,12 @@ class InternVLCausalLMOutputWithPast(ModelOutput):
 )
 class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^language_model.lm_head": "lm_head",
+        r"^language_model.model": "model.language_model",
+        r"^vision_tower": "model.vision_tower",
+        r"^multi_modal_projector": "model.multi_modal_projector",
+        r"^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: InternVLConfig):
         super().__init__(config)

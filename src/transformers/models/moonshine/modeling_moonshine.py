@@ -1009,7 +1009,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     """
 )
 class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["proj_out.weight"]
+    _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)

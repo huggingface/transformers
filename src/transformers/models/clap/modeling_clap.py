@@ -1308,28 +1308,29 @@ class ClapPreTrainedModel(PreTrainedModel):
     input_modalities = ["audio", "text"]
     supports_gradient_checkpointing = False
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
 
         if isinstance(module, ClapTextEmbeddings):
-            module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.token_type_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            module.position_embeddings.weight.normal_(mean=0.0, std=factor * 0.02)
+            module.token_type_embeddings.weight.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, ClapModel):
-            module.logit_scale_a.data.fill_(math.log(self.config.logit_scale_init_value))
-            module.logit_scale_t.data.fill_(math.log(self.config.logit_scale_init_value))
+            module.logit_scale_a.fill_(math.log(self.config.logit_scale_init_value))
+            module.logit_scale_t.fill_(math.log(self.config.logit_scale_init_value))
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            module.weight.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, (nn.Conv2d, nn.Linear)):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.weight, std=in_proj_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, ClapAudioSelfAttention):
-            module.relative_position_bias_table.data.zero_()
+            module.relative_position_bias_table.zero_()
 
 
 class ClapAudioModel(ClapPreTrainedModel):

@@ -44,6 +44,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralPreTrainedModel,
     MixtralRMSNorm,
     MixtralSparseMoeBlock,
+    MixtralTopKRouter,
 )
 
 
@@ -161,10 +162,10 @@ class MiniMaxConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.block_sparse_moe.gate": "colwise_rep",  # we need to replicate here to correctly route experts
-        "layers.*.block_sparse_moe.experts.*.w1": "colwise",
-        "layers.*.block_sparse_moe.experts.*.w2": "rowwise",
-        "layers.*.block_sparse_moe.experts.*.w3": "colwise",
+        "layers.*.mlp.gate": "colwise_rep",  # we need to replicate here to correctly route experts
+        "layers.*.mlp.experts.*.w1": "colwise",
+        "layers.*.mlp.experts.*.w2": "rowwise",
+        "layers.*.mlp.experts.*.w3": "colwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -464,6 +465,10 @@ class MiniMaxAttention(MixtralAttention):
     pass
 
 
+class MiniMaxTopKRouter(MixtralTopKRouter):
+    pass
+
+
 class MiniMaxSparseMoeBlock(MixtralSparseMoeBlock):
     pass
 
@@ -476,7 +481,8 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
-
+        del self.mlp
+        self.mlp = MiniMaxSparseMoeBlock(config)
         if self.layer_type == "linear_attention":
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
             self.attn_alpha_factor = config.linear_attn_alpha_factor
@@ -512,7 +518,7 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
         hidden_states = residual * self.attn_alpha_factor + hidden_states * self.attn_beta_factor
         hidden_states = self.post_attention_layernorm(hidden_states)
         residual = hidden_states
-        hidden_states = self.block_sparse_moe(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual * self.mlp_alpha_factor + hidden_states * self.mlp_beta_factor
 
         return hidden_states
@@ -521,7 +527,7 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
 class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
     _can_compile_fullgraph = False
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="block_sparse_moe.gate", index=0),
+        "router_logits": OutputRecorder(MiniMaxTopKRouter, layer_name="mlp.gate", index=0),
         "hidden_states": MiniMaxDecoderLayer,
         "attentions": [MiniMaxAttention, MiniMaxLightningAttention],
     }

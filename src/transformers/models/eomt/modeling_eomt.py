@@ -996,6 +996,7 @@ class EomtPreTrainedModel(PreTrainedModel):
         "attentions": EomtAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
@@ -1005,20 +1006,20 @@ class EomtPreTrainedModel(PreTrainedModel):
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=1)
+            module.weight.normal_(mean=0.0, std=1)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, EomtLayerScale):
             if hasattr(module, "lambda1"):
-                module.lambda1.data.fill_(self.config.layerscale_value)
+                module.lambda1.fill_(self.config.layerscale_value)
         elif isinstance(module, EomtEmbeddings):
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32), mean=0.0, std=std
-            ).to(module.cls_token.dtype)
-            module.register_tokens.data.zero_()
+            module.cls_token.copy_(
+                nn.init.trunc_normal_(module.cls_token.to(torch.float32), mean=0.0, std=std).to(module.cls_token.dtype)
+            )
+            module.register_tokens.zero_()
 
 
 @auto_docstring(

@@ -401,10 +401,9 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = GraniteMoeSharedAttention(config=config, layer_idx=layer_idx)
-        self.block_sparse_moe = GraniteMoeSharedMoE(config)
         self.input_layernorm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
+        self.block_sparse_moe = GraniteMoeSharedMoE(config)
         self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
 
@@ -468,10 +467,11 @@ class GraniteMoeSharedPreTrainedModel(PreTrainedModel):
         "attentions": GraniteMoeSharedAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeSharedParallelExperts):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 class GraniteMoeSharedRotaryEmbedding(nn.Module):
@@ -706,7 +706,7 @@ def load_balancing_loss_func(
 
 @auto_docstring
 class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

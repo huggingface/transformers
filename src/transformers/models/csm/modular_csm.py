@@ -140,12 +140,13 @@ class CsmPreTrainedModel(PreTrainedModel):
         "attentions": CsmAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, CsmCodebooksHead):
             num_codebooks = module.num_codebooks
             for i in range(num_codebooks - 1):
-                module.weight.data[i].normal_(mean=0.0, std=self.config.initializer_range)
+                module.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -420,10 +421,9 @@ class CsmBackboneModel(LlamaModel):
     """
 )
 class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
-    _tied_weights_keys = [
-        "backbone_model.embed_tokens.embed_audio_tokens.weight",
-        "depth_decoder.model.embed_tokens.weight",
-    ]
+    _tied_weights_keys = {
+        "backbone_model.embed_tokens.embed_audio_tokens.weight": "depth_decoder.model.embed_tokens.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -440,13 +440,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
 
     def set_input_embeddings(self, value):
         self.backbone_model.embed_tokens = value
-
-    def _tie_weights(self):
-        if self.config.tie_codebooks_embeddings:
-            self._tie_embedding_weights(
-                self.backbone_model.embed_tokens.embed_audio_tokens,
-                self.depth_decoder.model.embed_tokens,
-            )
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):

@@ -522,13 +522,14 @@ class TvpPreTrainedModel(PreTrainedModel):
     input_modalities = ["video", "text"]
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
@@ -537,7 +538,7 @@ class TvpPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.text_prompt)
 
         if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
         if hasattr(module, "pad_up"):
             nn.init.normal_(module.pad_up)
         if hasattr(module, "pad_down"):

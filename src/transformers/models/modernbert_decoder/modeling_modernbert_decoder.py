@@ -394,6 +394,7 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
         "attentions": ModernBertDecoderAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
@@ -436,9 +437,9 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
         elif isinstance(module, ModernBertDecoderForCausalLM):
             init_weight(module.decoder, stds["out"])
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
 
 
 @auto_docstring
@@ -549,7 +550,7 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
     """
 )
 class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["decoder.weight"]
+    _tied_weights_keys = {"decoder.weight": "model.embeddings.tok_embeddings.weight"}
 
     def __init__(self, config: ModernBertDecoderConfig):
         super().__init__(config)

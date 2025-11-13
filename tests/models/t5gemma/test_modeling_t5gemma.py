@@ -635,6 +635,8 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         return False
 
     def test_config(self):
+        # Skip `create_and_test_config_from_and_save_pretrained_composite` because the config has twice the same subconfig
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite = lambda: None
         self.config_tester.run_common_tests()
 
     def test_shift_right(self):
@@ -1485,6 +1487,8 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
     def test_config(self):
+        # Skip `create_and_test_config_from_and_save_pretrained_composite` because the config has twice the same subconfig
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite = lambda: None
         self.config_tester.run_common_tests()
 
     @unittest.skip("This was not properly written, submodules need the attribute to be overwritten")

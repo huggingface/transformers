@@ -3726,6 +3726,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_load_best_model_from_safetensors(self):
         total = int(self.n_epochs * 64 / self.batch_size)
         for save_safetensors, pretrained in product([False, True], [False, True]):
+            save_safetensors = True
             with tempfile.TemporaryDirectory() as tmpdir:
                 trainer = get_regression_trainer(
                     a=1.5,

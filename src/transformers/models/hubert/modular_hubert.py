@@ -134,36 +134,37 @@ class HubertPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             if is_deepspeed_zero3_enabled():
                 import deepspeed
 
                 if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
                     with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
-                        nn.init.kaiming_normal_(module.weight.data)
+                        nn.init.kaiming_normal_(module.weight)
                 else:
                     with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
-                        nn.init.kaiming_normal_(module.weight.data)
+                        nn.init.kaiming_normal_(module.weight)
             else:
-                nn.init.kaiming_normal_(module.weight.data)
+                nn.init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, HubertModel):
             if hasattr(module, "masked_spec_embed"):
-                module.masked_spec_embed.data.uniform_()
+                module.masked_spec_embed.uniform_()
         elif isinstance(module, HubertForSequenceClassification):
             if hasattr(module, "layer_weights"):
-                module.layer_weights.data.fill_(1.0 / (self.config.num_hidden_layers + 1))
+                module.layer_weights.fill_(1.0 / (self.config.num_hidden_layers + 1))
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """

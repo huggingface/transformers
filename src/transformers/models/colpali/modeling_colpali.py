@@ -38,6 +38,7 @@ class ColPaliPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = (
             self.config.initializer_range
@@ -46,13 +47,13 @@ class ColPaliPreTrainedModel(PreTrainedModel):
         )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
 
 @dataclass
@@ -113,7 +114,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
         self.vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
-        self._tied_weights_keys = [f"vlm.language_model.{k}" for k in (self.vlm._tied_weights_keys or [])]
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
@@ -185,9 +185,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
-
-    def tie_weights(self):
-        return self.vlm.tie_weights()
 
     def resize_token_embeddings(
         self,

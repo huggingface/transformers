@@ -392,15 +392,16 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
         "attentions": VideoMAESelfAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv3d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 @auto_docstring

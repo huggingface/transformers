@@ -416,19 +416,20 @@ class MusicgenPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_factor
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
 
 class MusicgenDecoder(MusicgenPreTrainedModel):
@@ -1393,23 +1394,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
             )
 
         # tie text encoder, decoder weights if config set accordingly
-        self.tie_weights()
-
-    def tie_weights(self):
-        # tie text encoder & decoder if needed
-        if self.config.tie_encoder_decoder:
-            # tie text encoder and decoder base model
-            decoder_base_model_prefix = self.decoder.base_model_prefix
-            tied_weights = self._tie_encoder_decoder_weights(
-                self.text_encoder,
-                self.decoder._modules[decoder_base_model_prefix],
-                self.decoder.base_model_prefix,
-                "text_encoder",
-            )
-            # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
-            # attributed not an instance member, therefore modifying it will modify the entire class
-            # Leading to issues on subsequent calls by different tests or subsequent calls.
-            self._dynamic_tied_weights_keys = tied_weights
+        self.post_init()
 
     def get_audio_encoder(self):
         return self.audio_encoder

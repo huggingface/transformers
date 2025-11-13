@@ -42,6 +42,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -789,8 +790,15 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         return self.thinker_config.get_text_config()
 
 
-class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel):
-    pass
+class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        std = self.config.initializer_range
+        if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
+            module.experts.gate_up_proj.normal_(mean=0.0, std=std)
+            module.experts.down_proj.normal_(mean=0.0, std=std)
+            module.router.weight.normal_(mean=0.0, std=std)
 
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration):

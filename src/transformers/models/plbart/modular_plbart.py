@@ -67,7 +67,10 @@ class PLBartDecoder(BartDecoder):
 
 @auto_docstring
 class PLBartModel(PLBartPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: PLBartConfig):
         super().__init__(config)
@@ -76,8 +79,8 @@ class PLBartModel(PLBartPreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = PLBartScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
 
-        self.encoder = PLBartEncoder(config, self.shared)
-        self.decoder = PLBartDecoder(config, self.shared)
+        self.encoder = PLBartEncoder(config)
+        self.decoder = PLBartDecoder(config)
 
         self.init_weights()
 
@@ -88,11 +91,6 @@ class PLBartModel(PLBartPreTrainedModel):
         self.shared = value
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder
@@ -203,7 +201,9 @@ class PLBartModel(PLBartPreTrainedModel):
 class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: PLBartConfig):
         super().__init__(config)

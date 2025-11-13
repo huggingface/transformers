@@ -396,6 +396,7 @@ class DFineConfig(PreTrainedConfig):
                 f"Embedded dimension {self.d_model} must be divisible by decoder_attention_heads {self.decoder_attention_heads}"
             )
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        self.tie_encoder_decoder = True
 
 
 __all__ = ["DFineConfig"]

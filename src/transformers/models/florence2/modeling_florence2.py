@@ -615,7 +615,6 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
 @auto_docstring
 class Florence2PreTrainedModel(PreTrainedModel):
     config: Florence2Config
-    base_model_prefix = "model"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -628,6 +627,7 @@ class Florence2PreTrainedModel(PreTrainedModel):
 
     _supports_attention_backend = False
     config_class = Florence2Config
+    base_model_prefix = "model"
 
 
 @auto_docstring(
@@ -637,10 +637,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
 )
 class Florence2Model(Florence2PreTrainedModel):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = [
-        "language_model.encoder.embed_tokens.weight",
-        "language_model.decoder.embed_tokens.weight",
-    ]
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
@@ -806,11 +802,9 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
 )
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = [
-        "model.language_model.encoder.embed_tokens.weight",
-        "model.language_model.decoder.embed_tokens.weight",
-        "lm_head.weight",
-    ]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.language_model.shared.weight",
+    }
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)

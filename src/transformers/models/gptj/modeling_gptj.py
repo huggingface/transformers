@@ -447,19 +447,20 @@ class GPTJPreTrainedModel(PreTrainedModel):
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear,)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 @auto_docstring
@@ -722,7 +723,7 @@ class GPTJModel(GPTJPreTrainedModel):
     """
 )
 class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
     def __init__(self, config):
         super().__init__(config)

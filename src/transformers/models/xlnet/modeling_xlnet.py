@@ -635,19 +635,20 @@ class XLNetPreTrainedModel(PreTrainedModel):
     config: XLNetConfig
     base_model_prefix = "transformer"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, XLNetRelativeAttention):
             for param in [
                 module.q,
@@ -660,9 +661,9 @@ class XLNetPreTrainedModel(PreTrainedModel):
                 module.r_w_bias,
                 module.seg_embed,
             ]:
-                param.data.normal_(mean=0.0, std=self.config.initializer_range)
+                param.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, XLNetModel):
-            module.mask_emb.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.mask_emb.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @dataclass
@@ -1233,7 +1234,7 @@ class XLNetModel(XLNetPreTrainedModel):
     """
 )
 class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_loss.weight"]
+    _tied_weights_keys = {"lm_loss.weight": "transformer.word_embedding.weight"}
 
     def __init__(self, config):
         super().__init__(config)

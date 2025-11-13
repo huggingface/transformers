@@ -72,6 +72,11 @@ def get_conversion_pr_reference(api: HfApi, model_id: str, **kwargs):
         pr = previous_pr(api, model_id, pr_title, token=token)
     else:
         logger.info("Safetensors PR exists")
+    if pr is None:
+        raise OSError(
+            "Could not create safetensors conversion PR. The repo does not appear to have a file named pytorch_model.bin or model.safetensors."
+            "If you are loading with variant, use `use_safetensors=False` to load the original model."
+        )
 
     sha = f"refs/pr/{pr.num}"
 

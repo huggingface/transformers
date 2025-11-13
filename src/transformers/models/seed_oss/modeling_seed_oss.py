@@ -439,7 +439,7 @@ class SeedOssModel(SeedOssPreTrainedModel):
 
 @auto_docstring
 class SeedOssForCausalLM(SeedOssPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

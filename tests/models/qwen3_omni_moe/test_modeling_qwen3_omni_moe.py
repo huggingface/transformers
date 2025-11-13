@@ -256,9 +256,9 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
 
 
 @require_torch
-class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
-    Model tester for `Qwen2_5OmniThinkerForConditionalGeneration`.
+    Model tester for `Qwen3OmniMoeThinkerForConditionalGeneration`.
     """
 
     all_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
@@ -617,7 +617,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
 
 
 @require_torch
-class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
+class Qwen3OmniModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(
             "Qwen/Qwen3-Omni-30B-A3B-Instruct", min_pixels=28 * 28, max_pixels=56 * 56

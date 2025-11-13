@@ -439,19 +439,20 @@ class OpenLlamaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["OpenLlamaDecoderLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
             if self.config.use_stable_embedding:
-                torch.nn.init.xavier_normal_(module.weight.data)
+                torch.nn.init.xavier_normal_(module.weight)
             else:
-                module.weight.data.normal_(mean=0.0, std=std)
+                module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
 
 OPEN_LLAMA_INPUTS_DOCSTRING = r"""

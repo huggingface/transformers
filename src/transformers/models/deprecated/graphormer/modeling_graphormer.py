@@ -721,7 +721,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             self.normal_(module.weight.data)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         if isinstance(module, nn.Embedding):
             self.normal_(module.weight.data)
             if module.padding_idx is not None:
@@ -731,6 +731,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
             self.normal_(module.k_proj.weight.data)
             self.normal_(module.v_proj.weight.data)
 
+    @torch.no_grad()
     def _init_weights(
         self,
         module: Union[
@@ -742,28 +743,28 @@ class GraphormerPreTrainedModel(PreTrainedModel):
         """
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # We might be missing part of the Linear init, dependent on the layer num
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            module.weight.normal_(mean=0.0, std=0.02)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            module.weight.normal_(mean=0.0, std=0.02)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, GraphormerMultiheadAttention):
-            module.q_proj.weight.data.normal_(mean=0.0, std=0.02)
-            module.k_proj.weight.data.normal_(mean=0.0, std=0.02)
-            module.v_proj.weight.data.normal_(mean=0.0, std=0.02)
+            module.q_proj.weight.normal_(mean=0.0, std=0.02)
+            module.k_proj.weight.normal_(mean=0.0, std=0.02)
+            module.v_proj.weight.normal_(mean=0.0, std=0.02)
             module.reset_parameters()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, GraphormerGraphEncoder):
             if module.apply_graphormer_init:
                 module.apply(self.init_graphormer_params)
 
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 class GraphormerModel(GraphormerPreTrainedModel):

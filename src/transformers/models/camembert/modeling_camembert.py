@@ -383,7 +383,6 @@ class CamembertLMHead(nn.Module):
 
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        self.decoder.bias = self.bias
 
     def forward(self, features, **kwargs):
         x = self.dense(features)
@@ -394,14 +393,6 @@ class CamembertLMHead(nn.Module):
         x = self.decoder(x)
 
         return x
-
-    def _tie_weights(self):
-        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        # For accelerate compatibility and to not break backward compatibility
-        if self.decoder.bias.device.type == "meta":
-            self.decoder.bias = self.bias
-        else:
-            self.bias = self.decoder.bias
 
 
 @auto_docstring
@@ -419,21 +410,22 @@ class CamembertPreTrainedModel(PreTrainedModel):
         "cross_attentions": CamembertCrossAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, CamembertLMHead):
-            module.bias.data.zero_()
+            module.bias.zero_()
 
 
 class CamembertEmbeddings(nn.Module):
@@ -745,7 +737,10 @@ class CamembertModel(CamembertPreTrainedModel):
 
 @auto_docstring
 class CamembertForMaskedLM(CamembertPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight",
+        "lm_head.decoder.bias": "lm_head.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1191,7 +1186,10 @@ class CamembertForQuestionAnswering(CamembertPreTrainedModel):
     """
 )
 class CamembertForCausalLM(CamembertPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "camembert.embeddings.word_embeddings.weight",
+        "lm_head.decoder.bias": "lm_head.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)

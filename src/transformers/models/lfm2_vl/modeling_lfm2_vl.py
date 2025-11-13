@@ -76,7 +76,6 @@ class Lfm2VlMultiModalProjector(nn.Module):
 @auto_docstring
 class Lfm2VlPreTrainedModel(PreTrainedModel):
     config: Lfm2VlConfig
-    base_model_prefix = "model"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -86,6 +85,7 @@ class Lfm2VlPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
+    base_model_prefix = "model"
 
 
 @dataclass
@@ -307,7 +307,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
 )
 class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)

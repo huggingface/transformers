@@ -597,19 +597,11 @@ class LxmertPredictionHeadTransform(nn.Module):
 
 
 class LxmertLMPredictionHead(nn.Module):
-    def __init__(self, config, lxmert_model_embedding_weights):
+    def __init__(self, config):
         super().__init__()
         self.transform = LxmertPredictionHeadTransform(config)
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(
-            lxmert_model_embedding_weights.size(1),
-            lxmert_model_embedding_weights.size(0),
-            bias=False,
-        )
-        self.decoder.weight = lxmert_model_embedding_weights
-        self.bias = nn.Parameter(torch.zeros(lxmert_model_embedding_weights.size(0)))
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -664,9 +656,9 @@ class LxmertVisualObjHead(nn.Module):
 
 
 class LxmertPreTrainingHeads(nn.Module):
-    def __init__(self, config, lxmert_model_embedding_weights):
+    def __init__(self, config):
         super().__init__()
-        self.predictions = LxmertLMPredictionHead(config, lxmert_model_embedding_weights)
+        self.predictions = LxmertLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
     def forward(self, sequence_output, pooled_output):
@@ -682,21 +674,22 @@ class LxmertPreTrainedModel(PreTrainedModel):
     input_modalities = ["image", "text"]
     _supports_param_buffer_assignment = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, LxmertLMPredictionHead):
-            module.bias.data.zero_()
+            module.bias.zero_()
 
 
 @auto_docstring
@@ -851,7 +844,10 @@ class LxmertModel(LxmertPreTrainedModel):
 
 @auto_docstring
 class LxmertForPreTraining(LxmertPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight"]
+    # help saving them
+    _tied_weights_keys = {
+        "cls.predictions.decoder.weight": "lxmert.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -870,7 +866,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         self.lxmert = LxmertModel(config)
 
         # Pre-training heads
-        self.cls = LxmertPreTrainingHeads(config, self.lxmert.embeddings.word_embeddings.weight)
+        self.cls = LxmertPreTrainingHeads(config)
         if self.task_obj_predict:
             self.obj_predict_head = LxmertVisualObjHead(config)
         if self.task_qa:
@@ -907,9 +903,6 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
                 "loss": "l2",
             }
         self.visual_losses = visual_losses
-
-    def _tie_weights(self):
-        self.cls.predictions.decoder.weight = self.lxmert.embeddings.word_embeddings.weight
 
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True

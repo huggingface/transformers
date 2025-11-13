@@ -248,6 +248,7 @@ class CausalLMModelTester:
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand
         self.mamba_chunk_size = mamba_chunk_size
+        self.tie_word_embeddings = False
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)

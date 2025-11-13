@@ -304,7 +304,6 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         del self._tied_weights_keys
-        self._tied_weights_keys = [f"vlm.{k}" for k in (self.vlm._tied_weights_keys or [])]
 
     @can_return_tuple
     @auto_docstring

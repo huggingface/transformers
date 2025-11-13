@@ -504,12 +504,13 @@ class XCLIPPreTrainedModel(PreTrainedModel):
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, XCLIPTextEmbeddings):
-            module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            module.token_embedding.weight.normal_(mean=0.0, std=factor * 0.02)
+            module.position_embedding.weight.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, XCLIPVisionEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
@@ -544,12 +545,12 @@ class XCLIPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.position_embedding, std=self.config.initializer_factor)
 
         if isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_factor)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_factor)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->XCLIP

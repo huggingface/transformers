@@ -237,10 +237,10 @@ def replace_batch_norm(model):
             new_module = ConditionalDetrFrozenBatchNorm2d(module.num_features)
 
             if module.weight.device != torch.device("meta"):
-                new_module.weight.data.copy_(module.weight)
-                new_module.bias.data.copy_(module.bias)
-                new_module.running_mean.data.copy_(module.running_mean)
-                new_module.running_var.data.copy_(module.running_var)
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
 
             model._modules[name] = new_module
 
@@ -970,6 +970,7 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
     input_modalities = "image"
     _no_split_modules = [r"ConditionalDetrConvEncoder", r"ConditionalDetrEncoderLayer", r"ConditionalDetrDecoderLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
         xavier_std = self.config.init_xavier_std
@@ -983,13 +984,13 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrEncoder with Detr->ConditionalDetr,DETR->ConditionalDETR

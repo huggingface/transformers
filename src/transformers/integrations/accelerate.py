@@ -512,10 +512,8 @@ def accelerate_disk_offload(
     checkpoint_files,
     device_map,
     checkpoint_keys,
-    key_renaming_mapping,
     sharded_metadata,
     dtype,
-    reverse_key_renaming_mapping,
 ):
     disk_only_shard_files = []
     if disk_offload_folder is not None:
@@ -534,19 +532,13 @@ def accelerate_disk_offload(
             weight_map = dict.fromkeys(checkpoint_keys, checkpoint_files[0])
         else:
             folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
-            # Fix the weight map keys according to the key mapping
-            weight_map = {
-                key_renaming_mapping[k]: v
-                for k, v in sharded_metadata["weight_map"].items()
-                if k in key_renaming_mapping
-            }
             weight_map = {k: os.path.join(folder, v) for k, v in weight_map.items()}
             # Find potential checkpoints containing only offloaded weights
             disk_only_shard_files = get_disk_only_shard_files(device_map, weight_map)
         disk_offload_index = {
             name: {
                 "safetensors_file": file,
-                "weight_name": reverse_key_renaming_mapping[name],
+                "weight_name": name,
                 "dtype": str_dtype,
             }
             for name, file in weight_map.items()

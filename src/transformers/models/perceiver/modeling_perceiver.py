@@ -531,26 +531,27 @@ class PerceiverPreTrainedModel(PreTrainedModel):
     main_input_name = "inputs"
     input_modalities = "image"  # techinically can be anything but HF impl has only image processor
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif hasattr(module, "latents"):
-            module.latents.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.latents.normal_(mean=0.0, std=self.config.initializer_range)
         elif hasattr(module, "position_embeddings") and isinstance(module, PerceiverTrainablePositionEncoding):
-            module.position_embeddings.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.position_embeddings.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.ParameterDict):
             for modality in module:
-                module[modality].data.normal_(mean=0.0, std=self.config.initializer_range)
+                module[modality].normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 @auto_docstring(

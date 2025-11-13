@@ -106,7 +106,6 @@ class ApertusConfig(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the added norm on q and k
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

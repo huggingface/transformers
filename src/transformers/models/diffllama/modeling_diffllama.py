@@ -596,13 +596,14 @@ class DiffLlamaPreTrainedModel(PreTrainedModel):
         "attentions": DiffLlamaAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, DiffLlamaAttention):
-            module.lambda_q1.data.normal_(0, self.config.lambda_std_dev)
-            module.lambda_k1.data.normal_(0, self.config.lambda_std_dev)
-            module.lambda_q2.data.normal_(0, self.config.lambda_std_dev)
-            module.lambda_k2.data.normal_(0, self.config.lambda_std_dev)
+            module.lambda_q1.normal_(0, self.config.lambda_std_dev)
+            module.lambda_k1.normal_(0, self.config.lambda_std_dev)
+            module.lambda_q2.normal_(0, self.config.lambda_std_dev)
+            module.lambda_k2.normal_(0, self.config.lambda_std_dev)
 
 
 @auto_docstring
@@ -686,7 +687,7 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
 
 @auto_docstring
 class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

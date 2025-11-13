@@ -442,7 +442,6 @@ class SamHQVisionModel(SamVisionModel):
     """
 )
 class SamHQModel(SamModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config):

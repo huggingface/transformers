@@ -781,17 +781,18 @@ class ClvpPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            module.weight.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, (nn.Linear, Conv1D, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            module.weight.normal_(mean=0.0, std=factor * 0.02)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, ClvpRMSNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, ClvpEncoderMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
@@ -800,22 +801,22 @@ class ClvpPreTrainedModel(PreTrainedModel):
         elif isinstance(module, ClvpEncoder):
             config = self.config.get_text_config()
             factor = config.initializer_factor
-            module.projection.weight.data.normal_(mean=0.0, std=factor * (config.hidden_size**-0.5))
+            module.projection.weight.normal_(mean=0.0, std=factor * (config.hidden_size**-0.5))
         elif isinstance(module, ClvpConditioningEncoder):
-            module.mel_conv.weight.data.normal_(mean=0.0, std=factor)
-            module.mel_conv.bias.data.zero_()
+            module.mel_conv.weight.normal_(mean=0.0, std=factor)
+            module.mel_conv.bias.zero_()
         elif isinstance(module, ClvpForCausalLM):
             for name, p in module.named_parameters():
                 if name == "c_proj.weight":
-                    p.data.normal_(
+                    p.normal_(
                         mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers))
                     )
         elif isinstance(module, ClvpModelForConditionalGeneration):
-            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
+            module.logit_scale.fill_(self.config.logit_scale_init_value)
 
         if isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 class ClvpEncoder(ClvpPreTrainedModel):

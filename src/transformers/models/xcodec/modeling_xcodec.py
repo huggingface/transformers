@@ -327,26 +327,27 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     main_input_name = "input_values"
     input_modalities = "audio"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif module.__class__.__name__ == "Snake1d":
-            module.alpha.data.fill_(1.0)
+            module.alpha.fill_(1.0)
         elif isinstance(module, nn.ConvTranspose1d):
             module.reset_parameters()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            module.weight.normal_(mean=0.0, std=0.02)
         elif isinstance(module, XcodecModel):
             # The conv1d are not handled correctly, as `self.acoustic_encoder/decoder` are initialized from a PreTrainedModel,
             # but then only the submodules are used (which are not PreTrainedModels...) -> here we reinit them as in DacModel
@@ -354,10 +355,12 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
                 if isinstance(submodule, nn.Conv1d):
                     nn.init.trunc_normal_(submodule.weight, std=0.02)
                     nn.init.constant_(submodule.bias, 0)
+                    submodule._is_hf_initialized = True
             for submodule in module.acoustic_decoder.modules():
                 if isinstance(submodule, nn.Conv1d):
                     nn.init.trunc_normal_(submodule.weight, std=0.02)
                     nn.init.constant_(submodule.bias, 0)
+                    submodule._is_hf_initialized = True
 
     def apply_weight_norm(self):
         """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied."""
@@ -401,9 +404,8 @@ class XcodecModel(XcodecPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.pad = config.hop_length // 2
-        acoustic_model = AutoModel.from_config(config.acoustic_model_config)
-        self.acoustic_encoder = acoustic_model.encoder
-        self.acoustic_decoder = acoustic_model.decoder
+        self.acoustic_model = AutoModel.from_config(config.acoustic_model_config)
+
         self._adjust_dac_decoder(self.acoustic_decoder)
         self.encoder_semantic = SemanticEncoder(config)
         self.decoder_semantic = SemanticDecoder(config)
@@ -415,6 +417,14 @@ class XcodecModel(XcodecPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    @property
+    def acoustic_encoder(self):
+        return self.acoustic_model.encoder
+
+    @property
+    def acoustic_decoder(self):
+        return self.acoustic_model.decoder
 
     @staticmethod
     def _adjust_dac_decoder(decoder: nn.Module):

@@ -259,19 +259,20 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     config: OpenAIGPTConfig
     base_model_prefix = "transformer"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, Conv1D)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 @dataclass
@@ -416,7 +417,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     """
 )
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "transformer.tokens_embed.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -501,7 +502,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
     """
 )
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"transformer.tokens_embed.weight": "lm_head.weight"}
 
     def __init__(self, config):
         super().__init__(config)

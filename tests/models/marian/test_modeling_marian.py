@@ -246,7 +246,7 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -271,16 +271,29 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
         # check if embeddings are shared by default
         for model_class in self.all_model_classes:
+            config.share_encoder_decoder_embeddings = True
+            config.tie_encoder_decoder = True
             model = model_class(config)
-            self.assertIs(model.get_encoder().embed_tokens, model.get_decoder().embed_tokens)
-            self.assertIs(model.get_encoder().embed_tokens.weight, model.get_decoder().embed_tokens.weight)
+            self.assertIs(
+                model.get_encoder().embed_tokens.weight,
+                model.get_decoder().embed_tokens.weight,
+                msg=f"Failed for {model_class}",
+            )
 
         # check if embeddings are not shared when config.share_encoder_decoder_embeddings = False
         config.share_encoder_decoder_embeddings = False
+        config.tie_encoder_decoder = False
+        config.tie_word_embeddings = False
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsNot(model.get_encoder().embed_tokens, model.get_decoder().embed_tokens)
-            self.assertIsNot(model.get_encoder().embed_tokens.weight, model.get_decoder().embed_tokens.weight)
+            self.assertIsNot(
+                model.get_encoder().embed_tokens, model.get_decoder().embed_tokens, msg=f"Failed for {model_class}"
+            )
+            self.assertIsNot(
+                model.get_encoder().embed_tokens.weight,
+                model.get_decoder().embed_tokens.weight,
+                msg=f"Failed for {model_class}",
+            )
 
         # check if a model with shared embeddings can be saved and loaded with share_encoder_decoder_embeddings = False
         config, _ = self.model_tester.prepare_config_and_inputs()

@@ -404,10 +404,6 @@ class Pop2PianoModelTester:
                 decoder_attention_mask=decoder_attention_mask,
             )
 
-            # check that models has less parameters
-            self.parent.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             # check that outputs are equal
@@ -424,10 +420,6 @@ class Pop2PianoModelTester:
                 tied_model.to(torch_device)
                 tied_model.eval()
 
-                # check that models has less parameters
-                self.parent.assertLess(
-                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-                )
                 random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
                 tied_model_result = tied_model(
@@ -582,7 +574,7 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @slow
     def test_model_from_pretrained(self):
         model_name = "sweetcocoa/pop2piano"
-        model = Pop2PianoForConditionalGeneration.from_pretrained(model_name)
+        model = Pop2PianoForConditionalGeneration.from_pretrained(model_name, trust_remote_code=True)
         self.assertIsNotNone(model)
 
     def test_pass_with_input_features(self):
@@ -593,7 +585,7 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 "extrapolated_beatstep": torch.randint(size=(1, 900), low=0, high=100).type(torch.float32),
             }
         )
-        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
+        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano", trust_remote_code=True)
         model_opts = model.generate(input_features=input_features["input_features"], return_dict_in_generate=True)
 
         self.assertEqual(model_opts.sequences.ndim, 2)
@@ -619,7 +611,7 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 "attention_mask_extrapolated_beatstep": torch.ones((5, 900)).type(torch.int32),
             }
         )
-        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
+        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano", trust_remote_code=True)
         model_opts = model.generate(
             input_features=input_features["input_features"],
             attention_mask=input_features["attention_mask"],

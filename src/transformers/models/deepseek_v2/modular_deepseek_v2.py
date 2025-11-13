@@ -142,8 +142,7 @@ class DeepseekV2Config(LlamaConfig):
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.gate_up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
 
@@ -224,12 +223,10 @@ def apply_rotary_emb(
     return xq_out, xk_out
 
 
-class DeepseekV2Experts(Qwen2MoeExperts, nn.ModuleList):
+class DeepseekV2Experts(Qwen2MoeExperts):
     def __init__(self, config):
-        nn.ModuleList.__init__(self)
+        super().__init__(config)
         self.num_experts = config.n_routed_experts
-        for _ in range(config.n_routed_experts):
-            self.append(DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size))
 
 
 class DeepseekV2Moe(nn.Module):
@@ -267,6 +264,7 @@ class DeepseekV2Moe(nn.Module):
             topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
 
         topk_weight = topk_weight * self.routed_scaling_factor
+        topk_weight = torch.zeros_like(router_logits).scatter_(1, topk_idx, topk_weight)
         return topk_idx, topk_weight
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -439,10 +437,11 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2Moe):
-            module.gate.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.gate.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV2Model(LlamaModel):

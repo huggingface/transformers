@@ -473,15 +473,8 @@ class BlipTextLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -511,15 +504,16 @@ class BlipTextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "bert"
     _no_split_modules = []
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L571
@@ -744,7 +738,10 @@ class BlipTextModel(BlipTextPreTrainedModel):
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L811
 class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
