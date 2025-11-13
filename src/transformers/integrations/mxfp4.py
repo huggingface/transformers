@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
 
 
 if is_torch_available():
@@ -114,6 +114,9 @@ def convert_moe_packed_tensors(
     if not blocks.is_cuda and torch.cuda.is_available():
         blocks = blocks.cuda()
         scales = scales.cuda()
+    elif (blocks.device.type != "xpu") and is_torch_xpu_available():
+        blocks = blocks.to("xpu")
+        scales = scales.to("xpu")
 
     scales = scales.to(torch.int32) - 127  # TODO that's because 128=2**7
 
@@ -351,6 +354,8 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
                 if target_device == "cpu" and torch.cuda.is_available():
                     torch.cuda.empty_cache()
+                elif target_device == "cpu" and is_torch_xpu_available():
+                    torch.xpu.empty_cache()
                 setattr(module, proj, torch.nn.Parameter(dequantized.to(target_device)))
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
@@ -395,7 +400,7 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
         else:
             blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
         if getattr(target_device, "type", target_device) == "cpu":
-            target_device = "cuda"
+            target_device = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
         blocks = blocks.to(target_device).contiguous()
         scales = scales.to(target_device).contiguous()
         with on_device(target_device):
