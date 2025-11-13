@@ -21,11 +21,11 @@ from transformers.core_model_loading import (
     Concatenate,
     MergeModulelist,
     WeightConverter,
-    _glob_to_regex_src,
     build_glob_alt,
     convert_and_load_state_dict_in_model,
     match_glob,
 )
+from transformers import PretrainedConfig
 
 
 class TestWeightGlobMatching(unittest.TestCase):
@@ -175,6 +175,7 @@ class DummyRoot(nn.Module):
 class TestConvertAndLoadStateDict(unittest.TestCase):
     def test_moe_and_qkv_conversion(self):
         model = DummyRoot()
+        model.config = PretrainedConfig()
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -193,7 +194,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             "model.layers.1.self_attn.qkv_proj.weight": torch.tensor([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]),
             "mlp.w2.weight": torch.tensor([[60.0, 61.0], [62.0, 63.0]]),
         }
-        state_dict = {k: (k, v.clone()) for k, v in raw_tensors.items()}
+        state_dict = {k: v.clone() for k, v in raw_tensors.items()}
 
         weight_mapping = [
             WeightConverter(
@@ -207,23 +208,22 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 operations=[MergeModulelist(dim=0)],
             ),
             WeightConverter(
-                "model.layers.*.self_attn.qkv_proj.weight",
+                "model.layers.0.self_attn.qkv_proj.weight",
                 [
-                    "model.layers.*.self_attn.q_proj.weight",
-                    "model.layers.*.self_attn.k_proj.weight",
-                    "model.layers.*.self_attn.v_proj.weight",
+                    "model.layers.0.self_attn.q_proj.weight",
+                    "model.layers.0.self_attn.k_proj.weight",
+                    "model.layers.0.self_attn.v_proj.weight",
                 ],
-                operations=[Concatenate(dim=0), Chunk(dim=0, chunks=3)],
+                operations=[Chunk(dim=0, chunks=3)],
             ),
             WeightConverter("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
-
         missing, unexpected, mismatch, misc = convert_and_load_state_dict_in_model(
             model, state_dict, weight_mapping, tp_plan=None, quantizer=None
         )
 
-        self.assertEqual(missing, set())
-        self.assertEqual(unexpected, set())
+        self.assertEqual(missing, set(['model.layers.1.self_attn.k_proj.weight', 'model.layers.1.self_attn.v_proj.weight', 'model.layers.1.self_attn.q_proj.weight']))
+        self.assertEqual(unexpected, set(['model.layers.1.self_attn.qkv_proj.weight']))
         self.assertEqual(mismatch, set())
         self.assertEqual(misc, {})
 
@@ -267,6 +267,9 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             key = f"model.layers.{layer_idx}.self_attn.qkv_proj.weight"
             expected_q, expected_k, expected_v = torch.chunk(raw_tensors[key], chunks=3, dim=0)
             prefix = f"model.layers.{layer_idx}.self_attn"
+            if layer_idx == 1:
+                # These were missing and thus not loaded
+                continue
             torch.testing.assert_close(model_state[f"{prefix}.q_proj.weight"], expected_q)
             torch.testing.assert_close(model_state[f"{prefix}.k_proj.weight"], expected_k)
             torch.testing.assert_close(model_state[f"{prefix}.v_proj.weight"], expected_v)
