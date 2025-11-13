@@ -4588,18 +4588,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             self.initialize_weights()
 
-        # Replace the loaded parameters class back to nn.Parameter (they were changed to easily skip initialization
-        # when performed in-place on the tensors)
-        for name, p in list(self.named_parameters()) + list(self.named_buffers()):
-            # We get back the original parameter that we stored in _original. This attribute was created when we initialized LoadedParam when loading the checkpoints.
-            if hasattr(p, "_original"):
-                if "." in name:
-                    module, name = name.rsplit(".", 1)
-                    module = self.get_submodule(module)
-                else:
-                    module = self
-                setattr(module, name, p._original)
-
     def _adjust_missing_and_unexpected_keys(
         self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool
     ) -> tuple[set[str], set[str]]:
