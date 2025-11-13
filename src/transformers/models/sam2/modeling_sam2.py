@@ -1279,7 +1279,6 @@ class Sam2MaskDecoder(nn.Module):
 )
 class Sam2Model(Sam2PreTrainedModel):
     input_modalities = ["image", "text"]
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam2TwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = [
         r"^memory_.*",

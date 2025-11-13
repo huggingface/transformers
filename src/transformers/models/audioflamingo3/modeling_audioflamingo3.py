@@ -264,6 +264,7 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         # important: this ported version of AudioFlamingo3 isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed
@@ -435,10 +436,9 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
     """
 )
 class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = None
+    _keep_in_fp32_modules_strict = None
     _tp_plan = None
     _pp_plan = None
-    _keep_in_fp32_modules_strict = None
 
     def __init__(self, config):
         super().__init__(config)
