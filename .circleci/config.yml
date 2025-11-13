@@ -39,7 +39,9 @@ jobs:
     fetch_tests:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-quality
+            # in order to use pytest to get all test (full) names to run, we need to install .[dev]
+            # (But in different jobs, the content should be different. How could we achieve that?)
+            - image: huggingface/transformers-consistency
         parallelism: 1
         steps:
             - checkout
