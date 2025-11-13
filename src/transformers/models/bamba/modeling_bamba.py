@@ -35,6 +35,7 @@ from transformers.activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -42,20 +43,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_bamba import BambaConfig
-
-
-if is_mamba_2_ssm_available():
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
-else:
-    selective_state_update = None
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
 
 
 logger = logging.get_logger(__name__)
@@ -497,6 +485,21 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
 
     return hidden_states
 
+
+causal_conv1d = lazy_load_kernel("causal-conv1d")
+causal_conv1d_update = causal_conv1d.causal_conv1d_update if causal_conv1d is not None else None
+causal_conv1d_fn = causal_conv1d.causal_conv1d_fn if causal_conv1d is not None else None
+
+mamba_ssm = lazy_load_kernel("mamba-ssm")
+selective_state_update = (
+    mamba_ssm.ops.triton.selective_state_update.selective_state_update if mamba_ssm is not None else None
+)
+mamba_chunk_scan_combined = (
+    mamba_ssm.ops.triton.ssd_combined.mamba_chunk_scan_combined if mamba_ssm is not None else None
+)
+mamba_split_conv1d_scan_combined = (
+    mamba_ssm.ops.triton.ssd_combined.mamba_split_conv1d_scan_combined if mamba_ssm is not None else None
+)
 
 is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
 
