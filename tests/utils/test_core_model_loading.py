@@ -283,6 +283,8 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         torch.testing.assert_close(model_state["mlp.down_proj.weight"], raw_tensors["mlp.w2.weight"])
 
     def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
+        if is_triton_available():
+            from transformers.integrations.finegrained_fp8 import Fp8Dequantize
         else:
             self.skipTest("Fine-grained FP8 integration tests require Triton to be installed.")
         n_heads = 2
@@ -406,3 +408,4 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    unittest.main()
