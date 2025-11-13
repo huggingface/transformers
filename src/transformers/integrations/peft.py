@@ -236,7 +236,7 @@ class PeftAdapterMixin:
                 **adapter_kwargs,
             )
             peft_config.inference_mode = not is_trainable
-
+        # TODO: WE NEED TOO APPLY OUR DYNAMIC WEIGHT CONVERSION AT SOME POINT HERE!
         # Create and add fresh new adapters into the model.
         inject_adapter_in_model(peft_config, self, adapter_name, **peft_load_kwargs)
 

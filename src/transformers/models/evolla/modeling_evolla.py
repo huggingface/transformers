@@ -517,20 +517,21 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
         ],
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
@@ -1268,15 +1269,16 @@ class EvollaPreTrainedModel(PreTrainedModel):
         "attentions": EvollaAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         super()._init_weights(module)
         if isinstance(module, EvollaSequenceAlignerCrossAttention):
             module.gate_attention.zero_()
             module.gate_ffw.zero_()
-            module.attention_norm.weight.data.fill_(1.0)
+            module.attention_norm.weight.fill_(1.0)
         elif isinstance(module, EvollaSequenceCompressorResampler):
-            module.latents.data.normal_(mean=0.0, std=std)
+            module.latents.normal_(mean=0.0, std=std)
 
 
 class EvollaModel(EvollaPreTrainedModel):

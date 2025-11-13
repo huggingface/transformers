@@ -794,7 +794,6 @@ class MllamaRotaryEmbedding(nn.Module):
 @auto_docstring
 class MllamaPreTrainedModel(PreTrainedModel):
     config: MllamaConfig
-    base_model_prefix = ""
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -816,36 +815,37 @@ class MllamaPreTrainedModel(PreTrainedModel):
         ],
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         elif isinstance(module, MllamaTextRMSNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, MllamaVisionModel):
-            nn.init.normal_(module.class_embedding.data, std=std)
+            nn.init.normal_(module.class_embedding, std=std)
         elif isinstance(module, MllamaPrecomputedPositionEmbedding):
-            nn.init.normal_(module.embedding.data, std=std)
-            nn.init.zeros_(module.gate.data)
+            nn.init.normal_(module.embedding, std=std)
+            nn.init.zeros_(module.gate)
         elif isinstance(module, MllamaVisionEncoderLayer) and module.is_gated:
-            nn.init.normal_(module.gate_attn.data, std=std)
-            nn.init.normal_(module.gate_ffn.data, std=std)
+            nn.init.normal_(module.gate_attn, std=std)
+            nn.init.normal_(module.gate_ffn, std=std)
         elif isinstance(module, MllamaCrossAttentionDecoderLayer):
-            module.cross_attn_attn_gate.data.zero_()
-            module.cross_attn_mlp_gate.data.zero_()
+            module.cross_attn_attn_gate.zero_()
+            module.cross_attn_mlp_gate.zero_()
         elif isinstance(module, MllamaPrecomputedAspectRatioEmbedding):
             if module.is_gated:
-                module.gate.data.zero_()
+                module.gate.zero_()
 
     # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
     def _update_causal_mask(
@@ -1326,7 +1326,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     config: MllamaTextConfig
     _can_compile_fullgraph = True  # only the LLM without cross attn can do compile
     base_model_prefix = "language_model"
-    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config.get_text_config())
@@ -1437,7 +1436,11 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     """
 )
 class MllamaModel(MllamaPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
+    base_model_prefix = ""
+    _checkpoint_conversion_mapping = {
+        "language_model.model": "language_model",
+        "model.vision_model": "vision_model",
+    }
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
@@ -1578,12 +1581,12 @@ class MllamaModel(MllamaPreTrainedModel):
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_model": "model.vision_model",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^language_model.lm_head": "lm_head",
+        r"^language_model.model": "model.language_model",
+        r"^vision_model": "model.vision_model",
+        r"^multi_modal_projector": "model.multi_modal_projector",
+        r"^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    # _tied_weights_keys = {"lm_head.weight": "model.language_moddel.embed_tokens.weight"}
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)

@@ -528,60 +528,61 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(factor * 1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(factor * 1.0)
+            module.bias.zero_()
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            module.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            module.weight.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, GPTSanJapaneseModel):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.embed_tokens.weight.data.normal_(mean=0.0, std=factor * 1.0)
-            module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            module.embed_tokens.weight.normal_(mean=0.0, std=factor * 1.0)
+            module.position_embeddings.weight.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "extra_position_embeddings") and module.extra_position_embeddings is not None:
-                module.extra_position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
+                module.extra_position_embeddings.weight.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, (GPTSanJapaneseModel, GPTSanJapaneseForConditionalGeneration)):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.final_logits_bias.data.normal_(mean=0.0, std=factor * 1.0)
+            module.final_logits_bias.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+                module.lm_head.weight.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, GPTSanJapaneseDenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
             # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            module.wi.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                module.wi.bias.zero_()
+            module.wo.weight.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+                module.wo.bias.zero_()
         elif isinstance(module, GPTSanJapaneseAttention):
             # Multi-headed attention
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_model
             n_heads = self.config.num_heads
-            module.k_proj.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.v_proj.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.q_proj.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.out_proj.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            module.k_proj.weight.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            module.v_proj.weight.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            module.q_proj.weight.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            module.out_proj.weight.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
         elif isinstance(module, GPTSanJapaneseSparseMLP):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_model
             n_heads = self.config.num_heads
-            module.router.classifier.weight.data.normal_(mean=0.0, std=factor * 1)
+            module.router.classifier.weight.normal_(mean=0.0, std=factor * 1)
             for idx in range(self.config.num_experts):
-                module.experts[f"expert_{idx}"].wi.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-                module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+                module.experts[f"expert_{idx}"].wi.weight.normal_(mean=0.0, std=factor * (d_model**-0.5))
+                module.experts[f"expert_{idx}"].wo.weight.normal_(mean=0.0, std=factor * (d_model**-0.5))
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -852,7 +853,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
 
 
 class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)

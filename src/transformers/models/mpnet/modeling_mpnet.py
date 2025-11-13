@@ -45,21 +45,22 @@ class MPNetPreTrainedModel(PreTrainedModel):
     config: MPNetConfig
     base_model_prefix = "mpnet"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, MPNetLMHead):
-            module.bias.data.zero_()
+            module.bias.zero_()
 
 
 class MPNetEmbeddings(nn.Module):
@@ -464,7 +465,10 @@ class MPNetModel(MPNetPreTrainedModel):
 
 
 class MPNetForMaskedLM(MPNetPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "mpnet.embeddings.word_embeddings.weight",
+        "lm_head.decoder.bias": "lm_head.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -540,14 +544,8 @@ class MPNetLMHead(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
 
     def forward(self, features, **kwargs):
         x = self.dense(features)
