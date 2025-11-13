@@ -140,6 +140,7 @@ class Scheduler(ABC):
                 prefill_length = min(prefill_length, len(state.prompt_ids) - 1)
                 state.remaining_prompt_ids = state.prompt_ids[prefill_length:]
                 state.prompt_ids = state.prompt_ids[prefill_length:]
+                state.position_offset += prefill_length
 
         # If the request has a split prefill, the tokens to process are the remaining prompt ids
         if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
