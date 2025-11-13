@@ -68,7 +68,6 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = DeepseekOcrImageProcessorKwargs
     model_input_names = [
         "pixel_values",
-        "pixel_values_global",
         "pixel_values_local",
         "num_local_crops",
         "image_attention_mask",

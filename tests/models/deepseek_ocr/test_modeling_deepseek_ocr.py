@@ -122,11 +122,15 @@ class DeepseekOcrModelTester:
         self.image_size = sam_config["image_size"]
         self.num_image_tokens = 7
         self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = 95
-        self.projector_config = projector_config if projector_config is not None else {
-            "input_dim": 32,
-            "n_embed": text_config["hidden_size"],
-        }
+        self.image_token_id = 0
+        self.projector_config = (
+            projector_config
+            if projector_config is not None
+            else {
+                "input_dim": 32,
+                "n_embed": text_config["hidden_size"],
+            }
+        )
 
     def get_config(self):
         vision_config = {
