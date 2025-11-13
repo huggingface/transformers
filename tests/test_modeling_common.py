@@ -689,7 +689,6 @@ class ModelTesterMixin:
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
         }
-        import pdb;pdb.set_trace()
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 
         if hasattr(self.model_tester, "num_hidden_layers") and isinstance(self.model_tester.num_hidden_layers, int):
