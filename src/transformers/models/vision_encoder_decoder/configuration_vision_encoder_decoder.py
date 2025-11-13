@@ -14,20 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
-
-from packaging import version
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
-
-if TYPE_CHECKING:
-    from ... import PreTrainedTokenizerBase
 
 logger = logging.get_logger(__name__)
 
@@ -118,100 +108,4 @@ class VisionEncoderDecoderConfig(PreTrainedConfig):
         return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
 
 
-class VisionEncoderDecoderEncoderOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict({"last_hidden_state": {0: "batch", 1: "encoder_sequence"}})
-
-
-class VisionEncoderDecoderDecoderOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = OrderedDict()
-        common_inputs["input_ids"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
-        common_inputs["attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
-        common_inputs["encoder_hidden_states"] = {0: "batch", 1: "encoder_sequence"}
-
-        return common_inputs
-
-    def generate_dummy_inputs(
-        self,
-        tokenizer: "PreTrainedTokenizerBase",
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-    ) -> Mapping[str, Any]:
-        import torch
-
-        common_inputs = OrderedDict()
-
-        dummy_input = super().generate_dummy_inputs(
-            tokenizer,
-            batch_size=batch_size,
-            seq_length=seq_length,
-            is_pair=is_pair,
-        )
-
-        batch, encoder_sequence = dummy_input["input_ids"].shape
-        encoder_hidden_states_shape = (batch, encoder_sequence, self._config.encoder_hidden_size)
-        common_inputs["input_ids"] = dummy_input.pop("input_ids")
-        common_inputs["attention_mask"] = dummy_input.pop("attention_mask")
-        common_inputs["encoder_hidden_states"] = torch.zeros(encoder_hidden_states_shape)
-
-        return common_inputs
-
-
-class VisionEncoderDecoderOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> None:
-        pass
-
-    def get_encoder_config(self, encoder_config: PreTrainedConfig) -> OnnxConfig:
-        r"""
-        Returns ONNX encoder config for `VisionEncoderDecoder` model.
-
-        Args:
-            encoder_config (`PreTrainedConfig`):
-                The encoder model's configuration to use when exporting to ONNX.
-
-        Returns:
-            [`VisionEncoderDecoderEncoderOnnxConfig`]: An instance of the ONNX configuration object
-        """
-        return VisionEncoderDecoderEncoderOnnxConfig(encoder_config)
-
-    def get_decoder_config(
-        self, encoder_config: PreTrainedConfig, decoder_config: PreTrainedConfig, feature: str = "default"
-    ) -> OnnxConfig:
-        r"""
-        Returns ONNX decoder config for `VisionEncoderDecoder` model.
-
-        Args:
-            encoder_config (`PreTrainedConfig`):
-                The encoder model's configuration to use when exporting to ONNX.
-            decoder_config (`PreTrainedConfig`):
-                The decoder model's configuration to use when exporting to ONNX
-            feature (`str`, *optional*):
-                The type of feature to export the model with.
-
-        Returns:
-            [`VisionEncoderDecoderDecoderOnnxConfig`]: An instance of the ONNX configuration object.
-        """
-        decoder_config.encoder_hidden_size = encoder_config.hidden_size
-        return VisionEncoderDecoderDecoderOnnxConfig(decoder_config, feature)
-
-
-__all__ = ["VisionEncoderDecoderConfig", "VisionEncoderDecoderOnnxConfig"]
+__all__ = ["VisionEncoderDecoderConfig"]

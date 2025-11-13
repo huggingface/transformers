@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 
 This page explains how the Rotary Embedding is computed and applied in Transformers and what types of RoPE are supported.
 
-
 ## Overview
 
 Rotary Position Embeddings are a technique used to inject positional information into attention mechanisms without relying on explicit position encodings.  
@@ -35,11 +34,9 @@ The Transformers library provides a flexible and extensible implementation of va
 | `"longrope"` | [LongRoPE](https://github.com/microsoft/LongRoPE) scaling as in Phi-2 model series. |
 | `"llama3"` | RoPE scaling as in Llama3.1. |
 
+## Configuration in Model Configs
 
-# Configuration in Model Configs
-
-To enable and customize rotary embeddings, add a `rope_parameters` field to your model’s configuration file (`config.json`). This field controls the RoPE behavior across model layers. Note that each RoPE variant defines its own set of expected keys and missing keys will raise an error. See the example below which creates a llama config with default RoPE parameters: 
-
+To enable and customize rotary embeddings, add a `rope_parameters` field to your model’s configuration file (`config.json`). This field controls the RoPE behavior across model layers. Note that each RoPE variant defines its own set of expected keys and missing keys will raise an error. See the example below which creates a llama config with default RoPE parameters:
 
 ```python
 from transformers import LlamaConfig
@@ -62,7 +59,6 @@ config.rope_parameters = {
 
 Some models such as Gemma-3 use different layer types with different attention mechanisms, i.e. "full attention" in some blocks and "sliding-window attention" in others. Transformers supports specifying distinct RoPE parameters per layer type for these models. In this case, `rope_parameters` should be a nested dictionary, where top-level keys correspond to `config.layer_types` and values are per-type RoPE parameters. During model initialization, each decoder layer will automatically look up the matching RoPE configuration based on its declared layer type.
 
-
 ```python
 from transformers import Gemma3Config
 
@@ -81,9 +77,7 @@ config.rope_parameters = {
 }
 ```
 
-# Utilities
+## Utilities
 
 [[autodoc]] RopeParameters
     - __call__
-
-
