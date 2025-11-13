@@ -505,7 +505,7 @@ class AutoModelTest(unittest.TestCase):
     def test_model_file_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named pytorch_model.bin",
+            "Could not create safetensors conversion PR. The repo does not appear to have a file named pytorch_model.bin or model.safetensors.If you are loading with variant, use `use_safetensors=False` to load the original model.",
         ):
             _ = AutoModel.from_pretrained("hf-internal-testing/config-no-model")
 

@@ -798,7 +798,6 @@ class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
         if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
             module.experts.gate_up_proj.normal_(mean=0.0, std=std)
             module.experts.down_proj.normal_(mean=0.0, std=std)
-        elif isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
             module.router.weight.normal_(mean=0.0, std=std)
 
 

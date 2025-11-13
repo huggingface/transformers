@@ -2444,7 +2444,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     else:
                         parent_path, last = "", target_n
                         parent = top_level  # top-level
+                    original_device = getattr(parent, last).device
                     setattr(parent, last, top_level_params[source_n])
+                    getattr(parent, last).to(original_device)
                     self._adjust_bias(parent, top_level_params[source_n])
                     if missing_keys and source_is_there:  # test_model_weights_reload_no_missing_tied_weights
                         missing_keys.discard(target_n)
