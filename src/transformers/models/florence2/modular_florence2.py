@@ -1627,9 +1627,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         "lm_head.weight",
     ]
 
-    def get_encoder(self):
-        return self.model.get_encoder()
-
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 

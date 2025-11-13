@@ -1276,9 +1276,6 @@ class InformerModel(InformerPreTrainedModel):
 
         return transformer_inputs, loc, scale, static_feat
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,

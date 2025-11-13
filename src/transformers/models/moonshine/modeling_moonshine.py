@@ -860,9 +860,6 @@ class MoonshineModel(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-    def get_encoder(self):
-        return self.encoder
-
     def freeze_encoder(self):
         """
         Calling this function will disable the gradient computation for the Moonshine encoder so that its parameters will
@@ -1018,9 +1015,6 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
 
     def get_output_embeddings(self):
         return self.proj_out

@@ -1339,9 +1339,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
             )
         return reshaped_lagged_sequence, features, loc, scale, static_feat
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1584,9 +1581,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
 
     def output_params(self, decoder_output):
         return self.parameter_projection(decoder_output[:, -self.config.prediction_length :, :])
-
-    def get_encoder(self):
-        return self.model.get_encoder()
 
     @torch.jit.ignore
     def output_distribution(self, params, loc=None, scale=None, trailing_n=None) -> torch.distributions.Distribution:

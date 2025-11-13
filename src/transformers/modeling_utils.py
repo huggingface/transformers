@@ -2647,7 +2647,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         3. `self.base_model.get_decoder()`    (nested wrappers)
         4. fallback: raise for the few exotic models that need a bespoke rule
         """
-        possible_module_names = ["language_model", "text_model", "decoder"]
+        possible_module_names = ["language_model", "text_model", "decoder", "text_decoder"]
         for name in possible_module_names:
             if hasattr(self, name):
                 return getattr(self, name)

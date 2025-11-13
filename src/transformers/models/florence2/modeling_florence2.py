@@ -960,9 +960,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
 
         return model_inputs
 
-    def get_encoder(self):
-        return self.model.get_encoder()
-
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):

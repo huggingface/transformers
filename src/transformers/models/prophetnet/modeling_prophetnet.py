@@ -1432,9 +1432,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             self._tie_embedding_weights(self.encoder.word_embeddings, self.word_embeddings)
             self._tie_embedding_weights(self.decoder.word_embeddings, self.word_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,

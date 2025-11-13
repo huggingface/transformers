@@ -893,9 +893,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
 
@@ -1026,9 +1023,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         # Decoder input and output embeddings are tied.
         if self.config.tie_word_embeddings:
             self._tie_embedding_weights(self.lm_head.out_proj, self.get_decoder().get_input_embeddings())
-
-    def get_encoder(self):
-        return self.model.encoder
 
     @can_return_tuple
     @auto_docstring

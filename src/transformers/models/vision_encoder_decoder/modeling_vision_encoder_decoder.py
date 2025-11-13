@@ -145,9 +145,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
-    def get_encoder(self):
-        return self.encoder
-
     def get_input_embeddings(self):
         return self.decoder.get_input_embeddings()
 

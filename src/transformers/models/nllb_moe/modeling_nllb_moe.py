@@ -916,9 +916,6 @@ class NllbMoeModel(NllbMoePreTrainedModel):
             self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
             self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1086,9 +1083,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
         self.router_aux_loss_coef = config.router_aux_loss_coef
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
 
     @can_return_tuple
     @auto_docstring

@@ -2205,10 +2205,6 @@ class SeamlessM4Tv2TextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrainedMod
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TTextToUnitForConditionalGeneration.get_encoder
-    def get_encoder(self):
-        return self.model.encoder
-
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TTextToUnitForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):
         return self.model.decoder.embed_tokens
@@ -2674,12 +2670,6 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
-        return self.text_encoder
-
-    def get_decoder(self):
-        return self.text_decoder
-
     def get_input_embeddings(self):
         return self.text_decoder.embed_tokens
 
@@ -2934,10 +2924,6 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.get_encoder
     def get_encoder(self):
         return self.speech_encoder
-
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.get_decoder
-    def get_decoder(self):
-        return self.text_decoder
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.get_input_embeddings
     def get_input_embeddings(self):
@@ -3205,14 +3191,6 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
 
         self.t2u_model = SeamlessM4Tv2TextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4Tv2CodeHifiGan(config)
-
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.get_encoder
-    def get_encoder(self):
-        return self.text_encoder
-
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.get_decoder
-    def get_decoder(self):
-        return self.text_decoder
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.get_input_embeddings
     def get_input_embeddings(self):
@@ -3570,10 +3548,6 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.get_encoder
     def get_encoder(self):
         return self.speech_encoder
-
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.get_decoder
-    def get_decoder(self):
-        return self.text_decoder
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.get_input_embeddings
     def get_input_embeddings(self):

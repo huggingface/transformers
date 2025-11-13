@@ -843,9 +843,6 @@ class FSMTModel(PretrainedFSMTModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
             self._tie_embedding_weights(self.decoder.embed_tokens, self.get_input_embeddings())
@@ -1087,9 +1084,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id)
-
-    def get_encoder(self):
-        return self.model.encoder
 
     def get_output_embeddings(self):
         return self.model.decoder.embed_tokens
