@@ -865,7 +865,7 @@ class Qwen3NextSparseMoeBlock(nn.Module):
         self.shared_expert = Qwen3NextMLP(config, intermediate_size=config.shared_expert_intermediate_size)
         self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
 
-    def route_tokens_to_experts(self, hidden_states, router_logits):
+    def route_tokens_to_experts(self, router_logits):
         routing_weights = F.softmax(router_logits, dim=-1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.num_experts_per_tok, dim=-1)
         if self.norm_topk_prob:
@@ -873,12 +873,12 @@ class Qwen3NextSparseMoeBlock(nn.Module):
         routing_weights = routing_weights.to(router_logits.dtype)
         return selected_experts, routing_weights
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         shared_expert_output = self.shared_expert(hidden_states_reshaped)
         router_logits = self.gate(hidden_states_reshaped)
-        selected_experts, routing_weights = self.route_tokens_to_experts(hidden_states_reshaped, router_logits)
+        selected_experts, routing_weights = self.route_tokens_to_experts(router_logits)
         expert_output = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
 
         shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states_reshaped)) * shared_expert_output

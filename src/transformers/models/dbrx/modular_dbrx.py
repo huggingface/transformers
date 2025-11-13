@@ -227,7 +227,7 @@ class DbrxFFN(nn.Module):
         self.top_k = config.ffn_config.moe_top_k
 
     def route_tokens_to_experts(self, router_logits):
-        router_logits = torch.nn.functional.softmax(router_logits, dim=1, dtype=router_logits.dtype)
+        router_logits = torch.nn.functional.softmax(router_logits, dim=-1, dtype=router_logits.dtype)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
         if self.moe_normalize_expert_weights is not None:
             router_top_value = router_top_value / torch.norm(

@@ -73,7 +73,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         self.num_experts_per_tok = config.num_experts_per_tok
         self.norm_topk_prob = config.norm_topk_prob
 
-    def route_tokens_to_experts(self, hidden_states, router_logits):
+    def route_tokens_to_experts(self, router_logits):
         routing_weights = F.softmax(router_logits, dim=-1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.num_experts_per_tok, dim=-1)
         if self.norm_topk_prob:
@@ -81,11 +81,11 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         routing_weights = routing_weights.to(router_logits.dtype)
         return selected_experts, routing_weights
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         router_logits = self.gate(hidden_states_reshaped)
-        selected_experts, routing_weights = self.route_tokens_to_experts(hidden_states_reshaped, router_logits)
+        selected_experts, routing_weights = self.route_tokens_to_experts(router_logits)
         final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
