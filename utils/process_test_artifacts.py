@@ -52,7 +52,7 @@ def process_artifacts(input_file, output_file):
     # Process items and build the new JSON structure
     transformed_data = {}
     for item in data.get("items", []):
-        if "test_list" in item["path"]:
+        if "test_list" in item["path"] and "_detailed" not in item["path"]:
             key = os.path.splitext(os.path.basename(item["path"]))[0]
             transformed_data[key] = item["url"]
             parallel_key = key.split("_test")[0] + "_parallelism"
