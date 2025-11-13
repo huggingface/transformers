@@ -24,50 +24,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class Glm46VConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`Glm46VModel`]. It is used to instantiate a
-    GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Glm46VTextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Glm46VVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 151343):
-            The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 151344):
-            The video token index to encode the image prompt.
-        image_start_token_id (`int`, *optional*, defaults to 151339):
-            The image start token index to encode the start of image.
-        image_end_token_id (`int`, *optional*, defaults to 151340):
-            The image end token index to encode the end of image.
-        video_start_token_id (`int`, *optional*, defaults to 151341):
-            The video start token index to encode the start of video.
-        video_end_token_id (`int`, *optional*, defaults to 151342):
-            The video end token index to encode the end of video.
-
-    ```python
-    >>> from transformers import Glm46VForConditionalGeneration, Glm46VConfig
-
-    >>> # Initializing a GLM-4.1V style configuration
-    >>> configuration = Glm46VConfig()
-
-    >>> # Initializing a model from the GLM-4.1V style configuration
-    >>> model = Glm46VForConditionalGeneration(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "glm46v"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
@@ -99,6 +56,8 @@ class Glm46VConfig(PreTrainedConfig):
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Glm46VConfig"]
