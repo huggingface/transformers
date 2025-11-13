@@ -16,8 +16,8 @@ import argparse
 import contextlib
 import json
 import os
-import random
 import time
+from itertools import cycle
 from typing import Optional
 
 import datasets
@@ -30,34 +30,26 @@ from transformers.generation import GenerationConfig
 from transformers.generation.continuous_batching.requests import logger
 
 
-def generate_simple(
-    model_id: str,
-    sliding_window: int,
-    attn_impl: str,
-    simple_batch_inputs: list[int],
-    generation_config: GenerationConfig,
+def generate_without_cb(
+    model_id: str, sliding_window: int, attn_impl: str, batched_inputs: list[int], generation_config: GenerationConfig,
 ) -> dict[str, str]:
-    attn_impl = {
-        "sdpa": "sdpa",
-        "eager": "eager",
-        "flash_paged": "flash_attention_2",  # TODO: this does not work on AMD docker
-        "kernels-community/flash-attn": "eager",
-    }[attn_impl]
-
+    # Setup model and tokenizer
     model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, attn_implementation=attn_impl)
     model = model.cuda().eval()
     if sliding_window > 0 and getattr(model.config, "sliding_window", None) is not None:
         model.config.sliding_window = sliding_window
-
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    # Generate one by one
     decoded_outputs = {}
-    for input_ids in tqdm(simple_batch_inputs, desc="Generating outputs without CB"):
+    for input_ids in tqdm(batched_inputs, desc="Generating outputs without CB"):
         key = " ".join(map(str, input_ids))  # This will be used to identify the output after batched generation
         input_ids = torch.tensor([input_ids]).to("cuda")
-        # attention_mask = torch.ones_like(input_ids)
-        outputs = model.generate(input_ids, generation_config=generation_config, use_model_defaults=False)
+        attention_mask = torch.ones_like(input_ids)
+        outputs = model.generate(
+            input_ids, attention_mask=attention_mask, generation_config=generation_config, use_model_defaults=False
+        )
         generated_tokens = outputs[0][input_ids.shape[1] :]
-        decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=False)
-        decoded_outputs[key] = decoded_output
+        decoded_outputs[key] = tokenizer.decode(generated_tokens, skip_special_tokens=False)
     return decoded_outputs
 
 
@@ -137,14 +129,7 @@ def batch_generate(
 
         # Display sample if asked
         if i < displayed_samples:
-            if len(output_text) > 0:
-                print("-" * 20)
-                print(f"{request} Input:  {input_text}")
-                print(f"{request} Output: {output_text}")
-            else:
-                print(f"{request} Input:  {input_text}")
-                print("[WARN]")
-                print(f"{request} Output was empty!")
+            print("-" * 20, f"{request} Input:  {input_text}", f"{request} Output: {output_text}", sep="\n")
 
         # Compare with classic generate if asked
         if expected_outputs is not None:
@@ -200,7 +185,7 @@ if __name__ == "__main__":
     parser.add_argument("--samples", type=int, default=500, help="Number of samples to generate")
     parser.add_argument("--add-prefix", action="store_true", help="Add a prefix to the samples")
     parser.add_argument("--compare", action="store_true", help="Compare CB generation with classic generate")
-    parser.add_argument("--profile ", type=str, default=None)
+    parser.add_argument("--profile", type=str, default=None)
     parser.add_argument("--metrics", action="store_true")
     parser.add_argument("--force-max-length", action="store_true", help="Force generation to stop at max length")
 
@@ -213,7 +198,9 @@ if __name__ == "__main__":
 
 
     # Create model
-    model_id = "google/gemma-2-2b-it" if args.sliding_window > 0 else "meta-llama/Meta-Llama-3-8B"
+    model_id = "google/gemma-2-2b-it" if args.sliding_window > 0 else "meta-llama/Llama-3.1-8B-Instruct"
+    has_system_role = args.sliding_window == 0
+
     model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=args.attn, dtype=torch.bfloat16)
     model = model.cuda().eval()
 
@@ -248,22 +235,32 @@ if __name__ == "__main__":
     dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
     dataset = dataset.select(range(args.samples))
 
-    # Add prefixes to the samples if asked
-    def random_prefix() -> str:
-        if not args.add_prefix:
-            return ""
-        prefixes = [
-            "Math and reasonning problems are very important to the world. This is a problem, and then you will find the answer.\n",
-            "We all know that reasonning can be taught by answering questions, often illustrated with examples. Here is one and its solution, hopefully you will enjoy it!\n",
-            "Reasonning a very good metric of intelligence, hence it is regularly trained and tested in both children and AI model like LLMs. This test can look like a math or a logical problem, a riddle or pattern detection task. For instance, this is one of those test. You will find it and the solution associated after. Here it goes:\n",
+    if args.add_prefix:
+        possible_prefixes = [
+            None,
+            "You are a bot that solves math problems.",
+            "You are a bot who solves math problems. Try to make your answer clear and understandable, and include your stages of reasoning.",
+            "You are a bot with the aim to solves math problems. Try to make your answer clear and understandable, and include your stages of reasoning. No loud words or emojis, all responses must be readable by a child. Here is now the problem:",
         ]  # fmt: skip
-        return random.choice(prefixes)
+    else:
+        possible_prefixes = [None]
 
-    random.seed(0)
-    simple_batch_inputs = [tokenizer(random_prefix() + item["question"])["input_ids"] for item in dataset]
+    batched_inputs = []
+    for item, prefix in zip(dataset, cycle(possible_prefixes)):
+        messages = []
+        question = item["question"]
+        if prefix is not None:
+            if has_system_role:
+                messages.append({"role": "system", "content": prefix})
+            else:
+                question = prefix + "\n\n" + question
+        messages.append({"role": "user", "content": question})
+        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
+        batched_inputs.append(inputs["input_ids"])
+
 
     # Prepare generation config
-    generation_config = GenerationConfig(
+    generation_cfg = GenerationConfig(
         max_new_tokens=512,
         use_cuda_graph=use_cuda_graph,
         eos_token_id=tokenizer.pad_token_id if args.force_max_length else tokenizer.eos_token_id,
@@ -276,7 +273,10 @@ if __name__ == "__main__":
     )
 
     # If we need to compare, we need to generate the reference outputs
-    expected_outputs = generate_simple(args.attn, simple_batch_inputs, generation_config) if args.compare else None
+    if args.compare:
+        expected_outputs = generate_without_cb(model_id, args.sliding_window, args.attn, batched_inputs, generation_cfg)
+    else:
+        expected_outputs = None
 
     # If no output file is provided, we pick a name based on the args
     if args.output_file is None:
@@ -289,8 +289,8 @@ if __name__ == "__main__":
     # Run warmup batch generation # TODO: understand why warmup incurs a large overhead during cache creation
     batch_generate(
         model,
-        simple_batch_inputs[: min(5, args.samples)],
-        generation_config,
+        batched_inputs[: min(5, args.samples)],
+        generation_cfg,
         tokenizer,
         displayed_samples=-1,
     )
@@ -303,8 +303,8 @@ if __name__ == "__main__":
         # Run batch generation
         gen_time, tok_per_sec = batch_generate(
             model,
-            simple_batch_inputs,
-            generation_config,
+            batched_inputs,
+            generation_cfg,
             tokenizer,
             displayed_samples=args.displayed,
             output_file=args.output_file,
@@ -315,5 +315,5 @@ if __name__ == "__main__":
         prof.export_chrome_trace(filename)
 
 # Example usage:
-# python examples/pytorch/continuous_batching.py --attn sdpa_paged -mp none --samples 3 --compare
-# python examples/pytorch/continuous_batching.py --num-blocks 369 --max-batch-tokens 23 --attn sdpa_paged -mp none --samples 1 --displayed 0 --output-file sliced.json
+# python examples/pytorch/continuous_batching.py --attn sdpa --add-prefix --samples 10 --compare
+# python examples/pytorch/continuous_batching.py --attn flash_attention_2 -mp none --add-prefix --samples 500
