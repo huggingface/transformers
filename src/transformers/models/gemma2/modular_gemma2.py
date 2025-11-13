@@ -309,7 +309,7 @@ def eager_attention_forward(
         attn_output = torch.einsum("bkgjs, bksd -> bkgjd", attn_weights, value).flatten(1, 2)
         attn_weights = attn_weights.flatten(1, 2)
     else:
-        attn_output = (attn_weights @ value)
+        attn_output = attn_weights @ value
     return attn_output.transpose(1, 2).contiguous(), attn_weights
 
 
