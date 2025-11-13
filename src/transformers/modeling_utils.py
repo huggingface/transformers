@@ -47,7 +47,6 @@ from torch.utils.checkpoint import checkpoint
 from .configuration_utils import PreTrainedConfig
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
-from .exporters.auto import get_hf_exporter
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import (
@@ -4288,7 +4287,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         offload_folder = kwargs.pop("offload_folder", None)
         offload_buffers = kwargs.pop("offload_buffers", False)
         quantization_config = kwargs.pop("quantization_config", None)
-        export_config = kwargs.pop("export_config", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
@@ -4536,11 +4534,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 token=token,
                 adapter_kwargs=adapter_kwargs,
             )
-
-        if export_config is not None:
-            hf_exporter = get_hf_exporter(export_config)
-            hf_exporter.validate_environment()
-            hf_exporter.export(model)
 
         if output_loading_info:
             loading_info = {

@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
 from ..utils.export_config import DynamoConfig
@@ -55,19 +54,18 @@ class DynamoExporter(HfExporter):
         if not is_torch_greater_or_equal("2.6.0"):
             raise ImportError(f"{self.__class__.__name__} requires torch>=2.6.0 for stable Dynamo based export.")
 
-    def export(self, model: "PreTrainedModel"):
+    def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]):
+        """Exports a model to a TorchDynamo ExportedProgram.
+        Args:
+            model (`PreTrainedModel`):
+                The model to export.
+            sample_inputs (`Dict[str, Any]`):
+                The sample inputs to use for the export.
+        Returns:
+            `ExportedProgram`: The exported model.
+        """
         raise_on_unsupported_model(model)
         warn_on_unsupported_cache_class(model)
-
-        if self.export_config.sample_inputs is None:
-            raise NotImplementedError(
-                f"{self.__class__.__name__} can't automatically generate export inptus. Please provide sample_inputs in the exporter_config as a dictionary. "
-                "You can do so by using the tokenizer/processor to prepare a batch of inputs as you would do for a normal forward pass. "
-                f"{self.__class__.__name__} can automatically generate past_key_values and its dynamic shapes if the model is "
-                "an auto-regressive (CausalLM) and its model.config.use_cache is set to True."
-            )
-
-        sample_inputs = copy.deepcopy(self.export_config.sample_inputs)
         model, sample_inputs = prepare_inputs_for_export(model, sample_inputs)
 
         dynamic_shapes = self.export_config.dynamic_shapes
@@ -85,5 +83,4 @@ class DynamoExporter(HfExporter):
                 dynamic_shapes=dynamic_shapes,
                 strict=self.export_config.strict,
             )
-        model.exported_model = exported_program
         return exported_program

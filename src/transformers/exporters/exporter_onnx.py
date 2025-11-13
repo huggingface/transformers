@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
 from ..utils.export_config import OnnxConfig
@@ -8,6 +8,10 @@ from .exporter_dynamo import DynamoExporter
 
 if is_torch_available():
     import torch
+
+    if is_torch_greater_or_equal("2.6.0"):
+        from torch.export import ExportedProgram
+        from torch.onnx import ONNXProgram
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -20,22 +24,24 @@ class OnnxExporter(DynamoExporter):
 
     required_packages = ["torch", "onnx", "onnxscript"]
 
-    def validate_environment(self, *args, **kwargs):
-        super().validate_environment(*args, **kwargs)
-
-        if not is_torch_greater_or_equal("2.9.0"):
-            raise ImportError(f"{self.__class__.__name__} requires torch>=2.9.0 for Dynamo based ONNX export.")
-
-    def export(self, model: "PreTrainedModel"):
-        from torch.export import ExportedProgram
-        from torch.onnx import ONNXProgram
-
-        exported_program: ExportedProgram = super().export(model)
+    def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]):
+        """Exports a model to ONNX format using TorchDynamo.
+        Args:
+            model (`PreTrainedModel`):
+                The model to export.
+            sample_inputs (`Dict[str, Any]`):
+                The sample inputs to use for the export.
+        Returns:
+            `ONNXProgram`: The exported model.
+        """
+        exported_program: ExportedProgram = super().export(model, sample_inputs)
         onnx_program: ONNXProgram = torch.onnx.export(
             exported_program,
             f=self.export_config.f,
             optimize=self.export_config.optimize,
+            opset_version=self.export_config.opset_version,
             do_constant_folding=self.export_config.do_constant_folding,
+            external_data=self.export_config.external_data,
+            export_params=self.export_config.export_params,
         )
-        model.exported_model = onnx_program
         return onnx_program

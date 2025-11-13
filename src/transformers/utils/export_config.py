@@ -80,14 +80,11 @@ class DynamoConfig(ExportConfigMixin):
     Args:
         strict (`bool`, *optional*, defaults to `False`):
             Whether to enable strict mode during export.
-        sample_inputs (`dict[str, Any]`, *optional*):
-            Sample inputs to be used during export.
         dynamic_shapes (`dict[str, Any]`, *optional*):
             Dynamic shapes for the model inputs.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
-    sample_inputs: dict[str, Any] | None = None
     dynamic: bool | None = None
 
     strict: bool = False
@@ -119,7 +116,6 @@ class OnnxConfig(DynamoConfig):
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
-    sample_inputs: dict[str, Any] | None = None
     dynamic: bool | None = None
 
     f: str | PathLike | None = None

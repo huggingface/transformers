@@ -3520,6 +3520,8 @@ class ModelTesterMixin:
                 return is_tested
             return is_tested
 
+        exporter = DynamoExporter(export_config=DynamoConfig())
+
         for model_class in self.all_model_classes:
             if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
@@ -3549,8 +3551,7 @@ class ModelTesterMixin:
                     eager_outputs = model(**copy.deepcopy(inputs_dict))
 
                 try:
-                    exporter = DynamoExporter(export_config=DynamoConfig(sample_inputs=inputs_dict))
-                    exported_program = exporter.export(model)
+                    exported_program = exporter.export(model, sample_inputs=copy.deepcopy(inputs_dict))
                 except NotImplementedError:
                     continue
                 except Exception as e:
