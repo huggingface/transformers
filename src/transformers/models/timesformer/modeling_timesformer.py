@@ -467,7 +467,6 @@ class TimesformerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, TimesformerEmbeddings):
             nn.init.trunc_normal_(module.cls_token, std=self.config.initializer_range)
             nn.init.trunc_normal_(module.position_embeddings, std=self.config.initializer_range)
-            module.patch_embeddings.apply(self._init_weights)
 
 
 @auto_docstring

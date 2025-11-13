@@ -343,11 +343,11 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif module.__class__.__name__ == "Snake1d":
-            module.alpha.fill_(1.0)
+            nn.init.ones_(module.alpha)
         elif isinstance(module, nn.ConvTranspose1d):
             module.reset_parameters()
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=0.02)
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
         elif isinstance(module, XcodecModel):
             # The conv1d are not handled correctly, as `self.acoustic_encoder/decoder` are initialized from a PreTrainedModel,
             # but then only the submodules are used (which are not PreTrainedModels...) -> here we reinit them as in DacModel
@@ -355,12 +355,10 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
                 if isinstance(submodule, nn.Conv1d):
                     nn.init.trunc_normal_(submodule.weight, std=0.02)
                     nn.init.constant_(submodule.bias, 0)
-                    submodule._is_hf_initialized = True
             for submodule in module.acoustic_decoder.modules():
                 if isinstance(submodule, nn.Conv1d):
                     nn.init.trunc_normal_(submodule.weight, std=0.02)
                     nn.init.constant_(submodule.bias, 0)
-                    submodule._is_hf_initialized = True
 
     def apply_weight_norm(self):
         """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied."""

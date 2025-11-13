@@ -987,12 +987,10 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         if isinstance(module, Wav2Vec2ForPreTraining):
             module.project_hid.reset_parameters()
             module.project_q.reset_parameters()
-            module.project_hid._is_hf_initialized = True
-            module.project_q._is_hf_initialized = True
         # gumbel softmax requires special init
         elif isinstance(module, Wav2Vec2GumbelVectorQuantizer):
-            module.weight_proj.weight.normal_(mean=0.0, std=1)
-            module.weight_proj.bias.zero_()
+            nn.init.normal_(module.weight_proj.weight, mean=0.0, std=1)
+            nn.init.zeros_(module.weight_proj.bias)
             nn.init.uniform_(module.codevectors)
         elif isinstance(module, Wav2Vec2PositionalConvEmbedding):
             nn.init.normal_(

@@ -1227,8 +1227,8 @@ class VitsPreTrainedModel(PreTrainedModel):
                 nn.init.normal_(module.emb_rel_k, std=head_dim**-0.5)
                 nn.init.normal_(module.emb_rel_v, std=head_dim**-0.5)
         elif isinstance(module, VitsElementwiseAffine):
-            module.translate.zero_()
-            module.log_scale.zero_()
+            nn.init.zeros_(module.translate)
+            nn.init.zeros_(module.log_scale)
 
 
 @auto_docstring(

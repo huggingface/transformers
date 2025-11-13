@@ -426,8 +426,6 @@ class PvtPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
             nn.init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
@@ -435,21 +433,9 @@ class PvtPreTrainedModel(PreTrainedModel):
             nn.init.zeros_(module.bias)
             nn.init.ones_(module.weight)
         elif isinstance(module, PvtPatchEmbeddings):
-            module.position_embeddings.copy_(
-                nn.init.trunc_normal_(
-                    module.position_embeddings,
-                    mean=0.0,
-                    std=std,
-                )
-            )
+            nn.init.trunc_normal_(module.position_embeddings, mean=0.0, std=std)
             if module.cls_token is not None:
-                module.cls_token.copy_(
-                    nn.init.trunc_normal_(
-                        module.cls_token,
-                        mean=0.0,
-                        std=std,
-                    )
-                )
+                nn.init.trunc_normal_(module.cls_token, mean=0.0, std=std)
 
 
 @auto_docstring

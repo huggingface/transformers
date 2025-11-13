@@ -164,8 +164,8 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         # gumbel softmax requires special init
         if isinstance(module, UniSpeechSatGumbelVectorQuantizer):
-            module.weight_proj.weight.normal_(mean=0.0, std=1)
-            module.weight_proj.bias.zero_()
+            nn.init.normal_(module.weight_proj.weight, mean=0.0, std=1)
+            nn.init.zeros_(module.weight_proj.bias)
             nn.init.uniform_(module.codevectors)
         elif isinstance(module, UniSpeechSatPositionalConvEmbedding):
             nn.init.normal_(

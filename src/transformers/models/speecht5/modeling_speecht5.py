@@ -1182,7 +1182,7 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
             )
             nn.init.constant_(module.conv.bias, 0)
         elif isinstance(module, SpeechT5ScaledPositionalEncoding):
-            module.alpha.fill_(1.0)
+            nn.init.ones_(module.alpha)
         elif isinstance(module, SpeechT5FeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
@@ -3014,14 +3014,6 @@ class SpeechT5HifiGan(PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @torch.no_grad()
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm

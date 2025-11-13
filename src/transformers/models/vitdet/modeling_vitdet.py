@@ -570,20 +570,6 @@ class VitDetEncoder(nn.Module):
         )
 
 
-def caffe2_msra_fill(module: nn.Module) -> None:
-    """
-    Initialize `module.weight` using the "MSRAFill" implemented in Caffe2. Also initializes `module.bias` to 0.
-
-    Source: https://detectron2.readthedocs.io/en/latest/_modules/fvcore/nn/weight_init.html.
-
-    Args:
-        module (torch.nn.Module): module to initialize.
-    """
-    nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-    if module.bias is not None:
-        nn.init.constant_(module.bias, 0)
-
-
 @auto_docstring
 class VitDetPreTrainedModel(PreTrainedModel):
     config: VitDetConfig
@@ -597,53 +583,28 @@ class VitDetPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.copy_(
-                nn.init.trunc_normal_(module.weight.to(torch.float32), mean=0.0, std=self.config.initializer_range).to(
-                    module.weight.dtype
-                )
-            )
+            nn.init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
             nn.init.zeros_(module.bias)
             nn.init.ones_(module.weight)
-
         elif isinstance(module, VitDetEmbeddings):
-            module.position_embeddings.copy_(
-                nn.init.trunc_normal_(
-                    module.position_embeddings.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                ).to(module.position_embeddings.dtype)
-            )
-
+            nn.init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, VitDetAttention) and self.config.use_relative_position_embeddings:
-            module.rel_pos_h.copy_(
-                nn.init.trunc_normal_(
-                    module.rel_pos_h.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                )
-            )
-            module.rel_pos_w.copy_(
-                nn.init.trunc_normal_(
-                    module.rel_pos_w.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                )
-            )
-
+            nn.init.trunc_normal_(module.rel_pos_h, mean=0.0, std=self.config.initializer_range)
+            nn.init.trunc_normal_(module.rel_pos_w, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, VitDetResBottleneckBlock):
             for layer in [module.conv1, module.conv2, module.conv3]:
-                caffe2_msra_fill(layer)
+                nn.init.kaiming_normal_(layer.weight, mode="fan_out", nonlinearity="relu")
+                if layer.bias is not None:
+                    nn.init.constant_(layer.bias, 0)
             for layer in [module.norm1, module.norm2]:
-                layer.weight.fill_(1.0)
-                layer.bias.zero_()
+                nn.init.ones_(layer.weight)
+                nn.init.zeros_(layer.bias)
             # zero init last norm layer.
-            module.norm3.weight.zero_()
-            module.norm3.bias.zero_()
+            nn.init.zeros_(module.norm3.weight)
+            nn.init.zeros_(module.norm3.bias)
 
 
 @auto_docstring

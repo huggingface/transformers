@@ -1019,11 +1019,11 @@ class SamPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, SamVisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.zero_()
-                module.rel_pos_w.zero_()
+                nn.init.zeros_(module.rel_pos_h)
+                nn.init.zeros_(module.rel_pos_w)
         elif isinstance(module, SamVisionEncoder):
             if self.config.use_abs_pos:
-                module.pos_embed.zero_()
+                nn.init.zeros_(module.pos_embed)
 
 
 class SamVisionEncoder(SamPreTrainedModel):

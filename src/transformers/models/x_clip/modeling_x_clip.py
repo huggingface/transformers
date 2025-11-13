@@ -548,7 +548,7 @@ class XCLIPPreTrainedModel(PreTrainedModel):
             nn.init.zeros_(module.bias)
             nn.init.ones_(module.weight)
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_factor)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_factor)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
 
