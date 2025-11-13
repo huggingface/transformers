@@ -180,6 +180,7 @@ if __name__ == "__main__":
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
+    parser.add_argument("--do-sample", action="store_true", help="Activate sampling")
 
     # Benchmark parameters
     parser.add_argument("--samples", type=int, default=500, help="Number of samples to generate")
@@ -265,7 +266,7 @@ if __name__ == "__main__":
         use_cuda_graph=use_cuda_graph,
         eos_token_id=tokenizer.pad_token_id if args.force_max_length else tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
-        do_sample=not args.compare,
+        do_sample=args.do_sample,
         temperature=0.8,
         top_p=0.9,
         num_blocks=args.num_blocks,
