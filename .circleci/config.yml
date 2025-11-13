@@ -69,7 +69,7 @@ jobs:
                 path: test_preparation
 
             - run: apt-get update
-            - run: apt-get install -y curl
+            - run: apt-get install -y jq curl
 
             - run:
                 name: "Retrieve Artifact Paths"
