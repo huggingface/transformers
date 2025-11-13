@@ -914,11 +914,11 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            module.dt_bias.copy_(inv_dt)
+            nn.init.copy_(module.dt_bias, inv_dt)
 
             A = torch.arange(1, module.num_heads + 1)
-            module.A_log.copy_(torch.log(A))
-            module.D.fill_(1.0)
+            nn.init.copy_(module.A_log, torch.log(A))
+            nn.module.ones_(module.D)
 
 
 class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):

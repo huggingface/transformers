@@ -796,18 +796,9 @@ class ZambaPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, ZambaRMSNorm):
-            nn.init.ones_(module.weight)
-        elif isinstance(module, ZambaMambaMixer):
-            module.x_proj_weight.normal_(mean=0.0, std=std)
+        super()._init_weights(module)
+        if isinstance(module, ZambaMambaMixer):
+            nn.init.normal_(module.x_proj_weight, mean=0.0, std=std)
             dt_init_std = self.config.mamba_dt_rank**-0.5
             nn.init.uniform_(module.dt_proj_weight, -dt_init_std, dt_init_std)
 
@@ -819,12 +810,12 @@ class ZambaPreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            module.dt_proj_bias.copy_(inv_dt)
+            nn.init.copy_(module.dt_proj_bias, inv_dt)
 
             A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
             A = A.expand(module.intermediate_size, -1).contiguous()
-            module.A_log.copy_(torch.log(A).reshape(module.n_mamba_heads, module.mamba_head_dim, -1))
-            module.D.fill_(1.0)
+            nn.init.copy_(module.A_log, torch.log(A).reshape(module.n_mamba_heads, module.mamba_head_dim, -1))
+            nn.init.ones_(module.D)
 
 
 @auto_docstring

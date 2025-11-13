@@ -1124,8 +1124,8 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
-            module.b1.zero_()
-            module.b2.zero_()
+            nn.init.zeros_(module.b1)
+            nn.init.zeros_(module.b2)
 
 
 class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
@@ -1447,8 +1447,8 @@ class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Phi4MultimodalImageEmbedding):
-            module.global_img_feature_extensor.zero_()
-            module.sub_img_feature_extensor.zero_()
+            nn.init.zeros_(module.global_img_feature_extensor)
+            nn.init.zeros_(module.sub_img_feature_extensor)
 
 
 class Phi4MultimodalModel(Phi3Model):

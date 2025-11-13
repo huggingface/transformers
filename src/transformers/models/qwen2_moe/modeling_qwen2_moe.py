@@ -443,8 +443,8 @@ class Qwen2MoePreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, Qwen2MoeExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
-            module.down_proj.normal_(mean=0.0, std=std)
+            nn.init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            nn.init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, Qwen2MoeTopKRouter):
             nn.init.normal_(module.weight, mean=0.0, std=std)
 

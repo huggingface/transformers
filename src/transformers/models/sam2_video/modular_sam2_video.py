@@ -990,29 +990,19 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, (nn.LayerNorm, Sam2VideoLayerNorm)):
-            nn.init.ones_(module.weight)
-            nn.init.zeros_(module.bias)
-        elif isinstance(module, Sam2VideoModel):
+        super()._init_weights(module)
+        if isinstance(module, Sam2VideoModel):
             if module.no_memory_positional_encoding is not None:
-                module.no_memory_positional_encoding.zero_()
+                nn.init.zeros_(module.no_memory_positional_encoding)
             if module.memory_temporal_positional_encoding is not None:
-                module.memory_temporal_positional_encoding.zero_()
+                nn.init.zeros_(module.memory_temporal_positional_encoding)
             if module.no_object_pointer is not None:
-                module.no_object_pointer.zero_()
+                nn.init.zeros_(module.no_object_pointer)
             if module.occlusion_spatial_embedding_parameter is not None:
-                module.occlusion_spatial_embedding_parameter.zero_()
+                nn.init.zeros_(module.occlusion_spatial_embedding_parameter)
         if isinstance(module, Sam2VideoMemoryFuserCXBlock):
             if module.scale is not None:
-                module.scale.zero_()
+                nn.init.zeros_(module.scale)
 
 
 class Sam2VideoVisionRotaryEmbedding(nn.Module):

@@ -400,11 +400,11 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
         elif isinstance(module, (SwiftFormerConvEncoder, SwiftFormerLocalRepresentation)):
-            module.layer_scale.fill_(1.0)
+            nn.init.ones_(module.layer_scale)
         elif isinstance(module, SwiftFormerEncoderBlock):
             if self.config.use_layer_scale:
-                module.layer_scale_1.fill_(self.config.layer_scale_init_value)
-                module.layer_scale_2.fill_(self.config.layer_scale_init_value)
+                nn.init.constant_(module.layer_scale_1, self.config.layer_scale_init_value)
+                nn.init.constant_(module.layer_scale_2, self.config.layer_scale_init_value)
         elif isinstance(module, SwiftFormerEfficientAdditiveAttention):
             nn.init.normal_(module.w_g)
 

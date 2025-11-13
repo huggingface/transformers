@@ -902,7 +902,7 @@ class Swinv2PreTrainedModel(PreTrainedModel):
             if module.position_embeddings is not None:
                 nn.init.zeros_(module.position_embeddings)
         elif isinstance(module, Swinv2SelfAttention):
-            module.logit_scale.fill_(math.log(10))
+            nn.init.constant_(module.logit_scale, math.log(10))
 
 
 @auto_docstring

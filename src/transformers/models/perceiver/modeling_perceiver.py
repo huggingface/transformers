@@ -539,12 +539,12 @@ class PerceiverPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
         elif hasattr(module, "latents"):
-            module.latents.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.latents, mean=0.0, std=self.config.initializer_range)
         elif hasattr(module, "position_embeddings") and isinstance(module, PerceiverTrainablePositionEncoding):
-            module.position_embeddings.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.ParameterDict):
             for modality in module:
-                module[modality].normal_(mean=0.0, std=self.config.initializer_range)
+                nn.init.normal_(module[modality], mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:

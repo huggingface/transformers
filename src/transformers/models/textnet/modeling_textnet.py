@@ -221,17 +221,6 @@ class TextNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "textnet"
     main_input_name = "pixel_values"
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.BatchNorm2d):
-            nn.init.ones_(module.weight)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-
 
 @auto_docstring
 class TextNetModel(TextNetPreTrainedModel):

@@ -62,6 +62,12 @@ def trunc_normal_(tensor: torch.Tensor, mean: float = 0.0, std: float = 1.0, a: 
     return tensor
 
 
+def orthogonal_(tensor: torch.Tensor, gain: float = 1, generator: torch.Generator | None = None,) -> torch.Tensor:
+    if not getattr(tensor, "_is_hf_initialized", False):
+        return init.orthogonal_(tensor, gain=gain, generator=generator)
+    return tensor
+
+
 def copy_(tensor: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
         with torch.no_grad():

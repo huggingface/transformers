@@ -472,16 +472,9 @@ class SuperGluePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.BatchNorm1d):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
-
+        super()._init_weights(module)
         if hasattr(module, "bin_score"):
-            module.bin_score.fill_(1.0)
+            nn.init.ones_(module.bin_score)
 
 
 @auto_docstring(
