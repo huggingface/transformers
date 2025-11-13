@@ -24,7 +24,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...modeling_utils import PreTrainedAudioTokenizerBase
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from .configuration_dac import DacConfig
 
 
@@ -575,12 +575,12 @@ class DacModel(DacPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def encode(
         self,
         input_values: torch.Tensor,
         n_quantizers: Optional[int] = None,
-        return_dict: Optional[bool] = None,
     ):
         r"""
         input_values (`torch.Tensor of shape `(batch_size, 1, time_steps)`):
@@ -588,8 +588,6 @@ class DacModel(DacPreTrainedModel):
         n_quantizers (int, *optional*):
             Number of quantizers to use. If None, all quantizers are used. Default is None.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         quantized_representation = self.encoder(input_values)
         quantized_representation, audio_codes, projected_latents, commitment_loss, codebook_loss = self.quantizer(
             quantized_representation, n_quantizers
@@ -597,17 +595,14 @@ class DacModel(DacPreTrainedModel):
 
         loss = self.config.commitment_loss_weight * commitment_loss + self.config.codebook_loss_weight * codebook_loss
 
-        if not return_dict:
-            return (loss, quantized_representation, audio_codes, projected_latents)
-
         return DacEncoderOutput(loss, quantized_representation, audio_codes, projected_latents)
 
+    @can_return_tuple
     @auto_docstring
     def decode(
         self,
         quantized_representation: Optional[torch.Tensor] = None,
         audio_codes: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
     ):
         r"""
         quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`, *optional*):
@@ -616,22 +611,15 @@ class DacModel(DacPreTrainedModel):
             The codebook indices for each codebook, representing the quantized discrete
             representation of the input. This parameter should be provided if you want
             to decode directly from the audio codes (it will overwrite quantized_representation).
-        return_dict (`bool`, *optional*, defaults to `True`):
-            Whether to return a [`DacDecoderOutput`] instead of a plain tuple.
         """
 
         if quantized_representation is None and audio_codes is None:
             raise ValueError("Either `quantized_representation` or `audio_codes` must be provided.")
 
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if audio_codes is not None:
             quantized_representation = self.quantizer.from_codes(audio_codes)[0]
 
         audio_values = self.decoder(quantized_representation).squeeze(1)
-
-        if not return_dict:
-            return (audio_values,)
 
         return DacDecoderOutput(audio_values)
 
@@ -640,7 +628,6 @@ class DacModel(DacPreTrainedModel):
         self,
         input_values: torch.Tensor,
         n_quantizers: Optional[int] = None,
-        return_dict: Optional[bool] = None,
     ):
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, time_steps)`):
@@ -669,17 +656,12 @@ class DacModel(DacPreTrainedModel):
         >>> # or the equivalent with a forward pass
         >>> audio_values = model(inputs["input_values"]).audio_values
         ```"""
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
         length = input_values.shape[-1]
 
         loss, quantized_representation, audio_codes, projected_latents = self.encode(
             input_values, n_quantizers, return_dict=False
         )
         audio_values = self.decode(quantized_representation, return_dict=False)[0][..., :length]
-
-        if not return_dict:
-            return (loss, audio_values, quantized_representation, audio_codes, projected_latents)
 
         return DacOutput(loss, audio_values, quantized_representation, audio_codes, projected_latents)
 
