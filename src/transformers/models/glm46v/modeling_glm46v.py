@@ -30,7 +30,7 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
-from ..auto.modeling_auto import AutoModel
+from ..auto import AutoModel
 from .configuration_glm46v import Glm46VConfig
 
 

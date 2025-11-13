@@ -18,7 +18,7 @@ from typing import Optional, Union
 import numpy as np
 
 from ...video_utils import VideoMetadata
-from ..auto.modeling_auto import AutoModel
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..glm4v.configuration_glm4v import Glm4vConfig
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
 from ..glm4v.image_processing_glm4v_fast import Glm4vImageProcessorFast
@@ -28,7 +28,38 @@ from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 
 
 class Glm46VConfig(Glm4vConfig):
-    sub_configs = None
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        image_token_id=151343,
+        video_token_id=151344,
+        image_start_token_id=151339,
+        image_end_token_id=151340,
+        video_start_token_id=151361,
+        video_end_token_id=151362,
+        **kwargs,
+    ):
+        if isinstance(vision_config, dict):
+            vision_config["model_type"] = vision_config.get("model_type", "glm4v")
+            self.vision_config = CONFIG_MAPPING["vision_config"](**vision_config)
+        elif vision_config is None:
+            self.vision_config = CONFIG_MAPPING["glm4v"]()
+
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config.get("model_type", "glm4v_text")
+            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            self.text_config = CONFIG_MAPPING["glm4v_text"]()
+
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
+        self.video_start_token_id = video_start_token_id
+        self.video_end_token_id = video_end_token_id
+        self.image_start_token_id = image_start_token_id
+        self.image_end_token_id = image_end_token_id
 
 
 class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
