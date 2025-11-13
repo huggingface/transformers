@@ -373,4 +373,4 @@ class Glm4vMoeConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["Glm4vMoeConfig", "Glm4vMoeTextConfig"]
+__all__ = ["Glm4vMoeConfig", "Glm4vMoeTextConfig", "Glm4vMoeVisionConfig"]

@@ -1689,9 +1689,11 @@ class Glm4vProcessor(Qwen2VLProcessor):
 __all__ = [
     "Glm4vConfig",
     "Glm4vTextConfig",
+    "Glm4vVisionConfig",
     "Glm4vForConditionalGeneration",
     "Glm4vModel",
     "Glm4vPreTrainedModel",
     "Glm4vProcessor",
     "Glm4vTextModel",
+    "Glm4vVisionModel",
 ]
