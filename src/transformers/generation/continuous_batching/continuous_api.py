@@ -22,6 +22,7 @@ from functools import partial
 from itertools import count
 from math import ceil
 from time import perf_counter
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 import torch
 from torch import nn
@@ -1168,40 +1169,40 @@ class ContinuousMixin:
             progress_bar = False
 
         # Initialize manager with the batch inputs
-        with self.continuous_batching_context_manager(
-            generation_config=generation_config,
-            num_q_cuda_graphs=num_q_cuda_graphs,
-            num_kv_cuda_graphs=num_kv_cuda_graphs,
-            allow_prefix_sharing=allow_prefix_sharing,
-            block=True,
-            timeout=5,
-        ) as manager:
-            results = {}
-            num_requests = len(inputs)
+        results = {}
+        num_requests = len(inputs)
+        with (
+            self.continuous_batching_context_manager(
+                generation_config=generation_config,
+                num_q_cuda_graphs=num_q_cuda_graphs,
+                num_kv_cuda_graphs=num_kv_cuda_graphs,
+                allow_prefix_sharing=allow_prefix_sharing,
+                block=True,
+                timeout=5,
+            ) as manager,
+            logging_redirect_tqdm([logger]),
+            tqdm(
+                total=num_requests,
+                disable=(not progress_bar),
+                desc=f"Solving {num_requests} requests",
+                unit="request",
+            ) as pbar,
+        ):
             try:
-                from tqdm.contrib.logging import logging_redirect_tqdm
-
-                with logging_redirect_tqdm([logger]):
-                    with tqdm(
-                        total=num_requests,
-                        disable=(not progress_bar),
-                        desc=f"Solving {num_requests} requests",
-                        unit="request",
-                    ) as pbar:
-                        manager.add_requests(inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"))
-                        finished_count = 0
-                        while finished_count < num_requests:
-                            result = manager.get_result(timeout=1)
-                            if result:
-                                req_id = result.request_id
-                                if result.is_finished():
-                                    results[req_id] = result
-                                    finished_count += 1
-                                    pbar.update(1)
-                            else:
-                                if not manager.is_running():
-                                    logger.error("Generation thread terminated unexpectedly.")
-                                    break
+                manager.add_requests(inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"))
+                finished_count = 0
+                while finished_count < num_requests:
+                    result = manager.get_result(timeout=1)
+                    if result:
+                        req_id = result.request_id
+                        if result.is_finished():
+                            results[req_id] = result
+                            finished_count += 1
+                            pbar.update(1)
+                    else:
+                        if not manager.is_running():
+                            logger.error("Generation thread terminated unexpectedly.")
+                            break
 
             except Exception as e:
                 logger.error(f"Error during batch generation: {e}", exc_info=True)
