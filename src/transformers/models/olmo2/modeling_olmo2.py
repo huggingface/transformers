@@ -163,12 +163,11 @@ def eager_attention_forward(
         # Equivalent to (but faster than):
         # attn_output = (attn_weights @ value.unsqueeze(2)).flatten(1, 2).transpose(1, 2)
         attn_output = torch.einsum("bkgjs, bksd -> bkgjd", attn_weights, value).flatten(1, 2)
-        attn_output = attn_output.transpose(1, 2).contiguous()
         attn_weights = attn_weights.flatten(1, 2)
     else:
-        attn_output = (attn_weights @ value).transpose(1, 2)
+        attn_output = attn_weights @ value
 
-    return attn_output, attn_weights
+    return attn_output.transpose(1, 2).contiguous(), attn_weights
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
