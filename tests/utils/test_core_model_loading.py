@@ -11,9 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from types import SimpleNamespace
 import unittest
-from transformers.utils.import_utils import is_triton_available
+from types import SimpleNamespace
+
 import torch
 import torch.nn as nn
 
@@ -22,12 +22,13 @@ from transformers.core_model_loading import (
     Chunk,
     Concatenate,
     MergeModulelist,
+    PermuteForRope,
     WeightConverter,
     build_glob_alt,
     convert_and_load_state_dict_in_model,
     match_glob,
-    PermuteForRope
 )
+from transformers.utils.import_utils import is_triton_available
 
 
 class TestWeightGlobMatching(unittest.TestCase):
@@ -223,10 +224,10 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         self.assertEqual(
             missing,
             {
-                    "model.layers.1.self_attn.k_proj.weight",
-                    "model.layers.1.self_attn.v_proj.weight",
-                    "model.layers.1.self_attn.q_proj.weight",
-                },
+                "model.layers.1.self_attn.k_proj.weight",
+                "model.layers.1.self_attn.v_proj.weight",
+                "model.layers.1.self_attn.q_proj.weight",
+            },
         )
         self.assertEqual(unexpected, {"model.layers.1.self_attn.qkv_proj.weight"})
         self.assertEqual(mismatch, set())

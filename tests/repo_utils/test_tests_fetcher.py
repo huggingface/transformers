@@ -37,7 +37,6 @@ from tests_fetcher import (  # noqa: E402
     diff_is_docstring_only,
     extract_imports,
     get_all_tests,
-    get_diff,
     get_module_dependencies,
     get_tree_starting_at,
     infer_tests_to_run,

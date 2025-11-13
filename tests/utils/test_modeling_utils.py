@@ -510,7 +510,6 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertIsNotNone(model)
 
-
     def test_model_from_pretrained_with_different_pretrained_model_name(self):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertIsNotNone(model)
@@ -968,7 +967,7 @@ class ModelUtilsTest(TestCasePlus):
                 _ = BertModel.from_pretrained(tmp_dir, use_safetensors=True)
 
             # We can load the model with use_safetensors=False
-            new_model = BertModel.from_pretrained(tmp_dir, use_safetensors=False)
+            _ = BertModel.from_pretrained(tmp_dir, use_safetensors=False)
 
             # We can load the model without specifying use_safetensors
             with self.assertRaises(OSError):
@@ -990,7 +989,10 @@ class ModelUtilsTest(TestCasePlus):
                     "hf-internal-testing/tiny-random-bert-variant-sharded", cache_dir=tmp_dir
                 )
             model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant-sharded", cache_dir=tmp_dir, variant="v2", use_safetensors=False
+                "hf-internal-testing/tiny-random-bert-variant-sharded",
+                cache_dir=tmp_dir,
+                variant="v2",
+                use_safetensors=False,
             )
         self.assertIsNotNone(model)
 
@@ -1303,7 +1305,8 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertTrue(
             "does not appear to have a file named pytorch_model.bin or model.safetensors."
-            in str(missing_model_file_error.exception), msg=missing_model_file_error.exception
+            in str(missing_model_file_error.exception),
+            msg=missing_model_file_error.exception,
         )
 
         with self.assertRaises(OSError) as missing_model_file_error:
@@ -1314,7 +1317,8 @@ class ModelUtilsTest(TestCasePlus):
                 BertModel.from_pretrained(tmp_dir)
 
         self.assertTrue(
-            "Error no file named model.safetensors found in directory" in str(missing_model_file_error.exception), msg=missing_model_file_error.exception
+            "Error no file named model.safetensors found in directory" in str(missing_model_file_error.exception),
+            msg=missing_model_file_error.exception,
         )
 
     def test_safetensors_save_and_load(self):
@@ -1641,9 +1645,7 @@ class ModelUtilsTest(TestCasePlus):
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
             with LoggingLevel(logging.INFO):
-                _, loading_info = TestModelGammaBeta.from_pretrained(
-                    tmp_dir, config=config, output_loading_info=True
-                )
+                _, loading_info = TestModelGammaBeta.from_pretrained(tmp_dir, config=config, output_loading_info=True)
 
         missing_keys = loading_info["missing_keys"]
         unexpected_keys = loading_info["unexpected_keys"]
@@ -2929,7 +2931,9 @@ class TestTensorSharing(TestCasePlus):
 
 
 @require_torch
-@unittest.skip("These tests are currently failing and need to be fixed, but not sure we want to support this/not sure its even used! Fix this line:https://github.com/huggingface/transformers/blob/b750e6b9eeed5fb9adc2f8c7adb46639c8e41963/src/transformers/core_model_loading.py#L512")
+@unittest.skip(
+    "These tests are currently failing and need to be fixed, but not sure we want to support this/not sure its even used! Fix this line:https://github.com/huggingface/transformers/blob/b750e6b9eeed5fb9adc2f8c7adb46639c8e41963/src/transformers/core_model_loading.py#L512"
+)
 class TestSaveAndLoadModelWithExtraState(TestCasePlus):
     """
     This test checks that a model can be saved and loaded that uses the torch extra state API.
