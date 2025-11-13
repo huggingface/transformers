@@ -13,53 +13,58 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-02-20 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2022-02-20 and added to Hugging Face Transformers on 2023-06-20 and contributed by [Francesco](https://huggingface.co/Francesco).*
+
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0. You can do so by running the following command: pip install -U transformers==4.30.0.
 
 # VAN
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Visual Attention Network](https://huggingface.co/papers/2202.09741) proposes a novel large kernel attention (LKA) module to address challenges in applying self-attention to images. This module enables self-adaptive and long-range correlations while avoiding issues related to 2D structure neglect, quadratic complexity, and lack of channel adaptability. The model, VAN, outperforms state-of-the-art vision transformers and convolutional neural networks across various tasks, including image classification, object detection, semantic segmentation, and instance segmentation.
 
-<Tip warning={true}>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
+```py
+import torch
+from transformers import pipeline
 
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0.
-You can do so by running the following command: `pip install -U transformers==4.30.0`.
+pipeline = pipeline(task="image-classification", model="Visual-Attention-Network/van-base", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-</Tip>
+</hfoption>
+<hfoption id="AutoModel">
 
-## Overview
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-The VAN model was proposed in [Visual Attention Network](https://huggingface.co/papers/2202.09741) by Meng-Hao Guo, Cheng-Ze Lu, Zheng-Ning Liu, Ming-Ming Cheng, Shi-Min Hu.
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-This paper introduces a new attention layer based on convolution operations able to capture both local and distant relationships. This is done by combining normal and large kernel convolution layers. The latter uses a dilated convolution to capture distant correlations.
+image_processor = AutoImageProcessor.from_pretrained("Visual-Attention-Network/van-base")
+model = AutoModelForImageClassification.from_pretrained("Visual-Attention-Network/van-base", dtype="auto")
 
-The abstract from the paper is the following:
+inputs = image_processor(image, return_tensors="pt")
 
-*While originally designed for natural language processing tasks, the self-attention mechanism has recently taken various computer vision areas by storm. However, the 2D nature of images brings three challenges for applying self-attention in computer vision. (1) Treating images as 1D sequences neglects their 2D structures. (2) The quadratic complexity is too expensive for high-resolution images. (3) It only captures spatial adaptability but ignores channel adaptability. In this paper, we propose a novel large kernel attention (LKA) module to enable self-adaptive and long-range correlations in self-attention while avoiding the above issues. We further introduce a novel neural network based on LKA, namely Visual Attention Network (VAN). While extremely simple, VAN outperforms the state-of-the-art vision transformers and convolutional neural networks with a large margin in extensive experiments, including image classification, object detection, semantic segmentation, instance segmentation, etc. Code is available at [this https URL](https://github.com/Visual-Attention-Network/VAN-Classification).*
+with torch.no_grad():
+    logits = model(**inputs).logits
 
-Tips:
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
 
-- VAN does not have an embedding layer, thus the `hidden_states` will have a length equal to the number of stages.
+</hfoption>
+</hfoptions>
 
-The figure below illustrates the architecture of a Visual Attention Layer. Taken from the [original paper](https://huggingface.co/papers/2202.09741).
+## Usage tips
 
-<img width="600" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/van_architecture.png"/>
-
-This model was contributed by [Francesco](https://huggingface.co/Francesco). The original code can be found [here](https://github.com/Visual-Attention-Network/VAN-Classification).
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with VAN.
-
-<PipelineTag pipeline="image-classification"/>
-
-- [`VanForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+- VAN doesn't have an embedding layer. The `hidden_states` have a length equal to the number of stages.
 
 ## VanConfig
 
@@ -74,3 +79,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] VanForImageClassification
     - forward
+

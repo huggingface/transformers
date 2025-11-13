@@ -17,46 +17,33 @@ rendered properly in your Markdown viewer.
 
 # FLAN-T5
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[FLAN-T5](https://huggingface.co/papers/2210.11416) investigates instruction finetuning of language models, focusing on scaling task diversity, model size, and chain-of-thought data. The authors show that instruction finetuning substantially improves performance across model families (PaLM, T5, U-PaLM), prompting strategies (zero-shot, few-shot, CoT), and benchmarks (MMLU, BBH, TyDiQA, MGSM). Notably, Flan-PaLM 540B finetuned on 1.8K tasks surpasses PaLM 540B by 9.4% on average and achieves state-of-the-art results, including 75.2% on five-shot MMLU. Additionally, publicly released Flan-T5 checkpoints demonstrate strong few-shot abilities rivaling much larger models, underscoring instruction finetuning as a broadly effective method for enhancing pretrained language models.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-FLAN-T5 was released in the paper [Scaling Instruction-Finetuned Language Models](https://huggingface.co/papers/2210.11416) - it is an enhanced version of T5 that has been finetuned in a mixture of tasks.
+```py
+import torch
+from transformers import pipeline
 
-One can directly use FLAN-T5 weights without finetuning the model:
-
-```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
->>> model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-small")
->>> tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
-
->>> inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt")
->>> outputs = model.generate(**inputs)
->>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['Pour a cup of bolognese into a large bowl and add the pasta']
+pipeline = pipeline("text-generation", model="google/flan-t5-small", dtype="auto")
+pipeline("Plants create energy through a process known as photosynthesis.")
 ```
 
-FLAN-T5 includes the same improvements as T5 version 1.1 (see [here](https://huggingface.co/docs/transformers/model_doc/t5v1.1) for the full details of the model's improvements.)
+</hfoption>
+<hfoption id="AutoModel">
 
-Google has released the following variants:
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-- [google/flan-t5-small](https://huggingface.co/google/flan-t5-small)
+model = AutoModelForCausalLM.from_pretrained("google/flan-t5-small", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
 
-- [google/flan-t5-base](https://huggingface.co/google/flan-t5-base)
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
 
-- [google/flan-t5-large](https://huggingface.co/google/flan-t5-large)
-
-- [google/flan-t5-xl](https://huggingface.co/google/flan-t5-xl)
-
-- [google/flan-t5-xxl](https://huggingface.co/google/flan-t5-xxl).
-
-The original checkpoints can be found [here](https://github.com/google-research/t5x/blob/main/docs/models.md#flan-t5-checkpoints).
-
-<Tip>
-
-Refer to [T5's documentation page](t5) for all API reference, code examples and notebooks. For more details regarding training and evaluation of the FLAN-T5, refer to the model card.
-
-</Tip>
+</hfoption>
+</hfoptions>

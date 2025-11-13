@@ -93,6 +93,9 @@ def get_paper_link(model_card: str | None, path: str | None) -> str:
 def get_first_commit_date(model_name: str | None) -> str:
     """Get the first commit date of the model's init file or model.md. This date is considered as the date the model was added to HF transformers"""
 
+    if model_name is None:
+        return date.today().isoformat()
+
     if model_name.endswith(".md"):
         model_name = f"{model_name[:-3]}"
 
@@ -120,19 +123,119 @@ def get_first_commit_date(model_name: str | None) -> str:
     return final_date.strip().split("\n")[0][:10]
 
 
+def get_contributors(file_path: str) -> str:
+    """Extract contributor names from the model card. Checks both v4.50.0 and origin/main, and uses whichever has contributor info (preferring v4.50.0)."""
+
+    # Extract model name from file_path
+    model_name = os.path.splitext(os.path.basename(file_path))[0]
+
+    if model_name in ["auto", "timm_wrapper"]:
+        return ""
+
+    # Get the model card content from v4.50.0
+    model_card_path = f"docs/source/en/model_doc/{model_name}.md"
+
+    # Try v4.50.0 first
+    result_v4_50 = None
+    try:
+        result_v4_50 = subprocess.check_output(
+            ["git", "show", f"v4.50.0:{model_card_path}"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        pass
+
+    # Try origin/main
+    result_origin_main = None
+    try:
+        result_origin_main = subprocess.check_output(
+            ["git", "show", f"origin/main:{model_card_path}"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        pass
+
+    # If neither exists, return empty
+    if result_v4_50 is None and result_origin_main is None:
+        return ""
+
+    # Find the "This model was contributed by" or "The X model was contributed by" line
+    # Pattern matches various contribution formats:
+    # - "This model was contributed by"
+    # - "This model was a joint contribution by"
+    # - "This HF implementation is contributed by"
+    # - "This model was added by"
+    # - "The model version was contributed by"
+    # The pattern also handles markdown tip/warning/note blocks where the line starts with "> "
+    contributed_pattern = r"(?:^|> )(?:This|The .+?) (?:model(?: version)? was (?:a joint contribution |contributed )|HF implementation is contributed |was added )by (.+?)(?:,? and (?:the original|the official) code|\.\s|\.$|\n|The code)"
+
+    # Check v4.50.0 first if it exists
+    match = None
+    if result_v4_50:
+        match = re.search(contributed_pattern, result_v4_50, re.IGNORECASE | re.DOTALL | re.MULTILINE)
+
+    # If no match in v4.50.0, try origin/main
+    if not match and result_origin_main:
+        match = re.search(contributed_pattern, result_origin_main, re.IGNORECASE | re.DOTALL | re.MULTILINE)
+
+    if not match:
+        return ""
+
+    contributor_text = match.group(1).strip()
+
+    # Remove "with contributions from" part and treat all as contributors
+    contributor_text = contributor_text.replace(" with contributions from", ",")
+
+    # Remove "from [organization]" pattern (e.g., "from [ABEJA, Inc.](link)")
+    # This removes organizational affiliations that are not actual contributors
+    contributor_text = re.sub(r"\s+from\s+\[.+?\]\(.+?\)", "", contributor_text)
+
+    # Extract all [name](link) patterns
+    contributor_pattern = r"\[([^\]]+)\]\(([^\)]+)\)"
+    contributors = re.findall(contributor_pattern, contributor_text)
+
+    if not contributors:
+        return ""
+
+    # Format contributor links
+    contributor_links = []
+    for name, link in contributors:
+        # Extract username from the link (last part of the URL)
+        # Works for both https://huggingface.co/username and https://github.com/username
+        username = link.rstrip("/").split("/")[-1]
+        contributor_links.append(f"[{username}]({link})")
+
+    # Format the final string
+    if len(contributor_links) == 1:
+        return f" and contributed by {contributor_links[0]}"
+    elif len(contributor_links) == 2:
+        return f" and contributed by {contributor_links[0]} and {contributor_links[1]}"
+    else:
+        # For 3+ contributors, use Oxford comma style
+        return f" and contributed by {', '.join(contributor_links[:-1])}, and {contributor_links[-1]}"
+
+
 def get_release_date(link: str) -> str:
     if link.startswith("https://huggingface.co/papers/"):
         link = link.replace("https://huggingface.co/papers/", "")
 
         try:
             info = paper_info(link)
-            return info.published_at.date().isoformat()
+            if info.published_at is not None:
+                return info.published_at.date().isoformat()
+            else:
+                return r"{release_date}"
         except Exception as e:
             print(f"Error fetching release date for the paper https://huggingface.co/papers/{link}: {e}")
+            return r"{release_date}"
 
     elif link.startswith("https://arxiv.org/abs/") or link.startswith("https://arxiv.org/pdf/"):
         print(f"This paper {link} is not yet available in Hugging Face papers, skipping the release date attachment.")
         return r"{release_date}"
+
+    return r"{release_date}"
 
 
 def replace_paper_links(file_path: str) -> bool:
@@ -193,9 +296,7 @@ def insert_dates(model_card_list: list[str]):
         if links_replaced:
             print(f"Updated paper links in {model_card}")
 
-        pattern = (
-            r"\n\*This model was released on (.*) and added to Hugging Face Transformers on (\d{4}-\d{2}-\d{2})\.\*"
-        )
+        pattern = r"\n\*This model was released on (.*) and added to Hugging Face Transformers on (\d{4}-\d{2}-\d{2})(.*)\.\*"
 
         # Check if the copyright disclaimer sections exists, if not, add one with 2025
         with open(file_path, "r", encoding="utf-8") as f:
@@ -219,20 +320,30 @@ def insert_dates(model_card_list: list[str]):
         else:
             release_date = r"{release_date}"
 
+        # Get contributor information
+        contributors = get_contributors(file_path)
+
         match = re.search(pattern, content)
 
         # If the dates info line already exists, preserve the existing release date unless it's a placeholder, and update the HF commit date if needed
         if match:
             existing_release_date = match.group(1)  # The release date part
             existing_hf_date = match.group(2)  # The existing HF date part
+            existing_contributors = match.group(3) if len(match.groups()) > 2 else ""  # The existing contributors part
             release_date = (
                 release_date
                 if (existing_release_date == r"{release_date}" or existing_release_date == "None")
                 else existing_release_date
             )
-            if existing_hf_date != hf_commit_date or existing_release_date != release_date:
+            # Always use newly extracted contributors to ensure they're up to date
+            final_contributors = contributors
+            if (
+                existing_hf_date != hf_commit_date
+                or existing_release_date != release_date
+                or existing_contributors != contributors
+            ):
                 old_line = match.group(0)  # Full matched line
-                new_line = f"\n*This model was released on {release_date} and added to Hugging Face Transformers on {hf_commit_date}.*"
+                new_line = f"\n*This model was released on {release_date} and added to Hugging Face Transformers on {hf_commit_date}{final_contributors}.*"
 
                 content = content.replace(old_line, new_line)
                 with open(file_path, "w", encoding="utf-8") as f:
@@ -242,7 +353,7 @@ def insert_dates(model_card_list: list[str]):
         else:
             insert_index = markers[0].end()
 
-            date_info = f"\n*This model was released on {release_date} and added to Hugging Face Transformers on {hf_commit_date}.*"
+            date_info = f"\n*This model was released on {release_date} and added to Hugging Face Transformers on {hf_commit_date}{contributors}.*"
             content = content[:insert_index] + date_info + content[insert_index:]
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -273,7 +384,7 @@ def main(all=False, auto=True, models=None):
             return
         print(f"Processing modified model cards: {model_cards}")
     else:
-        model_cards = models
+        model_cards = models or []
         print(f"Processing specified model cards: {model_cards}")
 
     insert_dates(model_cards)

@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was released on 2025-07-10 and added to Hugging Face Transformers on 2025-11-11.*
+*This model was released on 2025-07-10 and added to Hugging Face Transformers on 2025-11-13 and contributed by [lashahub](https://huggingface.co/lashahub) and [bezzam](https://huggingface.co/bezzam).*
 
 # Audio Flamingo 3
 

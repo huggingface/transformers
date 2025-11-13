@@ -17,43 +17,45 @@ rendered properly in your Markdown viewer.
 
 # RemBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[RemBERT](https://huggingface.co/papers/2010.12821) re-evaluates the practice of sharing weights between input and output embeddings in pre-trained language models. It demonstrates that decoupling these embeddings enhances modeling flexibility and optimizes parameter allocation in multilingual models. By reallocating input embedding parameters within Transformer layers, the model achieves superior performance on natural language understanding tasks without increasing parameters during fine-tuning. Additionally, allocating extra capacity to the output embedding, which is discarded post-pre-training, improves the model's generalization and transferability to various tasks and languages. These insights enable strong performance on the XTREME benchmark without expanding the parameter count at the fine-tuning stage.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The RemBERT model was proposed in [Rethinking Embedding Coupling in Pre-trained Language Models](https://huggingface.co/papers/2010.12821) by Hyung Won Chung, Thibault Févry, Henry Tsai, Melvin Johnson, Sebastian Ruder.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="fill-mask", model="google/rembert", dtype="auto")
+pipeline("Plants create <mask> through a process known as photosynthesis.")
+```
 
-*We re-evaluate the standard practice of sharing weights between input and output embeddings in state-of-the-art
-pre-trained language models. We show that decoupled embeddings provide increased modeling flexibility, allowing us to
-significantly improve the efficiency of parameter allocation in the input embedding of multilingual models. By
-reallocating the input embedding parameters in the Transformer layers, we achieve dramatically better performance on
-standard natural language understanding tasks with the same number of parameters during fine-tuning. We also show that
-allocating additional capacity to the output embedding provides benefits to the model that persist through the
-fine-tuning stage even though the output embedding is discarded after pre-training. Our analysis shows that larger
-output embeddings prevent the model's last layers from overspecializing to the pre-training task and encourage
-Transformer representations to be more general and more transferable to other tasks and languages. Harnessing these
-findings, we are able to train models that achieve strong performance on the XTREME benchmark without increasing the
-number of parameters at the fine-tuning stage.*
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+model = AutoModelForMaskedLM.from_pretrained("google/rembert", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/rembert")
+
+inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-For fine-tuning, RemBERT can be thought of as a bigger version of mBERT with an ALBERT-like factorization of the
-embedding layer. The embeddings are not tied in pre-training, in contrast with BERT, which enables smaller input
-embeddings (preserved during fine-tuning) and bigger output embeddings (discarded at fine-tuning). The tokenizer is
-also similar to the Albert one rather than the BERT one.
-
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+- For fine-tuning, RemBERT is like a bigger version of mBERT with ALBERT-like embedding factorization.
+- Embeddings aren't tied during pre-training (unlike BERT). This enables smaller input embeddings (preserved during fine-tuning) and bigger output embeddings (discarded at fine-tuning).
+- The tokenizer is similar to ALBERT's tokenizer rather than BERT's.
 
 ## RemBertConfig
 
@@ -109,3 +111,4 @@ also similar to the Albert one rather than the BERT one.
 
 [[autodoc]] RemBertForQuestionAnswering
     - forward
+

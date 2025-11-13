@@ -17,43 +17,41 @@ rendered properly in your Markdown viewer.
 
 # ProphetNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training](https://huggingface.co/papers/2001.04063) is an encoder-decoder model that employs future n-gram prediction and an n-stream self-attention mechanism. Unlike traditional models that predict the next token, ProphetNet predicts the next n tokens simultaneously, enhancing its ability to plan for future tokens and reducing overfitting on local correlations. Pre-trained on both base (16GB) and large (160GB) datasets, ProphetNet outperforms other models on CNN/DailyMail, Gigaword, and SQuAD 1.1 benchmarks for abstractive summarization and question generation tasks.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The ProphetNet model was proposed in [ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training,](https://huggingface.co/papers/2001.04063) by Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei
-Zhang, Ming Zhou on 13 Jan, 2020.
+```py
+import torch
+from transformers import pipeline
 
-ProphetNet is an encoder-decoder model and can predict n-future tokens for "ngram" language modeling instead of just
-the next token.
+pipeline = pipeline(task="text-generation", model="microsoft/prophetnet-large-uncased", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-The abstract from the paper is the following:
+</hfoption>
+<hfoption id="AutoModel">
 
-*In this paper, we present a new sequence-to-sequence pretraining model called ProphetNet, which introduces a novel
-self-supervised objective named future n-gram prediction and the proposed n-stream self-attention mechanism. Instead of
-the optimization of one-step ahead prediction in traditional sequence-to-sequence model, the ProphetNet is optimized by
-n-step ahead prediction which predicts the next n tokens simultaneously based on previous context tokens at each time
-step. The future n-gram prediction explicitly encourages the model to plan for the future tokens and prevent
-overfitting on strong local correlations. We pre-train ProphetNet using a base scale dataset (16GB) and a large scale
-dataset (160GB) respectively. Then we conduct experiments on CNN/DailyMail, Gigaword, and SQuAD 1.1 benchmarks for
-abstractive summarization and question generation tasks. Experimental results show that ProphetNet achieves new
-state-of-the-art results on all these datasets compared to the models using the same scale pretraining corpus.*
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-The Authors' code can be found [here](https://github.com/microsoft/ProphetNet).
+tokenizer = AutoTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+model = AutoModelForCausalLM.from_pretrained("microsoft/prophetnet-large-uncased", dtype="auto",)
+
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- ProphetNet is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
-  the left.
-- The model architecture is based on the original Transformer, but replaces the “standard” self-attention mechanism in the decoder by a main self-attention mechanism and a self and n-stream (predict) self-attention mechanism.
-
-## Resources
-
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
+- Pad inputs on the right. ProphetNet uses absolute position embeddings.
+- The model architecture is based on the original Transformer. It replaces the "standard" self-attention mechanism in the decoder with a main self-attention mechanism and a self and n-stream (predict) self-attention mechanism.
 
 ## ProphetNetConfig
 
@@ -97,3 +95,4 @@ The Authors' code can be found [here](https://github.com/microsoft/ProphetNet).
 
 [[autodoc]] ProphetNetForCausalLM
     - forward
+

@@ -13,45 +13,43 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-02-10 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2020-02-10 and added to Hugging Face Transformers on 2023-06-20 and contributed by [qqaatw](https://huggingface.co/qqaatw).*
+
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
 
 # REALM
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[REALM: Retrieval-Augmented Language Model Pre-Training](https://huggingface.co/papers/2002.08909) enhances language model pre-training by integrating a latent knowledge retriever. This retriever allows the model to access and utilize documents from a large corpus like Wikipedia during pre-training, fine-tuning, and inference. The model is trained in an unsupervised manner using masked language modeling, with the retrieval step considered during backpropagation across millions of documents. REALM significantly outperforms existing models on Open-domain Question Answering benchmarks, offering improvements of 4-16% in accuracy. It also provides benefits in interpretability and modularity.
 
-<Tip warning={true}>
+<hfoptions id="usage">
+<hfoption id="RealmForOpenQA">
 
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
-You can do so by running the following command: `pip install -U transformers==4.40.2`.
+```py
+import torch
+from transformers import RealmForOpenQA, RealmRetriever, AutoTokenizer
 
-</Tip>
+retriever = RealmRetriever.from_pretrained("google/realm-orqa-nq-openqa")
+tokenizer = AutoTokenizer.from_pretrained("google/realm-orqa-nq-openqa")
+model = RealmForOpenQA.from_pretrained("google/realm-orqa-nq-openqa", retriever=retriever, dtype="auto")
 
-## Overview
+question = "How do plants create energy?"
+question_ids = tokenizer([question], return_tensors="pt")
+answer_ids = tokenizer(
+    ["photosynthesis"],
+    add_special_tokens=False,
+    return_token_type_ids=False,
+    return_attention_mask=False,
+).input_ids
 
-The REALM model was proposed in [REALM: Retrieval-Augmented Language Model Pre-Training](https://huggingface.co/papers/2002.08909) by Kelvin Guu, Kenton Lee, Zora Tung, Panupong Pasupat and Ming-Wei Chang. It's a
-retrieval-augmented language model that firstly retrieves documents from a textual knowledge corpus and then
-utilizes retrieved documents to process question answering tasks.
+reader_output, predicted_answer_ids = model(**question_ids, answer_ids=answer_ids, return_dict=False)
+print(tokenizer.decode(predicted_answer_ids))
+```
 
-The abstract from the paper is the following:
-
-*Language model pre-training has been shown to capture a surprising amount of world knowledge, crucial for NLP tasks
-such as question answering. However, this knowledge is stored implicitly in the parameters of a neural network,
-requiring ever-larger networks to cover more facts. To capture knowledge in a more modular and interpretable way, we
-augment language model pre-training with a latent knowledge retriever, which allows the model to retrieve and attend
-over documents from a large corpus such as Wikipedia, used during pre-training, fine-tuning and inference. For the
-first time, we show how to pre-train such a knowledge retriever in an unsupervised manner, using masked language
-modeling as the learning signal and backpropagating through a retrieval step that considers millions of documents. We
-demonstrate the effectiveness of Retrieval-Augmented Language Model pre-training (REALM) by fine-tuning on the
-challenging task of Open-domain Question Answering (Open-QA). We compare against state-of-the-art models for both
-explicit and implicit knowledge storage on three popular Open-QA benchmarks, and find that we outperform all previous
-methods by a significant margin (4-16% absolute accuracy), while also providing qualitative benefits such as
-interpretability and modularity.*
-
-This model was contributed by [qqaatw](https://huggingface.co/qqaatw). The original code can be found
-[here](https://github.com/google-research/language/tree/master/language/realm).
+</hfoption>
+</hfoptions>
 
 ## RealmConfig
 
@@ -100,3 +98,4 @@ This model was contributed by [qqaatw](https://huggingface.co/qqaatw). The origi
 [[autodoc]] RealmForOpenQA
     - block_embedding_to
     - forward
+

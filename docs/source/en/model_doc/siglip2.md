@@ -13,31 +13,18 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-02-20 and added to Hugging Face Transformers on 2025-02-21.*
+*This model was released on 2025-02-20 and added to Hugging Face Transformers on 2025-02-21 and contributed by [qubvel-hf](https://huggingface.co/qubvel-hf).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-            <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-            <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
 
 # SigLIP2
 
-## Overview
-
-[SigLIP2](https://huggingface.co/papers/2502.14786) is a family of multilingual vision-language encoders that builds on the [SigLIP](./siglip) training recipe. It includes decoder-based pretraining, self-distillation, and masked prediction to improve dense prediction tasks (segmentation, depth estimation, etc.). This model is available in two variants:
-
-- NaFlex supports different resolutions and maintains the native image aspect ratio
-- FixRes supports fixed resolutions and is backwards compatible with [SigLIP](./siglip)
-
-You can find all the original SigLIP2 checkpoints under the [SigLIP2](https://huggingface.co/collections/google/siglip2-67b5dcef38c175486e240107) collection.
-
-> [!TIP]
-> Click on the SigLIP2 models in the right sidebar for more examples of how to apply SigLIP2 to different image and text tasks.
-
-The example below demonstrates zero-shot classification with [`Pipeline`] or the [`AutoModel`] class.
+[SigLIP2](https://huggingface.co/papers/2502.14786) introduces a family of multilingual vision-language encoders that enhance the original SigLIP with decoder-based pretraining, self-supervised losses, and online data curation. These improvements result in superior performance in zero-shot classification, image-text retrieval, and transfer learning for visual representations. SigLIP2 also excels in localization and dense prediction tasks. Available in FixRes and NaFlex variants, the models support multiple resolutions and maintain native aspect ratios. Trained on a diverse dataset with de-biasing techniques, SigLIP2 offers better multilingual understanding and fairness. Model checkpoints are provided in four sizes: ViT-B/86M, L/303M, So400m/400M, and g/1B.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -49,12 +36,12 @@ from transformers import pipeline
 image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 
-pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip2-base-patch16-224", device=0, dtype=torch.bfloat16)
+pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip2-base-patch16-224", dtype="auto")
 pipeline(image, candidate_labels=candidate_labels)
 ```
 
 </hfoption>
-<hfoption id="AutoModel (FixRes)">
+<hfoption id="AutoModel">
 
 ```py
 import torch
@@ -62,46 +49,14 @@ import requests
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("google/siglip2-base-patch16-224", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("google/siglip2-base-patch16-224", dtype="auto")
 processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
-
-# follows the pipeline prompt template to get same results
 texts = [f'This is a photo of {label}.' for label in candidate_labels]
-
-# IMPORTANT: we pass `padding=max_length` and `max_length=64` since the model was trained with this
-inputs = processor(text=texts, images=image, padding="max_length", max_length=64, return_tensors="pt").to(model.device)
-
-with torch.no_grad():
-    outputs = model(**inputs)
-
-logits_per_image = outputs.logits_per_image
-probs = torch.sigmoid(logits_per_image)
-print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
-```
-
-</hfoption>
-<hfoption id="AutoModel (NaFlex)">
-
-```py
-import torch
-import requests
-from PIL import Image
-from transformers import AutoProcessor, AutoModel
-
-model = AutoModel.from_pretrained("google/siglip2-base-patch16-naflex", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
-processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-naflex")
-
-url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-image = Image.open(requests.get(url, stream=True).raw)
-candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
-texts = [f'This is a photo of {label}.' for label in candidate_labels]
-
-# default value for `max_num_patches` is 256, but you can increase resulted image resolution providing higher values e.g. `max_num_patches=512`
-inputs = processor(text=texts, images=image, padding="max_length", max_num_patches=256, return_tensors="pt").to(model.device)
+inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -114,61 +69,14 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 </hfoption>
 </hfoptions>
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+## Usage tips
 
-The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
-
-```py
-import torch
-import requests
-from PIL import Image
-from transformers import AutoProcessor, AutoModel, BitsAndBytesConfig
-
-bnb_config = BitsAndBytesConfig(load_in_4bit=True)
-model = AutoModel.from_pretrained("google/siglip2-large-patch16-512", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
-processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
-
-url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-image = Image.open(requests.get(url, stream=True).raw)
-candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
-
-# follows the pipeline prompt template to get same results
-texts = [f'This is a photo of {label}.' for label in candidate_labels]
-
-# IMPORTANT: we pass `padding=max_length` and `max_length=64` since the model was trained with this
-inputs = processor(text=texts, images=image, padding="max_length", max_length=64, return_tensors="pt").to(model.device)
-
-with torch.no_grad():
-    outputs = model(**inputs)
-
-logits_per_image = outputs.logits_per_image
-probs = torch.sigmoid(logits_per_image)
-print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
-```
-
-## Notes
-
-- Training is supported for DDP and FSDP on single-node multi-accelerator setups. However, it does not use [torch.distributed](https://pytorch.org/tutorials/beginner/dist_overview.html) utilities which may limit the scalability of batch size.
-- When using the standalone [`GemmaTokenizerFast`] make sure to pass `padding="max_length"` and `max_length=64` as that's how the model was trained.
-- Model was trained with *lowercased* text, so make sure your text labels are preprocessed the same way.
-- To get the same results as the [`Pipeline`], a prompt template of `"This is a photo of {label}."` should be passed to the processor.
-- The NaFlex variant processes different types of images at the appropriate resolution (using a larger resolution to process document images for example), while also minimizing the impact of aspect ratio distortion for certain inference tasks like OCR.
-
-   NaFlex resizes the input image so the height and width are multiples of the patch size after resizing. It keeps the aspect ratio distortion as low as possible and produces a sequence length of at most the desired target sequence length (`max_num_patches`). After resizing, the image is split into a sequence of patches and a mask with padding information is added.
-- Toggle the `attn_implementation` parameter to either `"sdpa"` or `"flash_attention_2"` to use a more memory-efficient attention.
-
-    ```py
-    # pip install -U flash-attn --no-build-isolation
-
-    from transformers import SiglipModel
-
-    model = SiglipModel.from_pretrained(
-        "google/siglip2-so400m-patch14-384",
-        attn_implementation="flash_attention_2",
-        dtype=torch.float16,
-        device_map=device,
-    )
-    ```
+- Training supports DDP and FSDP on single-node multi-accelerator setups. The model doesn't use `torch.distributed` utilities, which may limit batch size scalability.
+- Use `padding="max_length"` and `max_length=64` when using standalone [`GemmaTokenizerFast`]. This matches how the model was trained.
+- The model trains with lowercased text. Preprocess your text labels the same way.
+- Pass the prompt template `"This is a photo of {label}."` to the processor to get the same results as the [`Pipeline`].
+- The NaFlex variant processes different image types at appropriate resolutions. It uses larger resolutions for document images and minimizes aspect ratio distortion for inference tasks like OCR.
+- NaFlex resizes input images so height and width become multiples of the patch size after resizing. It keeps aspect ratio distortion as low as possible and produces a sequence length of at most the desired target sequence length (`max_num_patches`). After resizing, the image splits into a sequence of patches and adds a mask with padding information.
 
 ## Siglip2Config
 
@@ -217,3 +125,4 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 
 [[autodoc]] Siglip2ForImageClassification
     - forward
+

@@ -13,130 +13,58 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-04-20 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2020-04-20 and added to Hugging Face Transformers on 2023-06-20 and contributed by [shangz](https://huggingface.co/shangz).*
+
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
 
 # QDQBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[QDQBERT](https://huggingface.co/papers/2004.09602) explores integer quantization to decrease Deep Neural Network sizes and enhance inference speed through high-throughput integer instructions. The paper examines quantization parameters and evaluates their impact across various neural network models in vision, speech, and language domains. It highlights techniques compatible with processors featuring high-throughput integer pipelines. A workflow for 8-bit quantization is introduced, ensuring accuracy within 1% of the floating-point baseline across all studied networks, including challenging models like MobileNets and BERT-large.
 
-<Tip warning={true}>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
-You can do so by running the following command: `pip install -U transformers==4.40.2`.
+```py
+import torch
+from transformers import pipeline
 
-</Tip>
+pipeline = pipeline(task="fill-mask", model="google-bert/bert-base-uncased", dtype="auto")
+pipeline("Plants create [MASK] through a process known as photosynthesis.")
+```
 
-## Overview
+</hfoption>
+<hfoption id="AutoModel">
 
-The QDQBERT model can be referenced in [Integer Quantization for Deep Learning Inference: Principles and Empirical
-Evaluation](https://huggingface.co/papers/2004.09602) by Hao Wu, Patrick Judd, Xiaojie Zhang, Mikhail Isaev and Paulius
-Micikevicius.
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-The abstract from the paper is the following:
+model = AutoModelForMaskedLM.from_pretrained("google-bert/bert-base-uncased", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
-*Quantization techniques can reduce the size of Deep Neural Networks and improve inference latency and throughput by
-taking advantage of high throughput integer instructions. In this paper we review the mathematical aspects of
-quantization parameters and evaluate their choices on a wide range of neural network models for different application
-domains, including vision, speech, and language. We focus on quantization techniques that are amenable to acceleration
-by processors with high-throughput integer math pipelines. We also present a workflow for 8-bit quantization that is
-able to maintain accuracy within 1% of the floating-point baseline on all networks studied, including models that are
-more difficult to quantize, such as MobileNets and BERT-large.*
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
 
-This model was contributed by [shangz](https://huggingface.co/shangz).
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- QDQBERT model adds fake quantization operations (pair of QuantizeLinear/DequantizeLinear ops) to (i) linear layer
-  inputs and weights, (ii) matmul inputs, (iii) residual add inputs, in BERT model.
-- QDQBERT requires the dependency of [Pytorch Quantization Toolkit](https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization). To install `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
-- QDQBERT model can be loaded from any checkpoint of HuggingFace BERT model (for example *google-bert/bert-base-uncased*), and
-  perform Quantization Aware Training/Post Training Quantization.
-- A complete example of using QDQBERT model to perform Quatization Aware Training and Post Training Quantization for
-  SQUAD task can be found at https://github.com/huggingface/transformers-research-projects/tree/main/quantization-qdqbert.
-
-### Set default quantizers
-
-QDQBERT model adds fake quantization operations (pair of QuantizeLinear/DequantizeLinear ops) to BERT by
-`TensorQuantizer` in [Pytorch Quantization Toolkit](https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization). `TensorQuantizer` is the module
-for quantizing tensors, with `QuantDescriptor` defining how the tensor should be quantized. Refer to [Pytorch
-Quantization Toolkit userguide](https://docs.nvidia.com/deeplearning/tensorrt/pytorch-quantization-toolkit/docs/userguide.html) for more details.
-
-Before creating QDQBERT model, one has to set the default `QuantDescriptor` defining default tensor quantizers.
-
-Example:
-
-```python
->>> import pytorch_quantization.nn as quant_nn
->>> from pytorch_quantization.tensor_quant import QuantDescriptor
-
->>> # The default tensor quantizer is set to use Max calibration method
->>> input_desc = QuantDescriptor(num_bits=8, calib_method="max")
->>> # The default tensor quantizer is set to be per-channel quantization for weights
->>> weight_desc = QuantDescriptor(num_bits=8, axis=((0,)))
->>> quant_nn.QuantLinear.set_default_quant_desc_input(input_desc)
->>> quant_nn.QuantLinear.set_default_quant_desc_weight(weight_desc)
-```
-
-### Calibration
-
-Calibration is the terminology of passing data samples to the quantizer and deciding the best scaling factors for
-tensors. After setting up the tensor quantizers, one can use the following example to calibrate the model:
-
-```python
->>> # Find the TensorQuantizer and enable calibration
->>> for name, module in model.named_modules():
-...     if name.endswith("_input_quantizer"):
-...         module.enable_calib()
-...         module.disable_quant()  # Use full precision data to calibrate
-
->>> # Feeding data samples
->>> model(x)
->>> # ...
-
->>> # Finalize calibration
->>> for name, module in model.named_modules():
-...     if name.endswith("_input_quantizer"):
-...         module.load_calib_amax()
-...         module.enable_quant()
-
->>> # If running on accelerator, it needs to call `.to(xx)` again because new tensors will be created by calibration process
->>> from accelerate import Accelerator
->>> device = Accelerator().device
->>> model.to(device)
-
->>> # Keep running the quantized model
->>> # ...
-```
-
-### Export to ONNX
-
-The goal of exporting to ONNX is to deploy inference by [TensorRT](https://developer.nvidia.com/tensorrt). Fake
-quantization will be broken into a pair of QuantizeLinear/DequantizeLinear ONNX ops. After setting static member of
-TensorQuantizer to use Pytorch's own fake quantization functions, fake quantized model can be exported to ONNX, follow
-the instructions in [torch.onnx](https://pytorch.org/docs/stable/onnx.html). Example:
-
-```python
->>> from pytorch_quantization.nn import TensorQuantizer
-
->>> TensorQuantizer.use_fb_fake_quant = True
-
->>> # Load the calibrated model
->>> ...
->>> # ONNX export
->>> torch.onnx.export(...)
-```
-
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+- QDQBERT adds fake quantization operations (QuantizeLinear/DequantizeLinear ops) to linear layer inputs and weights, matmul inputs, and residual add inputs in BERT.
+- Install the PyTorch Quantization Toolkit: `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`.
+- Load QDQBERT from any HuggingFace BERT checkpoint (e.g., `google-bert/bert-base-uncased`) to perform Quantization Aware Training or Post Training Quantization.
+- See the [complete example](https://github.com/huggingface/transformers-research-projects/tree/main/quantization-qdqbert) for Quantization Aware Training and Post Training Quantization on the SQUAD task.
+- QDQBERT uses `TensorQuantizer` from the PyTorch Quantization Toolkit. `TensorQuantizer` quantizes tensors using `QuantDescriptor` to define quantization parameters.
+- Set the default `QuantDescriptor` before creating a QDQBERT model.
+- Export to ONNX for TensorRT deployment. Fake quantization becomes QuantizeLinear/DequantizeLinear ONNX ops. Set `TensorQuantizer`'s static member to use PyTorch's fake quantization functions, then follow [`torch.onnx`](https://pytorch.org/docs/stable/onnx.html) instructions.
 
 ## QDQBertConfig
 
@@ -181,3 +109,4 @@ the instructions in [torch.onnx](https://pytorch.org/docs/stable/onnx.html). Exa
 
 [[autodoc]] QDQBertForQuestionAnswering
     - forward
+

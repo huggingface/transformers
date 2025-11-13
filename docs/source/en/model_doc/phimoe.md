@@ -15,89 +15,64 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2024-04-22 and added to Hugging Face Transformers on 2024-10-04.*
 
-# PhiMoE
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# PhiMoE
 
-The PhiMoE model was proposed in [Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone](https://huggingface.co/papers/2404.14219) by Microsoft.
+[Phi-3.5-MoE](https://huggingface.co/papers/2404.14219) s a 3.8 billion parameter language model trained on 3.3 trillion tokens, achieving competitive performance with models like GPT-3.5 and Mixtral 8x7B (69% on MMLU, 8.38 on MT-bench) while being small enough for mobile deployment. Its training data is a scaled-up, heavily filtered version of phi-2’s dataset, including publicly available web data and synthetic data, and the model is further aligned for safety and chat robustness. Larger models, phi-3-small and phi-3-medium, trained on 4.8 trillion tokens, reach higher benchmarks (75–78% MMLU, 8.7–8.9 MT-bench). The phi-3.5 series expands capabilities with multilingual, multimodal, and long-context support, including phi-3.5-MoE, a 16×3.8B Mixture-of-Experts model outperforming similar-scale open models, and phi-3.5-Vision, which handles both single- and multi-image plus text reasoning tasks.
 
-### Summary
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The abstract from the Phi-3 paper is the following:
+```py
+import torch
+from transformers import pipeline
 
-We introduce phi-3-mini, a 3.8 billion parameter language model trained on 3.3 trillion tokens, whose overall performance, as measured by both academic benchmarks and internal testing, rivals that of models such as Mixtral 8x7B and GPT-3.5 (e.g., phi-3-mini achieves 69% on MMLU and 8.38 on MT-bench), despite being small enough to be deployed on a phone. Our training dataset is a scaled-up version of the one used for phi-2, composed of heavily filtered publicly available web data and synthetic data. The model is also further aligned for robustness, safety, and chat format. We also provide parameter-scaling results with a 7B, 14B models trained for 4.8T tokens, called phi-3-small, phi-3-medium, both significantly more capable than phi-3-mini (e.g., respectively 75%, 78% on MMLU, and 8.7, 8.9 on MT-bench). To enhance multilingual, multimodal, and long-context capabilities, we introduce three models in the phi-3.5 series: phi-3.5-mini, phi-3.5-MoE, and phi-3.5-Vision. The phi-3.5-MoE, a 16 x 3.8B MoE model with 6.6 billion active parameters, achieves superior performance in language reasoning, math, and code tasks compared to other open-source models of similar scale, such as Llama 3.1 and the Mixtral series, and on par with Gemini-1.5-Flash and GPT-4o-mini. Meanwhile, phi-3.5-Vision, a 4.2 billion parameter model derived from phi-3.5-mini, excels in reasoning tasks and is adept at handling both single-image and text prompts, as well as multi-image and text prompts.
+pipeline = pipeline(task="text-generation", model="microsoft/Phi-3.5-MoE-instruct", dtype="auto",)
+messages = [ 
+    {"role": "system", "content": "You are a plant biologist."}, 
+    {"role": "user", "content": "Can you explain how plants create energy?"}, 
+    {"role": "assistant", "content": "Plants create energy through photosynthesis, which is a process that converts sunlight into chemical energy. During photosynthesis, plants use chlorophyll in their leaves to capture light energy from the sun. They combine this energy with carbon dioxide from the air and water from the soil to produce glucose (sugar) and oxygen. The glucose serves as the plant's food source and energy storage."}, 
+    {"role": "user", "content": "What are the key components needed for photosynthesis?"}, 
+] 
+pipeline(messages)
+```
 
-The original code for PhiMoE can be found [here](https://huggingface.co/microsoft/Phi-3.5-MoE-instruct).
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
+model = AutoModelForCausalLM.from_pretrained("microsoft/Phi-3.5-MoE-instruct", dtype="auto")
+
+messages = [ 
+    {"role": "system", "content": "You are a plant biologist."}, 
+    {"role": "user", "content": "Can you explain how plants create energy?"}, 
+    {"role": "assistant", "content": "Plants create energy through photosynthesis, which is a process that converts sunlight into chemical energy. During photosynthesis, plants use chlorophyll in their leaves to capture light energy from the sun. They combine this energy with carbon dioxide from the air and water from the soil to produce glucose (sugar) and oxygen. The glucose serves as the plant's food source and energy storage."}, 
+    {"role": "user", "content": "What are the key components needed for photosynthesis?"}, 
+] 
+
+inputs = tokenizer.apply_chat_template(messages, tokenize=True, return_tensors="pt")
+outputs = model.generate(**inputs, max_length=200)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- This model is very similar to `Mixtral` with the main difference of [`Phi3LongRoPEScaledRotaryEmbedding`], where they are used to extend the context of the rotary embeddings. The query, key and values are fused, and the MLP's up and gate projection layers are also fused.
-- The tokenizer used for this model is identical to the [`LlamaTokenizer`], with the exception of additional tokens.
-
-## How to use PhiMoE
-
-<Tip warning={true}>
-
-Phi-3.5-MoE-instruct has been integrated in the development version (4.44.2.dev) of `transformers`. Until the official version is released through `pip`, ensure that you are doing the following:
-
-* When loading the model, ensure that `trust_remote_code=True` is passed as an argument of the `from_pretrained()` function.
-
-The current `transformers` version can be verified with: `pip list | grep transformers`.
-
-Examples of required packages:
-
-```bash
-flash_attn==2.5.8
-torch==2.3.1
-accelerate==0.31.0
-transformers==4.43.0
-```
-
-</Tip>
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline 
-
-torch.random.manual_seed(0) 
-
-model = AutoModelForCausalLM.from_pretrained( 
-    "microsoft/Phi-3.5-MoE-instruct",  
-    device_map="auto",  
-    dtype="auto",
-) 
-
-tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct") 
-
-messages = [ 
-    {"role": "system", "content": "You are a helpful AI assistant."}, 
-    {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"}, 
-    {"role": "assistant", "content": "Sure! Here are some ways to eat bananas and dragonfruits together: 1. Banana and dragonfruit smoothie: Blend bananas and dragonfruits together with some milk and honey. 2. Banana and dragonfruit salad: Mix sliced bananas and dragonfruits together with some lemon juice and honey."}, 
-    {"role": "user", "content": "What about solving an 2x + 3 = 7 equation?"}, 
-] 
-
-pipe = pipeline( 
-    "text-generation", 
-    model=model, 
-    tokenizer=tokenizer, 
-) 
-
-generation_args = { 
-    "max_new_tokens": 500, 
-    "return_full_text": False, 
-    "temperature": 0.0, 
-    "do_sample": False, 
-} 
-
-output = pipe(messages, **generation_args) 
-print(output[0]['generated_text'])
-```
+- This model is very similar to Mixtral. The main difference is [`Phi3LongRoPEScaledRotaryEmbedding`], which extends the context of rotary embeddings.
+- Query, key, and values are fused. The MLP's up and gate projection layers are also fused.
+- The tokenizer is identical to [`LlamaTokenizer`], except for additional tokens.
 
 ## PhimoeConfig
 
@@ -118,3 +93,4 @@ print(output[0]['generated_text'])
 
 [[autodoc]] PhimoeForSequenceClassification
     - forward
+

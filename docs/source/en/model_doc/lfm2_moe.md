@@ -19,49 +19,36 @@ limitations under the License.
 
 # Lfm2Moe
 
-## Overview
+LFM2-MoE is a Mixture-of-Experts version of the LFM2 architecture, designed for efficient on-device inference. It combines gated convolutions for local context with grouped-query attention (GQA) for efficient global reasoning. By adding sparse MoE feed-forward layers, it boosts representational power while keeping computational costs low. The initial model, LFM2-8B-A1B, has 8.3B total parameters with 1.5B active per inference, matching the quality of 3–4B dense models while running faster than typical 1.5B models.
 
-LFM2-MoE is a Mixture-of-Experts (MoE) variant of [LFM2](https://huggingface.co/collections/LiquidAI/lfm2-686d721927015b2ad73eaa38). The LFM2 family is optimized for on-device inference by combining short‑range, input‑aware gated convolutions with grouped‑query attention (GQA) in a layout tuned to maximize quality under strict speed and memory constraints.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-LFM2‑MoE keeps this fast backbone and introduces sparse MoE feed‑forward networks to add representational capacity without significantly increasing the active compute path. The first LFM2-MoE release is LFM2-8B-A1B, with 8.3B total parameters and 1.5B active parameters. The model excels in quality (comparable to 3-4B dense models) and speed (faster than other 1.5B class models).
+```py
+import torch
+from transformers import pipeline
 
-## Example
+pipeline = pipeline(task="text-generation", model="LiquidAI/LFM2-8B-A1B", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-The following example shows how to generate an answer using the `AutoModelForCausalLM` class.
+</hfoption>
+<hfoption id="AutoModel">
 
-```python
+```py
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# Load model and tokenizer
-model_id = "LiquidAI/LFM2-8B-A1B"
-model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    device_map="auto",
-    dtype="bfloat16",
-#    attn_implementation="flash_attention_2" <- uncomment on compatible GPU
-)
-tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-8B-A1B")
+model = AutoModelForCausalLM.from_pretrained("LiquidAI/LFM2-8B-A1B", dtype="auto",)
 
-# Generate answer
-prompt = "What is C. elegans?"
-input_ids = tokenizer.apply_chat_template(
-    [{"role": "user", "content": prompt}],
-    add_generation_prompt=True,
-    return_tensors="pt",
-    tokenize=True,
-).to(model.device)
-
-output = model.generate(
-    input_ids,
-    do_sample=True,
-    temperature=0.3,
-    min_p=0.15,
-    repetition_penalty=1.05,
-    max_new_tokens=512,
-)
-
-print(tokenizer.decode(output[0], skip_special_tokens=False))
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
 ```
+
+</hfoption>
+</hfoptions>
 
 ## Lfm2MoeConfig
 

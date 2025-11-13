@@ -15,84 +15,50 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2023-09-05 and added to Hugging Face Transformers on 2024-02-14.*
 
-# StableLM
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# StableLM
 
-StableLM 3B 4E1T ([blog post](https://stability.ai/news/stable-lm-3b-sustainable-high-performance-language-models-smart-devices)) was proposed in [StableLM 3B 4E1T: Technical Report](https://stability.wandb.io/stability-llm/stable-lm/reports/StableLM-3B-4E1T--VmlldzoyMjU4?accessToken=u3zujipenkx5g7rtcj9qojjgxpconyjktjkli2po09nffrffdhhchq045vp0wyfo) by Stability AI and is the first model in a series of multi-epoch pre-trained language models.
+[StableLM](https://huggingface.co/papers/2402.17834) is a new-generation language model with both base and instruction-tuned versions, whose weights are publicly available on Hugging Face. The model was trained with a detailed data and training procedure, and it achieves strong performance on zero- and few-shot tasks, multilingual benchmarks, and multi-turn dialogue MT evaluations. At under 2 billion parameters, it was the leading open model in its size class when released. The report also includes throughput benchmarks on edge devices and performance metrics for several open-source quantized checkpoints.
 
-### Model Details
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-StableLM 3B 4E1T is a decoder-only base language model pre-trained on 1 trillion tokens of diverse English and code datasets for four epochs.
-The model architecture is transformer-based with partial Rotary Position Embeddings, SwiGLU activation, LayerNorm, etc.
+```py
+import torch
+from transformers import pipeline
 
-We also provide StableLM Zephyr 3B, an instruction fine-tuned version of the model that can be used for chat-based applications.
-
-### Usage Tips
-
-- The architecture is similar to LLaMA but with RoPE applied to 25% of head embedding dimensions, LayerNorm instead of RMSNorm, and optional QKV bias terms.
-- `StableLM 3B 4E1T`-based models uses the same tokenizer as [`GPTNeoXTokenizerFast`].
-
-`StableLM 3B 4E1T` and `StableLM Zephyr 3B` can be found on the [Huggingface Hub](https://huggingface.co/stabilityai)
-
-The following code snippet demonstrates how to use `StableLM 3B 4E1T` for inference:
-
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator, set_seed
->>> device = Accelerator().device # the device to load the model onto
-
->>> set_seed(0)
-
->>> tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
->>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t")
->>> model.to(device)  # doctest: +IGNORE_RESULT
-
->>> model_inputs = tokenizer("The weather is always wonderful in", return_tensors="pt").to(model.device)
-
->>> generated_ids = model.generate(**model_inputs, max_length=32, do_sample=True)
->>> responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
->>> responses
-['The weather is always wonderful in Costa Rica, which makes it a prime destination for retirees. That’s where the Pensionado program comes in, offering']
+pipeline = pipeline(task="text-generation", model="stabilityai/stablelm-3b-4e1t", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
 ```
 
-## Combining StableLM and Flash Attention 2
+</hfoption>
+<hfoption id="AutoModel">
 
-First, make sure to install the latest version of Flash Attention v2.
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-```bash
-pip install -U flash-attn --no-build-isolation
+tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
+model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", dtype="auto",)
+
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
 ```
 
-Also make sure that your hardware is compatible with Flash-Attention 2. Read more about it in the official documentation of the [`flash-attn`](https://github.com/Dao-AILab/flash-attention) repository. Note: you must load your model in half-precision (e.g. `torch.bfloat16`).
+</hfoption>
+</hfoptions>
 
-Now, to run the model with Flash Attention 2, refer to the snippet below:
+## Usage tips
 
-```python
->>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator, set_seed
->>> device = Accelerator().device # the device to load the model onto
-
->>> set_seed(0)
-
->>> tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
->>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", dtype=torch.bfloat16, attn_implementation="flash_attention_2")  # doctest: +SKIP
->>> model.to(device)  # doctest: +SKIP
-
->>> model_inputs = tokenizer("The weather is always wonderful in", return_tensors="pt").to(model.device)
-
->>> generated_ids = model.generate(**model_inputs, max_length=32, do_sample=True)  # doctest: +SKIP
->>> responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)  # doctest: +SKIP
->>> responses  # doctest: +SKIP
-['The weather is always wonderful in Costa Rica, which makes it a prime destination for retirees. That’s where the Pensionado program comes in, offering']
-```
+- The architecture is similar to LLaMA but with key differences: RoPE applied to 25% of head embedding dimensions, LayerNorm instead of RMSNorm, and optional QKV bias terms.
+- StableLM 3B 4E1T-based models use the same tokenizer as [`GPTNeoXTokenizerFast`].
 
 ## StableLmConfig
 

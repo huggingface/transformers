@@ -13,67 +13,46 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-11-22 and added to Hugging Face Transformers on 2025-01-27.*
-
+*This model was released on 2024-11-22 and added to Hugging Face Transformers on 2025-01-27 and contributed by [pglo](https://huggingface.co/pglo).*
 # Zamba2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-[Zamba2](https://huggingface.co/papers/2411.15242) is a large language model (LLM) trained by Zyphra, and made available under an Apache 2.0 license. Please see the [Zyphra Hugging Face](https://huggingface.co/collections/zyphra/) repository for model weights.
+[Zamba2](https://huggingface.co/papers/2411.15242) introduces hybrid Mamba2-transformer models with 1.2B, 2.7B, and 7.4B parameters, delivering state-of-the-art performance among open-weight models of similar scale. Compared to previous work (Zamba1-7B), the new models feature architectural improvements, optimized training strategies, and training on up to three trillion tokens. They achieve significant efficiency gains in inference latency, throughput, and memory usage. All models, along with instruction-tuned variants and the Zyda-2 pretraining dataset, are released as open source on Hugging Face.
 
-This model was contributed by [pglo](https://huggingface.co/pglo).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-## Model details
+```py
+import torch
+from transformers import pipeline
 
-[Zamba2-1.2B](https://www.zyphra.com/post/zamba2-mini), [Zamba2-2.7B](https://www.zyphra.com/post/zamba2-small) and [Zamba2-7B](https://www.zyphra.com/post/zamba2-7b) are hybrid models combining state-space models (Specifically [Mamba2](https://github.com/state-spaces/mamba)) and transformer, and were trained using next-token prediction. Zamba2 uses shared transformer layers after every 6 mamba blocks. It uses the [Mistral v0.1 tokenizer](https://huggingface.co/mistralai/Mistral-7B-v0.1). We came to this architecture after a series of ablations at small scales. Zamba2-1.2B, Zamba2-2.7B and Zamba2-7B were pre-trained on 2T and 3T tokens, respectively.
-
-<img src=https://github.com/user-attachments/assets/c2cff209-b901-483c-87aa-774b82a0769f width=30% height=40% />
-
-## Quick start
-
-### Presequities
-
-Zamba2 requires you use `transformers` version 4.48.0 or higher:
-
-```bash
-pip install transformers>=4.48.0
+pipeline = pipeline(task="text-generation", model="Zyphra/Zamba2-1.2B", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
 ```
 
-## Inference
+</hfoption>
+<hfoption id="AutoModel">
 
-```python
+```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("Zyphra/Zamba2-7B")
-model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba2-7B", device_map="auto", dtype=torch.bfloat16)
+tokenizer = AutoTokenizer.from_pretrained("Zyphra/Zamba2-1.2B")
+model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba2-1.2B", dtype="auto",)
 
-input_text = "What factors contributed to the fall of the Roman Empire?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
-
-outputs = model.generate(**input_ids, max_new_tokens=100)
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
 print(tokenizer.decode(outputs[0]))
 ```
 
-## Model card
-
-The model cards can be found at:
-
-* [Zamba2-1.2B](https://huggingface.co/Zyphra/Zamba2-1.2B)
-* [Zamba2-2.7B](https://huggingface.co/Zyphra/Zamba2-2.7B)
-* [Zamba2-7B](https://huggingface.co/Zyphra/Zamba2-7B)
-
-## Issues
-
-For issues with model output, or community discussion, please use the Hugging Face community [forum](https://huggingface.co/Zyphra/Zamba2-7B/discussions)
-
-## License
-
-The model weights are open-sourced via an Apache 2.0 license.
+</hfoption>
+</hfoptions>
 
 ## Zamba2Config
 

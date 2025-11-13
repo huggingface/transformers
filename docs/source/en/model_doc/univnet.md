@@ -13,46 +13,26 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-06-15 and added to Hugging Face Transformers on 2023-11-22.*
+*This model was released on 2021-06-15 and added to Hugging Face Transformers on 2023-11-22 and contributed by [dg845](https://huggingface.co/dg845).*
 
 # UnivNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[UnivNet](https://huggingface.co/papers/2106.07889) is a neural vocoder designed to synthesize high-fidelity speech waveforms in real time. It uses full-band mel-spectrograms as input and incorporates a multi-resolution spectrogram discriminator to mitigate over-smoothing issues. The discriminator employs multiple linear spectrogram magnitudes with varying parameters. Evaluated on a dataset with hundreds of speakers, UnivNet achieved the best objective and subjective results, including top scores for text-to-speech, demonstrating its capability for fast adaptation to new speakers without retraining.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="UnivNetModel">
 
-The UnivNet model was proposed in [UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminators for High-Fidelity Waveform Generation](https://huggingface.co/papers/2106.07889) by Won Jang, Dan Lim, Jaesam Yoon, Bongwan Kin, and Juntae Kim.
-The UnivNet model is a generative adversarial network (GAN) trained to synthesize high fidelity speech waveforms. The UnivNet model shared in `transformers` is the *generator*, which maps a conditioning log-mel spectrogram and optional noise sequence to a speech waveform (e.g. a vocoder). Only the generator is required for inference. The *discriminator* used to train the `generator` is not implemented.
-
-The abstract from the paper is the following:
-
-*Most neural vocoders employ band-limited mel-spectrograms to generate waveforms. If full-band spectral features are used as the input, the vocoder can be provided with as much acoustic information as possible. However, in some models employing full-band mel-spectrograms, an over-smoothing problem occurs as part of which non-sharp spectrograms are generated. To address this problem, we propose UnivNet, a neural vocoder that synthesizes high-fidelity waveforms in real time. Inspired by works in the field of voice activity detection, we added a multi-resolution spectrogram discriminator that employs multiple linear spectrogram magnitudes computed using various parameter sets. Using full-band mel-spectrograms as input, we expect to generate high-resolution signals by adding a discriminator that employs spectrograms of multiple resolutions as the input. In an evaluation on a dataset containing information on hundreds of speakers, UnivNet obtained the best objective and subjective results among competing models for both seen and unseen speakers. These results, including the best subjective score for text-to-speech, demonstrate the potential for fast adaptation to new speakers without a need for training from scratch.*
-
-Tips:
-
-- The `noise_sequence` argument for [`UnivNetModel.forward`] should be standard Gaussian noise (such as from `torch.randn`) of shape `([batch_size], noise_length, model.config.model_in_channels)`, where `noise_length` should match the length dimension (dimension 1) of the `input_features` argument. If not supplied, it will be randomly generated; a `torch.Generator` can be supplied to the `generator` argument so that the forward pass can be reproduced. (Note that [`UnivNetFeatureExtractor`] will return generated noise by default, so it shouldn't be necessary to generate `noise_sequence` manually.)
-- Padding added by [`UnivNetFeatureExtractor`] can be removed from the [`UnivNetModel`] output through the [`UnivNetFeatureExtractor.batch_decode`] method, as shown in the usage example below.
-- Padding the end of each waveform with silence can reduce artifacts at the end of the generated audio sample. This can be done by supplying `pad_end = True` to [`UnivNetFeatureExtractor.__call__`]. See [this issue](https://github.com/seungwonpark/melgan/issues/8) for more details.
-
-Usage Example:
-
-```python
+```py
 import torch
 from scipy.io.wavfile import write
 from datasets import Audio, load_dataset
-
 from transformers import UnivNetFeatureExtractor, UnivNetModel
 
-model_id_or_path = "dg845/univnet-dev"
-model = UnivNetModel.from_pretrained(model_id_or_path)
-feature_extractor = UnivNetFeatureExtractor.from_pretrained(model_id_or_path)
+model = UnivNetModel.from_pretrained("dg845/univnet-dev", dtype="auto")
+feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-# Resample the audio to the model and feature extractor's sampling rate.
 ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
-# Pad the end of the converted waveforms to reduce artifacts at the end of the output audio samples.
 inputs = feature_extractor(
     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], pad_end=True, return_tensors="pt"
 )
@@ -60,14 +40,18 @@ inputs = feature_extractor(
 with torch.no_grad():
     audio = model(**inputs)
 
-# Remove the extra padding at the end of the output.
 audio = feature_extractor.batch_decode(**audio)[0]
-# Convert to wav file
 write("sample_audio.wav", feature_extractor.sampling_rate, audio)
 ```
 
-This model was contributed by [dg845](https://huggingface.co/dg845).
-To the best of my knowledge, there is no official code release, but an unofficial implementation can be found at [maum-ai/univnet](https://github.com/maum-ai/univnet) with pretrained checkpoints [here](https://github.com/maum-ai/univnet#pre-trained-model).
+</hfoption>
+</hfoptions>
+
+## Usage tips
+
+- The `noise_sequence` argument for [`UnivNetModel.forward`] requires standard Gaussian noise (like from `torch.randn`) with shape `([batch_size], noise_length, model.config.model_in_channels)`. The `noise_length` must match the length dimension (dimension 1) of the `input_features` argument. If not supplied, noise generates randomly. Supply a `torch.Generator` to the `generator` argument to reproduce the forward pass. [`UnivNetFeatureExtractor`] returns generated noise by default, so manual noise generation isn't necessary.
+- Remove padding added by [`UnivNetFeatureExtractor`] from [`UnivNetModel`] output using [`UnivNetFeatureExtractor.batch_decode`], as shown in the usage example.
+- Pad the end of each waveform with silence to reduce artifacts at the end of generated audio samples. Set `pad_end=True` in [`UnivNetFeatureExtractor.call`]. See this [issue](https://github.com/mindslab-ai/univnet/issues/8) for more details.
 
 ## UnivNetConfig
 
@@ -82,3 +66,4 @@ To the best of my knowledge, there is no official code release, but an unofficia
 
 [[autodoc]] UnivNetModel
     - forward
+

@@ -13,39 +13,49 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-06-01 and added to Hugging Face Transformers on 2024-07-12.*
+*This model was released on 2023-06-01 and added to Hugging Face Transformers on 2024-07-12 and contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco) and [namangarg110](https://huggingface.co/namangarg110).*
 
 # Hiera
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Hiera](https://huggingface.co/papers/2306.00989) is a hierarchical Vision Transformer that simplifies the architecture by removing unnecessary vision-specific components, known as "bells-and-whistles," without sacrificing accuracy or efficiency. By pretraining with a strong visual pretext task (MAE), Hiera achieves superior performance and speed in both inference and training across various image and video recognition tasks. This model demonstrates that spatial biases can be effectively learned through proper pretraining, making additional architectural complexity redundant.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-Hiera was proposed in [Hiera: A Hierarchical Vision Transformer without the Bells-and-Whistles](https://huggingface.co/papers/2306.00989) by Chaitanya Ryali, Yuan-Ting Hu, Daniel Bolya, Chen Wei, Haoqi Fan, Po-Yao Huang, Vaibhav Aggarwal, Arkabandhu Chowdhury, Omid Poursaeed, Judy Hoffman, Jitendra Malik, Yanghao Li, Christoph Feichtenhofer
+```py
+import torch
+from transformers import pipeline
 
-The paper introduces "Hiera," a hierarchical Vision Transformer that simplifies the architecture of modern hierarchical vision transformers by removing unnecessary components without compromising on accuracy or efficiency. Unlike traditional transformers that add complex vision-specific components to improve supervised classification performance, Hiera demonstrates that such additions, often termed "bells-and-whistles," are not essential for high accuracy. By leveraging a strong visual pretext task (MAE) for pretraining, Hiera retains simplicity and achieves superior accuracy and speed both in inference and training across various image and video recognition tasks. The approach suggests that spatial biases required for vision tasks can be effectively learned through proper pretraining, eliminating the need for added architectural complexity.
+pipeline = pipeline(task="image-classification", model="facebook/hiera-base-224-hf", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-The abstract from the paper is the following:
+</hfoption>
+<hfoption id="AutoModel">
 
-*Modern hierarchical vision transformers have added several vision-specific components in the pursuit of supervised classification performance. While these components lead to effective accuracies and attractive FLOP counts, the added complexity actually makes these transformers slower than their vanilla ViT counterparts. In this paper, we argue that this additional bulk is unnecessary. By pretraining with a strong visual pretext task (MAE), we can strip out all the bells-and-whistles from a state-of-the-art multi-stage vision transformer without losing accuracy. In the process, we create Hiera, an extremely simple hierarchical vision transformer that is more accurate than previous models while being significantly faster both at inference and during training. We evaluate Hiera on a variety of tasks for image and video recognition. Our code and models are available at https://github.com/facebookresearch/hiera.*
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/hiera_overview.png"
-alt="drawing" width="600"/>
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-<small> Hiera architecture. Taken from the <a href="https://huggingface.co/papers/2306.00989">original paper.</a> </small>
+image_processor = AutoImageProcessor.from_pretrained("facebook/hiera-base-224-hf")
+model = AutoModelForImageClassification.from_pretrained("facebook/hiera-base-224-hf", dtype="auto")
 
-This model was a joint contribution by [EduardoPacheco](https://huggingface.co/EduardoPacheco) and [namangarg110](https://huggingface.co/namangarg110). The original code can be found [here] (https://github.com/facebookresearch/hiera).
+inputs = image_processor(image, return_tensors="pt")
 
-## Resources
+with torch.no_grad():
+    logits = model(**inputs).logits
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Hiera. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
 
-<PipelineTag pipeline="image-classification"/>
-
-- [`HieraForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
+</hfoption>
+</hfoptions>
 
 ## HieraConfig
 
@@ -65,3 +75,4 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] HieraForImageClassification
     - forward
+

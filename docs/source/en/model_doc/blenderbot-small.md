@@ -13,53 +13,44 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-04-28 and added to Hugging Face Transformers on 2021-01-05.*
+*This model was released on 2020-04-28 and added to Hugging Face Transformers on 2021-01-05 and contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).*
 
 # Blenderbot Small
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Blender](https://huggingface.co/papers/2004.13637) focuses on building open-domain chatbots by emphasizing the importance of various conversational skills beyond just scaling model parameters and data size. The model variants include 90M, 2.7B, and 9.4B parameters, demonstrating that with the right training data and generation strategies, large-scale models can learn to provide engaging talking points, listen, display knowledge, empathy, and personality, while maintaining a consistent persona. Human evaluations indicate that the best models outperform existing approaches in terms of engagingness and humanness in multi-turn dialogues. The paper also analyzes failure cases to highlight the limitations of the work.
 
-Note that [`BlenderbotSmallModel`] and
-[`BlenderbotSmallForConditionalGeneration`] are only used in combination with the checkpoint
-[facebook/blenderbot-90M](https://huggingface.co/facebook/blenderbot-90M). Larger Blenderbot checkpoints should
-instead be used with [`BlenderbotModel`] and
-[`BlenderbotForConditionalGeneration`]
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-## Overview
+```py
+import torch
+from transformers import pipeline
 
-The Blender chatbot model was proposed in [Recipes for building an open-domain chatbot](https://huggingface.co/papers/2004.13637) Stephen Roller, Emily Dinan, Naman Goyal, Da Ju, Mary Williamson, Yinhan Liu,
-Jing Xu, Myle Ott, Kurt Shuster, Eric M. Smith, Y-Lan Boureau, Jason Weston on 30 Apr 2020.
+pipeline = pipeline(task="text-generation", model="facebook/blenderbot_small-90M", dtype="auto")
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-The abstract of the paper is the following:
+</hfoption>
+<hfoption id="AutoModel">
 
-*Building open-domain chatbots is a challenging area for machine learning research. While prior work has shown that
-scaling neural models in the number of parameters and the size of the data they are trained on gives improved results,
-we show that other ingredients are important for a high-performing chatbot. Good conversation requires a number of
-skills that an expert conversationalist blends in a seamless way: providing engaging talking points and listening to
-their partners, and displaying knowledge, empathy and personality appropriately, while maintaining a consistent
-persona. We show that large scale models can learn these skills when given appropriate training data and choice of
-generation strategy. We build variants of these recipes with 90M, 2.7B and 9.4B parameter models, and make our models
-and code publicly available. Human evaluations show our best models are superior to existing approaches in multi-turn
-dialogue in terms of engagingness and humanness measurements. We then discuss the limitations of this work by analyzing
-failure cases of our models.*
+```py
+import torch
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The authors' code can be
-found [here](https://github.com/facebookresearch/ParlAI).
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/blenderbot_small-90M", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-Blenderbot Small is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
-the left.
-
-## Resources
-
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
+- Pad inputs on the right. Blenderbot Small uses absolute position embeddings.
 
 ## BlenderbotSmallConfig
 
@@ -91,3 +82,4 @@ the left.
 
 [[autodoc]] BlenderbotSmallForCausalLM
     - forward
+

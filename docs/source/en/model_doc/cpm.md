@@ -13,41 +13,41 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-12-01 and added to Hugging Face Transformers on 2021-04-10.*
+*This model was released on 2020-12-01 and added to Hugging Face Transformers on 2021-04-10 and contributed by [canwenxu](https://huggingface.co/canwenxu).*
 
 # CPM
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[CPM: A Large-scale Generative Chinese Pre-trained Language Model](https://huggingface.co/papers/2012.00413) is the largest Chinese pre-trained language model with 2.6 billion parameters and 100GB of Chinese training data. It facilitates various downstream NLP tasks including conversation, essay generation, cloze test, and language understanding. Extensive experiments show that CPM performs strongly in few-shot and zero-shot learning settings. Its architecture mirrors GPT-2, with the primary difference being the tokenization method.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The CPM model was proposed in [CPM: A Large-scale Generative Chinese Pre-trained Language Model](https://huggingface.co/papers/2012.00413) by Zhengyan Zhang, Xu Han, Hao Zhou, Pei Ke, Yuxian Gu, Deming Ye, Yujia Qin,
-Yusheng Su, Haozhe Ji, Jian Guan, Fanchao Qi, Xiaozhi Wang, Yanan Zheng, Guoyang Zeng, Huanqi Cao, Shengqi Chen,
-Daixuan Li, Zhenbo Sun, Zhiyuan Liu, Minlie Huang, Wentao Han, Jie Tang, Juanzi Li, Xiaoyan Zhu, Maosong Sun.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="text-generation", model="TsinghuaAI/CPM-Generate", dtype="auto")
+pipeline("植物通过光合作用产生能量。")
+```
 
-*Pre-trained Language Models (PLMs) have proven to be beneficial for various downstream NLP tasks. Recently, GPT-3,
-with 175 billion parameters and 570GB training data, drew a lot of attention due to the capacity of few-shot (even
-zero-shot) learning. However, applying GPT-3 to address Chinese NLP tasks is still challenging, as the training corpus
-of GPT-3 is primarily English, and the parameters are not publicly available. In this technical report, we release the
-Chinese Pre-trained Language Model (CPM) with generative pre-training on large-scale Chinese training data. To the best
-of our knowledge, CPM, with 2.6 billion parameters and 100GB Chinese training data, is the largest Chinese pre-trained
-language model, which could facilitate several downstream Chinese NLP tasks, such as conversation, essay generation,
-cloze test, and language understanding. Extensive experiments demonstrate that CPM achieves strong performance on many
-NLP tasks in the settings of few-shot (even zero-shot) learning.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [canwenxu](https://huggingface.co/canwenxu). The original implementation can be found
-here: https://github.com/TsinghuaAI/CPM-Generate
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-<Tip>
+model = AutoModelForCausalLM.from_pretrained("TsinghuaAI/CPM-Generate", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("TsinghuaAI/CPM-Generate")
 
-CPM's architecture is the same as GPT-2, except for tokenization method. Refer to [GPT-2 documentation](gpt2) for
-API reference information.
+inputs = tokenizer("植物通过光合作用产生能量。", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50, do_sample=True)
+generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+print(generated_text)
+```
 
-</Tip>
+</hfoption>
+</hfoptions>
 
 ## CpmTokenizer
 
@@ -56,3 +56,4 @@ API reference information.
 ## CpmTokenizerFast
 
 [[autodoc]] CpmTokenizerFast
+

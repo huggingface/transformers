@@ -13,43 +13,54 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-12-24 and added to Hugging Face Transformers on 2022-12-07.*
+*This model was released on 2019-12-24 and added to Hugging Face Transformers on 2022-12-07 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # Big Transfer (BiT)
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Big Transfer (BiT): General Visual Representation Learning](https://huggingface.co/papers/1912.11370) proposes a method for scaling up pre-training of ResNetv2 architectures. This approach, called Big Transfer (BiT), combines specific components and uses a simple heuristic for transfer learning, achieving strong performance across over 20 datasets. BiT demonstrates robustness across various data regimes, from 1 example per class to 1M total examples. It achieves 87.5% top-1 accuracy on ILSVRC-2012, 99.4% on CIFAR-10, and 76.3% on the 19-task Visual Task Adaptation Benchmark (VTAB). On small datasets, BiT reaches 76.8% on ILSVRC-2012 with 10 examples per class and 97.0% on CIFAR-10 with 10 examples per class. The paper includes a detailed analysis of the key components contributing to high transfer performance.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The BiT model was proposed in [Big Transfer (BiT): General Visual Representation Learning](https://huggingface.co/papers/1912.11370) by Alexander Kolesnikov, Lucas Beyer, Xiaohua Zhai, Joan Puigcerver, Jessica Yung, Sylvain Gelly, Neil Houlsby.
-BiT is a simple recipe for scaling up pre-training of [ResNet](resnet)-like architectures (specifically, ResNetv2). The method results in significant improvements for transfer learning.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="image-classification", model="google/bit-50", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-*Transfer of pre-trained representations improves sample efficiency and simplifies hyperparameter tuning when training deep neural networks for vision. We revisit the paradigm of pre-training on large supervised datasets and fine-tuning the model on a target task. We scale up pre-training, and propose a simple recipe that we call Big Transfer (BiT). By combining a few carefully selected components, and transferring using a simple heuristic, we achieve strong performance on over 20 datasets. BiT performs well across a surprisingly wide range of data regimes -- from 1 example per class to 1M total examples. BiT achieves 87.5% top-1 accuracy on ILSVRC-2012, 99.4% on CIFAR-10, and 76.3% on the 19 task Visual Task Adaptation Benchmark (VTAB). On small datasets, BiT attains 76.8% on ILSVRC-2012 with 10 examples per class, and 97.0% on CIFAR-10 with 10 examples per class. We conduct detailed analysis of the main components that lead to high transfer performance.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/google-research/big_transfer).
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("google/bit-50")
+model = AutoModelForImageClassification.from_pretrained("google/bit-50", dtype="auto")
+
+inputs = image_processor(image, return_tensors="pt")
+
+with torch.no_grad():
+    logits = model(**inputs).logits
+
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- BiT models are equivalent to ResNetv2 in terms of architecture, except that: 1) all batch normalization layers are replaced by [group normalization](https://huggingface.co/papers/1803.08494),
-
-2) [weight standardization](https://huggingface.co/papers/1903.10520) is used for convolutional layers. The authors show that the combination of both is useful for training with large batch sizes, and has a significant
-impact on transfer learning.
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with BiT.
-
-<PipelineTag pipeline="image-classification"/>
-
-- [`BitForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+- BiT models are equivalent to ResNetv2 in architecture with two key differences: all batch normalization layers are replaced by group normalization, and weight standardization is used for convolutional layers.
+- The combination of group normalization and weight standardization is useful for training with large batch sizes and has a significant impact on transfer learning.
 
 ## BitConfig
 
@@ -74,3 +85,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] BitForImageClassification
     - forward
+

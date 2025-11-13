@@ -13,84 +13,58 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-10-22 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2020-10-22 and added to Hugging Face Transformers on 2023-06-20 and contributed by [nielsr](https://huggingface.co/nielsr).*
+
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # Hybrid Vision Transformer (ViT Hybrid)
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[ViT](https://huggingface.co/papers/2010.11929) demonstrates that a pure Transformer architecture can excel in image classification tasks without relying on convolutional networks. By applying Transformers directly to sequences of image patches, ViT achieves excellent results on benchmarks like ImageNet and CIFAR-100, surpassing state-of-the-art convolutional networks with reduced computational resources during training.
 
-<Tip warning={true}>
-
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
-You can do so by running the following command: `pip install -U transformers==4.40.2`.
-
-</Tip>
-
-## Overview
-
-The hybrid Vision Transformer (ViT) model was proposed in [An Image is Worth 16x16 Words: Transformers for Image Recognition
-at Scale](https://huggingface.co/papers/2010.11929) by Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk
-Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob
-Uszkoreit, Neil Houlsby. It's the first paper that successfully trains a Transformer encoder on ImageNet, attaining
-very good results compared to familiar convolutional architectures. ViT hybrid is a slight variant of the [plain Vision Transformer](vit),
-by leveraging a convolutional backbone (specifically, [BiT](bit)) whose features are used as initial "tokens" for the Transformer.
-
-The abstract from the paper is the following:
-
-*While the Transformer architecture has become the de-facto standard for natural language processing tasks, its
-applications to computer vision remain limited. In vision, attention is either applied in conjunction with
-convolutional networks, or used to replace certain components of convolutional networks while keeping their overall
-structure in place. We show that this reliance on CNNs is not necessary and a pure transformer applied directly to
-sequences of image patches can perform very well on image classification tasks. When pre-trained on large amounts of
-data and transferred to multiple mid-sized or small image recognition benchmarks (ImageNet, CIFAR-100, VTAB, etc.),
-Vision Transformer (ViT) attains excellent results compared to state-of-the-art convolutional networks while requiring
-substantially fewer computational resources to train.*
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code (written in JAX) can be
-found [here](https://github.com/google-research/vision_transformer).
-
-## Using Scaled Dot Product Attention (SDPA)
-
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
-or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
-page for more information.
-
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
-`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```py
-from transformers import ViTHybridForImageClassification
-model = ViTHybridForImageClassification.from_pretrained("google/vit-hybrid-base-bit-384", attn_implementation="sdpa", dtype=torch.float16)
-...
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="image-classification", model="google/vit-hybrid-base-bit-384", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
-For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+</hfoption>
+<hfoption id="AutoModel">
 
-On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` and `google/vit-hybrid-base-bit-384` model, we saw the following speedups during inference.
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-|   Batch size |   Average inference time (ms), eager mode |   Average inference time (ms), sdpa model |   Speed up, Sdpa / Eager (x) |
-|--------------|-------------------------------------------|-------------------------------------------|------------------------------|
-|            1 |                                        29 |                                        18 |                      1.61 |
-|            2 |                                        26 |                                        18 |                      1.44 |
-|            4 |                                        25 |                                        18 |                      1.39 |
-|            8 |                                        34 |                                        24 |                      1.42 |
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-## Resources
+image_processor = AutoImageProcessor.from_pretrained("google/vit-hybrid-base-bit-384")
+model = AutoModelForImageClassification.from_pretrained("google/vit-hybrid-base-bit-384", dtype="auto")
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ViT Hybrid.
+inputs = image_processor(image, return_tensors="pt")
 
-<PipelineTag pipeline="image-classification"/>
+with torch.no_grad():
+    logits = model(**inputs).logits
 
-- [`ViTHybridForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
 
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+</hfoption>
+</hfoptions>
 
 ## ViTHybridConfig
 
@@ -110,3 +84,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] ViTHybridForImageClassification
     - forward
+

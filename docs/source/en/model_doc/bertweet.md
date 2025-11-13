@@ -13,25 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-05-20 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2020-05-20 and added to Hugging Face Transformers on 2020-11-16 and contributed by [dqnguyen](https://huggingface.co/dqnguyen).*
 
 # BERTweet
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
-
-## BERTweet
-
-[BERTweet](https://huggingface.co/papers/2005.10200) shares the same architecture as [BERT-base](./bert), but it's pretrained like [RoBERTa](./roberta) on English Tweets. It performs really well on Tweet-related tasks like part-of-speech tagging, named entity recognition, and text classification.
-
-You can find all the original BERTweet checkpoints under the [VinAI Research](https://huggingface.co/vinai?search_models=BERTweet) organization.
-
-> [!TIP]
-> Refer to the [BERT](./bert) docs for more examples of how to apply BERTweet to different language tasks.
-
-The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
+[BERTweet](https://huggingface.co/papers/2005.10200) is a large-scale pre-trained language model for English Tweets, sharing the architecture of BERT-base and trained using the RoBERTa pre-training procedure. It surpasses strong baselines like RoBERTa-base and XLM-R-base, achieving superior results in Part-of-speech tagging, Named-entity recognition, and text classification tasks.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -40,58 +26,37 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="vinai/bertweet-base",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("Plants create <mask> through a process known as photosynthesis.")
+pipeline = pipeline(task="text-classification", model="vinai/bertweet-base", dtype="auto")
+result = pipeline("SC has first two presumptive cases of coronavirus , DHEC confirms HTTPURL via @USER :cry:")
+print(f"Label: {result[0]['label']}, Score: {result[0]['score']}")
 ```
 
 </hfoption>
-<hfoption id="AutoModel">
+<hfoption id="Pipeline">
 
 ```py
 import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-   "vinai/bertweet-base",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "vinai/bertweet-base",
-    dtype=torch.float16,
-    device_map="auto"
-)
-inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt").to(model.device)
+model = AutoModelForSequenceClassification.from_pretrained("vinai/bertweet-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model vinai/bertweet-base --device 0
+inputs = tokenizer("SC has first two presumptive cases of coronavirus , DHEC confirms HTTPURL via @USER :cry:", return_tensors="pt")
+outputs = model(**inputs)
+predicted_class_id = outputs.logits.argmax(dim=-1).item()
+label = model.config.id2label[predicted_class_id]
+print(f"Predicted label: {label}")
 ```
 
 </hfoption>
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- Use the [`AutoTokenizer`] or [`BertweetTokenizer`] because it's preloaded with a custom vocabulary adapted to tweet-specific tokens like hashtags (#), mentions (@), emojis, and common abbreviations. Make sure to also install the [emoji](https://pypi.org/project/emoji/) library.
-- Inputs should be padded on the right (`padding="max_length"`) because BERT uses absolute position embeddings.
+- Use [`AutoTokenizer`] or [`BertweetTokenizer`]. They come preloaded with custom vocabulary for tweet-specific tokens like hashtags (#), mentions (@), emojis, and common abbreviations. Install the [emoji](https://pypi.org/project/emoji/) library too.
+- Pad inputs on the right (`padding="max_length"`). BERT uses absolute position embeddings.
 
 ## BertweetTokenizer
 
 [[autodoc]] BertweetTokenizer
+

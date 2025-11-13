@@ -13,53 +13,45 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-03-02 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2020-03-02 and added to Hugging Face Transformers on 2020-11-16 and contributed by [dqnguyen](https://huggingface.co/dqnguyen).*
 
 # PhoBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[PhoBERT](https://huggingface.co/papers/2020.findings-emnlp.92.pdf) introduces PhoBERT-base and PhoBERT-large, the first large-scale monolingual language models pre-trained for Vietnamese. Experiments demonstrate that PhoBERT outperforms XLM-R in various Vietnamese-specific NLP tasks such as Part-of-speech tagging, Dependency parsing, Named-entity recognition, and Natural language inference.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The PhoBERT model was proposed in [PhoBERT: Pre-trained language models for Vietnamese](https://huggingface.co/papers/2003.00744) by Dat Quoc Nguyen, Anh Tuan Nguyen.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
-
-*We present PhoBERT with two versions, PhoBERT-base and PhoBERT-large, the first public large-scale monolingual
-language models pre-trained for Vietnamese. Experimental results show that PhoBERT consistently outperforms the recent
-best pre-trained multilingual model XLM-R (Conneau et al., 2020) and improves the state-of-the-art in multiple
-Vietnamese-specific NLP tasks including Part-of-speech tagging, Dependency parsing, Named-entity recognition and
-Natural language inference.*
-
-This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen). The original code can be found [here](https://github.com/VinAIResearch/PhoBERT).
-
-## Usage example
-
-```python
->>> import torch
->>> from transformers import AutoModel, AutoTokenizer
-
->>> phobert = AutoModel.from_pretrained("vinai/phobert-base")
->>> tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
-
->>> # INPUT TEXT MUST BE ALREADY WORD-SEGMENTED!
->>> line = "Tôi là sinh_viên trường đại_học Công_nghệ ."
-
->>> input_ids = torch.tensor([tokenizer.encode(line)])
-
->>> with torch.no_grad():
-...     features = phobert(input_ids)  # Models outputs are now tuples
+pipeline = pipeline("fill-mask", model="vinai/phobert-base", dtype="auto")
+pipeline("Thực vật tự tạo ra <mask> thông qua một quá trình được gọi là quang hợp.")
 ```
 
-<Tip>
+</hfoption>
+<hfoption id="AutoModel">
 
-PhoBERT implementation is the same as BERT, except for tokenization. Refer to [BERT documentation](bert) for information on
-configuration classes and their parameters. PhoBERT-specific tokenizer is documented below.
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-</Tip>
+model = AutoModelForMaskedLM.from_pretrained("vinai/phobert-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
+
+inputs = tokenizer("Thực vật tự tạo ra <mask> thông qua một quá trình được gọi là quang hợp.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## PhobertTokenizer
 
 [[autodoc]] PhobertTokenizer
+

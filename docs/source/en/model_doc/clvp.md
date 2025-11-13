@@ -13,62 +13,42 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-05-12 and added to Hugging Face Transformers on 2023-11-10.*
+*This model was released on 2023-05-12 and added to Hugging Face Transformers on 2023-11-10 and contributed by [susnato](https://huggingface.co/susnato).*
 
 # CLVP
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[CLVP](https://huggingface.co/papers/2305.07243) applies advancements from image generation, specifically autoregressive transformers and DDPMs, to speech synthesis. The result is TorToise, an expressive, multi-voice text-to-speech system.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="ClvpModelForConditionalGeneration">
 
-The CLVP (Contrastive Language-Voice Pretrained Transformer) model was proposed in [Better speech synthesis through scaling](https://huggingface.co/papers/2305.07243) by James Betker.
+```py
+import datasets
+import torch
+from transformers import AutoProcessor, ClvpModelForConditionalGeneration
 
-The abstract from the paper is the following:
+text = "Plants create energy through a process known as photosynthesis."
 
-*In recent years, the field of image generation has been revolutionized by the application of autoregressive transformers and DDPMs. These approaches model the process of image generation as a step-wise probabilistic processes and leverage large amounts of compute and data to learn the image distribution. This methodology of improving performance need not be confined to images. This paper describes a way to apply advances in the image generative domain to speech synthesis. The result is TorToise - an expressive, multi-voice text-to-speech system.*
+ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
+sample = ds[0]["audio"]
 
-This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
-The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
+processor = AutoProcessor.from_pretrained("susnato/clvp_dev")
+model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev", dtype="auto")
+
+processor_output = processor(raw_speech=sample["array"], sampling_rate=sample["sampling_rate"], text=text, return_tensors="pt")
+outputs = model(**processor_output)
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-1. CLVP is an integral part of the Tortoise TTS model.
-2. CLVP can be used to compare different generated speech candidates with the provided text, and the best speech tokens are forwarded to the diffusion model.
-3. The use of the [`ClvpModelForConditionalGeneration.generate()`] method is strongly recommended for tortoise usage.
-4. Note that the CLVP model expects the audio to be sampled at 22.05 kHz contrary to other audio models which expects 16 kHz.
-
-## Brief Explanation
-
-- The [`ClvpTokenizer`] tokenizes the text input, and the [`ClvpFeatureExtractor`] extracts the log mel-spectrogram from the desired audio.
-- [`ClvpConditioningEncoder`] takes those text tokens and audio representations and converts them into embeddings conditioned on the text and audio.
-- The [`ClvpForCausalLM`] uses those embeddings to generate multiple speech candidates.
-- Each speech candidate is passed through the speech encoder ([`ClvpEncoder`]) which converts them into a vector representation, and the text encoder ([`ClvpEncoder`]) converts the text tokens into the same latent space.
-- At the end, we compare each speech vector with the text vector to see which speech vector is most similar to the text vector.
-- [`ClvpModelForConditionalGeneration.generate()`] compresses all of the logic described above into a single method.  
-
-Example :
-
-```python
->>> import datasets
->>> from transformers import ClvpProcessor, ClvpModelForConditionalGeneration
-
->>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library).
->>> text = "This is an example text."
-
->>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
->>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
->>> sample = ds[0]["audio"]
-
->>> # Define processor and model.
->>> processor = ClvpProcessor.from_pretrained("susnato/clvp_dev")
->>> model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev")
-
->>> # Generate processor output and model output.
->>> processor_output = processor(raw_speech=sample["array"], sampling_rate=sample["sampling_rate"], text=text, return_tensors="pt")
->>> generated_output = model.generate(**processor_output)
-```
+- CLVP is an integral part of the Tortoise TTS model.
+- CLVP compares different generated speech candidates with provided text. The best speech tokens forward to the diffusion model.
+- Use [`ClvpModelForConditionalGeneration.generate`] for Tortoise usage.
+- CLVP expects audio sampled at 22.05 kHz, unlike other audio models that expect 16 kHz.
 
 ## ClvpConfig
 
@@ -122,3 +102,4 @@ Example :
 ## ClvpDecoder
 
 [[autodoc]] ClvpDecoder
+

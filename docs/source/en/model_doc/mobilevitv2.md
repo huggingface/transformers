@@ -13,33 +13,56 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-06-06 and added to Hugging Face Transformers on 2023-06-02.*
+*This model was released on 2022-06-06 and added to Hugging Face Transformers on 2023-06-02 and contributed by [shehan97](https://huggingface.co/shehan97).*
 
 # MobileViTV2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[MobileViTV2](https://huggingface.co/papers/2206.02680) replaces multi-headed self-attention in MobileViT with separable self-attention, reducing time complexity from O(k²) to O(k) through element-wise operations. This enhancement improves efficiency and latency, making it suitable for resource-constrained devices. MobileViTV2 achieves state-of-the-art results in mobile vision tasks, including ImageNet classification and MS-COCO detection, with a top-1 accuracy of 75.6% and a 3.2× speed increase over MobileViT.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The MobileViTV2 model was proposed in [Separable Self-attention for Mobile Vision Transformers](https://huggingface.co/papers/2206.02680) by Sachin Mehta and Mohammad Rastegari.
+```py
+import torch
+from transformers import pipeline
 
-MobileViTV2 is the second version of MobileViT, constructed by replacing the multi-headed self-attention in MobileViT with separable self-attention.
+pipeline = pipeline(task="image-classification", model="apple/mobilevitv2-1.0", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-The abstract from the paper is the following:
+</hfoption>
+<hfoption id="AutoModel">
 
-*Mobile vision transformers (MobileViT) can achieve state-of-the-art performance across several mobile vision tasks, including classification and detection. Though these models have fewer parameters, they have high latency as compared to convolutional neural network-based models. The main efficiency bottleneck in MobileViT is the multi-headed self-attention (MHA) in transformers, which requires O(k2) time complexity with respect to the number of tokens (or patches) k. Moreover, MHA requires costly operations (e.g., batch-wise matrix multiplication) for computing self-attention, impacting latency on resource-constrained devices. This paper introduces a separable self-attention method with linear complexity, i.e. O(k). A simple yet effective characteristic of the proposed method is that it uses element-wise operations for computing self-attention, making it a good choice for resource-constrained devices. The improved model, MobileViTV2, is state-of-the-art on several mobile vision tasks, including ImageNet object classification and MS-COCO object detection. With about three million parameters, MobileViTV2 achieves a top-1 accuracy of 75.6% on the ImageNet dataset, outperforming MobileViT by about 1% while running 3.2× faster on a mobile device.*
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-This model was contributed by [shehan97](https://huggingface.co/shehan97).
-The original code can be found [here](https://github.com/apple/ml-cvnets).
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("apple/mobilevitv2-1.0")
+model = AutoModelForImageClassification.from_pretrained("apple/mobilevitv2-1.0", dtype="auto")
+
+inputs = image_processor(image, return_tensors="pt")
+
+with torch.no_grad():
+    logits = model(**inputs).logits
+
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- MobileViTV2 is more like a CNN than a Transformer model. It does not work on sequence data but on batches of images. Unlike ViT, there are no embeddings. The backbone model outputs a feature map.
-- One can use [`MobileViTImageProcessor`] to prepare images for the model. Note that if you do your own preprocessing, the pretrained checkpoints expect images to be in BGR pixel order (not RGB).
-- The available image classification checkpoints are pre-trained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k) (also referred to as ILSVRC 2012, a collection of 1.3 million images and 1,000 classes).
-- The segmentation model uses a [DeepLabV3](https://huggingface.co/papers/1706.05587) head. The available semantic segmentation checkpoints are pre-trained on [PASCAL VOC](http://host.robots.ox.ac.uk/pascal/VOC/).
+- MobileViTV2 is more like a CNN than a Transformer model. It doesn't work on sequence data but on batches of images. Unlike ViT, there are no embeddings. The backbone model outputs a feature map.
+- Use [`MobileViTImageProcessor`] to prepare images for the model. If doing custom preprocessing, the pretrained checkpoints expect images to be in BGR pixel order (not RGB).
+- The available image classification checkpoints are pretrained on ImageNet-1k (ILSVRC 2012, 1.3 million images and 1,000 classes).
+- The segmentation model uses a DeepLabV3 head. The available semantic segmentation checkpoints are pretrained on PASCAL VOC.
 
 ## MobileViTV2Config
 
@@ -59,3 +82,4 @@ The original code can be found [here](https://github.com/apple/ml-cvnets).
 
 [[autodoc]] MobileViTV2ForSemanticSegmentation
     - forward
+

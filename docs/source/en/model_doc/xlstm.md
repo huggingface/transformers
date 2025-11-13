@@ -13,23 +13,41 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-05-07 and added to Hugging Face Transformers on 2025-07-25.*
+
+*This model was released on 2024-05-07 and added to Hugging Face Transformers on 2025-07-25 and contributed by [NX-AI](https://huggingface.co/NX-AI).*
 
 # xLSTM
 
-## Overview
+[xLSTM: Extended Long Short-Term Memory](https://huggingface.co/papers/2405.04517) updates the original LSTM architecture by introducing exponential gating, matrix memory expansion, and parallelizable training to compete with Transformer models. The model modifies the LSTM memory structure to include scalar and matrix memory variants, enhancing its performance and scalability. Exponential gating and these memory modifications enable xLSTM to match or outperform state-of-the-art Transformers and State Space Models.
 
-The xLSTM model was proposed in [xLSTM: Extended Long Short-Term Memory](https://huggingface.co/papers/2405.04517) by Maximilian Beck*, Korbinian Pöppel*, Markus Spanring, Andreas Auer, Oleksandra Prudnikova, Michael Kopp, Günter Klambauer, Johannes Brandstetter and Sepp Hochreiter.
-xLSTM updates the original LSTM architecture to be competitive with Transformer models by introducing exponential gating, matrix memory expansion, and parallelizable training and ingestion.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The [7B model](https://huggingface.co/NX-AI/xLSTM-7b) variant was trained by the xLSTM team Maximilian Beck, Korbinian Pöppel, Phillip Lippe, Richard Kurle, Patrick Blies, Sebastian Böck and Sepp Hochreiter at NXAI.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="text-generation", model="NX-AI/xLSTM-7b", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-*In the 1990s, the constant error carousel and gating were introduced as the central ideas of the Long Short-Term Memory (LSTM). Since then, LSTMs have stood the test of time and contributed to numerous deep learning success stories, in particular they constituted the first Large Language Models (LLMs). However, the advent of the Transformer technology with parallelizable self-attention at its core marked the dawn of a new era, outpacing LSTMs at scale. We now raise a simple question: How far do we get in language modeling when scaling LSTMs to billions of parameters, leveraging the latest techniques from modern LLMs, but mitigating known limitations of LSTMs? Firstly, we introduce exponential gating with appropriate normalization and stabilization techniques. Secondly, we modify the LSTM memory structure, obtaining: (i) sLSTM with a scalar memory, a scalar update, and new memory mixing, (ii) mLSTM that is fully parallelizable with a matrix memory and a covariance update rule. Integrating these LSTM extensions into residual block backbones yields xLSTM blocks that are then residually stacked into xLSTM architectures. Exponential gating and modified memory structures boost xLSTM capabilities to perform favorably when compared to state-of-the-art Transformers and State Space Models, both in performance and scaling.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [NX-AI](https://huggingface.co/NX-AI).
-The original code can be found [here](https://github.com/NX-AI/xlstm).
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("NX-AI/xLSTM-7b")
+model = AutoModelForCausalLM.from_pretrained("NX-AI/xLSTM-7b", dtype="auto",)
+
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## xLSTMConfig
 
@@ -44,3 +62,4 @@ The original code can be found [here](https://github.com/NX-AI/xlstm).
 
 [[autodoc]] xLSTMForCausalLM
     - forward
+

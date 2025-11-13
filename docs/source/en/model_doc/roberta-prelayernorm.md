@@ -13,39 +13,49 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-04-01 and added to Hugging Face Transformers on 2022-12-19.*
+*This model was released on 2019-04-01 and added to Hugging Face Transformers on 2022-12-19 and contributed by [andreasmadsen](https://huggingface.co/andreasmadsen).*
 
 # RoBERTa-PreLayerNorm
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[RoBERTa-PreLayerNorm](https://huggingface.co/papers/1904.01038) is part of the fairseq toolkit, which facilitates training custom models for tasks like translation and summarization. Built on PyTorch, fairseq supports distributed training, mixed-precision training, and inference on modern GPUs. This specific model variant applies layer normalization before the self-attention and feed-forward layers, differing from the standard RoBERTa configuration.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The RoBERTa-PreLayerNorm model was proposed in [fairseq: A Fast, Extensible Toolkit for Sequence Modeling](https://huggingface.co/papers/1904.01038) by Myle Ott, Sergey Edunov, Alexei Baevski, Angela Fan, Sam Gross, Nathan Ng, David Grangier, Michael Auli.
-It is identical to using the `--encoder-normalize-before` flag in [fairseq](https://fairseq.readthedocs.io/).
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="fill-mask", model="andreasmadsen/efficient_mlm_m0.40", dtype="auto")
+pipeline("Plants create <mask> through a process known as photosynthesis.")
+```
 
-*fairseq is an open-source sequence modeling toolkit that allows researchers and developers to train custom models for translation, summarization, language modeling, and other text generation tasks. The toolkit is based on PyTorch and supports distributed training across multiple GPUs and machines. We also support fast mixed-precision training and inference on modern GPUs.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [andreasmaden](https://huggingface.co/andreasmadsen).
-The original code can be found [here](https://github.com/princeton-nlp/DinkyTrain).
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+model = AutoModelForMaskedLM.from_pretrained("andreasmadsen/efficient_mlm_m0.40", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
+
+inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- The implementation is the same as [Roberta](roberta) except instead of using *Add and Norm* it does *Norm and Add*. *Add* and *Norm* refers to the Addition and LayerNormalization as described in [Attention Is All You Need](https://huggingface.co/papers/1706.03762).
-- This is identical to using the `--encoder-normalize-before` flag in [fairseq](https://fairseq.readthedocs.io/).
-
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+- The implementation is the same as RoBERTa except it uses Norm and Add instead of Add and Norm.
+- Add and Norm refers to Addition and LayerNormalization as described in [Attention Is All You Need](https://huggingface.co/papers/1706.03762).
+- This is identical to using the `--encoder-normalize-before` flag in fairseq.
 
 ## RobertaPreLayerNormConfig
 
@@ -85,3 +95,4 @@ The original code can be found [here](https://github.com/princeton-nlp/DinkyTrai
 
 [[autodoc]] RobertaPreLayerNormForQuestionAnswering
     - forward
+

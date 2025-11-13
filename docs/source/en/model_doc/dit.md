@@ -13,25 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-03-04 and added to Hugging Face Transformers on 2022-03-10.*
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2022-03-04 and added to Hugging Face Transformers on 2022-03-10 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # DiT
 
-[DiT](https://huggingface.co/papers/2203.02378) is an image transformer pretrained on large-scale unlabeled document images. It learns to predict the missing visual tokens from a corrupted input image. The pretrained DiT model can be used as a backbone in other models for visual document tasks like document image classification and table detection.
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dit_architecture.jpg"/>
-
-You can find all the original DiT checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=dit) organization.
-
-> [!TIP]
-> Refer to the [BEiT](./beit) docs for more examples of how to apply DiT to different vision tasks.
-
-The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
+[DiT: Self-supervised Pre-training for Document Image Transformer](https://huggingface.co/papers/2203.02378) applies self-supervised pre-training to 42 million document images, achieving state-of-the-art results in document image classification, document layout analysis, and table detection. Specifically, it improves performance on the RVL-CDIP dataset from 91.11% to 92.69%, on PubLayNet from 91.0% to 94.9%, and on ICDAR 2019 cTDaR from 94.23% to 96.55%. DiT leverages large-scale unlabeled text images to address the lack of human-labeled document images in Document AI tasks.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -40,58 +26,37 @@ The example below demonstrates how to classify an image with [`Pipeline`] or the
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="image-classification",
-    model="microsoft/dit-base-finetuned-rvlcdip",
-    dtype=torch.float16,
-    device=0
-)
+pipeline = pipeline(task="image-classification", model="microsoft/dit-base-finetuned-rvlcdip", dtype="auto")
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dit-example.jpg")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
 import requests
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-image_processor = AutoImageProcessor.from_pretrained(
-    "microsoft/dit-base-finetuned-rvlcdip",
-    use_fast=True,
-)
-model = AutoModelForImageClassification.from_pretrained(
-    "microsoft/dit-base-finetuned-rvlcdip",
-    device_map="auto",
-)
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dit-example.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt").to(model.device)
+
+image_processor = AutoImageProcessor.from_pretrained("microsoft/dit-base-finetuned-rvlcdip")
+model = AutoModelForImageClassification.from_pretrained("microsoft/dit-base-finetuned-rvlcdip", dtype="auto")
+
+inputs = image_processor(image, return_tensors="pt")
 
 with torch.no_grad():
-  logits = model(**inputs).logits
-predicted_class_id = logits.argmax(dim=-1).item()
+    logits = model(**inputs).logits
 
-class_labels = model.config.id2label
-predicted_class_label = class_labels[predicted_class_id]
-print(f"The predicted class label is: {predicted_class_label}")
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
 ```
 
 </hfoption>
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- The pretrained DiT weights can be loaded in a [BEiT] model with a modeling head to predict visual tokens.
-
-   ```py
-   from transformers import BeitForMaskedImageModeling
-
-   model = BeitForMaskedImageModeling.from_pretraining("microsoft/dit-base")
-   ```
-
-## Resources
-
-- Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/DiT/Inference_with_DiT_(Document_Image_Transformer)_for_document_image_classification.ipynb) for a document image classification inference example.
+- Load pretrained DiT weights in a [`BEiT`] model with a modeling head to predict visual tokens.

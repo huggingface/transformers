@@ -13,76 +13,41 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+
 *This model was released on 2024-12-27 and added to Hugging Face Transformers on 2025-07-08.*
 
 # Doge
 
-## Overview
+[Doge-20M](https://huggingface.co/papers/PAPER_ID) is utilized for text generation, demonstrating its capability to produce coherent and contextually relevant responses. For question answering, Doge-20M-Instruct is employed, showcasing enhanced performance in understanding and generating answers through a structured conversational format. The model leverages specific generation configurations, including temperature and top-p sampling, to ensure varied and engaging outputs.
 
-Doge is a series of small language models based on the [Doge](https://github.com/SmallDoges/small-doge) architecture, aiming to combine the advantages of state-space and self-attention algorithms, calculate dynamic masks from cached value states using the zero-order hold method, and solve the problem of existing mainstream language models getting lost in context. It uses the `wsd_scheduler` scheduler to pre-train on the `smollm-corpus`, and can continue training on new datasets or add sparse activation feedforward networks from stable stage checkpoints.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/refs%2Fpr%2F426/transformers/model_doc/doge_architecture.png" alt="drawing" width="600"/>
+```py
+import torch
+from transformers import pipeline
 
-As shown in the figure below, the sequence transformation part of the Doge architecture uses `Dynamic Mask Attention`, which can be understood as using self-attention related to value states during training, and using state-space without past state decay during inference, to solve the problem of existing Transformers or SSMs getting lost in long text. The state transformation part of Doge uses `Cross Domain Mixture of Experts`, which consists of dense linear layers and sparse embedding layers, and can additionally increase sparse parameters to continue training from dense weight checkpoints without retraining the entire model, thereby reducing the cost of continuous iteration of the model. In addition, Doge also uses `RMSNorm` and `Residual` with learnable parameters to adapt the gradient range of deep models.
+pipeline = pipeline(task="text-generation", model="SmallDoge/Doge-20M", dtype="auto")
+pipeline("Plants generate energy through a process known as  ")
+```
 
-Checkout all Doge model checkpoints [here](https://huggingface.co/collections/SmallDoge/doge-slm-679cc991f027c4a3abbded4a).
+</hfoption>
+<hfoption id="AutoModel">
 
-## Usage
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-<details>
-<summary>Using Doge-Base for text generation</summary>
-
-```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
-
+model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M", dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
-model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M")
-inputs = tokenizer("Hey how are you doing?", return_tensors="pt")
 
-outputs = model.generate(**inputs, max_new_tokens=100)
-print(tokenizer.batch_decode(outputs))
+inputs = tokenizer("Plants generate energy through a process known as  ", return_tensors='pt', return_token_type_ids=False)
+outputs = model.generate(**inputs, max_new_tokens=64)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
 ```
 
-</details>
-
-<details>
-<summary>Using Doge-Instruct for question answering</summary>
-
-```python
-from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig, TextStreamer
-
-tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M-Instruct")
-model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M-Instruct")
-
-generation_config = GenerationConfig(
-      max_new_tokens=100, 
-      use_cache=True, 
-      do_sample=True, 
-      temperature=0.8, 
-      top_p=0.9,
-      repetition_penalty=1.0
-)
-steamer = TextStreamer(tokenizer=tokenizer, skip_prompt=True)
-
-prompt = "Hi, how are you doing today?"
-conversation = [
-      {"role": "user", "content": prompt}
-]
-inputs = tokenizer.apply_chat_template(
-    conversation=conversation,
-    tokenize=True,
-    return_tensors="pt",
-)
-
-outputs = model.generate(
-    inputs, 
-    tokenizer=tokenizer,
-    generation_config=generation_config, 
-    streamer=steamer
-)
-```
-
-</details>
+</hfoption>
+</hfoptions>
 
 ## DogeConfig
 
@@ -102,3 +67,4 @@ outputs = model.generate(
 
 [[autodoc]] DogeForSequenceClassification
     - forward
+

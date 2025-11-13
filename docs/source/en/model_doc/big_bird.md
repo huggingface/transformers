@@ -13,24 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-07-28 and added to Hugging Face Transformers on 2021-03-30.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
-    </div>
-</div>
+*This model was released on 2020-07-28 and added to Hugging Face Transformers on 2021-03-30 and contributed by [vasudevgupta](https://huggingface.co/vasudevgupta).*
 
 # BigBird
 
-[BigBird](https://huggingface.co/papers/2007.14062) is a transformer model built to handle sequence lengths up to 4096 compared to 512 for [BERT](./bert). Traditional transformers struggle with long inputs because attention gets really expensive as the sequence length grows. BigBird fixes this by using a sparse attention mechanism, which means it doesn’t try to look at everything at once. Instead, it mixes in local attention, random attention, and a few global tokens to process the whole input. This combination gives it the best of both worlds. It keeps the computation efficient while still capturing enough of the sequence to understand it well. Because of this, BigBird is great at tasks involving long documents, like question answering, summarization, and genomic applications.
-
-You can find all the original BigBird checkpoints under the [Google](https://huggingface.co/google?search_models=bigbird) organization.
-
-> [!TIP]
-> Click on the BigBird models in the right sidebar for more examples of how to apply BigBird to different language tasks.
-
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+[BigBird: Transformers for Longer Sequences](https://huggingface.co/papers/2007.14062) introduces a sparse-attention mechanism that reduces the quadratic dependency on sequence length to linear, enabling handling of much longer sequences compared to models like BERT. BigBird combines sparse, global, and random attention to approximate full attention efficiently. This allows it to process sequences up to 8 times longer on similar hardware, improving performance on long document NLP tasks such as question answering and summarization. Additionally, the model supports novel applications in genomics.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -39,12 +26,7 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="google/bigbird-roberta-base",
-    dtype=torch.float16,
-    device=0
-)
+pipeline = pipeline(task="fill-mask", model="google/bigbird-roberta-base", dtype="auto")
 pipeline("Plants create [MASK] through a process known as photosynthesis.")
 ```
 
@@ -55,47 +37,26 @@ pipeline("Plants create [MASK] through a process known as photosynthesis.")
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "google/bigbird-roberta-base",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "google/bigbird-roberta-base",
-    dtype=torch.float16,
-    device_map="auto",
-)
-inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to(model.device)
+model = AutoModelForMaskedLM.from_pretrained("google/bigbird-roberta-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/bigbird-roberta-base")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-!echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model google/bigbird-roberta-base --device 0
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- Inputs should be padded on the right because BigBird uses absolute position embeddings.
-- BigBird supports `original_full` and `block_sparse` attention. If the input sequence length is less than 1024, it is recommended to use `original_full` since sparse patterns don't offer much benefit for smaller inputs.
-- The current implementation uses window size of 3 blocks and 2 global blocks, only supports the ITC-implementation, and doesn't support `num_random_blocks=0`.
-- The sequence length must be divisible by the block size.
-
-## Resources
-
-- Read the [BigBird](https://huggingface.co/blog/big-bird) blog post for more details about how its attention works.
+- Pad inputs on the right. BigBird uses absolute position embeddings.
+- BigBird supports `original_full` and `block_sparse` attention. Use `original_full` for sequences under 1024 tokens since sparse patterns don't help much with smaller inputs.
+- Current implementation uses 3-block window size and 2 global blocks. It only supports ITC-implementation and doesn't support `num_random_blocks=0`.
+- Sequence length must be divisible by the block size.
 
 ## BigBirdConfig
 
@@ -156,3 +117,4 @@ print(f"The predicted token is: {predicted_token}")
 
 [[autodoc]] BigBirdForQuestionAnswering
     - forward
+

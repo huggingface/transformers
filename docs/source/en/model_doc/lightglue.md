@@ -11,51 +11,34 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-06-23 and added to Hugging Face Transformers on 2025-06-17.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
-    </div>
-</div>
+*This model was released on 2023-06-23 and added to Hugging Face Transformers on 2025-06-17 and contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).*
 
 # LightGlue
 
 [LightGlue](https://huggingface.co/papers/2306.13643) is a deep neural network that learns to match local features across images. It revisits multiple design decisions of SuperGlue and derives simple but effective improvements. Cumulatively, these improvements make LightGlue more efficient - in terms of both memory and computation, more accurate, and much easier to train. Similar to [SuperGlue](https://huggingface.co/magic-leap-community/superglue_outdoor), this model consists of matching two sets of local features extracted from two images, with the goal of being faster than SuperGlue. Paired with the [SuperPoint model](https://huggingface.co/magic-leap-community/superpoint), it can be used to match two images and estimate the pose between them.
 
-You can find all the original LightGlue checkpoints under the [ETH-CVG](https://huggingface.co/ETH-CVG) organization.
-
-> [!TIP]
-> This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
->
-> Click on the LightGlue models in the right sidebar for more examples of how to apply LightGlue to different computer vision tasks.
-
-The example below demonstrates how to match keypoints between two images with [`Pipeline`] or the [`AutoModel`] class.
-
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```py
+import torch
 from transformers import pipeline
 
-keypoint_matcher = pipeline(task="keypoint-matching", model="ETH-CVG/lightglue_superpoint")
-
+pipeline = pipeline(task="keypoint-matching", model="ETH-CVG/lightglue_superpoint", dtype="auto")
 url_0 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
 url_1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
 
-results = keypoint_matcher([url_0, url_1], threshold=0.9)
-print(results[0])
-# {'keypoint_image_0': {'x': ..., 'y': ...}, 'keypoint_image_1': {'x': ..., 'y': ...}, 'score': ...}
+pipeline([url_0, url_1], threshold=0.9)
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
-from transformers import AutoImageProcessor, AutoModel
 import torch
-from PIL import Image
 import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForKeypointMatching
 
 url_image1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
 image1 = Image.open(requests.get(url_image1, stream=True).raw)
@@ -65,76 +48,34 @@ image2 = Image.open(requests.get(url_image2, stream=True).raw)
 images = [image1, image2]
 
 processor = AutoImageProcessor.from_pretrained("ETH-CVG/lightglue_superpoint")
-model = AutoModel.from_pretrained("ETH-CVG/lightglue_superpoint")
-
+model = AutoModelForKeypointMatching.from_pretrained("ETH-CVG/lightglue_superpoint", dtype="auto")
 inputs = processor(images, return_tensors="pt")
+
 with torch.inference_mode():
     outputs = model(**inputs)
 
-# Post-process to get keypoints and matches
 image_sizes = [[(image.height, image.width) for image in images]]
 processed_outputs = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
+
+for i, output in enumerate(processed_outputs):
+    print(f"For the image pair {i}")
+    for keypoint0, keypoint1, matching_score in zip(
+            output["keypoints0"], output["keypoints1"], output["matching_scores"]
+    ):
+        print(f"Keypoint at {keypoint0.numpy()} matches with keypoint at {keypoint1.numpy()} with score {matching_score}")
+
+visualized_images = processor.visualize_keypoint_matching(images, processed_outputs)
 ```
 
 </hfoption>
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- LightGlue is adaptive to the task difficulty. Inference is much faster on image pairs that are intuitively easy to match, for example, because of a larger visual overlap or limited appearance change.
-
-    ```py
-    from transformers import AutoImageProcessor, AutoModel
-    import torch
-    from PIL import Image
-    import requests
-
-    processor = AutoImageProcessor.from_pretrained("ETH-CVG/lightglue_superpoint")
-    model = AutoModel.from_pretrained("ETH-CVG/lightglue_superpoint")
-
-    # LightGlue requires pairs of images
-    images = [image1, image2]
-    inputs = processor(images, return_tensors="pt")
-    with torch.inference_mode():
-        outputs = model(**inputs)
-
-    # Extract matching information
-    keypoints0 = outputs.keypoints0  # Keypoints in first image
-    keypoints1 = outputs.keypoints1  # Keypoints in second image
-    matches = outputs.matches        # Matching indices
-    matching_scores = outputs.matching_scores  # Confidence scores
-    ```
-
+- LightGlue is adaptive to task difficulty. Inference is much faster on image pairs that are intuitively easy to match, for example, because of larger visual overlap or limited appearance change.
 - The model outputs matching indices, keypoints, and confidence scores for each match, similar to SuperGlue but with improved efficiency.
-- For better visualization and analysis, use the [`LightGlueImageProcessor.post_process_keypoint_matching`] method to get matches in a more readable format.
-
-    ```py
-    # Process outputs for visualization
-    image_sizes = [[(image.height, image.width) for image in images]]
-    processed_outputs = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
-
-    for i, output in enumerate(processed_outputs):
-        print(f"For the image pair {i}")
-        for keypoint0, keypoint1, matching_score in zip(
-                output["keypoints0"], output["keypoints1"], output["matching_scores"]
-        ):
-            print(f"Keypoint at {keypoint0.numpy()} matches with keypoint at {keypoint1.numpy()} with score {matching_score}")
-    ```
-
-- Visualize the matches between the images using the built-in plotting functionality.
-
-    ```py
-    # Easy visualization using the built-in plotting method
-    processor.visualize_keypoint_matching(images, processed_outputs)
-    ```
-
-<div class="flex justify-center">
-    <img src="https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/duPp09ty8NRZlMZS18ccP.png">
-</div>
-
-## Resources
-
-- Refer to the [original LightGlue repository](https://github.com/cvg/LightGlue) for more examples and implementation details.
+- Use the [`post_process_keypoint_matching`] method to get matches in a more readable format for better visualization and analysis.
+- Visualize matches between images using the built-in plotting functionality.
 
 ## LightGlueConfig
 
@@ -143,9 +84,10 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 ## LightGlueImageProcessor
 
 [[autodoc]] LightGlueImageProcessor
-    - preprocess
-    - post_process_keypoint_matching
-    - visualize_keypoint_matching
+
+- preprocess
+- post_process_keypoint_matching
+- visualize_keypoint_matching
 
 ## LightGlueImageProcessorFast
 
@@ -157,4 +99,5 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 ## LightGlueForKeypointMatching
 
 [[autodoc]] LightGlueForKeypointMatching
-    - forward
+
+- forward

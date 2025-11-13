@@ -29,7 +29,7 @@ model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 
 will create a model that is an instance of [`BertModel`].
 
-There is one class of `AutoModel` for each task.
+There is one class of `AutoModel` for each task, and for each backend (PyTorch, TensorFlow, or Flax).
 
 ## Extending the Auto Classes
 
@@ -48,7 +48,7 @@ You will then be able to use the auto classes like you would usually do!
 
 <Tip warning={true}>
 
-If your `NewModelConfig` is a subclass of [`~transformers.PreTrainedConfig`], make sure its
+If your `NewModelConfig` is a subclass of [`~transformers.PretrainedConfig`], make sure its
 `model_type` attribute is set to the same key you use when registering the config (here `"new-model"`).
 
 Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
@@ -73,13 +73,13 @@ Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
 
 [[autodoc]] AutoImageProcessor
 
-## AutoVideoProcessor
-
-[[autodoc]] AutoVideoProcessor
-
 ## AutoProcessor
 
 [[autodoc]] AutoProcessor
+
+## AutoVideoProcessor
+
+[[autodoc]] AutoVideoProcessor
 
 ## Generic model classes
 
@@ -161,10 +161,6 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForKeypointDetection
 
-### AutoModelForKeypointMatching
-
-[[autodoc]] AutoModelForKeypointMatching
-
 ### AutoModelForMaskedImageModeling
 
 [[autodoc]] AutoModelForMaskedImageModeling
@@ -200,6 +196,10 @@ The following auto classes are available for the following computer vision tasks
 ### AutoModelForZeroShotObjectDetection
 
 [[autodoc]] AutoModelForZeroShotObjectDetection
+
+### AutoModelForKeypointMatching
+
+[[autodoc]] AutoModelForKeypointMatching
 
 ## Audio
 
@@ -260,8 +260,6 @@ The following auto classes are available for the following multimodal tasks.
 ### AutoModelForImageTextToText
 
 [[autodoc]] AutoModelForImageTextToText
-
-## Time Series
 
 ### AutoModelForTimeSeriesPrediction
 

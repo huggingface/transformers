@@ -9,102 +9,45 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2020-10-26 and added to Hugging Face Transformers on 2024-01-03.*
+*This model was released on 2020-10-26 and added to Hugging Face Transformers on 2024-01-03 and contributed by [connor-henderson](https://huggingface.co/connor-henderson).*
 
 # FastSpeech2Conformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[FastSpeech2Conformer](https://huggingface.co/papers/2010.13956) enhances text-to-speech (TTS) by addressing limitations in FastSpeech. It eliminates the need for a teacher-student distillation pipeline and instead uses ground-truth target data for training. FastSpeech2 incorporates additional speech variation information, such as pitch and energy, as conditional inputs. This model achieves faster training and inference speeds while improving voice quality, surpassing even autoregressive models.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The FastSpeech2Conformer model was proposed with the paper [Recent Developments On Espnet Toolkit Boosted By Conformer](https://huggingface.co/papers/2010.13956) by Pengcheng Guo, Florian Boyer, Xuankai Chang, Tomoki Hayashi, Yosuke Higuchi, Hirofumi Inaguma, Naoyuki Kamo, Chenda Li, Daniel Garcia-Romero, Jiatong Shi, Jing Shi, Shinji Watanabe, Kun Wei, Wangyou Zhang, and Yuekai Zhang.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the original FastSpeech2 paper is the following:
-
-*Non-autoregressive text to speech (TTS) models such as FastSpeech (Ren et al., 2019) can synthesize speech significantly faster than previous autoregressive models with comparable quality. The training of FastSpeech model relies on an autoregressive teacher model for duration prediction (to provide more information as input) and knowledge distillation (to simplify the data distribution in output), which can ease the one-to-many mapping problem (i.e., multiple speech variations correspond to the same text) in TTS. However, FastSpeech has several disadvantages: 1) the teacher-student distillation pipeline is complicated and time-consuming, 2) the duration extracted from the teacher model is not accurate enough, and the target mel-spectrograms distilled from teacher model suffer from information loss due to data simplification, both of which limit the voice quality. In this paper, we propose FastSpeech 2, which addresses the issues in FastSpeech and better solves the one-to-many mapping problem in TTS by 1) directly training the model with ground-truth target instead of the simplified output from teacher, and 2) introducing more variation information of speech (e.g., pitch, energy and more accurate duration) as conditional inputs. Specifically, we extract duration, pitch and energy from speech waveform and directly take them as conditional inputs in training and use predicted values in inference. We further design FastSpeech 2s, which is the first attempt to directly generate speech waveform from text in parallel, enjoying the benefit of fully end-to-end inference. Experimental results show that 1) FastSpeech 2 achieves a 3x training speed-up over FastSpeech, and FastSpeech 2s enjoys even faster inference speed; 2) FastSpeech 2 and 2s outperform FastSpeech in voice quality, and FastSpeech 2 can even surpass autoregressive models. Audio samples are available at https://speechresearch.github.io/fastspeech2/.*
-
-This model was contributed by [Connor Henderson](https://huggingface.co/connor-henderson). The original code can be found [here](https://github.com/espnet/espnet/blob/master/espnet2/tts/fastspeech2/fastspeech2.py).
-
-## 🤗 Model Architecture
-
-FastSpeech2's general structure with a Mel-spectrogram decoder was implemented, and the traditional transformer blocks were replaced with conformer blocks as done in the ESPnet library.
-
-### FastSpeech2 Model Architecture
-
-![FastSpeech2 Model Architecture](https://www.microsoft.com/en-us/research/uploads/prod/2021/04/fastspeech2-1.png)
-
-#### Conformer Blocks
-
-![Conformer Blocks](https://www.researchgate.net/profile/Hirofumi-Inaguma-2/publication/344911155/figure/fig2/AS:951455406108673@1603856054097/An-overview-of-Conformer-block.png)
-
-#### Convolution Module
-
-![Convolution Module](https://d3i71xaburhd42.cloudfront.net/8809d0732f6147d4ad9218c8f9b20227c837a746/2-Figure1-1.png)
-
-## 🤗 Transformers Usage
-
-You can run FastSpeech2Conformer locally with the 🤗 Transformers library.
-
-1. First install the 🤗 [Transformers library](https://github.com/huggingface/transformers), g2p-en:
-
-```bash
-pip install --upgrade pip
-pip install --upgrade transformers g2p-en
+pipeline = pipeline(task="text-to-audio", model="espnet/fastspeech2_conformer_with_hifigan", dtype="auto")
+output = pipeline("Plants create energy through a process known as photosynthesis.")
+audio = output["audio"]
 ```
 
-2. Run inference via the Transformers modelling code with the model and hifigan separately
+</hfoption>
+<hfoption id="FastSpeech2ConformerWithHifiGan">
 
-```python
-
-from transformers import FastSpeech2ConformerTokenizer, FastSpeech2ConformerModel, FastSpeech2ConformerHifiGan
+```py
+import torch
 import soundfile as sf
-
-tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
-inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt")
-input_ids = inputs["input_ids"]
-
-model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
-output_dict = model(input_ids, return_dict=True)
-spectrogram = output_dict["spectrogram"]
-
-hifigan = FastSpeech2ConformerHifiGan.from_pretrained("espnet/fastspeech2_conformer_hifigan")
-waveform = hifigan(spectrogram)
-
-sf.write("speech.wav", waveform.squeeze().detach().numpy(), samplerate=22050)
-```
-
-3. Run inference via the Transformers modelling code with the model and hifigan combined
-
-```python
 from transformers import FastSpeech2ConformerTokenizer, FastSpeech2ConformerWithHifiGan
-import soundfile as sf
 
-tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
-inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt")
+tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer_with_hifigan"")
+model = FastSpeech2ConformerWithHifiGan.from_pretrained("espnet/fastspeech2_conformer_with_hifigan", dtype="auto")
+
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
 input_ids = inputs["input_ids"]
 
-model = FastSpeech2ConformerWithHifiGan.from_pretrained("espnet/fastspeech2_conformer_with_hifigan")
 output_dict = model(input_ids, return_dict=True)
 waveform = output_dict["waveform"]
-
 sf.write("speech.wav", waveform.squeeze().detach().numpy(), samplerate=22050)
 ```
 
-4. Run inference with a pipeline and specify which vocoder to use
-
-```python
-from transformers import pipeline, FastSpeech2ConformerHifiGan
-import soundfile as sf
-
-vocoder = FastSpeech2ConformerHifiGan.from_pretrained("espnet/fastspeech2_conformer_hifigan")
-synthesiser = pipeline(model="espnet/fastspeech2_conformer", vocoder=vocoder)
-
-speech = synthesiser("Hello, my dog is cooler than you!")
-
-sf.write("speech.wav", speech["audio"].squeeze(), samplerate=speech["sampling_rate"])
-```
+</hfoption>
+</hfoptions>
 
 ## FastSpeech2ConformerConfig
 

@@ -13,37 +13,23 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-08-09 and added to Hugging Face Transformers on 2021-06-02.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2019-08-09 and added to Hugging Face Transformers on 2021-06-02 and contributed by [gchhablani](https://huggingface.co/gchhablani).*
 
 # VisualBERT
 
-[VisualBERT](https://huggingface.co/papers/1908.03557) is a vision-and-language model. It uses an approach called "early fusion", where inputs are fed together into a single Transformer stack initialized from [BERT](./bert). Self-attention implicitly aligns words with their corresponding image objects. It processes text with visual features from object-detector regions instead of raw pixels.
-
-You can find all the original VisualBERT checkpoints under the [UCLA NLP](https://huggingface.co/uclanlp/models?search=visualbert) organization.
-
-> [!TIP]
-> This model was contributed by [gchhablani](https://huggingface.co/gchhablani).
-> Click on the VisualBERT models in the right sidebar for more examples of how to apply VisualBERT to different image and language tasks.
-
-The example below demonstrates how to answer a question based on an image with the [`AutoModel`] class.
+[VisualBERT](https://huggingface.co/papers/1908.03557) is a neural network framework designed for vision-and-language tasks. It utilizes a stack of Transformer layers to align text and image regions through self-attention. Two pre-training objectives for image caption data are introduced. Experiments on VQA, VCR, NLVR2, and Flickr30K demonstrate that VisualBERT matches or surpasses state-of-the-art models with a simpler architecture. Analysis shows that VisualBERT can ground language elements to image regions without explicit supervision and is sensitive to syntactic relationships, such as verb-object associations.
 
 <hfoptions id="usage">
-<hfoption id="AutoModel">
+<hfoption id="">
 
 ```py
 import torch
 import torchvision
-from PIL import Image
 import numpy as np
-from transformers import AutoTokenizer, VisualBertForQuestionAnswering
 import requests
+from PIL import Image
 from io import BytesIO
+from transformers import AutoTokenizer, VisualBertForQuestionAnswering
 
 def get_visual_embeddings_simple(image, device=None):
     
@@ -83,7 +69,7 @@ def get_visual_embeddings_simple(image, device=None):
     return visual_embeds
 
 tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
-model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
+model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa-coco-pre", dtype="auto")
 
 response = requests.get("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 image = Image.open(BytesIO(response.content))
@@ -112,18 +98,12 @@ print(f"Predicted answer: {predicted_answer_idx}")
 </hfoption>
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- Use a fine-tuned checkpoint for downstream tasks, like `visualbert-vqa` for visual question answering. Otherwise, use one of the pretrained checkpoints.
-- The fine-tuned detector and weights aren't provided (available in the research projects), but the states can be directly loaded into the detector.
-- The text input is concatenated in front of the visual embeddings in the embedding layer and is expected to be bound by `[CLS]` and [`SEP`] tokens.
-- The segment ids must be set appropriately for the text and visual parts.
-- Use [`BertTokenizer`] to encode the text and implement a custom detector/image processor to get the visual embeddings.
-
-## Resources
-
-- Refer to this [notebook](https://github.com/huggingface/transformers-research-projects/tree/main/visual_bert) for an example of using VisualBERT for visual question answering.
-- Refer to this [notebook](https://colab.research.google.com/drive/1bLGxKdldwqnMVA5x4neY7-l_8fKGWQYI?usp=sharing) for an example of how to generate visual embeddings.
+- The fine-tuned detector and weights aren't provided in this repository but are available in the research projects. Load the states directly into the detector.
+- Text input concatenates in front of visual embeddings in the embedding layer. Text must be bound by `[CLS]` and `[SEP]` tokens.
+- Set segment IDs appropriately for text and visual parts.
+- Use [`BertTokenizer`] to encode text and implement a custom detector/image processor to get visual embeddings.
 
 ## VisualBertConfig
 
@@ -158,3 +138,4 @@ print(f"Predicted answer: {predicted_answer_idx}")
 
 [[autodoc]] VisualBertForRegionToPhraseAlignment
     - forward
+

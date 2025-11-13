@@ -15,40 +15,28 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2024-07-15 and added to Hugging Face Transformers on 2024-08-08.*
 
-# Qwen2Audio
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# Qwen2Audio
 
-The Qwen2-Audio is the new model series of large audio-language models from the Qwen team. Qwen2-Audio is capable of accepting various audio signal inputs and performing audio analysis or direct textual responses with regard to speech instructions. We introduce two distinct audio interaction modes:
+[Qwen2-Audio](https://huggingface.co/papers/2407.10759) is a large-scale audio-language model that processes various audio inputs and responds with text or performs audio analysis based on speech instructions. It features two interaction modes: voice chat, allowing free voice interactions without text input, and audio analysis, where users provide audio and text for analysis. The model uses natural language prompts for pre-training and has been optimized with DPO to enhance factuality and behavior adherence. Evaluation on AIR-Bench shows Qwen2-Audio outperforms previous models in audio-centric instruction-following tasks.
 
-* voice chat: users can freely engage in voice interactions with Qwen2-Audio without text input
-* audio analysis: users could provide audio and text instructions for analysis during the interaction
+<hfoptions id="usage">
+<hfoption id="Qwen2AudioForConditionalGeneration">
 
-It was proposed in [Qwen2-Audio Technical Report](https://huggingface.co/papers/2407.10759) by Yunfei Chu, Jin Xu, Qian Yang, Haojie Wei, Xipin Wei, Zhifang Guo, Yichong Leng, Yuanjun Lv, Jinzheng He, Junyang Lin, Chang Zhou, Jingren Zhou.
-
-The abstract from the paper is the following:
-
-*We introduce the latest progress of Qwen-Audio, a large-scale audio-language model called Qwen2-Audio, which is capable of accepting various audio signal inputs and performing audio analysis or direct textual responses with regard to speech instructions. In contrast to complex hierarchical tags, we have simplified the pre-training process by utilizing natural language prompts for different data and tasks, and have further expanded the data volume. We have boosted the instruction-following capability of Qwen2-Audio and implemented two distinct audio interaction modes for voice chat and audio analysis. In the voice chat mode, users can freely engage in voice interactions with Qwen2-Audio without text input. In the audio analysis mode, users could provide audio and text instructions for analysis during the interaction. Note that we do not use any system prompts to switch between voice chat and audio analysis modes. Qwen2-Audio is capable of intelligently comprehending the content within audio and following voice commands to respond appropriately. For instance, in an audio segment that simultaneously contains sounds, multi-speaker conversations, and a voice command, Qwen2-Audio can directly understand the command and provide an interpretation and response to the audio. Additionally, DPO has optimized the model's performance in terms of factuality and adherence to desired behavior. According to the evaluation results from AIR-Bench, Qwen2-Audio outperformed previous SOTAs, such as Gemini-1.5-pro, in tests focused on audio-centric instruction-following capabilities. Qwen2-Audio is open-sourced with the aim of fostering the advancement of the multi-modal language community.*
-
-## Usage tips
-
-`Qwen2-Audio-7B` and `Qwen2-Audio-7B-Instruct` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
-
-### Inference
-
-```python
+```py
+import torch
 from io import BytesIO
-from urllib.request import urlopen
 import librosa
+from urllib.request import urlopen
 from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
 
-model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B", trust_remote_code=True, device_map="auto")
+model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B", trust_remote_code=True, dtype="auto")
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B", trust_remote_code=True)
 
 prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
@@ -58,170 +46,16 @@ inputs = processor(text=prompt, audios=audio, return_tensors="pt").to(model.devi
 
 generate_ids = model.generate(**inputs, max_length=256)
 generate_ids = generate_ids[:, inputs.input_ids.size(1):]
-
-response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-
-# We can also omit the audio_bos and audio_eos tokens
-prompt = "<|AUDIO|>Generate the caption in English:"
-inputs = processor(text=prompt, audios=audio, return_tensors="pt").to(model.device)
-
-generate_ids = model.generate(**inputs, max_length=256)
-generate_ids = generate_ids[:, inputs.input_ids.size(1):]
-
-response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
 ```
 
-In the following, we demonstrate how to use `Qwen2-Audio-7B-Instruct` for the inference, supporting both voice chat and audio analysis modes. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
+</hfoption>
+</hfoptions>
 
-### Voice Chat Inference
+## Usage tips
 
-In the voice chat mode, users can freely engage in voice interactions with Qwen2-Audio without text input:
-
-```python
-from io import BytesIO
-from urllib.request import urlopen
-import librosa
-from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
-
-processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
-model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map="auto")
-
-conversation = [
-    {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"},
-    ]},
-    {"role": "assistant", "content": "Yes, the speaker is female and in her twenties."},
-    {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav"},
-    ]},
-]
-text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-audios = []
-for message in conversation:
-    if isinstance(message["content"], list):
-        for ele in message["content"]:
-            if ele["type"] == "audio":
-                audios.append(librosa.load(
-                    BytesIO(urlopen(ele['audio_url']).read()),
-                    sr=processor.feature_extractor.sampling_rate)[0]
-                )
-
-inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
-inputs.input_ids = inputs.input_ids.to(model.device)
-
-generate_ids = model.generate(**inputs, max_length=256)
-generate_ids = generate_ids[:, inputs.input_ids.size(1):]
-
-response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-```
-
-### Audio Analysis Inference
-
-In the audio analysis, users could provide both audio and text instructions for analysis:
-
-```python
-from io import BytesIO
-from urllib.request import urlopen
-import librosa
-from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
-
-processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
-model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map="auto")
-
-conversation = [
-    {'role': 'system', 'content': 'You are a helpful assistant.'},
-    {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"},
-        {"type": "text", "text": "What's that sound?"},
-    ]},
-    {"role": "assistant", "content": "It is the sound of glass shattering."},
-    {"role": "user", "content": [
-        {"type": "text", "text": "What can you do when you hear that?"},
-    ]},
-    {"role": "assistant", "content": "Stay alert and cautious, and check if anyone is hurt or if there is any damage to property."},
-    {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac"},
-        {"type": "text", "text": "What does the person say?"},
-    ]},
-]
-text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-audios = []
-for message in conversation:
-    if isinstance(message["content"], list):
-        for ele in message["content"]:
-            if ele["type"] == "audio":
-                audios.append(
-                    librosa.load(
-                        BytesIO(urlopen(ele['audio_url']).read()),
-                        sr=processor.feature_extractor.sampling_rate)[0]
-                )
-
-inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
-inputs.input_ids = inputs.input_ids.to(model.device)
-
-generate_ids = model.generate(**inputs, max_length=256)
-generate_ids = generate_ids[:, inputs.input_ids.size(1):]
-
-response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-```
-
-### Batch Inference
-
-We also support batch inference:
-
-```python
-from io import BytesIO
-from urllib.request import urlopen
-import librosa
-from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
-
-processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
-model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map="auto")
-
-conversation1 = [
-    {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"},
-        {"type": "text", "text": "What's that sound?"},
-    ]},
-    {"role": "assistant", "content": "It is the sound of glass shattering."},
-    {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"},
-        {"type": "text", "text": "What can you hear?"},
-    ]}
-]
-
-conversation2 = [
-    {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac"},
-        {"type": "text", "text": "What does the person say?"},
-    ]},
-]
-
-conversations = [conversation1, conversation2]
-
-text = [processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False) for conversation in conversations]
-
-audios = []
-for conversation in conversations:
-    for message in conversation:
-        if isinstance(message["content"], list):
-            for ele in message["content"]:
-                if ele["type"] == "audio":
-                    audios.append(
-                        librosa.load(
-                            BytesIO(urlopen(ele['audio_url']).read()),
-                            sr=processor.feature_extractor.sampling_rate)[0]
-                    )
-
-inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
-inputs['input_ids'] = inputs['input_ids'].to(model.device)
-inputs.input_ids = inputs.input_ids.to(model.device)
-
-generate_ids = model.generate(**inputs, max_length=256)
-generate_ids = generate_ids[:, inputs.input_ids.size(1):]
-
-response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-```
+- Voice chat mode enables free voice interactions with Qwen2-Audio without text input.
+- Audio analysis mode accepts both audio and text instructions for analysis.
 
 ## Qwen2AudioConfig
 
@@ -244,3 +78,4 @@ response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_
 
 [[autodoc]] Qwen2AudioForConditionalGeneration
     - forward
+

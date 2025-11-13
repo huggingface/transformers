@@ -13,56 +13,53 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-08-20 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2019-08-20 and added to Hugging Face Transformers on 2020-11-16 and contributed by [eltoto1219](https://huggingface.co/eltoto1219).*
 
 # LXMERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[LXMERT](https://huggingface.co/papers/1908.07490) proposes a framework to learn vision-and-language connections using a large-scale Transformer model with three encoders: object relationship, language, and cross-modality. The model is pretrained on diverse tasks including masked language modeling, masked object prediction, cross-modality matching, and image question answering, using datasets like MSCOCO, Visual-Genome, VQA 2.0, and GQA. Fine-tuned, LXMERT achieves state-of-the-art results on VQA and GQA, and improves the best result on NLVR by 22% absolute. Ablation studies and attention visualizations support the effectiveness of the model components and pretraining strategies.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="LxmertForQuestionAnswering">
 
-The LXMERT model was proposed in [LXMERT: Learning Cross-Modality Encoder Representations from Transformers](https://huggingface.co/papers/1908.07490) by Hao Tan & Mohit Bansal. It is a series of bidirectional transformer encoders
-(one for the vision modality, one for the language modality, and then one to fuse both modalities) pretrained using a
-combination of masked language modeling, visual-language text alignment, ROI-feature regression, masked
-visual-attribute modeling, masked visual-object modeling, and visual-question answering objectives. The pretraining
-consists of multiple multi-modal datasets: MSCOCO, Visual-Genome + Visual-Genome Question Answering, VQA 2.0, and GQA.
+```py
+import torch
+from transformers import AutoTokenizer, LxmertForQuestionAnswering
 
-The abstract from the paper is the following:
+tokenizer = AutoTokenizer.from_pretrained("unc-nlp/lxmert-base-uncased")
+model = LxmertForQuestionAnswering.from_pretrained("unc-nlp/lxmert-base-uncased", dtype="auto")
 
-*Vision-and-language reasoning requires an understanding of visual concepts, language semantics, and, most importantly,
-the alignment and relationships between these two modalities. We thus propose the LXMERT (Learning Cross-Modality
-Encoder Representations from Transformers) framework to learn these vision-and-language connections. In LXMERT, we
-build a large-scale Transformer model that consists of three encoders: an object relationship encoder, a language
-encoder, and a cross-modality encoder. Next, to endow our model with the capability of connecting vision and language
-semantics, we pre-train the model with large amounts of image-and-sentence pairs, via five diverse representative
-pretraining tasks: masked language modeling, masked object prediction (feature regression and label classification),
-cross-modality matching, and image question answering. These tasks help in learning both intra-modality and
-cross-modality relationships. After fine-tuning from our pretrained parameters, our model achieves the state-of-the-art
-results on two visual question answering datasets (i.e., VQA and GQA). We also show the generalizability of our
-pretrained cross-modality model by adapting it to a challenging visual-reasoning task, NLVR, and improve the previous
-best result by 22% absolute (54% to 76%). Lastly, we demonstrate detailed ablation studies to prove that both our novel
-model components and pretraining strategies significantly contribute to our strong results; and also present several
-attention visualizations for the different encoders*
+question, text = "How do plants create energy?", "By a process known as photosynthesis."
 
-This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). The original code can be found [here](https://github.com/airsplay/lxmert).
+# Create dummy visual features (normally these would come from Faster R-CNN)
+batch_size = 1
+num_visual_features = 36
+visual_feat_dim = 2048
+visual_pos_dim = 4
+
+visual_feats = torch.randn(batch_size, num_visual_features, visual_feat_dim)
+visual_pos = torch.rand(batch_size, num_visual_features, visual_pos_dim)
+
+inputs = tokenizer(question, text, return_tensors="pt")
+with torch.no_grad():
+    outputs = model(**inputs, visual_feats=visual_feats, visual_pos=visual_pos)
+
+qa_scores = outputs.question_answering_score
+predicted_answer_idx = qa_scores.argmax().item()
+
+print(f"Question answering scores: {qa_scores[0]}")
+print(f"Predicted answer index: {predicted_answer_idx}")
+print(f"Confidence score: {qa_scores[0][predicted_answer_idx]:.4f}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- Bounding boxes are not necessary to be used in the visual feature embeddings, any kind of visual-spacial features
-  will work.
-- Both the language hidden states and the visual hidden states that LXMERT outputs are passed through the
-  cross-modality layer, so they contain information from both modalities. To access a modality that only attends to
-  itself, select the vision/language hidden states from the first input in the tuple.
-- The bidirectional cross-modality encoder attention only returns attention values when the language modality is used
-  as the input and the vision modality is used as the context vector. Further, while the cross-modality encoder
-  contains self-attention for each respective modality and cross-attention, only the cross attention is returned and
-  both self attention outputs are disregarded.
-
-## Resources
-
-- [Question answering task guide](../tasks/question_answering)
+- Bounding boxes aren't necessary for visual feature embeddings. Any visual-spatial features work.
+- LXMERT outputs both language and visual hidden states through the cross-modality layer, so they contain information from both modalities. Select vision or language hidden states from the first input in the tuple to access a modality that only attends to itself.
+- The bidirectional cross-modality encoder attention returns attention values only when the language modality is the input and the vision modality is the context vector. The cross-modality encoder contains self-attention for each modality and cross-attention, but only cross-attention is returned. Self-attention outputs are disregarded.
 
 ## LxmertConfig
 
@@ -84,6 +81,8 @@ This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). T
 
 [[autodoc]] models.lxmert.modeling_lxmert.LxmertForQuestionAnsweringOutput
 
+] models.lxmert.modeling_tf_lxmert.TFLxmertForPreTrainingOutput
+
 ## LxmertModel
 
 [[autodoc]] LxmertModel
@@ -98,3 +97,4 @@ This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). T
 
 [[autodoc]] LxmertForQuestionAnswering
     - forward
+

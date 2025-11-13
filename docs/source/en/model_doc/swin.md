@@ -13,24 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-03-25 and added to Hugging Face Transformers on 2022-01-21.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2021-03-25 and added to Hugging Face Transformers on 2022-01-21 and contributed by [novice03](https://huggingface.co/novice03).*
 
 # Swin Transformer
 
-[Swin Transformer](https://huggingface.co/papers/2103.14030) is a hierarchical vision transformer. Images are processed in patches and windowed self-attention is used to capture local information. These windows are shifted across the image to allow for cross-window connections, capturing global information more efficiently. This hierarchical approach with shifted windows allows the Swin Transformer to process images effectively at different scales and achieve linear computational complexity relative to image size, making it a versatile backbone for various vision tasks like image classification and object detection.
-
-You can find all official Swin Transformer checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=swin) organization.
-
-> [!TIP]
-> Click on the Swin Transformer models in the right sidebar for more examples of how to apply Swin Transformer to different image tasks.
-
-The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
+[Swin Transformer](https://huggingface.co/papers/2103.14030) presents a hierarchical vision Transformer using shifted windows to address challenges in adapting Transformer models from language to vision. The shifted windowing scheme enhances efficiency by focusing self-attention on non-overlapping local windows while enabling cross-window connections. This design supports multi-scale modeling with linear computational complexity relative to image size. Swin Transformer excels in various vision tasks, achieving top-1 accuracy of 87.3% on ImageNet-1K, 58.7 box AP and 51.1 mask AP on COCO, and 53.5 mIoU on ADE20K. Its performance significantly outperforms previous state-of-the-art models, highlighting the potential of Transformer-based architectures in vision.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -39,55 +26,41 @@ The example below demonstrates how to classify an image with [`Pipeline`] or the
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="image-classification",
-    model="microsoft/swin-tiny-patch4-window7-224",
-    dtype=torch.float16,
-    device=0
-)
+pipeline = pipeline(task="image-classification", model="microsoft/swin-tiny-patch4-window7-224", dtype="auto")
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
 </hfoption>
-
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
 import requests
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-image_processor = AutoImageProcessor.from_pretrained(
-    "microsoft/swin-tiny-patch4-window7-224",
-    use_fast=True,
-)
-model = AutoModelForImageClassification.from_pretrained(
-    "microsoft/swin-tiny-patch4-window7-224",
-    device_map="auto"
-)
-
-device = Accelerator().device
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt").to(model.device)
+
+image_processor = AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+model = AutoModelForImageClassification.from_pretrained("microsoft/swin-tiny-patch4-window7-224", dtype="auto")
+
+inputs = image_processor(image, return_tensors="pt")
 
 with torch.no_grad():
-  logits = model(**inputs).logits
-predicted_class_id = logits.argmax(dim=-1).item()
+    logits = model(**inputs).logits
 
-class_labels = model.config.id2label
-predicted_class_label = class_labels[predicted_class_id]
-print(f"The predicted class label is: {predicted_class_label}")
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
 ```
 
 </hfoption>
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- Swin can pad the inputs for any input height and width divisible by `32`.
-- Swin can be used as a [backbone](../backbones). When `output_hidden_states = True`, it outputs both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
+- Swin pads inputs for any input height and width divisible by 32.
+- Swin works as a backbone. When `output_hidden_states = True`, it outputs both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
 
 ## SwinConfig
 
@@ -107,3 +80,4 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 [[autodoc]] transformers.SwinForImageClassification
     - forward
+

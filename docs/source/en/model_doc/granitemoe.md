@@ -13,57 +13,47 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-08-23 and added to Hugging Face Transformers on 2024-09-20.*
+*This model was released on 2024-08-23 and added to Hugging Face Transformers on 2024-09-20 and contributed by [mayank-mishra](https://huggingface.co/mayank-mishra).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # GraniteMoe
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[GraniteMoe](https://huggingface.co/papers/2408.13359) is a 3B sparse Mixture-of-Experts (sMoE) language model trained using the Power learning rate scheduler. It activates 800M parameters per token and demonstrates competitive performance compared to dense models with twice the active parameters across various benchmarks such as natural language multi-choice, code generation, and math reasoning. The Power scheduler, which is agnostic to batch size and number of training tokens, achieves consistent performance across different model sizes and architectures when combined with Maximum Update Parameterization (mup).
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The GraniteMoe model was proposed in [Power Scheduler: A Batch Size and Token Number Agnostic Learning Rate Scheduler](https://huggingface.co/papers/2408.13359) by Yikang Shen, Matthew Stallone, Mayank Mishra, Gaoyuan Zhang, Shawn Tan, Aditya Prasad, Adriana Meza Soria, David D. Cox and Rameswar Panda.
+```py
+import torch
+from transformers import pipeline
 
-PowerMoE-3B is a 3B sparse Mixture-of-Experts (sMoE) language model trained with the Power learning rate scheduler. It sparsely activates 800M parameters for each token. It is trained on a mix of open-source and proprietary datasets. PowerMoE-3B has shown promising results compared to other dense models with 2x activate parameters across various benchmarks, including natural language multi-choices, code generation, and math reasoning.
+pipeline = pipeline(task="text-generation", model="ibm/PowerMoE-3b", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-The abstract from the paper is the following:
+</hfoption>
+<hfoption id="AutoModel">
 
-*Finding the optimal learning rate for language model pretraining is a challenging task.
-This is not only because there is a complicated correlation between learning rate, batch size, number of training tokens, model size, and other hyperparameters but also because it is prohibitively expensive to perform a hyperparameter search for large language models with Billions or Trillions of parameters. Recent studies propose using small proxy models and small corpus to perform hyperparameter searches and transposing the optimal parameters to large models and large corpus. While the zero-shot transferability is theoretically and empirically proven for model size related hyperparameters, like depth and width, the zero-shot transfer from small corpus to large corpus is underexplored.
-In this paper, we study the correlation between optimal learning rate, batch size, and number of training tokens for the recently proposed WSD scheduler. After thousands of small experiments, we found a power-law relationship between variables and demonstrated its transferability across model sizes. Based on the observation, we propose a new learning rate scheduler, Power scheduler, that is agnostic about the number of training tokens and batch size. The experiment shows that combining the Power scheduler with Maximum Update Parameterization (\mup) can consistently achieve impressive performance with one set of hyperparameters regardless of the number of training tokens, batch size, model size, and even model architecture. Our 3B dense and MoE models trained with the Power scheduler achieve comparable performance as state-of-the-art small language models.
-We [open source](https://huggingface.co/collections/ibm/power-lm-66be64ae647ddf11b9808000) these pretrained models.*
-
-Tips:
-
-```python
+```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_path = "ibm/PowerMoE-3b"
-tokenizer = AutoTokenizer.from_pretrained(model_path)
+tokenizer = AutoTokenizer.from_pretrained("ibm/PowerMoE-3b")
+model = AutoModelForCausalLM.from_pretrained("ibm/PowerMoE-3b", dtype="auto",)
 
-# drop device_map if running on CPU
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
-model.eval()
-
-# change input text as desired
-prompt = "Write a code to find the maximum value in a list of numbers."
-
-# tokenize the text
-input_tokens = tokenizer(prompt, return_tensors="pt")
-# generate output tokens
-output = model.generate(**input_tokens, max_new_tokens=100)
-# decode output tokens into text
-output = tokenizer.batch_decode(output)
-# loop over the batch to print, in this example the batch size is 1
-for i in output:
-    print(i)
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
 ```
 
-This model was contributed by [mayank-mishra](https://huggingface.co/mayank-mishra).
+</hfoption>
+</hfoptions>
 
 ## GraniteMoeConfig
 
@@ -78,3 +68,4 @@ This model was contributed by [mayank-mishra](https://huggingface.co/mayank-mish
 
 [[autodoc]] GraniteMoeForCausalLM
     - forward
+

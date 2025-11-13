@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-06-30 and added to Hugging Face Transformers on 2025-07-21.*
+*This model was released on 2025-06-30 and added to Hugging Face Transformers on 2025-07-21 and contributed by [AntonV](https://huggingface.co/AntonV).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -26,145 +25,40 @@ rendered properly in your Markdown viewer.
 
 # Ernie 4.5 Moe
 
-## Overview
+# Ernie 4.5
 
-The Ernie 4.5 Moe model was released in the [Ernie 4.5 Model Family](https://ernie.baidu.com/blog/posts/ernie4.5/) release by baidu.
-This family of models contains multiple different architectures and model sizes. This model in specific targets the base text
-model with mixture of experts (moe) - one with 21B total, 3B active parameters and another one with 300B total, 47B active parameters.
-It uses the standard [Llama](./llama) at its core combined with a specialized MoE based on [Mixtral](./mixtral) with additional shared
-experts.
+[Ernie 4.5](https://ernie.baidu.com/blog/posts/ernie4.5/) introduces three major innovations. First, it uses Multimodal Heterogeneous MoE pre-training, jointly training on text and images through modality-isolated routing, router orthogonal loss, and multimodal token-balanced loss to ensure effective cross-modal learning. Second, it employs a scaling-efficient infrastructure with heterogeneous hybrid parallelism, FP8 mixed precision, recomputation strategies, and advanced quantization (4-bit/2-bit) to achieve high training and inference efficiency across hardware platforms. Finally, modality-specific post-training tailors models for language and vision tasks using Supervised Fine-Tuning, Direct Preference Optimization, and a new Unified Preference Optimization method.
 
-Other models from the family can be found at [Ernie 4.5](./ernie4_5).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-<div class="flex justify-center">
-    <img src="https://ernie.baidu.com/blog/posts/ernie4.5/overview.png"/>
-</div>
+```py
+import torch
+from transformers import pipeline
 
-## Usage Tips
+pipeline = pipeline(task="text-generation", model="baidu/ERNIE-4.5-21B-A3B-PT", dtype="auto")
+pipeline("Plants generate energy through a process known as  ")
+```
 
-### Generate text
+</hfoption>
+<hfoption id="AutoModel">
 
-```python
+```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
+model = AutoModelForCausalLM.from_pretrained("baidu/ERNIE-4.5-21B-A3B-PT", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-21B-A3B-PT")
 
-# load the tokenizer and the model
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    device_map="auto",
-    dtype=torch.bfloat16,
-)
+messages = [{"role": "user", "content": "How do plants generate energy?"}]
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt")
 
-# prepare the model input
-inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
-prompt = "Hey, are you conscious? Can you talk to me?"
-messages = [
-    {"role": "user", "content": prompt}
-]
-text = tokenizer.apply_chat_template(
-    messages,
-    tokenize=False,
-    add_generation_prompt=True
-)
-model_inputs = tokenizer([text], add_special_tokens=False, return_tensors="pt").to(model.device)
-
-# conduct text completion
-generated_ids = model.generate(
-    **model_inputs,
-    max_new_tokens=32,
-)
-output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
-
-# decode the generated ids
-generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
+outputs = model.generate(input_ids, max_new_tokens=100, do_sample=True, temperature=0.3,)
+print(tokenizer.decode(outputs[0]))
 ```
 
-### Distributed Generation with Tensor Parallelism
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
-
-# load the tokenizer and the model
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    device_map="auto",
-    dtype=torch.bfloat16,
-    tp_plan="auto",
-)
-
-# prepare the model input
-inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
-prompt = "Hey, are you conscious? Can you talk to me?"
-messages = [
-    {"role": "user", "content": prompt}
-]
-text = tokenizer.apply_chat_template(
-    messages,
-    tokenize=False,
-    add_generation_prompt=True
-)
-model_inputs = tokenizer([text], add_special_tokens=False, return_tensors="pt").to(model.device)
-
-# conduct text completion
-generated_ids = model.generate(
-    **model_inputs,
-    max_new_tokens=32,
-)
-output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
-
-# decode the generated ids
-generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
-```
-
-### Quantization with Bitsandbytes
-
-```python
-import torch
-from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer
-
-model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
-
-# load the tokenizer and the model
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    device_map="auto",
-    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-)
-
-# prepare the model input
-inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
-prompt = "Hey, are you conscious? Can you talk to me?"
-messages = [
-    {"role": "user", "content": prompt}
-]
-text = tokenizer.apply_chat_template(
-    messages,
-    tokenize=False,
-    add_generation_prompt=True
-)
-model_inputs = tokenizer([text], add_special_tokens=False, return_tensors="pt").to(model.device)
-
-# conduct text completion
-generated_ids = model.generate(
-    **model_inputs,
-    max_new_tokens=32,
-)
-output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
-
-# decode the generated ids
-generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
-```
-
-This model was contributed by [Anton Vlasjuk](https://huggingface.co/AntonV).
-The original code can be found [here](https://github.com/PaddlePaddle/ERNIE).
+</hfoption>
+</hfoptions>
 
 ## Ernie4_5_MoeConfig
 

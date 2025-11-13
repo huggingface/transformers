@@ -13,52 +13,58 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-10-12 and added to Hugging Face Transformers on 2021-10-26.*
+*This model was released on 2021-10-12 and added to Hugging Face Transformers on 2021-10-26 and contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # UniSpeech-SAT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[UniSpeech-SAT](https://huggingface.co/papers/2110.05752) enhances self-supervised learning for speaker representation by integrating multi-task learning with utterance-wise contrastive loss and an utterance mixing strategy for data augmentation. These methods are incorporated into the HuBERT framework, achieving state-of-the-art performance on the SUPERB benchmark, particularly for speaker identification tasks. Scaling up the training dataset to 94 thousand hours of public audio data further improves performance across all SUPERB tasks.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The UniSpeech-SAT model was proposed in [UniSpeech-SAT: Universal Speech Representation Learning with Speaker Aware
-Pre-Training](https://huggingface.co/papers/2110.05752) by Sanyuan Chen, Yu Wu, Chengyi Wang, Zhengyang Chen, Zhuo Chen,
-Shujie Liu, Jian Wu, Yao Qian, Furu Wei, Jinyu Li, Xiangzhan Yu .
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="automatic-speech-recognition", model="microsoft/unispeech-sat-base-100h-libri-ft", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+```
 
-*Self-supervised learning (SSL) is a long-standing goal for speech processing, since it utilizes large-scale unlabeled
-data and avoids extensive human labeling. Recent years witness great successes in applying self-supervised learning in
-speech recognition, while limited exploration was attempted in applying SSL for modeling speaker characteristics. In
-this paper, we aim to improve the existing SSL framework for speaker representation learning. Two methods are
-introduced for enhancing the unsupervised speaker information extraction. First, we apply the multi-task learning to
-the current SSL framework, where we integrate the utterance-wise contrastive loss with the SSL objective function.
-Second, for better speaker discrimination, we propose an utterance mixing strategy for data augmentation, where
-additional overlapped utterances are created unsupervisedly and incorporate during training. We integrate the proposed
-methods into the HuBERT framework. Experiment results on SUPERB benchmark show that the proposed system achieves
-state-of-the-art performance in universal representation learning, especially for speaker identification oriented
-tasks. An ablation study is performed verifying the efficacy of each proposed method. Finally, we scale up training
-dataset to 94 thousand hours public audio data and achieve further performance improvement in all SUPERB tasks.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The Authors' code can be
-found [here](https://github.com/microsoft/UniSpeech/tree/main/UniSpeech-SAT).
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, AutoModelForCTC
+
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
+
+processor = AutoProcessor.from_pretrained("microsoft/unispeech-sat-base-100h-libri-ft")
+model = AutoModelForCTC.from_pretrained("microsoft/unispeech-sat-base-100h-libri-ft", dtype="auto")
+
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- UniSpeechSat is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
-  Please use [`Wav2Vec2Processor`] for the feature extraction.
-- UniSpeechSat model can be fine-tuned using connectionist temporal classification (CTC) so the model output has to be
-  decoded using [`Wav2Vec2CTCTokenizer`].
-- UniSpeechSat performs especially well on speaker verification, speaker identification, and speaker diarization tasks.
-
-## Resources
-
-- [Audio classification task guide](../tasks/audio_classification)
-- [Automatic speech recognition task guide](../tasks/asr)
+- UniSpeech accepts raw speech waveforms as float arrays. Use `Wav2Vec2Processor` for feature extraction.
+- [`UniSpeech`] models fine-tune using connectionist temporal classification (CTC). Decode model outputs with [`Wav2Vec2CTCTokenizer`].
 
 ## UniSpeechSatConfig
 
@@ -97,3 +103,4 @@ found [here](https://github.com/microsoft/UniSpeech/tree/main/UniSpeech-SAT).
 
 [[autodoc]] UniSpeechSatForPreTraining
     - forward
+

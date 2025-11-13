@@ -13,67 +13,58 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-04-06 and added to Hugging Face Transformers on 2024-02-26.*
+*This model was released on 2023-04-06 and added to Hugging Face Transformers on 2024-02-26 and contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco).*
 
 # SegGPT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[SegGPT](https://huggingface.co/papers/2304.03284) is a generalist model designed for segmenting various elements in context using a decoder-only Transformer. It generates segmentation masks from input images, prompt images, and their corresponding prompt masks. SegGPT achieves high accuracy with 56.1 mIoU on COCO-20 and 85.6 mIoU on FSS-1000. The model is trained as an in-context coloring problem with random color mapping, enabling it to handle diverse segmentation tasks such as object instance, stuff, part, contour, and text segmentation. It is evaluated on tasks including few-shot semantic segmentation, video object segmentation, semantic segmentation, and panoptic segmentation, demonstrating strong capabilities in both in-domain and out-of-domain scenarios.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="SegGptForImageSegmentation">
 
-The SegGPT model was proposed in [SegGPT: Segmenting Everything In Context](https://huggingface.co/papers/2304.03284) by Xinlong Wang, Xiaosong Zhang, Yue Cao, Wen Wang, Chunhua Shen, Tiejun Huang. SegGPT employs a decoder-only Transformer that can generate a segmentation mask given an input image, a prompt image and its corresponding prompt mask. The model achieves remarkable one-shot results with 56.1 mIoU on COCO-20 and 85.6 mIoU on FSS-1000.
-
-The abstract from the paper is the following:
-
-*We present SegGPT, a generalist model for segmenting everything in context. We unify various segmentation tasks into a generalist in-context learning framework that accommodates different kinds of segmentation data by transforming them into the same format of images. The training of SegGPT is formulated as an in-context coloring problem with random color mapping for each data sample. The objective is to accomplish diverse tasks according to the context, rather than relying on specific colors. After training, SegGPT can perform arbitrary segmentation tasks in images or videos via in-context inference, such as object instance, stuff, part, contour, and text. SegGPT is evaluated on a broad range of tasks, including few-shot semantic segmentation, video object segmentation, semantic segmentation, and panoptic segmentation. Our results show strong capabilities in segmenting in-domain and out-of*
-
-Tips:
-
-- One can use [`SegGptImageProcessor`] to prepare image input, prompt and mask to the model.
-- One can either use segmentation maps or RGB images as prompt masks. If using the latter make sure to set `do_convert_rgb=False` in the `preprocess` method.
-- It's highly advisable to pass `num_labels` when using `segmentation_maps` (not considering background) during preprocessing and postprocessing with [`SegGptImageProcessor`] for your use case.
-- When doing inference with [`SegGptForImageSegmentation`] if your `batch_size` is greater than 1 you can use feature ensemble across your images by passing `feature_ensemble=True` in the forward method.
-
-Here's how to use the model for one-shot semantic segmentation:
-
-```python
+```py
 import torch
-from datasets import load_dataset
-from transformers import SegGptImageProcessor, SegGptForImageSegmentation
+import requests
+import matplotlib.pyplot as plt
+from PIL import Image
+from transformers import SegGptForImageSegmentation, SegGptImageProcessor
 
-checkpoint = "BAAI/seggpt-vit-large"
-image_processor = SegGptImageProcessor.from_pretrained(checkpoint)
-model = SegGptForImageSegmentation.from_pretrained(checkpoint)
+image_input_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
+image_prompt_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1.jpg"
+mask_prompt_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1_target.png"
 
-dataset_id = "EduardoPacheco/FoodSeg103"
-ds = load_dataset(dataset_id, split="train")
-# Number of labels in FoodSeg103 (not including background)
-num_labels = 103
+image_input = Image.open(requests.get(image_input_url, stream=True).raw)
+image_prompt = Image.open(requests.get(image_prompt_url, stream=True).raw)
+mask_prompt = Image.open(requests.get(mask_prompt_url, stream=True).raw).convert("L")
 
-image_input = ds[4]["image"]
-ground_truth = ds[4]["label"]
-image_prompt = ds[29]["image"]
-mask_prompt = ds[29]["label"]
+processor = SegGptImageProcessor.from_pretrained("BAAI/seggpt-vit-large")
+model = SegGptForImageSegmentation.from_pretrained("BAAI/seggpt-vit-large", dtype="auto")
 
-inputs = image_processor(
-    images=image_input, 
-    prompt_images=image_prompt,
-    segmentation_maps=mask_prompt, 
-    num_labels=num_labels,
-    return_tensors="pt"
-)
+inputs = processor(images=image_input, prompt_images=image_prompt, prompt_masks=mask_prompt, return_tensors="pt")
 
-with torch.no_grad():
+with torch.inference_mode():
     outputs = model(**inputs)
 
-target_sizes = [image_input.size[::-1]]
-mask = image_processor.post_process_semantic_segmentation(outputs, target_sizes, num_labels=num_labels)[0]
+target_sizes = [(image_input.height, image_input.width)]
+outputs = processor.post_process_semantic_segmentation(
+    outputs,
+    target_sizes=target_sizes,
+)
+
+plt.imshow(outputs[0])
+plt.axis("off")
+plt.show()
 ```
 
-This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco).
-The original code can be found [here]([(https://github.com/baaivision/Painter/tree/main)).
+</hfoption>
+</hfoptions>
+
+## Usage tips
+
+- Use [`SegGptImageProcessor`] to prepare image input, prompt, and mask for the model.
+- Use segmentation maps or RGB images as prompt masks. If using RGB images, set `do_convert_rgb=False` in the preprocess method.
+- Pass `num_labels` when using segmentation maps (excluding background) during preprocessing and postprocessing with [`SegGptImageProcessor`] for your use case.
+- When doing inference with [`SegGptForImageSegmentation`], if your batch size is greater than 1, use feature ensemble across images by passing `feature_ensemble=True` in the forward method.
 
 ## SegGptConfig
 
@@ -94,3 +85,4 @@ The original code can be found [here]([(https://github.com/baaivision/Painter/tr
 
 [[autodoc]] SegGptForImageSegmentation
     - forward
+

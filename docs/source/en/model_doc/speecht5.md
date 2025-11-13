@@ -13,23 +13,44 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-10-14 and added to Hugging Face Transformers on 2023-02-03.*
+*This model was released on 2021-10-14 and added to Hugging Face Transformers on 2023-02-03 and contributed by [Matthijs](https://huggingface.co/Matthijs).*
 
 # SpeechT5
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[SpeechT5](https://huggingface.co/papers/2110.07205) proposes a unified-modal framework that applies encoder-decoder pre-training for self-supervised learning of speech and text representations. The framework includes a shared encoder-decoder network and modal-specific pre/post-nets. It preprocesses speech and text inputs, models sequence-to-sequence transformations, and generates outputs in the respective modality. Using large-scale unlabeled data, SpeechT5 learns a unified representation to enhance modeling capabilities for both speech and text. A cross-modal vector quantization approach aligns textual and speech information in a unified semantic space. Evaluations demonstrate SpeechT5's effectiveness across tasks such as automatic speech recognition, speech synthesis, speech translation, voice conversion, speech enhancement, and speaker identification.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The SpeechT5 model was proposed in [SpeechT5: Unified-Modal Encoder-Decoder Pre-Training for Spoken Language Processing](https://huggingface.co/papers/2110.07205) by Junyi Ao, Rui Wang, Long Zhou, Chengyi Wang, Shuo Ren, Yu Wu, Shujie Liu, Tom Ko, Qing Li, Yu Zhang, Zhihua Wei, Yao Qian, Jinyu Li, Furu Wei.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="automatic-speech-recognition", model="microsoft/speecht5_asr", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+```
 
-*Motivated by the success of T5 (Text-To-Text Transfer Transformer) in pre-trained natural language processing models, we propose a unified-modal SpeechT5 framework that explores the encoder-decoder pre-training for self-supervised speech/text representation learning. The SpeechT5 framework consists of a shared encoder-decoder network and six modal-specific (speech/text) pre/post-nets. After preprocessing the input speech/text through the pre-nets, the shared encoder-decoder network models the sequence-to-sequence transformation, and then the post-nets generate the output in the speech/text modality based on the output of the decoder. Leveraging large-scale unlabeled speech and text data, we pre-train SpeechT5 to learn a unified-modal representation, hoping to improve the modeling capability for both speech and text. To align the textual and speech information into this unified semantic space, we propose a cross-modal vector quantization approach that randomly mixes up speech/text states with latent units as the interface between encoder and decoder. Extensive evaluations show the superiority of the proposed SpeechT5 framework on a wide variety of spoken language processing tasks, including automatic speech recognition, speech synthesis, speech translation, voice conversion, speech enhancement, and speaker identification.*
+</hfoption>
+<hfoption id="SpeechT5ForSpeechToText">
 
-This model was contributed by [Matthijs](https://huggingface.co/Matthijs). The original code can be found [here](https://github.com/microsoft/SpeechT5).
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, SpeechT5ForSpeechToText
+
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
+
+processor = AutoProcessor.from_pretrained("microsoft/speecht5_asr")
+model = SpeechT5ForSpeechToText.from_pretrained("microsoft/speecht5_asr", dtype="auto")
+
+inputs = processor(audio=dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+predicted_ids = model.generate(**inputs, max_length=100)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## SpeechT5Config
 
@@ -88,3 +109,4 @@ This model was contributed by [Matthijs](https://huggingface.co/Matthijs). The o
 
 [[autodoc]] SpeechT5HifiGan
     - forward
+

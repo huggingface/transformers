@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-02-26 and added to Hugging Face Transformers on 2021-05-12.*
+*This model was released on 2021-02-26 and added to Hugging Face Transformers on 2021-05-12 and contributed by [valhalla](https://huggingface.co/valhalla).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -25,14 +24,7 @@ rendered properly in your Markdown viewer.
 
 # CLIP
 
-[CLIP](https://huggingface.co/papers/2103.00020) is a is a multimodal vision and language model motivated by overcoming the fixed number of object categories when training a computer vision model. CLIP learns about images directly from raw text by jointly training on 400M (image, text) pairs. Pretraining on this scale enables zero-shot transfer to downstream tasks. CLIP uses an image encoder and text encoder to get visual features and text features. Both features are projected to a latent space with the same number of dimensions and their dot product gives a similarity score.
-
-You can find all the original CLIP checkpoints under the [OpenAI](https://huggingface.co/openai?search_models=clip) organization.
-
-> [!TIP]
-> Click on the CLIP models in the right sidebar for more examples of how to apply CLIP to different image and language tasks.
-
-The example below demonstrates how to calculate similarity scores between multiple text descriptions and an image with [`Pipeline`] or the [`AutoModel`] class.
+[CLIP](https://huggingface.co/papers/2103.00020) is a neural network trained on 400 million (image, text) pairs from the internet. It learns to predict which caption corresponds to which image, enabling zero-shot transfer to various computer vision tasks. Benchmarked on over 30 datasets, CLIP demonstrates competitive performance without task-specific training, matching ResNet-50's accuracy on ImageNet zero-shot without using its training examples.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -41,48 +33,52 @@ The example below demonstrates how to calculate similarity scores between multip
 import torch
 from transformers import pipeline
 
-clip = pipeline(
-   task="zero-shot-image-classification",
-   model="openai/clip-vit-base-patch32",
-   dtype=torch.bfloat16,
-   device=0
-)
-labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
-clip("http://images.cocodataset.org/val2017/000000039769.jpg", candidate_labels=labels)
+pipeline = pipeline(task="zero-shot-image-classification", model="openai/clip-vit-base-patch32", dtype="auto")
+candidate_labels = ["a photo of a dog", "a photo of a cat", "a photo of a person"]
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", candidate_labels=candidate_labels)
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
-import requests
 import torch
+import requests
 from PIL import Image
-from transformers import AutoProcessor, AutoModel
+from transformers import AutoProcessor, AutoModelForZeroShotImageClassification
 
-model = AutoModel.from_pretrained("openai/clip-vit-base-patch32", dtype=torch.bfloat16, attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
+model = AutoModelForZeroShotImageClassification.from_pretrained("openai/clip-vit-base-patch32", dtype="auto")
 
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
-labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = requests.get(url, stream=True)
+inputs = Image.open(image.raw).convert("RGB")
 
-inputs = processor(text=labels, images=image, return_tensors="pt", padding=True)
+image_inputs = processor(images=inputs, return_tensors="pt").to(model.device)
+with torch.no_grad():
+    image_embeds = model.get_image_features(**image_inputs)
 
-outputs = model(**inputs)
-logits_per_image = outputs.logits_per_image
-probs = logits_per_image.softmax(dim=1)
-most_likely_idx = probs.argmax(dim=1).item()
-most_likely_label = labels[most_likely_idx]
-print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_likely_idx].item():.3f}")
+candidate_labels = ["a photo of a dog", "a photo of a cat", "a photo of a person"]
+text_inputs = processor(text=candidate_labels, padding=True, return_tensors="pt").to(model.device)
+with torch.no_grad():
+    text_embeds = model.get_text_features(**text_inputs)
+
+image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
+text_embeds  = text_embeds  / text_embeds.norm(p=2, dim=-1, keepdim=True)
+
+logits = (image_embeds @ text_embeds.T) * 100.0
+probs  = logits.softmax(dim=-1).cpu().squeeze()
+
+for label, score in zip(candidate_labels, probs):
+    print(f"{label:20s} → {score.item():.4f}")
 ```
 
 </hfoption>
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- Use [`CLIPImageProcessor`] to resize (or rescale) and normalizes images for the model.
+- Use [`CLIPImageProcessor`] to resize and normalize images for the model.
 
 ## CLIPConfig
 
@@ -153,3 +149,4 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 
 [[autodoc]] CLIPForImageClassification
     - forward
+

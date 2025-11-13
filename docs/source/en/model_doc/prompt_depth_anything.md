@@ -17,68 +17,47 @@ rendered properly in your Markdown viewer.
 
 # Prompt Depth Anything
 
-## Overview
+[Prompt Depth Anything](https://huggingface.co/papers/2412.14015) introduces prompting into depth foundation models, enabling accurate metric depth estimation up to 4K resolution. This model uses low-cost LiDAR as a prompt integrated at multiple scales within the depth decoder. To overcome training challenges with limited datasets, it employs a scalable data pipeline featuring synthetic LiDAR simulation and real data pseudo GT depth generation. The approach achieves state-of-the-art results on ARKitScenes and ScanNet++ datasets and enhances applications like 3D reconstruction and robotic grasping.
 
-The Prompt Depth Anything model was introduced in [Prompting Depth Anything for 4K Resolution Accurate Metric Depth Estimation](https://huggingface.co/papers/2412.14015) by Haotong Lin, Sida Peng, Jingxiao Chen, Songyou Peng, Jiaming Sun, Minghuan Liu, Hujun Bao, Jiashi Feng, Xiaowei Zhou, Bingyi Kang.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is as follows:
-
-*Prompts play a critical role in unleashing the power of language and vision foundation models for specific tasks. For the first time, we introduce prompting into depth foundation models, creating a new paradigm for metric depth estimation termed Prompt Depth Anything. Specifically, we use a low-cost LiDAR as the prompt to guide the Depth Anything model for accurate metric depth output, achieving up to 4K resolution. Our approach centers on a concise prompt fusion design that integrates the LiDAR at multiple scales within the depth decoder. To address training challenges posed by limited datasets containing both LiDAR depth and precise GT depth, we propose a scalable data pipeline that includes synthetic data LiDAR simulation and real data pseudo GT depth generation. Our approach sets new state-of-the-arts on the ARKitScenes and ScanNet++ datasets and benefits downstream applications, including 3D reconstruction and generalized robotic grasping.*
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/prompt_depth_anything_architecture.jpg"
-alt="drawing" width="600"/>
-
-<small> Prompt Depth Anything overview. Taken from the <a href="https://huggingface.co/papers/2412.14015">original paper</a>.</small>
-
-## Usage example
-
-The Transformers library allows you to use the model with just a few lines of code:
-
-```python
->>> import torch
->>> import requests
->>> import numpy as np
-
->>> from PIL import Image
->>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
-
->>> url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
->>> image = Image.open(requests.get(url, stream=True).raw)
-
->>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
->>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
-
->>> prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
->>> prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
->>> # the prompt depth can be None, and the model will output a monocular relative depth.
-
->>> # prepare image for the model
->>> inputs = image_processor(images=image, return_tensors="pt", prompt_depth=prompt_depth)
-
->>> with torch.no_grad():
-...     outputs = model(**inputs)
-
->>> # interpolate to original size
->>> post_processed_output = image_processor.post_process_depth_estimation(
-...     outputs,
-...     target_sizes=[(image.height, image.width)],
-... )
-
->>> # visualize the prediction
->>> predicted_depth = post_processed_output[0]["predicted_depth"]
->>> depth = predicted_depth * 1000 
->>> depth = depth.detach().cpu().numpy()
->>> depth = Image.fromarray(depth.astype("uint16")) # mm
+pipeline = pipeline(task="depth-estimation", model="depth-anything/prompt-depth-anything-vits-hf", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
-## Resources
+</hfoption>
+<hfoption id="AutoModel">
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Prompt Depth Anything.
+```python
+import torch
+import requests
+import numpy as np
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
-- [Prompt Depth Anything Demo](https://huggingface.co/spaces/depth-anything/PromptDA)
-- [Prompt Depth Anything Interactive Results](https://promptda.github.io/interactive.html)
+image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
+model = AutoModelForDepthEstimation.from_pretrained("depth-anything/prompt-depth-anything-vits-hf", dtype="auto")
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = image_processor(images=image, return_tensors="pt")
 
-If you are interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+with torch.no_grad():
+    outputs = model(**inputs)
+
+post_processed_output = image_processor.post_process_depth_estimation(
+    outputs,
+    target_sizes=[(image.height, image.width)],
+)
+predicted_depth = post_processed_output[0]["predicted_depth"]
+depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+depth = depth.detach().cpu().numpy() * 255
+Image.fromarray(depth.astype("uint8"))
+```
+
+</hfoption>
+</hfoptions>
 
 ## PromptDepthAnythingConfig
 

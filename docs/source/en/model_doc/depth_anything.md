@@ -13,24 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-01-19 and added to Hugging Face Transformers on 2024-01-25.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
-
+*This model was released on 2024-01-19 and added to Hugging Face Transformers on 2024-01-25 and contributed by [nielsr](https://huggingface.co/nielsr).*
 # Depth Anything
 
-[Depth Anything](https://huggingface.co/papers/2401.10891) is designed to be a foundation model for monocular depth estimation (MDE). It is jointly trained on labeled and ~62M unlabeled images to enhance the dataset. It uses a pretrained [DINOv2](./dinov2) model as an image encoder to inherit its existing rich semantic priors, and [DPT](./dpt) as the decoder. A teacher model is trained on unlabeled images to create pseudo-labels. The student model is trained on a combination of the pseudo-labels and labeled images. To improve the student model's performance, strong perturbations are added to the unlabeled images to challenge the student model to learn more visual knowledge from the image.
-
-You can find all the original Depth Anything checkpoints under the [Depth Anything](https://huggingface.co/collections/LiheYoung/depth-anything-release-65b317de04eec72abf6b55aa) collection.
-
-> [!TIP]
-> Click on the Depth Anything models in the right sidebar for more examples of how to apply Depth Anything to different vision tasks.
-
-The example below demonstrates how to obtain a depth map with [`Pipeline`] or the [`AutoModel`] class.
+[Depth Anything](https://huggingface.co/papers/2401.10891) is a robust monocular depth estimation model based on the DPT architecture. Trained on approximately 62 million images, it achieves state-of-the-art results in both relative and absolute depth estimation. The model leverages large-scale unlabeled data, enhanced by data augmentation and auxiliary supervision from pre-trained encoders, to improve generalization and robustness. Extensive zero-shot evaluations on six public datasets and random photos demonstrate its impressive capabilities, and fine-tuning with metric depth information from NYUv2 and KITTI sets new benchmarks. Additionally, the improved depth model enhances depth-conditioned ControlNet performance.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -39,14 +25,14 @@ The example below demonstrates how to obtain a depth map with [`Pipeline`] or th
 import torch
 from transformers import pipeline
 
-pipe = pipeline(task="depth-estimation", model="LiheYoung/depth-anything-base-hf", dtype=torch.bfloat16, device=0)
-pipe("http://images.cocodataset.org/val2017/000000039769.jpg")["depth"]
+pipeline = pipeline(task="depth-estimation", model="LiheYoung/depth-anything-base-hf", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
 import requests
 import numpy as np
@@ -54,8 +40,8 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
 image_processor = AutoImageProcessor.from_pretrained("LiheYoung/depth-anything-base-hf")
-model = AutoModelForDepthEstimation.from_pretrained("LiheYoung/depth-anything-base-hf", dtype=torch.bfloat16)
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+model = AutoModelForDepthEstimation.from_pretrained("LiheYoung/depth-anything-base-hf", dtype="auto")
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 inputs = image_processor(images=image, return_tensors="pt")
 
@@ -75,10 +61,6 @@ Image.fromarray(depth.astype("uint8"))
 </hfoption>
 </hfoptions>
 
-## Notes
-
-- [DepthAnythingV2](./depth_anything_v2), released in June 2024, uses the same architecture as Depth Anything and is compatible with all code examples and existing workflows. It uses synthetic data and a larger capacity teacher model to achieve much finer and robust depth predictions.
-
 ## DepthAnythingConfig
 
 [[autodoc]] DepthAnythingConfig
@@ -87,3 +69,4 @@ Image.fromarray(depth.astype("uint8"))
 
 [[autodoc]] DepthAnythingForDepthEstimation
     - forward
+

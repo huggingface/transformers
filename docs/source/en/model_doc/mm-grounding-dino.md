@@ -15,59 +15,46 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2024-01-04 and added to Hugging Face Transformers on 2025-08-01.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
-
 # MM Grounding DINO
 
-[MM Grounding DINO](https://huggingface.co/papers/2401.02361) model was proposed in [An Open and Comprehensive Pipeline for Unified Object Grounding and Detection](https://huggingface.co/papers/2401.02361) by Xiangyu Zhao, Yicheng Chen, Shilin Xu, Xiangtai Li, Xinjiang Wang, Yining Li, Haian Huang>.
-
-MM Grounding DINO improves upon the [Grounding DINO](https://huggingface.co/docs/transformers/model_doc/grounding-dino) by improving the contrastive class head and removing the parameter sharing in the decoder, improving zero-shot detection performance on both COCO (50.6(+2.2) AP) and LVIS (31.9(+11.8) val AP and 41.4(+12.6) minival AP).
-
-You can find all the original MM Grounding DINO checkpoints under the [MM Grounding DINO](https://huggingface.co/collections/openmmlab-community/mm-grounding-dino-688cbde05b814c4e2832f9df) collection. This model also supports LLMDet inference. You can find LLMDet checkpoints under the [LLMDet](https://huggingface.co/collections/iSEE-Laboratory/llmdet-688475906dc235d5f1dc678e) collection.
-
-> [!TIP]
-> Click on the MM Grounding DINO models in the right sidebar for more examples of how to apply MM Grounding DINO to different MM Grounding DINO tasks.
-
-The example below demonstrates how to generate text based on an image with the [`AutoModelForZeroShotObjectDetection`] class.
+[MM Grounding DINO](https://huggingface.co/papers/2401.02361) is an open-source implementation of the Grounding-DINO model, designed for tasks like Open-Vocabulary Detection, Phrase Grounding, and Referring Expression Comprehension. It is built on the MMDetection framework and uses large-scale vision datasets for pre-training, followed by fine-tuning on specialized detection and grounding datasets. The model provides detailed reproducible settings and analysis, and experiments show that MM-Grounding-DINO-Tiny surpasses the original Grounding-DINO-Tiny in performance. All code and trained models are publicly available for research and downstream applications.
 
 <hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="zero-shot-object-detection", model="openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", candidate_labels=["cat", "couch"])
+```
+
+</hfoption>
 <hfoption id="AutoModel">
 
 ```py
 import torch
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
-from accelerate import Accelerator
 from transformers.image_utils import load_image
 
+processor = AutoProcessor.from_pretrained("openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det")
+model = AutoModelForZeroShotObjectDetection.from_pretrained("openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det", dtype="auto")
 
-# Prepare processor and model
-model_id = "openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det"
-device = Accelerator().device
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
-
-# Prepare inputs
-image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = load_image(image_url)
 text_labels = [["a cat", "a remote control"]]
 inputs = processor(images=image, text=text_labels, return_tensors="pt").to(device)
 
-# Run inference
 with torch.no_grad():
     outputs = model(**inputs)
 
-# Postprocess outputs
 results = processor.post_process_grounded_object_detection(
     outputs,
     threshold=0.4,
     target_sizes=[(image.height, image.width)]
 )
 
-# Retrieve the first image result
 result = results[0]
 for box, score, labels in zip(result["boxes"], result["scores"], result["labels"]):
     box = [round(x, 2) for x in box.tolist()]
@@ -122,3 +109,11 @@ for box, score, labels in zip(result["boxes"], result["scores"], result["labels"
 
 [[autodoc]] MMGroundingDinoForObjectDetection
     - forward
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="zero-shot-object-detection", model="openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det", dtype="auto")
+pipeline("path/to/image.png", ["a cat", "a dog"])
+```

@@ -13,66 +13,56 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-05-02 and added to Hugging Face Transformers on 2025-05-05.*
+*This model was released on 2025-05-02 and added to Hugging Face Transformers on 2025-05-05 and contributed by [SukritiSharma](https://huggingface.co/SukritiSharma) and [abrooks9944](https://huggingface.co/abrooks9944).*
 
 # GraniteMoeHybrid
 
-## Overview
+[GraniteMoeHybrid](https://www.ibm.com/new/announcements/ibm-granite-4-0-tiny-preview-sneak-peek) is the smallest upcoming model in the Granite 4.0 family, designed for extreme efficiency on consumer-grade GPUs. It uses a new hybrid Mamba-2/Transformer mixture-of-experts (MoE) architecture with 7B total parameters but only 1B active during inference, enabling reduced memory use while supporting long contexts up to 128K tokens. Despite being only partially trained on 2.5T tokens (of a planned 15T+), it already matches Granite 3.3 2B Instruct and is expected to rival the 8B model after full training. The model is open-sourced on Hugging Face under Apache 2.0 and optimized for concurrent sessions on affordable hardware, making large-context LLM experimentation more accessible.
 
-The [GraniteMoeHybrid](https://www.ibm.com/new/announcements/ibm-granite-4-0-tiny-preview-sneak-peek) model builds on top of GraniteMoeSharedModel and Bamba. Its decoding layers consist of state space layers or MoE attention layers with shared experts. By default, the attention layers do not use positional encoding.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
+```py
+import torch
+from transformers import pipeline
 
-model_path = "ibm-granite/granite-4.0-tiny-preview"
-tokenizer = AutoTokenizer.from_pretrained(model_path)
-
-# drop device_map if running on CPU
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
-model.eval()
-
-# change input text as desired
-prompt = "Write a code to find the maximum value in a list of numbers."
-
-# tokenize the text
-input_tokens = tokenizer(prompt, return_tensors="pt")
-# generate output tokens
-output = model.generate(**input_tokens, max_new_tokens=100)
-# decode output tokens into text
-output = tokenizer.batch_decode(output)
-# loop over the batch to print, in this example the batch size is 1
-for i in output:
-    print(i)
+pipeline = pipeline(task="text-generation", model="ibm-granite/granite-4.0-tiny-preview", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
 ```
 
-This HF implementation is contributed by [Sukriti Sharma](https://huggingface.co/SukritiSharma) and [Alexander Brooks](https://huggingface.co/abrooks9944).
+</hfoption>
+<hfoption id="AutoModel">
 
-## Notes
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-- `GraniteMoeHybridForCausalLM` supports padding-free training which concatenates distinct training examples while still processing inputs as separate batches. It can significantly accelerate inference by [~2x](https://github.com/huggingface/transformers/pull/35861#issue-2807873129) (depending on model and data distribution) and reduce memory-usage if there are examples of varying lengths by avoiding unnecessary compute and memory overhead from padding tokens.
+tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-tiny-preview")
+model = AutoModelForCausalLM.from_pretrained("ibm-granite/granite-4.0-tiny-preview", dtype="auto",)
 
-  Padding-free training requires the `flash-attn`, `mamba-ssm`, and `causal-conv1d` packages and the following arguments must be passed to the model in addition to `input_ids` and `labels`.
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
 
-  - `position_ids: torch.LongTensor`: the position index of each token in each sequence.
-  - `seq_idx: torch.IntTensor`: the index of each sequence in the batch.
-  - Each of the [`FlashAttentionKwargs`]
-    - `cu_seq_lens_q: torch.LongTensor`: the cumulative sequence lengths of all queries.
-    - `cu_seq_lens_k: torch.LongTensor`: the cumulative sequence lengths of all keys.
-    - `max_length_q: int`: the longest query length in the batch.
-    - `max_length_k: int`: the longest key length in the batch.
+</hfoption>
+</hfoptions>
 
-  The `attention_mask` inputs should not be provided. The [`DataCollatorWithFlattening`] programmatically generates the set of additional arguments above using `return_seq_idx=True` and `return_flash_attn_kwargs=True`. See the [Improving Hugging Face Training Efficiency Through Packing with Flash Attention](https://huggingface.co/blog/packing-with-FA2) blog post for additional information.
+## Usage tips
 
-  ```python
-  from transformers import DataCollatorWithFlattening
+- [`GraniteMoeHybridForCausalLM`] supports padding-free training. This concatenates distinct training examples while processing inputs as separate batches. Expect ~2x inference acceleration (varies by model and data distribution). Memory usage drops when examples have varying lengths since you avoid padding token overhead.
 
-  # Example of using padding-free training
-  data_collator = DataCollatorWithFlattening(
-      tokenizer=tokenizer,
-      return_seq_idx=True,
-      return_flash_attn_kwargs=True
-  )
-  ```
+- Padding-free training requires the `flash-attn`, `mamba-ssm`, and `causal-conv1d` packages. Pass these arguments alongside `input_ids` and `labels`:
+
+  - `position_ids`: `torch.LongTensor` - position index of each token in each sequence
+  - `seq_idx`: `torch.IntTensor` - index of each sequence in the batch
+  - FlashAttentionKwargs:
+    - `cu_seq_lens_q`: `torch.LongTensor` - cumulative sequence lengths of all queries
+    - `cu_seq_lens_k`: `torch.LongTensor` - cumulative sequence lengths of all keys
+    - `max_length_q`: `int` - longest query length in the batch
+    - `max_length_k`: `int` - longest key length in the batch
+
+- Don't provide `attention_mask` inputs. The [`DataCollatorWithFlattening`] generates these arguments automatically when you set `return_seq_idx=True` and `return_flash_attn_kwargs=True`. See the [Improving Hugging Face Training Efficiency Through Packing with Flash Attention](https://huggingface.co/blog/packing-flash-attention) blog post for additional information.
 
 ## GraniteMoeHybridConfig
 

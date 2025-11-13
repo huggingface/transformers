@@ -13,25 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-10-23 and added to Hugging Face Transformers on 2020-11-27.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2020-10-23 and added to Hugging Face Transformers on 2020-11-27 and contributed by [moussakam](https://huggingface.co/moussakam).*
 
 # BARThez
 
-[BARThez](https://huggingface.co/papers/2010.12321) is a [BART](./bart) model designed for French language tasks. Unlike existing French BERT models, BARThez includes a pretrained encoder-decoder, allowing it to generate text as well. This model is also available as a multilingual variant, mBARThez, by continuing pretraining multilingual BART on a French corpus.
-
-You can find all of the original BARThez checkpoints under the [BARThez](https://huggingface.co/collections/dascim/barthez-670920b569a07aa53e3b6887) collection.
-
-> [!TIP]
-> This model was contributed by [moussakam](https://huggingface.co/moussakam).
-> Refer to the [BART](./bart) docs for more usage examples.
-
-The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
+[BARThez](https://huggingface.co/papers/2010.12321) is the first BART model for the French language, pretrained on a large monolingual French corpus. Unlike BERT-based models like CamemBERT and FlauBERT, BARThez includes both an encoder and a decoder pretrained, making it well-suited for generative tasks. Evaluated on the FLUE benchmark and a new summarization dataset, OrangeSum, BARThez demonstrates strong performance. Additionally, continuing the pretraining of multilingual BART on BARThez's corpus results in mBARTHez, which outperforms or matches CamemBERT and FlauBERT.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -40,13 +26,8 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="moussaKam/barthez",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("Les plantes produisent <mask> grâce à un processus appelé photosynthèse.")
+pipeline = pipeline("fill-mask", model="moussaKam/barthez", dtype="auto")
+pipeline("Les plantes créent <mask> grâce à un processus appelé photosynthèse.")
 ```
 
 </hfoption>
@@ -56,32 +37,15 @@ pipeline("Les plantes produisent <mask> grâce à un processus appelé photosynt
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "moussaKam/barthez",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "moussaKam/barthez",
-    dtype=torch.float16,
-    device_map="auto",
-)
-inputs = tokenizer("Les plantes produisent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt").to(model.device)
+model = AutoModelForMaskedLM.from_pretrained("moussaKam/barthez", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("moussaKam/barthez")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Les plantes produisent <mask> grâce à un processus appelé photosynthèse." | transformers run --task fill-mask --model moussaKam/barthez --device 0
+inputs = tokenizer("Les plantes créent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>

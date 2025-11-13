@@ -13,28 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2020-11-16.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2020-11-16 and contributed by [DeBERTa](https://huggingface.co/DeBERTa).*
 
 # DeBERTa
 
-[DeBERTa](https://huggingface.co/papers/2006.03654) improves the pretraining efficiency of BERT and RoBERTa with two key ideas, disentangled attention and an enhanced mask decoder. Instead of mixing everything together like BERT, DeBERTa separates a word's *content* from its *position* and processes them independently. This gives it a clearer sense of what's being said and where in the sentence it's happening.
-
-The enhanced mask decoder replaces the traditional softmax decoder to make better predictions.
-
-Even with less training data than RoBERTa, DeBERTa manages to outperform it on several benchmarks.
-
-You can find all the original DeBERTa checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=deberta) organization.
-
-> [!TIP]
-> Click on the DeBERTa models in the right sidebar for more examples of how to apply DeBERTa to different language tasks.
-
-The example below demonstrates how to classify text with [`Pipeline`], [`AutoModel`], and from the command line.
+[DeBERTa](https://huggingface.co/papers/2006.03654) improves upon BERT and RoBERTa through disentangled attention and an enhanced mask decoder. Disentangled attention uses separate vectors for content and position, computing attention weights with disentangled matrices. The enhanced mask decoder replaces the softmax layer for predicting masked tokens during pretraining. These techniques boost pretraining efficiency and downstream task performance, with DeBERTa outperforming RoBERTa-Large on MNLI, SQuAD v2.0, and RACE using half the training data.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -43,16 +26,8 @@ The example below demonstrates how to classify text with [`Pipeline`], [`AutoMod
 import torch
 from transformers import pipeline
 
-classifier = pipeline(
-    task="text-classification",
-    model="microsoft/deberta-base-mnli",
-    device=0,
-)
-
-classifier({
-    "text": "A soccer game with multiple people playing.",
-    "text_pair": "Some people are playing a sport."
-})
+pipeline = pipeline(task="fill-mask", model="microsoft/deberta-base", dtype="auto")
+pipeline("Plants create [MASK] through a process known as photosynthesis.")
 ```
 
 </hfoption>
@@ -60,42 +35,26 @@ classifier({
 
 ```py
 import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-model_name = "microsoft/deberta-base-mnli"
-tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-base-mnli")
-model = AutoModelForSequenceClassification.from_pretrained("microsoft/deberta-base-mnli", device_map="auto")
+model = AutoModelForMaskedLM.from_pretrained("microsoft/deberta-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-base")
 
-inputs = tokenizer(
-    "A soccer game with multiple people playing.",
-    "Some people are playing a sport.",
-    return_tensors="pt"
-).to(model.device)
-
-with torch.no_grad():
-    logits = model(**inputs).logits
-    predicted_class = logits.argmax().item()
-
-labels = ["contradiction", "neutral", "entailment"]
-print(f"The predicted relation is: {labels[predicted_class]}")
-
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "Some people are playing a sport."}' | transformers run --task text-classification --model microsoft/deberta-base-mnli --device 0
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- DeBERTa uses **relative position embeddings**, so it does not require **right-padding** like BERT.
-- For best results, use DeBERTa on sentence-level or sentence-pair classification tasks like MNLI, RTE, or SST-2.
-- If you're using DeBERTa for token-level tasks like masked language modeling, make sure to load a checkpoint specifically pretrained or fine-tuned for token-level tasks.
+- DeBERTa uses relative position embeddings. It doesn't require right-padding like BERT.
+- Use DeBERTa on sentence-level or sentence-pair classification tasks like MNLI, RTE, or SST-2 for best results.
+- For token-level tasks like masked language modeling, load a checkpoint specifically pretrained or fine-tuned for token-level tasks.
 
 ## DebertaConfig
 
@@ -143,3 +102,4 @@ echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "S
 
 [[autodoc]] DebertaForQuestionAnswering
     - forward
+

@@ -13,49 +13,54 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-01-30 and added to Hugging Face Transformers on 2023-02-09.*
+*This model was released on 2023-01-30 and added to Hugging Face Transformers on 2023-02-09 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # BLIP-2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[BLIP-2](https://huggingface.co/papers/2301.12597) bootstraps vision-language pre-training using frozen image encoders and large language models. It employs a lightweight, 12-layer Transformer encoder to bridge the modality gap, achieving state-of-the-art results on various vision-language tasks. Specifically, BLIP-2 surpasses Flamingo by 8.7% on zero-shot VQAv2 with 54x fewer trainable parameters. The model also demonstrates strong zero-shot image-to-text generation capabilities following natural language instructions.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The BLIP-2 model was proposed in [BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models](https://huggingface.co/papers/2301.12597) by
-Junnan Li, Dongxu Li, Silvio Savarese, Steven Hoi. BLIP-2 leverages frozen pre-trained image encoders and large language models (LLMs) by training a lightweight, 12-layer Transformer
-encoder in between them, achieving state-of-the-art performance on various vision-language tasks. Most notably, BLIP-2 improves upon [Flamingo](https://huggingface.co/papers/2204.14198), an 80 billion parameter model, by 8.7%
-on zero-shot VQAv2 with 54x fewer trainable parameters.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="visual-question-answering", model="Salesforce/blip2-opt-2.7b", dtype="auto")
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+pipeline(question="What is shown in this image?", image=url)
+```
 
-*The cost of vision-and-language pre-training has become increasingly prohibitive due to end-to-end training of large-scale models. This paper proposes BLIP-2, a generic and efficient pre-training strategy that bootstraps vision-language pre-training from off-the-shelf frozen pre-trained image encoders and frozen large language models. BLIP-2 bridges the modality gap with a lightweight Querying Transformer, which is pre-trained in two stages. The first stage bootstraps vision-language representation learning from a frozen image encoder. The second stage bootstraps vision-to-language generative learning from a frozen language model. BLIP-2 achieves state-of-the-art performance on various vision-language tasks, despite having significantly fewer trainable parameters than existing methods. For example, our model outperforms Flamingo80B by 8.7% on zero-shot VQAv2 with 54x fewer trainable parameters. We also demonstrate the model's emerging capabilities of zero-shot image-to-text generation that can follow natural language instructions.*
+</hfoption>
+<hfoption id="AutoModel">
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/blip2_architecture.jpg"
-alt="drawing" width="600"/>
+```py
+import requests
+import torch
+from PIL import Image
+from transformers import AutoProcessor, AutoModelForVisualQuestionAnswering
 
-<small> BLIP-2 architecture. Taken from the <a href="https://huggingface.co/papers/2301.12597">original paper.</a> </small>
+processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
+model = AutoModelForVisualQuestionAnswering.from_pretrained("Salesforce/blip2-opt-2.7b", dtype="auto")
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/salesforce/LAVIS/tree/5ee63d688ba4cebff63acee04adaef2dee9af207).
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+question = "Question: What is shown in this image? Answer:"
+inputs = processor(images=image, text=question, return_tensors="pt")
+
+output = model.generate(**inputs)
+print(processor.batch_decode(output, skip_special_tokens=True)[0])
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- BLIP-2 can be used for conditional text generation given an image and an optional text prompt. At inference time, it's recommended to use the [`generate`] method.
-- One can use [`Blip2Processor`] to prepare images for the model, and decode the predicted tokens ID's back to text.
-
-> [!NOTE]
-> BLIP models after release v4.46 will raise warnings about adding `processor.num_query_tokens = {{num_query_tokens}}` and expand model embeddings layer to add special `<image>` token. It is strongly recommended to add the attributes to the processor if you own the model checkpoint, or open a PR if it is not owned by you. Adding these attributes means that BLIP will add the number of query tokens required per image and expand the text with as many `<image>` placeholders as there will be query tokens. Usually it is around 500 tokens per image, so make sure that the text is not truncated as otherwise there will be failure when merging the embeddings.
-The attributes can be obtained from model config, as `model.config.num_query_tokens` and model embeddings expansion can be done by following [this link](https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042).
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with BLIP-2.
-
-- Demo notebooks for BLIP-2 for image captioning, visual question answering (VQA) and chat-like conversations can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/BLIP-2).
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+- BLIP-2 generates conditional text from images and optional text prompts. Use the [`generate`] method at inference time.
+- Use [`Blip2Processor`] to prepare images for the model and decode predicted token IDs back to text.
+- BLIP models after release v4.46 raise warnings about adding `processor.num_query_tokens = {{num_query_tokens}}` and expanding model embeddings to add special `<image>` tokens. Add these attributes to the processor if you own the model checkpoint, or open a PR if you don't. Adding these attributes means BLIP adds the required query tokens per image and expands text with `<image>` placeholders. Usually around 500 tokens per image, so ensure text isn't truncated to avoid embedding merge failures. Get attributes from `model.config.num_query_tokens` and expand model embeddings following this [link](https://huggingface.co/docs/transformers/model_doc/blip2#blip2processor).
 
 ## Blip2Config
 
@@ -109,3 +114,4 @@ If you're interested in submitting a resource to be included here, please feel f
 ## Blip2VisionModelWithProjection
 
 [[autodoc]] Blip2VisionModelWithProjection
+

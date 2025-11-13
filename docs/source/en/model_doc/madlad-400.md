@@ -13,61 +13,37 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-09-09 and added to Hugging Face Transformers on 2023-11-28.*
+*This model was released on 2023-09-09 and added to Hugging Face Transformers on 2023-11-28 and contributed by [jbochi](https://huggingface.co/jbochi).*
 
 # MADLAD-400
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[MADLAD-400](https://huggingface.co/papers/MADLAD-400%3A%20A%20Multilingual%20And%20Document-Level%20Large%20Audited%20Dataset) is a manually audited, 3T token monolingual dataset spanning 419 languages. It was used to train a 10.7B-parameter multilingual machine translation model on 250 billion tokens covering over 450 languages, demonstrating competitiveness with larger models across various domains. Additionally, an 8B-parameter language model was trained and evaluated for few-shot translation. The models are available for use without fine-tuning and support many low-resource languages.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-MADLAD-400 models were released in the paper [MADLAD-400: A Multilingual And Document-Level Large Audited Dataset](https://huggingface.co/papers/2309.04662).
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
-
-*We introduce MADLAD-400, a manually audited, general domain 3T token monolingual dataset based on CommonCrawl, spanning 419 languages. We discuss
-the limitations revealed by self-auditing MADLAD-400, and the role data auditing
-had in the dataset creation process. We then train and release a 10.7B-parameter
-multilingual machine translation model on 250 billion tokens covering over 450
-languages using publicly available data, and find that it is competitive with models
-that are significantly larger, and report the results on different domains. In addition, we train a 8B-parameter language model, and assess the results on few-shot
-translation. We make the baseline models 1
-available to the research community.*
-
-This model was added by [Juarez Bochi](https://huggingface.co/jbochi). The original checkpoints can be found [here](https://github.com/google-research/google-research/tree/master/madlad_400).
-
-This is a machine translation model that supports many low-resource languages, and that is competitive with models that are significantly larger.
-
-One can directly use MADLAD-400 weights without finetuning the model:
-
-```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
->>> model = AutoModelForSeq2SeqLM.from_pretrained("google/madlad400-3b-mt")
->>> tokenizer = AutoTokenizer.from_pretrained("google/madlad400-3b-mt")
-
->>> inputs = tokenizer("<2pt> I love pizza!", return_tensors="pt")
->>> outputs = model.generate(**inputs)
->>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['Eu amo pizza!']
+pipeline = pipeline(task="translation_en_to_fr", model="google/madlad400-3b-mt", dtype="auto")
+pipeline("<2fr> Plants create energy through a process known as photosynthesis.")
 ```
 
-Google has released the following variants:
+</hfoption>
+<hfoption id="AutoModel">
 
-- [google/madlad400-3b-mt](https://huggingface.co/google/madlad400-3b-mt)
+```py
+import torch
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-- [google/madlad400-7b-mt](https://huggingface.co/google/madlad400-7b-mt)
+model = AutoModelForSeq2SeqLM.from_pretrained("google/madlad400-3b-mt", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/madlad400-3b-mt")
 
-- [google/madlad400-7b-mt-bt](https://huggingface.co/google/madlad400-7b-mt-bt)
+inputs = tokenizer("<2fr> Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+generated_tokens = model.generate(**inputs)
+print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
+```
 
-- [google/madlad400-10b-mt](https://huggingface.co/google/madlad400-10b-mt)
-
-The original checkpoints can be found [here](https://github.com/google-research/google-research/tree/master/madlad_400).
-
-<Tip>
-
-Refer to [T5's documentation page](t5) for all API references, code examples, and notebooks. For more details regarding training and evaluation of the MADLAD-400, refer to the model card.
-
-</Tip>
+</hfoption>
+</hfoptions>

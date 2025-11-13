@@ -13,41 +13,53 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-10-11 and added to Hugging Face Transformers on 2022-05-17.*
+*This model was released on 2020-10-11 and added to Hugging Face Transformers on 2022-05-17 and contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).*
 
 # Wav2Vec2-Conformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Wav2Vec2-Conformer](https://huggingface.co/papers/2010.05171) is an extension of the fairseq framework for speech-to-text tasks, including end-to-end speech recognition and speech-to-text translation. It supports scalable, extensible workflows covering data preprocessing, model training, and both offline and online inference. The framework implements state-of-the-art RNN, Transformer, and Conformer architectures, with open-source training recipes provided. Additionally, fairseq’s existing machine translation and language models can be integrated for multi-task or transfer learning.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The Wav2Vec2-Conformer was added to an updated version of [fairseq S2T: Fast Speech-to-Text Modeling with fairseq](https://huggingface.co/papers/2010.05171) by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Sravya Popuri, Dmytro Okhonko, Juan Pino.
+```py
+import torch
+from transformers import pipeline
 
-The official results of the model can be found in Table 3 and Table 4 of the paper.
+pipeline = pipeline(task="automatic-speech-recognition", model="facebook/wav2vec2-conformer-rel-pos-large", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+```
 
-The Wav2Vec2-Conformer weights were released by the Meta AI team within the [Fairseq library](https://github.com/pytorch/fairseq/blob/main/examples/wav2vec/README.md#pre-trained-models).
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
-The original code can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/wav2vec).
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, AutoModelForCTC
 
-Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](https://huggingface.co/docs/transformers/en/model_doc/wav2vec2-bert) - it's pretrained on 4.5M hours of audio. We especially recommend using it for fine-tuning tasks, e.g. as per [this guide](https://huggingface.co/blog/fine-tune-w2v2-bert).
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
+
+processor = AutoProcessor.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
+model = AutoModelForCTC.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large", dtype="auto")
+
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- Wav2Vec2-Conformer follows the same architecture as Wav2Vec2, but replaces the *Attention*-block with a *Conformer*-block
-  as introduced in [Conformer: Convolution-augmented Transformer for Speech Recognition](https://huggingface.co/papers/2005.08100).
-- For the same number of layers, Wav2Vec2-Conformer requires more parameters than Wav2Vec2, but also yields
-an improved word error rate.
-- Wav2Vec2-Conformer uses the same tokenizer and feature extractor as Wav2Vec2.
-- Wav2Vec2-Conformer can use either no relative position embeddings, Transformer-XL-like position embeddings, or
-  rotary position embeddings by setting the correct `config.position_embeddings_type`.
-
-## Resources
-
-- [Audio classification task guide](../tasks/audio_classification)
-- [Automatic speech recognition task guide](../tasks/asr)
+- Wav2Vec2-Conformer follows the same architecture as Wav2Vec2 but replaces the Attention-block with a Conformer-block from "Conformer: Convolution-augmented Transformer for Speech Recognition."
+- For the same number of layers, Wav2Vec2-Conformer needs more parameters than Wav2Vec2 but delivers improved word error rates.
+- The model uses the same tokenizer and feature extractor as Wav2Vec2.
+- Configure position embeddings by setting `config.position_embeddings_type`. Options include no relative position embeddings, Transformer-XL-like embeddings, or rotary position embeddings.
 
 ## Wav2Vec2ConformerConfig
 

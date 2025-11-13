@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-06-11 and added to Hugging Face Transformers on 2025-06-11.*
+*This model was released on 2025-06-11 and added to Hugging Face Transformers on 2025-06-11 and contributed by [koustuvs](https://huggingface.co/koustuvs), [yonigozlan](https://huggingface.co/yonigozlan), and [qubvel-hf](https://huggingface.co/qubvel-hf).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     </div>
@@ -25,85 +24,34 @@ rendered properly in your Markdown viewer.
 
 # V-JEPA 2
 
-[V-JEPA 2](https://huggingface.co/papers/2506.09985) ([blog post](https://ai.meta.com/blog/v-jepa-2-world-model-benchmarks/)) is a self-supervised approach to training video encoders developed by FAIR, Meta. Using internet-scale video data, V-JEPA 2 attains state-of-the-art performance on motion understanding and human action anticipation tasks. V-JEPA 2-AC is a latent action-conditioned world model post-trained from V-JEPA 2 (using a small amount of robot trajectory interaction data) that solves robot manipulation tasks without environment-specific data collection or task-specific training or calibration.
+[V-JEPA 2](https://huggingface.co/papers/2506.09985) is a self-supervised model pre-trained on over 1 million hours of internet video to learn motion, prediction, and planning without action labels. It achieves strong benchmarks in motion understanding and human action anticipation, and when aligned with a large language model, it attains state-of-the-art performance on video question-answering at the 8-billion parameter scale. For robotics, a latent action-conditioned version, V-JEPA 2-AC, is post-trained on under 62 hours of unlabeled robot video and can perform zero-shot object manipulation on Franka arms without task-specific data or rewards. This demonstrates that combining large-scale visual data with minimal robot interaction enables a generalizable world model capable of planning and acting in physical environments.
 
-<div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vjepa.gif" alt="drawing" width="600"/>
-</div>
-
-You can find all original V-JEPA2 checkpoints under the [V-JEPA 2](https://huggingface.co/collections/facebook/v-jepa-2-6841bad8413014e185b497a6) collection.
-
-This model was contributed by [koustuvs](https://huggingface.co/koustuvs), [yonigozlan](https://huggingface.co/yonigozlan) and [qubvel](https://huggingface.co/qubvel-hf). The original code can be found [here](https://github.com/facebookresearch/vjepa2).
-
-## Usage example
-
-The snippet below shows how to load the V-JEPA 2 model for feature extraction using the `AutoModel` class.
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
 ```py
 import torch
-from torchcodec.decoders import VideoDecoder
 import numpy as np
+from torchcodec.decoders import VideoDecoder
+from transformers import AutoVideoProcessor, AutoModelForVideoClassification
 
 processor = AutoVideoProcessor.from_pretrained("facebook/vjepa2-vitl-fpc64-256")
-model = AutoModel.from_pretrained(
-    "facebook/vjepa2-vitl-fpc64-256",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
+model = AutoModelForVideoClassification.from_pretrained("facebook/vjepa2-vitl-fpc64-256", dtype="auto",)
 
 video_url = "https://huggingface.co/datasets/nateraw/kinetics-mini/resolve/main/val/archery/-Qz25rXdMjE_000014_000024.mp4"
 
 vr = VideoDecoder(video_url)
-frame_idx = np.arange(0, 64) # choosing some frames. here, you can define more complex sampling strategy
-video = vr.get_frames_at(indices=frame_idx).data  # T x C x H x W
+frame_idx = np.arange(0, 64)
+video = vr.get_frames_at(indices=frame_idx).data
 video = processor(video, return_tensors="pt").to(model.device)
 outputs = model(**video)
 
-# V-JEPA 2 encoder outputs, same as calling `model.get_vision_features()`
 encoder_outputs = outputs.last_hidden_state
-
-# V-JEPA 2 predictor outputs
 predictor_outputs = outputs.predictor_output.last_hidden_state
 ```
 
-V-JEPA 2 can also be finetuned for video classification. In the following snippet, we show how use finetuned on Something-Something-V2 video classification model.
-
-```python
-import torch
-import numpy as np
-
-from torchcodec.decoders import VideoDecoder
-from transformers import AutoVideoProcessor, AutoModelForVideoClassification
-from accelerate import Accelerator
-
-device = Accelerator().device
-
-# Load model and video preprocessor
-hf_repo = "facebook/vjepa2-vitl-fpc16-256-ssv2"
-
-model = AutoModelForVideoClassification.from_pretrained(hf_repo).to(device)
-processor = AutoVideoProcessor.from_pretrained(hf_repo)
-
-# To load a video, sample the number of frames according to the model.
-video_url = "https://huggingface.co/datasets/nateraw/kinetics-mini/resolve/main/val/bowling/-WH-lxmGJVY_000005_000015.mp4"
-vr = VideoDecoder(video_url)
-frame_idx = np.arange(0, model.config.frames_per_clip, 8) # you can define more complex sampling strategy
-video = vr.get_frames_at(indices=frame_idx).data  # frames x channels x height x width
-
-# Preprocess and run inference
-inputs = processor(video, return_tensors="pt").to(model.device)
-with torch.no_grad():
-    outputs = model(**inputs)
-logits = outputs.logits
-
-print("Top 5 predicted class names:")
-top5_indices = logits.topk(5).indices[0]
-top5_probs = torch.softmax(logits, dim=-1).topk(5).values[0]
-for idx, prob in zip(top5_indices, top5_probs):
-    text_label = model.config.id2label[idx.item()]
-    print(f" - {text_label}: {prob:.2f}")
-```
+</hfoption>
+</hfoptions>
 
 ## VJEPA2Config
 

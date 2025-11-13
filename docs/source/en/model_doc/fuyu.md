@@ -13,104 +13,71 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-10-17 and added to Hugging Face Transformers on 2023-10-19.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2023-10-19 and contributed by [Molbap](https://huggingface.co/Molbap).*
 
 # Fuyu
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Fuyu](https://www.adept.ai/blog/fuyu-8b) is a small, open-source multimodal model designed for AI agents that can handle both text and images. Unlike most multimodal models, it uses a decoder-only Transformer without a separate image encoder, projecting image patches directly into the transformer and supporting arbitrary image resolutions. This simplified architecture allows fast inference—under 100 milliseconds for large images—and streamlines training by removing multiple specialized stages. Despite its small size, Fuyu-8B achieves competitive performance on standard image understanding benchmarks like VQAv2, OKVQA, COCO Captions, and AI2D, outperforming larger models on several metrics while being easier to scale and deploy.
 
-## Overview
-
-The Fuyu model was created by [ADEPT](https://www.adept.ai/blog/fuyu-8b), and authored by Rohan Bavishi, Erich Elsen, Curtis Hawthorne, Maxwell Nye, Augustus Odena, Arushi Somani, Sağnak Taşırlar.
-
-The authors introduced Fuyu-8B, a decoder-only multimodal model based on the classic transformers architecture, with query and key normalization. A linear encoder is added to create multimodal embeddings from image inputs.
-
-By treating image tokens like text tokens and using a special image-newline character, the model knows when an image line ends. Image positional embeddings are removed. This avoids the need for different training phases for various image resolutions. With 8 billion parameters and licensed under CC-BY-NC, Fuyu-8B is notable for its ability to handle both text and images, its impressive context size of 16K, and its overall performance.
-
-<Tip warning={true}>
-
-The `Fuyu` models were trained using `bfloat16`, but the original inference uses `float16` The checkpoints uploaded on the hub use `dtype = 'float16'` which will be
-used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`.
-
-The `dtype` of the online weights is mostly irrelevant, unless you are using `dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online) then it will be cast to the default `dtype` of `torch` (becomes `torch.float32`). Users should specify the `dtype` they want, and if they don't it will be `torch.float32`.
-
-Finetuning the model in `float16` is not recommended and known to produce `nan`, as such the model should be fine-tuned in `bfloat16`.
-
-</Tip>
-
-Tips:
-
-- To convert the model, you need to clone the original repository using `git clone https://github.com/persimmon-ai-labs/adept-inference`, then get the checkpoints:
-
-```bash
-git clone https://github.com/persimmon-ai-labs/adept-inference
-wget path/to/fuyu-8b-model-weights.tar
-tar -xvf fuyu-8b-model-weights.tar
-python src/transformers/models/fuyu/convert_fuyu_weights_to_hf.py  --input_dir /path/to/downloaded/fuyu/weights/ --output_dir /output/path \
-    --pt_model_path /path/to/fuyu_8b_release/iter_0001251/mp_rank_00/model_optim_rng.pt
-    --ada_lib_path /path/to/adept-inference
-```
-
-For the chat model:
-
-```bash
-wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_chat_model_release.tar
-tar -xvf 8b_base_model_release.tar
-```
-
-Then, model can be loaded via:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```py
-from transformers import FuyuConfig, FuyuForCausalLM
-model_config = FuyuConfig()
-model = FuyuForCausalLM(model_config).from_pretrained('/output/path')
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="text-generation", model="adept/fuyu-8b", dtype="auto")
+pipeline("Plants generate energy through a process known as  ")
 ```
 
-Inputs need to be passed through a specific Processor to have the correct formats.
-A processor requires an image_processor and a tokenizer. Hence, inputs can be loaded via:
+</hfoption>
+<hfoption id="AutoModel">
 
 ```py
+import torch
+import requests
 from PIL import Image
-from transformers import AutoTokenizer
-from transformers.models.fuyu.processing_fuyu import FuyuProcessor
-from transformers.models.fuyu.image_processing_fuyu_fast import FuyuImageProcessorFast
+from transformers import AutoProcessor, AutoModelForCausalLM
 
+processor = AutoProcessor.from_pretrained("adept/fuyu-8b")
+model = AutoModelForCausalLM.from_pretrained("adept/fuyu-8b", dtype="auto")
 
-tokenizer = AutoTokenizer.from_pretrained('adept-hf-collab/fuyu-8b')
-image_processor = FuyuImageProcessorFast()
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+prompt = "Generate a coco-style caption.\n"
 
-
-processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
-text_prompt = "Generate a coco-style caption.\\n"
-
-bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
-bus_image_pil = Image.open(io.BytesIO(requests.get(bus_image_url).content))
-inputs_to_model = processor(images=bus_image_pil, text=text_prompt)
-
-
+inputs = processor(images=image, text=prompt, return_tensors="pt")
+outputs = model(**inputs)
+generated_ids = model.generate(**inputs, max_new_tokens=7)
+generation_text = processor.batch_decode(generated_ids[:, -7:], skip_special_tokens=True)
+print(generation_text[0])
 ```
 
-This model was contributed by [Molbap](https://huggingface.co/Molbap).
-The original code can be found [here](https://github.com/persimmon-ai-labs/adept-inference).
+</hfoption>
+</hfoptions>
 
-- Fuyu uses a `sentencepiece` based tokenizer, with a `Unigram` model. It supports bytefallback, which is only available in `tokenizers==0.14.0` for the fast tokenizer.
-The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece.
+## Usage tips
 
-- The authors suggest to use the following prompt for image captioning: `f"Generate a coco-style caption.\\n"`
+- Fuyu models trained with bfloat16, but original inference uses float16. Hub checkpoints use `dtype='float16'`. The AutoModel API casts checkpoints from `torch.float32` to `torch.float16`.
+- Online weight dtype matters only when using `dtype="auto"`. The model downloads first (using checkpoint dtype), then casts to torch's default dtype (`torch.float32`). Specify your desired dtype or it defaults to `torch.float32`.
+- Don't fine-tune in float16. It produces NaN values. Fine-tune in bfloat16 instead.
+- Clone the original repository to convert the model: `git clone https://github.com/persimmon-ai-labs/adept-inference`.
+- Pass inputs through a specific Processor for correct formats. A processor needs an `image_processor` and a `tokenizer`.
+- Fuyu uses a sentencepiece-based tokenizer with a Unigram model. It supports bytefallback (available in `tokenizers==0.14.0` for the fast tokenizer). [`LlamaTokenizer`] wraps sentencepiece as a standard wrapper.
+- Use this prompt for image captioning: `f"Generate a coco-style caption.\\n"`.
 
 ## FuyuConfig
 
 [[autodoc]] FuyuConfig
 
-## FuyuModel
-
-[[autodoc]] FuyuModel
-
 ## FuyuForCausalLM
 
 [[autodoc]] FuyuForCausalLM
+    - forward
+
+## FuyuModel
+
+[[autodoc]] FuyuModel
     - forward
 
 ## FuyuImageProcessor

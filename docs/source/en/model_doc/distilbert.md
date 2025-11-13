@@ -13,91 +13,55 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-10-02 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2019-10-02 and added to Hugging Face Transformers on 2020-11-16 and contributed by [victorsanh](https://huggingface.co/victorsanh).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
 
 # DistilBERT
 
-[DistilBERT](https://huggingface.co/papers/1910.01108) is pretrained by knowledge distillation to create a smaller model with faster inference and requires less compute to train. Through a triple loss objective during pretraining, language modeling loss, distillation loss, cosine-distance loss, DistilBERT demonstrates similar performance to a larger transformer language model.
-
-You can find all the original DistilBERT checkpoints under the [DistilBERT](https://huggingface.co/distilbert) organization.
-
-> [!TIP]
-> Click on the DistilBERT models in the right sidebar for more examples of how to apply DistilBERT to different language tasks.
-
-The example below demonstrates how to classify text with [`Pipeline`], [`AutoModel`], and from the command line.
+[DistilBERT](https://huggingface.co/papers/1910.01108) is a smaller, faster, and more cost-effective Transformer model derived from BERT. By distilling BERT during the pretraining phase, DistilBERT reduces the number of parameters by 40% and increases speed by 60%, while maintaining over 95% of BERT's performance on the GLUE benchmark. The model uses a triple loss function that includes language modeling, distillation, and cosine-distance losses to capture the inductive biases of larger models. This makes DistilBERT suitable for on-device computations and constrained environments.
 
 <hfoptions id="usage">
-
 <hfoption id="Pipeline">
 
 ```py
+import torch
 from transformers import pipeline
 
-classifier = pipeline(
-    task="text-classification",
-    model="distilbert-base-uncased-finetuned-sst-2-english",
-    dtype=torch.float16,
-    device=0
-)
-
-result = classifier("I love using Hugging Face Transformers!")
-print(result)
-# Output: [{'label': 'POSITIVE', 'score': 0.9998}]
+pipeline = pipeline(task="fill-mask", model="distilbert/distilbert-base-uncased", dtype="auto")
+pipeline("Plants create [MASK] through a process known as photosynthesis.")
 ```
 
 </hfoption>
-
 <hfoption id="AutoModel">
 
 ```py
 import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "distilbert/distilbert-base-uncased-finetuned-sst-2-english",
-)
-model = AutoModelForSequenceClassification.from_pretrained(
-    "distilbert/distilbert-base-uncased-finetuned-sst-2-english",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
-inputs = tokenizer("I love using Hugging Face Transformers!", return_tensors="pt").to(model.device)
+model = AutoModelForMaskedLM.from_pretrained("distilbert/distilbert-base-uncased", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-
-predicted_class_id = torch.argmax(outputs.logits, dim=-1).item()
-predicted_label = model.config.id2label[predicted_class_id]
-print(f"Predicted label: {predicted_label}")
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
-
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "I love using Hugging Face Transformers!" | transformers run --task text-classification --model distilbert-base-uncased-finetuned-sst-2-english
-```
-
-</hfoption>
-
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- DistilBERT doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just
-  separate your segments with the separation token `tokenizer.sep_token` (or `[SEP]`).
-- DistilBERT doesn't have options to select the input positions (`position_ids` input). This could be added if
-  necessary though, just let us know if you need this option.
+- DistilBERT doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment. Just separate segments with `tokenizer.sep_token` (or `[SEP]`).
+- DistilBERT doesn't support `position_ids` input. This could be added if needed.
 
 ## DistilBertConfig
 
@@ -140,3 +104,4 @@ echo -e "I love using Hugging Face Transformers!" | transformers run --task text
 
 [[autodoc]] DistilBertForQuestionAnswering
     - forward
+
