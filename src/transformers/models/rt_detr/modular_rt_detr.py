@@ -15,7 +15,6 @@ from ...image_utils import (
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
     validate_annotations,
