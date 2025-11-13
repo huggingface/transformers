@@ -1103,22 +1103,65 @@ JOB_TO_TEST_FILE = {
     "tests_hub": r"tests/.*",
     "tests_non_model": r"tests/[^/]*?/test_.*\.py",
 }
+JOB_TO_TEST_FILE = {
+    "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
+    "tests_generate": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
+    "tests_tokenization": r"tests/models/.*/test_tokenization.*",
+    "pipelines_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
+}
+JOB_TO_TEST_FILE = {
+    "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
+}
 
 
 def create_test_list_from_filter(full_test_list, out_path):
     os.makedirs(out_path, exist_ok=True)
     all_test_files = "\n".join(full_test_list)
+
+    # os.system("python3 -m pytest --collect-only --no-header --no-summary -q tests > all_tests.txt")
+    #
+    # # We want to change (a list of) files to a list of tests
+    # # But we want to have the list of complete tests under `tests`
+    # with open("all_tests.txt") as fp:
+    #     data = fp.read().split("\n")
+    #     # print(data)
+    #
+    # # we want to have a map from files to tests
+    # file_to_test_map = {}
+    # for test in data:
+    #     file = test.split("::")[0]
+    #     if file == "":
+    #         break
+    #     assert file.endswith(".py")
+    #     if file not in file_to_test_map:
+    #         file_to_test_map[file] = []
+    #     file_to_test_map[file].append(test)
+
     for job_name, _filter in JOB_TO_TEST_FILE.items():
+        file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
         file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
         if job_name == "tests_hub":
             files_to_test = ["tests"]
         else:
             files_to_test = list(re.findall(_filter, all_test_files))
+
+        # job_tests = []
+        # for file in files_to_test:
+        #     if file in file_to_test_map:
+        #         job_tests.extend(file_to_test_map[file])
+
+        # files_to_test = ["tests/models/aria/test_modeling_aria.py"]
         print(job_name, file_name)
         if len(files_to_test) > 0:  # No tests -> no file with test list
+            import random
+            for _ in range(64):
+                random.shuffle(files_to_test)
+            # for _ in range(256):
+            #     random.shuffle(job_tests)
             with open(file_name, "w") as f:
                 f.write("\n".join(files_to_test))
-
+            # with open(file_name, "w") as f:
+            #     f.write("\n".join(job_tests))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

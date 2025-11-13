@@ -88,6 +88,8 @@ if stale_egg_info.exists():
     shutil.rmtree(stale_egg_info)
 
 
+a = 1
+
 # IMPORTANT:
 # 1. all dependencies should be listed here with their version requirements if any
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py

@@ -178,10 +178,19 @@ class CircleCIJob:
                 "command": """dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ package=$2; sub(".*/", "", package); printf("%.5f GB %s\n", $1/1024/1024, package)}' || true"""}
             },
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
+
+
             {"run": {"name": "Get files to test", "command":f'curl -L -o {self.job_name}_test_list.txt <<pipeline.parameters.{self.job_name}_test_list>> --header "Circle-Token: $CIRCLE_TOKEN"' if self.name != "pr_documentation_tests" else 'echo "Skipped"'}},
-                        {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
-                    "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
-                    }
+
+            # {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
+            #         "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
+            #         }
+            # },
+
+            {"run": {
+                "name": "split tests",
+                "command": f"python3 get_split_tests.py --target {self.job_name}_test_list.txt"
+                }
             },
             # During the CircleCI docker images build time, we might already (or not) download the data.
             # If it's done already, the files are inside the directory `/test_data/`.
@@ -349,6 +358,8 @@ PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
+ALL_TESTS = [torch_job, tokenization_job, generate_job, pipelines_torch_job]
+ALL_TESTS = [torch_job]
 
 
 def create_circleci_config(folder=None):
