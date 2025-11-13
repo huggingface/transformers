@@ -76,6 +76,16 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = True
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
+            module.experts.gate_up_proj.normal_(mean=0.0, std=std)
+            module.experts.down_proj.normal_(mean=0.0, std=std)
+        elif isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
+            module.router.weight.normal_(mean=0.0, std=std)
+
 
 def _get_feat_extract_output_lengths(input_lengths):
     """
@@ -1597,8 +1607,11 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range
-        if hasattr(module, "router"):
-            module.router.weight.normal_(mean=0.0, std=std)
+        if isinstance(module, Qwen3OmniMoeThinkerTextExperts):
+            module.gate_up_proj.normal_(mean=0.0, std=std)
+            module.down_proj.normal_(mean=0.0, std=std)
+        elif isinstance(module, Qwen3OmniMoeThinkerTextTopKRouter):
+            module.weight.normal_(mean=0.0, std=std)
 
 
 @use_kernel_forward_from_hub("RMSNorm")

@@ -1003,6 +1003,7 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
         if isinstance(module, Qwen3NextSparseMoeBlock):
             module.gate.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
+
 class Qwen3NextModel(Qwen3NextPreTrainedModel):
     def __init__(self, config: Qwen3NextConfig):
         super().__init__(config)

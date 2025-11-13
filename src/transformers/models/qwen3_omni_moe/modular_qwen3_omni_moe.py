@@ -25,6 +25,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ...modeling_utils import PreTrainedModel
 from ...activations import ACT2FN
 from ...audio_utils import AudioInput
 from ...cache_utils import Cache, DynamicCache
@@ -789,10 +790,10 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         return self.thinker_config.get_text_config()
 
 
-class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel):
+class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
             module.experts.gate_up_proj.normal_(mean=0.0, std=std)
