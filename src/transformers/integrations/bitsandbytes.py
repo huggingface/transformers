@@ -79,6 +79,42 @@ class Bnb4bitQuantize(ConversionOps):
                 return {target_key : new_value}
             return {}
 
+class Bnb8bitQuantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, missing_keys = None, **kwargs) -> dict[str, torch.Tensor]:
+        target_key, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+
+        module, tensor_name = get_module_from_name(model, target_key)
+
+        # Those 2 can only happen when self.pre_quantized == True
+        if tensor_name == "SCB":
+            setattr(module.weight, "SCB", value)
+            # TODO: maybe find a way to not deal with that
+            missing_keys.discard(target_key)
+            return {}
+        # It's not used, but it's getting serialized for BC reason...
+        elif tensor_name == "weight_format":
+            missing_keys.discard(target_key)
+            return {}
+
+        # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
+        # Since weights are saved in the correct "orientation", we skip transposing when loading.
+        if issubclass(module.source_cls, Conv1D) and not self.hf_quantizer.pre_quantized:
+            param_value = param_value.T
+
+        old_value = getattr(module, tensor_name)
+        kwargs = old_value.__dict__
+        # Need to pop SCB and reset it because of bnb internals that modifies its value when switching devices ...
+        SCB = kwargs.pop("SCB", None)
+        value_device = value.device
+        new_value = bnb.nn.Int8Params(value.to("cpu"), requires_grad=False, **kwargs).to(value_device)
+        if SCB is not None:
+            setattr(new_value, "SCB", SCB)
+        return {target_key: new_value}
+
 def _replace_with_bnb_linear(
     model,
     modules_to_not_convert=None,
