@@ -717,6 +717,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         std = self.config.initializer_range
@@ -725,7 +726,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
             # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
             A = torch.arange(1, self.config.num_heads + 1)
             module.A_log.copy_(torch.log(A))
-            module.D.data.fill_(1.0)
+            module.D.fill_(1.0)
 
             dt = torch.exp(
                 torch.rand(self.config.num_heads)
@@ -765,7 +766,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
                 if not getattr(module.bias, "_no_reinit", False):
                     nn.init.zeros_(module.bias)
         elif isinstance(module, (Mamba2RMSNorm, MambaRMSNormGated)):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, std=std)
 
@@ -934,7 +935,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
     """
 )
 class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = []
+    _tied_weights_keys = {}
 
     def __init__(self, config):
         super().__init__(config)

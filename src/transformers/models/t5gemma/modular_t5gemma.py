@@ -236,38 +236,7 @@ class T5GemmaConfig(PreTrainedConfig):
 
     model_type = "t5gemma"
     keys_to_ignore_at_inference = ["past_key_values"]
-    base_model_tp_plan = {
-        # encoder
-        "encoder.layers.*.self_attn.q_proj": "colwise",
-        "encoder.layers.*.self_attn.k_proj": "colwise",
-        "encoder.layers.*.self_attn.v_proj": "colwise",
-        "encoder.layers.*.self_attn.o_proj": "rowwise",
-        "encoder.layers.*.mlp.gate_proj": "colwise",
-        "encoder.layers.*.mlp.up_proj": "colwise",
-        "encoder.layers.*.mlp.down_proj": "rowwise",
-        # decoder
-        "decoder.layers.*.self_attn.q_proj": "colwise",
-        "decoder.layers.*.self_attn.k_proj": "colwise",
-        "decoder.layers.*.self_attn.v_proj": "colwise",
-        "decoder.layers.*.self_attn.o_proj": "rowwise",
-        "decoder.layers.*.cross_attn.q_proj": "colwise",
-        "decoder.layers.*.cross_attn.k_proj": "colwise",
-        "decoder.layers.*.cross_attn.v_proj": "colwise",
-        "decoder.layers.*.cross_attn.o_proj": "rowwise",
-        "decoder.layers.*.mlp.gate_proj": "colwise",
-        "decoder.layers.*.mlp.up_proj": "colwise",
-        "decoder.layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_pp_plan = {
-        # encoder
-        "encoder.embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "encoder.layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "encoder.norm": (["hidden_states"], ["hidden_states"]),
-        # decoder
-        "decoder.embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "decoder.layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "decoder.norm": (["hidden_states"], ["hidden_states"]),
-    }
+    sub_configs = {"encoder": T5GemmaModuleConfig, "decoder": T5GemmaModuleConfig}
 
     def __init__(
         self,
@@ -633,22 +602,23 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
         ],
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         # TODO: support initialization for encoders and decoders separately(?)
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5
-            module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
+            module.out_proj.weight.normal_(mean=0.0, std=std * scale)
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
-                module.out_proj.bias.data.zero_()
+                module.out_proj.bias.zero_()
         elif isinstance(module, T5GemmaLMHead):
             if not self.config.tie_word_embeddings:
                 scale = module.out_proj.weight.shape[0] ** -0.5
-                module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
+                module.out_proj.weight.normal_(mean=0.0, std=std * scale)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.data.zero_()
+            module.weight.zero_()
 
     def _shift_right(self, input_ids):
         """
@@ -1029,7 +999,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
 
 
 class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.decoder.embed_tokens.weight", "lm_head.out_proj.weight"]
+    _tied_weights_keys = {"lm_head.out_proj.weight": "model.decoder.embed_tokens.weight"}
     _tp_plan = {"lm_head.out_proj": "colwise_rep"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
@@ -1049,11 +1019,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self):
         return self.lm_head.out_proj
-
-    def _tie_weights(self):
-        # Decoder input and output embeddings are tied.
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.lm_head.out_proj, self.get_decoder().get_input_embeddings())
 
     def get_encoder(self):
         return self.model.encoder

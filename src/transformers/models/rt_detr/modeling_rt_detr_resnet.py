@@ -20,6 +20,7 @@ See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b14
 import math
 from typing import Optional
 
+import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
@@ -303,6 +304,7 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
     input_modalities = "image"
     _no_split_modules = ["RTDetrResNetConvLayer", "RTDetrResNetShortCut"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")

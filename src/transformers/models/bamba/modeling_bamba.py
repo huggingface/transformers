@@ -1126,12 +1126,13 @@ class BambaPreTrainedModel(PreTrainedModel):
     # Note: only supports HybridMambaAttentionDynamicCache
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, BambaMixer):
-            module.dt_bias.data.fill_(1.0)
-            module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
-            module.D.data.fill_(1.0)
+            module.dt_bias.fill_(1.0)
+            module.A_log.copy_(torch.log(torch.arange(1, module.num_heads + 1)))
+            module.D.fill_(1.0)
 
 
 @auto_docstring
@@ -1383,7 +1384,7 @@ class BambaModel(BambaPreTrainedModel):
 
 @auto_docstring
 class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
