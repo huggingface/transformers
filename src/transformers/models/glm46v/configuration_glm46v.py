@@ -25,7 +25,9 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class Glm46VConfig(PreTrainedConfig):
+    model_type = "glm46v"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
