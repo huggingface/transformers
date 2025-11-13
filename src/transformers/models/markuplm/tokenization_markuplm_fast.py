@@ -12,81 +12,90 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Fast tokenization class for MarkupLM. It overwrites 2 methods of the slow tokenizer class, namely _batch_encode_plus
-and _encode_plus, in which the Rust tokenizer is used.
-"""
 
-import json
-from functools import lru_cache
 from typing import Optional, Union
 
-from tokenizers import processors
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers.models import BPE
 
-from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     AddedToken,
     BatchEncoding,
     EncodedInput,
+    PaddingStrategy,
     PreTokenizedInput,
+    TensorType,
     TextInput,
     TextInputPair,
     TruncationStrategy,
 )
-from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
-from ...utils import logging
-from .tokenization_markuplm import MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING, MarkupLMTokenizer
-
+from ...tokenization_utils_tokenizers import TokenizersBackend
+from ...utils import add_end_docstrings, logging
 
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
-@lru_cache
-def bytes_to_unicode():
-    """
-    Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
-    characters the bpe code barfs on. The reversible bpe codes work on unicode strings. This means you need a large #
-    of unicode characters in your vocab if you want to avoid UNKs. When you're at something like a 10B token dataset
-    you end up needing around 5K for decent coverage. This is a significant percentage of your normal, say, 32K bpe
-    vocab. To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
-    """
-    bs = (
-        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
-    )
-    cs = bs[:]
-    n = 0
-    for b in range(2**8):
-        if b not in bs:
-            bs.append(b)
-            cs.append(2**8 + n)
-            n += 1
-    cs = [chr(n) for n in cs]
-    return dict(zip(bs, cs))
+MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
+            add_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to encode the sequences with the special tokens relative to their model.
+            padding (`bool`, `str` or [`~tokenization_utils_base.PaddingStrategy`], *optional*, defaults to `False`):
+                Activates and controls padding. Accepts the following values:
+
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
+                Activates and controls truncation. Accepts the following values:
+
+                - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will
+                  truncate token by token, removing a token from the longest sequence in the pair if a pair of
+                  sequences (or a batch of pairs) is provided.
+                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
+                  greater than the model maximum admissible input size).
+            max_length (`int`, *optional*):
+                Controls the maximum length to use by one of the truncation/padding parameters. If left unset or set to
+                `None`, this will use the predefined model maximum length if a maximum length is required by one of the
+                truncation/padding parameters. If the model has no specific maximum input length (like XLNet)
+                truncation/padding to a maximum length will be deactivated.
+            stride (`int`, *optional*, defaults to 0):
+                If set to a number along with `max_length`, the overflowing tokens returned when
+                `return_overflowing_tokens=True` will contain some tokens from the end of the truncated sequence
+                returned to provide some overlap between truncated and overflowing sequences. The value of this
+                argument defines the number of overlapping tokens.
+            is_split_into_words (`bool`, *optional*, defaults to `False`):
+                Whether or not the input is already pretokenized (e.g. split into words). Set this to `True` if you are
+                passing pretokenized inputs to avoid additional tokenization.
+            pad_to_multiple_of (`int`, *optional*):
+                If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
+            return_tensors (`str` or [`~tokenization_utils_base.TensorType`], *optional*):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
+"""
 
 
-def get_pairs(word):
-    """
-    Return set of symbol pairs in a word. Word is represented as tuple of symbols (symbols being variable-length
-    strings).
-    """
-    pairs = set()
-    prev_char = word[0]
-    for char in word[1:]:
-        pairs.add((prev_char, char))
-        prev_char = char
-    return pairs
-
-
-class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
+class MarkupLMTokenizer(TokenizersBackend):
     r"""
     Construct a MarkupLM tokenizer. Based on byte-level Byte-Pair-Encoding (BPE).
 
-    [`MarkupLMTokenizerFast`] can be used to turn HTML strings into to token-level `input_ids`, `attention_mask`,
-    `token_type_ids`, `xpath_tags_seq` and `xpath_tags_seq`. This tokenizer inherits from [`PreTrainedTokenizer`] which
-    contains most of the main methods.
+    [`MarkupLMTokenizer`] can be used to turn HTML strings into to token-level `input_ids`, `attention_mask`,
+    `token_type_ids`, `xpath_tags_seq` and `xpath_tags_seq`. This tokenizer inherits from [`TokenizersBackend`] which
+    contains most of the main methods and ensures a `tokenizers` backend is always instantiated.
 
     Users should refer to this superclass for more information regarding those methods.
 
@@ -139,14 +148,11 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class = MarkupLMTokenizer
-
     def __init__(
         self,
-        vocab_file,
-        merges_file,
         tags_dict,
-        tokenizer_file=None,
+        vocab: Optional[Union[dict, list]] = None,
+        merges: Optional[list] = None,
         errors="replace",
         bos_token="<s>",
         eos_token="</s>",
@@ -164,6 +170,11 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         trim_offsets=False,
         **kwargs,
     ):
+        if kwargs.get("from_slow"):
+            logger.warning(
+                "MarkupLMTokenizer no longer supports initialization from a slow tokenizer. Ignoring `from_slow=True`."
+            )
+        kwargs["from_slow"] = False
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
@@ -174,11 +185,65 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
+        processed_vocab = vocab
+        processed_merges = merges
+
+        if isinstance(processed_vocab, list):
+            processed_vocab = {
+                token: index for index, (token, _score) in enumerate(processed_vocab) if isinstance(token, str)
+            }
+        elif isinstance(processed_vocab, dict):
+            processed_vocab = {str(token): int(index) for token, index in processed_vocab.items()}
+
+        if processed_vocab is None:
+            processed_vocab = {
+                str(pad_token): 0,
+                str(unk_token): 1,
+                str(cls_token): 2,
+                str(sep_token): 3,
+                str(mask_token): 4,
+            }
+
+        normalized_merges = []
+        if processed_merges is not None:
+            for merge in processed_merges:
+                if isinstance(merge, tuple) and len(merge) == 2:
+                    normalized_merges.append((merge[0], merge[1]))
+                elif isinstance(merge, list) and len(merge) == 2:
+                    normalized_merges.append((merge[0], merge[1]))
+                elif isinstance(merge, str):
+                    parts = merge.split()
+                    if len(parts) == 2 and not merge.startswith("#"):
+                        normalized_merges.append((parts[0], parts[1]))
+        processed_merges = normalized_merges if normalized_merges else []
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=processed_vocab,
+                merges=processed_merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
+        )
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+        
+        sep_token_str = str(sep_token)
+        cls_token_str = str(cls_token)
+        tokenizer.post_processor = processors.RobertaProcessing(
+            sep=(sep_token_str, processed_vocab.get(sep_token_str, processed_vocab.get("</s>", 2))),
+            cls=(cls_token_str, processed_vocab.get(cls_token_str, processed_vocab.get("<s>", 0))),
+            add_prefix_space=add_prefix_space,
+            trim_offsets=trim_offsets,
+        )
+
         super().__init__(
-            vocab_file=vocab_file,
-            merges_file=merges_file,
+            tokenizer_object=tokenizer,
             tags_dict=tags_dict,
-            tokenizer_file=tokenizer_file,
+            vocab=vocab,
+            merges=merges,
             errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -202,32 +267,10 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             # With `trim_offsets=False` we don't need to do add `processors.ByteLevel(trim_offsets=False)`
             # because it's not doing anything
             raise NotImplementedError(
-                "`trim_offsets=True` is not implemented for MarkupLMTokenizerFast. Please set it to False."
+                "`trim_offsets=True` is not implemented for MarkupLMTokenizer. Please set it to False."
             )
 
         self.tags_dict = tags_dict
-
-        tokenizer_component = "post_processor"
-        tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
-        if tokenizer_component_instance:
-            state = json.loads(tokenizer_component_instance.__getstate__())
-
-            # The lists 'sep' and 'cls' must be cased in tuples for the object `post_processor_class`
-            if "sep" in state:
-                state["sep"] = tuple(state["sep"])
-            if "cls" in state:
-                state["cls"] = tuple(state["cls"])
-
-            changes_to_apply = False
-
-            if state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-                state["add_prefix_space"] = add_prefix_space
-                changes_to_apply = True
-
-            if changes_to_apply:
-                component_class = getattr(processors, state.pop("type"))
-                new_value = component_class(**state)
-                setattr(self.backend_tokenizer, tokenizer_component, new_value)
 
         # additional properties
         self.max_depth = max_depth
@@ -277,6 +320,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -305,28 +349,59 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                 Node-level xpaths. Each bounding box should be normalized to be on a 0-1000 scale.
             node_labels (`list[int]`, `list[list[int]]`, *optional*):
                 Node-level integer labels (for token classification tasks).
+            is_split_into_words (`bool`, *optional*):
+                Set to `True` if the inputs are already provided as pretokenized word lists.
         """
 
-        # Input type checking for clearer error
+        placeholder_xpath = "/document/node"
+
+        if isinstance(text, tuple):
+            text = list(text)
+        if text_pair is not None and isinstance(text_pair, tuple):
+            text_pair = list(text_pair)
+
+        if xpaths is None and not is_split_into_words:
+            nodes_source = text if text_pair is None else text_pair
+            if isinstance(nodes_source, tuple):
+                nodes_source = list(nodes_source)
+            processed_nodes = nodes_source
+
+            if isinstance(nodes_source, str):
+                processed_nodes = nodes_source.split()
+            elif isinstance(nodes_source, list):
+                if nodes_source and isinstance(nodes_source[0], str):
+                    requires_split = any(" " in entry for entry in nodes_source)
+                    if requires_split:
+                        processed_nodes = [entry.split() for entry in nodes_source]
+                    else:
+                        processed_nodes = nodes_source
+                elif nodes_source and isinstance(nodes_source[0], tuple):
+                    processed_nodes = [list(sample) for sample in nodes_source]
+
+            if text_pair is None:
+                text = processed_nodes
+            else:
+                text_pair = processed_nodes
+
+            if isinstance(processed_nodes, list) and processed_nodes and isinstance(
+                processed_nodes[0], (list, tuple)
+            ):
+                xpaths = [[placeholder_xpath] * len(sample) for sample in processed_nodes]
+            else:
+                length = len(processed_nodes) if hasattr(processed_nodes, "__len__") else 0
+                xpaths = [placeholder_xpath] * length
+
         def _is_valid_text_input(t):
             if isinstance(t, str):
-                # Strings are fine
                 return True
-            elif isinstance(t, (list, tuple)):
-                # List are fine as long as they are...
+            if isinstance(t, (list, tuple)):
                 if len(t) == 0:
-                    # ... empty
                     return True
-                elif isinstance(t[0], str):
-                    # ... list of strings
+                if isinstance(t[0], str):
                     return True
-                elif isinstance(t[0], (list, tuple)):
-                    # ... list with an empty list or with a list of strings
+                if isinstance(t[0], (list, tuple)):
                     return len(t[0]) == 0 or isinstance(t[0][0], str)
-                else:
-                    return False
-            else:
-                return False
+            return False
 
         if text_pair is not None:
             # in case text + text_pair are provided, text = questions, text_pair = nodes
@@ -337,6 +412,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                     "Nodes must be of type `list[str]` (single pretokenized example), "
                     "or `list[list[str]]` (batch of pretokenized examples)."
                 )
+            is_batched = isinstance(text, (list, tuple))
         else:
             # in case only text is provided => must be nodes
             if not isinstance(text, (list, tuple)):
@@ -344,10 +420,6 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                     "Nodes must be of type `list[str]` (single pretokenized example), "
                     "or `list[list[str]]` (batch of pretokenized examples)."
                 )
-
-        if text_pair is not None:
-            is_batched = isinstance(text, (list, tuple))
-        else:
             is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
 
         nodes = text if text_pair is None else text_pair
@@ -591,7 +663,27 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         )
 
         if is_pair:
-            batch_text_or_text_pairs = [([text], text_pair) for text, text_pair in batch_text_or_text_pairs]
+            processed_inputs = []
+            for text, text_pair in batch_text_or_text_pairs:
+                if isinstance(text, tuple):
+                    text = list(text)
+                if isinstance(text, str):
+                    text = [text]
+                if isinstance(text_pair, tuple):
+                    text_pair = list(text_pair)
+                if isinstance(text_pair, str):
+                    text_pair = [text_pair]
+                processed_inputs.append((text, text_pair))
+            batch_text_or_text_pairs = processed_inputs
+        else:
+            processed_inputs = []
+            for text in batch_text_or_text_pairs:
+                if isinstance(text, tuple):
+                    text = list(text)
+                if isinstance(text, str):
+                    text = [text]
+                processed_inputs.append(text)
+            batch_text_or_text_pairs = processed_inputs
 
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
@@ -733,6 +825,30 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:
+        placeholder_xpath = "/document/node"
+
+        if isinstance(text, tuple):
+            text = list(text)
+        if text_pair is not None and isinstance(text_pair, tuple):
+            text_pair = list(text_pair)
+
+        nodes_single = text if text_pair is None else text_pair
+        processed_nodes = nodes_single
+
+        if isinstance(nodes_single, str):
+            processed_nodes = nodes_single.split()
+        elif isinstance(nodes_single, list) and nodes_single and isinstance(nodes_single[0], str):
+            processed_nodes = nodes_single
+
+        if text_pair is None:
+            text = processed_nodes
+        else:
+            text_pair = processed_nodes
+
+        if xpaths is None:
+            length = len(processed_nodes) if hasattr(processed_nodes, "__len__") else 0
+            xpaths = [placeholder_xpath] * length
+
         # make it a batched input
         # 2 options:
         # 1) only text, in case text must be a list of str
@@ -926,4 +1042,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         return tuple(files)
 
 
-__all__ = ["MarkupLMTokenizerFast"]
+MarkupLMTokenizerFast = MarkupLMTokenizer
+
+
+__all__ = ["MarkupLMTokenizer", "MarkupLMTokenizerFast"]
