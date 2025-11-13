@@ -489,7 +489,9 @@ class ContinuousBatchingTest(unittest.TestCase):
                 f"There should be 2 blocks, one for the prefill and one for the decode, but {len(hash_table) = }",
             )
             total_prefix_length = manager.batch_processor.cache._total_prefix_length
-            self.assertEqual(total_prefix_length, 0, f"Expected total prefix length to be 0, got {total_prefix_length}")
+            self.assertEqual(
+                total_prefix_length, 0, f"Expected total prefix length to be 0, got {total_prefix_length}"
+            )
 
             # Second request, which should reuse the same block
             request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens)

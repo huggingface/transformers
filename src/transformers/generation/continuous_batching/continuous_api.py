@@ -820,7 +820,7 @@ class ContinuousBatchingManager:
             block: Whether to wait for the thread to stop
             timeout: Maximum time to wait for the thread to stop
         """
-        if self.batch_processor is not None:
+        if self.batch_processor is None:
             logger.warning("\nBatch processor was not initialized.")
         else:
             if self.batch_processor.cache.use_prefix_sharing:

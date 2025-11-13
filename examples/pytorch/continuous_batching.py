@@ -206,11 +206,9 @@ if __name__ == "__main__":
         print(f"Setting sliding window from {model.config.sliding_window} to {args.sliding_window}")
         model.config.sliding_window = args.sliding_window
 
-
     # Set up diagnostics
     logger.setLevel(args.log_level.upper())
     maybe_setup_metrics(args.metrics)
-
 
     # Set up performance
     if args.matmul_precision != "none":
