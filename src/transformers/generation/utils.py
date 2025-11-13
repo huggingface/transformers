@@ -3854,7 +3854,8 @@ class GenerationMixin(ContinuousMixin):
     def _prefill(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, model_kwargs):
         if generation_config.prefill_chunk_size is None:
             model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
-            model_inputs = self.prepare_inputs_for_generation(input_ids, is_prefill=True, **model_kwargs)
+            is_prefill = model_kwargs["cache_position"][0] == 0 or not model_kwargs.get("use_cache", True)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, is_prefill=is_prefill, **model_kwargs)
             return self(**model_inputs, return_dict=True)
         else:  # Chunked prefill
             # Even if we are not compiling the forward, flex is always compiled when used. With chunked prefill, we may
