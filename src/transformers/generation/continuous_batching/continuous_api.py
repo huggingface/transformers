@@ -728,6 +728,7 @@ class ContinuousBatchingManager:
         max_queue_size: int = 0,
         num_q_cuda_graphs: int = 0,
         num_kv_cuda_graphs: int = 0,
+        allow_prefix_sharing: bool = True,
     ) -> None:
         """Initialize the continuous batching manager.
 
@@ -737,6 +738,7 @@ class ContinuousBatchingManager:
             max_queue_size: Maximum size of the request queue (0 = unlimited)
             num_q_cuda_graphs: (optional) Number of CUDA graphs to use for the query dimension
             num_kv_cuda_graphs: (optional) Number of CUDA graphs to use for the keys/values dimension
+            allow_prefix_sharing: (optional) Whether to allow prefix sharing if the model has only full attention layers
         """
         if "paged|" not in model.config._attn_implementation:
             attn_implementation = f"paged|{model.config._attn_implementation}"
@@ -768,6 +770,8 @@ class ContinuousBatchingManager:
         self.profile = getattr(generation_config, "profile", False)  # TODO: not supported yet
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
+
+        self._allow_prefix_sharing = allow_prefix_sharing
 
         # If a number of cuda graphs was specified for either Q or KV, we activate cuda graphs
         if num_q_cuda_graphs > 0 or num_kv_cuda_graphs > 0:
@@ -955,6 +959,7 @@ class ContinuousBatchingManager:
                 self.model.device,
                 self.model.dtype,
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
+                allow_prefix_sharing=self._allow_prefix_sharing,
             )
             logger.debug(f"PagedAttentionCache created in {perf_counter() - t0} seconds")
 

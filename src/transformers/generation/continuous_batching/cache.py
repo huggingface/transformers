@@ -122,6 +122,7 @@ class PagedAttentionCache:
         device: torch.device,
         dtype: torch.dtype = torch.float16,
         tp_size: Optional[int] = None,
+        allow_prefix_sharing: bool = True,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -132,6 +133,7 @@ class PagedAttentionCache:
             device: Device for the cache tensors
             dtype: Data type of the cache
             tp_size: Tensor parallelism size
+            allow_prefix_sharing: A flag to allow prefix sharing if the model has only full attention layers.
         """
         self.config = config
         self.dtype = dtype
@@ -230,7 +232,7 @@ class PagedAttentionCache:
             self.group_cache_managers.append(cm)
 
         # We only use prefix sharing if the whole model has only full attention layers
-        self.use_prefix_sharing = group_types == ["full_attention"]
+        self.use_prefix_sharing = allow_prefix_sharing and group_types == ["full_attention"]
         self._block_manager = BlockManager(num_blocks, self.block_size, self.use_prefix_sharing)
         self.blocks_to_complete: dict[str, int] = {}
 
