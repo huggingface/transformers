@@ -278,9 +278,9 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
         layer_idx += 1
         for stage_idx in range(len(config.downsampling_ratios)):
             downsample_layer = VibeVoiceCausalConv1d(
-                in_channels=config.n_filters * (2**stage_idx),
-                out_channels=config.n_filters * (2 ** (stage_idx + 1)),
-                kernel_size=config.downsampling_ratios[stage_idx] * 2,
+                in_channels=int(config.n_filters * (2**stage_idx)),
+                out_channels=int(config.n_filters * (2 ** (stage_idx + 1))),
+                kernel_size=int(config.downsampling_ratios[stage_idx] * 2),
                 stride=config.downsampling_ratios[stage_idx],
                 bias=config.bias,
                 layer_idx=layer_idx,
@@ -290,7 +290,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
 
         self.stages = nn.ModuleList()
         for stage_idx in range(len(config.depths)):
-            input_channels = config.n_filters * (2**stage_idx)
+            input_channels = int(config.n_filters * (2**stage_idx))
             stage = nn.ModuleList(
                 [
                     VibeVoiceConvNext1dLayer(config, hidden_size=input_channels, layer_idx=layer_idx + depth_idx)

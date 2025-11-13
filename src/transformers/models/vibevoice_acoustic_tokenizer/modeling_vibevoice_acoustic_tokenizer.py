@@ -259,7 +259,7 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
         self.upsample_layers.append(
             VibeVoiceCausalConv1d(
                 in_channels=config.hidden_size,
-                out_channels=config.n_filters * 2 ** (len(config.decoder_depths) - 1),
+                out_channels=int(config.n_filters * 2 ** (len(config.decoder_depths) - 1)),
                 kernel_size=config.kernel_size,
                 bias=config.bias,
                 layer_idx=layer_idx,
@@ -267,12 +267,12 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
         )
         layer_idx += 1
         for stage_idx in range(len(config.upsampling_ratios)):
-            input_channels = config.n_filters * (2 ** (len(config.decoder_depths) - 1 - stage_idx))
-            output_channels = config.n_filters * (2 ** (len(config.decoder_depths) - 1 - stage_idx - 1))
+            input_channels = int(config.n_filters * (2 ** (len(config.decoder_depths) - 1 - stage_idx)))
+            output_channels = int(config.n_filters * (2 ** (len(config.decoder_depths) - 1 - stage_idx - 1)))
             upsample_layer = VibeVoiceCausalConvTranspose1d(
                 input_channels,
                 output_channels,
-                kernel_size=config.upsampling_ratios[stage_idx] * 2,
+                kernel_size=int(config.upsampling_ratios[stage_idx] * 2),
                 stride=config.upsampling_ratios[stage_idx],
                 bias=config.bias,
                 layer_idx=layer_idx,
@@ -504,9 +504,9 @@ class VibeVoiceAcousticTokenizerEncoder(nn.Module):
         layer_idx += 1
         for stage_idx in range(len(config.downsampling_ratios)):
             downsample_layer = VibeVoiceCausalConv1d(
-                in_channels=config.n_filters * (2**stage_idx),
-                out_channels=config.n_filters * (2 ** (stage_idx + 1)),
-                kernel_size=config.downsampling_ratios[stage_idx] * 2,
+                in_channels=int(config.n_filters * (2**stage_idx)),
+                out_channels=int(config.n_filters * (2 ** (stage_idx + 1))),
+                kernel_size=int(config.downsampling_ratios[stage_idx] * 2),
                 stride=config.downsampling_ratios[stage_idx],
                 bias=config.bias,
                 layer_idx=layer_idx,
@@ -516,7 +516,7 @@ class VibeVoiceAcousticTokenizerEncoder(nn.Module):
 
         self.stages = nn.ModuleList()
         for stage_idx in range(len(config.depths)):
-            input_channels = config.n_filters * (2**stage_idx)
+            input_channels = int(config.n_filters * (2**stage_idx))
             stage = nn.ModuleList(
                 [
                     VibeVoiceConvNext1dLayer(config, hidden_size=input_channels, layer_idx=layer_idx + depth_idx)

@@ -229,6 +229,7 @@ class VibeVoiceConfig(PretrainedConfig):
             )
 
         self.use_cache = use_cache
+        self.vocab_size = text_config.vocab_size
         self.speech_start_id = speech_start_id
         self.speech_end_id = speech_end_id
         self.speech_diffusion_id = speech_diffusion_id

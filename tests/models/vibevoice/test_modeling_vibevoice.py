@@ -30,12 +30,11 @@ from transformers import (
 from transformers.audio_utils import load_audio_librosa
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
 from transformers.utils.import_utils import is_datasets_available
+from parameterized import parameterized
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -46,7 +45,6 @@ from ...test_modeling_common import (
 
 
 if is_datasets_available():
-    from datasets import load_dataset
     from huggingface_hub import snapshot_download
 
 
@@ -59,47 +57,80 @@ if is_torch_available():
 import diffusers
 
 
+class DummyNoiseScheduler:
+    """A simple dummy noise scheduler for testing purposes."""
+    def __init__(self):
+        self.num_inference_steps = None
+        self.timesteps = None
+
+    def step(self, eps, timestep, sample):
+        # Simple dummy step: just subtract a fraction of the noise estimate
+        if self.num_inference_steps is None:
+            step_size = 0.1
+        else:
+            step_size = 1.0 / self.num_inference_steps
+        
+        # Return an object with prev_sample attribute like real schedulers
+        class StepOutput:
+            def __init__(self, prev_sample):
+                self.prev_sample = prev_sample
+        
+        prev_sample = sample - step_size * eps
+        return StepOutput(prev_sample)
+
+    def set_timesteps(self, num_inference_steps):
+        self.num_inference_steps = num_inference_steps
+        # Create timesteps as torch tensors going from high to low (typical for diffusion)
+        self.timesteps = torch.linspace(1000, 1, num_inference_steps).long()
+
+
+# TODO decrease sizes for quicker tests
 class VibeVoiceModelTester:
     def __init__(
         self,
         parent,
         batch_size=2,
-        seq_length=7,
+        seq_length=3,  # Smaller sequence length to debug
         is_training=True,
         use_cache=True,
         text_config={
             "model_type": "qwen2",
-            "vocab_size": 100,
-            "hidden_size": 64,
-            "intermediate_size": 128,
+            "intermediate_size": 36,
+            "initializer_range": 0.02,
+            "hidden_size": 32,
+            "max_position_embeddings": 52,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
-            "num_key_value_heads": 2,
-            "hidden_act": "silu",
-            "max_position_embeddings": 512,
+            "num_key_value_heads": 4,  # Same as num_attention_heads for MHA
+            "use_labels": True,
+            "use_mrope": False,
+            "vocab_size": 99,
             "pad_token_id": 0,
-            "eos_token_id": 1,
-            "bos_token_id": 2,
-            "tie_word_embeddings": False,
+            "eos_token_id": 0, # same as pad_token for Vibevoice
+            "bos_token_id": None,
         },
         acoustic_tokenizer_config={
             "model_type": "vibevoice_acoustic_tokenizer", 
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 2,
+            "hidden_size": 16,  
+            "kernel_size": 3,
+            "n_filters": 4,
+            "downsampling_ratios": [2],
+            "depths": [1, 1],
         },
         semantic_tokenizer_config={
             "model_type": "vibevoice_semantic_tokenizer",
+            "channels": 1,
             "hidden_size": 32, 
-            "num_hidden_layers": 2,
-            "num_attention_heads": 2,
+            "kernel_size": 3,
+            "n_filters": 4,
+            "downsampling_ratios": [2],
+            "depths": [1, 1],
         },
         diffusion_head_config={
             "model_type": "vibevoice_diffusion_head",
-            "hidden_size": 64,
+            "hidden_size": 32,
             "num_head_layers": 2,
-            "head_ffn_ratio": 3,
-            "latent_size": 32,
+            "latent_size": 16,  # should match acoustic_tokenizer_config["hidden_size"]
         },
     ):
         self.parent = parent
@@ -128,21 +159,25 @@ class VibeVoiceModelTester:
             use_cache=self.use_cache,
             pad_token_id=self.text_config["pad_token_id"],
             eos_token_id=self.text_config["eos_token_id"],
+            # Use token IDs that exist in our test vocabulary (vocab_size=99)
+            speech_start_id=3,  # Instead of default 151652
+            speech_end_id=4,    # Instead of default 151653
+            speech_diffusion_id=5,  # Instead of default 151654
         )
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
-        # For VibeVoice, we need text input_ids (not codebook-style)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
-        return config, input_ids, attention_mask
+        noise_scheduler = DummyNoiseScheduler()
+        return config, input_ids, attention_mask, noise_scheduler
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_ids, attention_mask = self.prepare_config_and_inputs()
-        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
+        config, input_ids, attention_mask, noise_scheduler = self.prepare_config_and_inputs()
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "noise_scheduler": noise_scheduler}
         return config, inputs_dict
 
-    def create_and_check_model(self, config, input_ids, attention_mask):
+    def create_and_check_model(self, config, input_ids, attention_mask, noise_scheduler):
         model = VibeVoiceForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
@@ -193,65 +228,48 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
         return inputs_dict
 
-    def _get_logits_processor_kwargs(self, do_sample=False, config=None):
-        """
-        Overrides [GenerationTesterMixin._get_logits_processor_kwargs] to restrict to top_k, top_p, and temperature sampling.
-        """
-        logits_processor_kwargs = {}
-        if do_sample:
-            logits_processor_kwargs.update(
-                {
-                    "top_k": 10,
-                    "top_p": 0.7,
-                    "temperature": 0.7,
-                }
-            )
-
-        return logits_processor_kwargs
-
-    # Skip tests that are not applicable to VibeVoice
+    @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
-    def test_assisted_decoding_matches_greedy_search(self):
-        pass
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        self.skipTest("VibeVoice generation has unique generation")
 
     @pytest.mark.generate  
-    @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
+    @unittest.skip(reason="VibeVoice generation has unique generation")
     def test_assisted_decoding_sample(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
+    @unittest.skip(reason="VibeVoice generation has unique generation")
     def test_beam_sample_generate(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
+    @unittest.skip(reason="VibeVoice generation has unique generation")
     def test_beam_search_generate(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
+    @unittest.skip(reason="VibeVoice generation has unique generation")
     def test_beam_search_generate_dict_output(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
+    @unittest.skip(reason="VibeVoice generation has unique generation")
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
+    @unittest.skip(reason="VibeVoice generation has unique generation")
     def test_beam_sample_generate_dict_output(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
+    @unittest.skip(reason="VibeVoice generation has unique generation")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
+    @unittest.skip(reason="VibeVoice generation has unique generation")
     def test_prompt_lookup_decoding_stops_at_eos(self):
         pass
 
@@ -278,7 +296,6 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         pass
 
 
-@require_read_token
 class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_checkpoint = "bezzam/VibeVoice-1.5B"

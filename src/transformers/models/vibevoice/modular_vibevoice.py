@@ -41,7 +41,7 @@ logger = logging.get_logger(__name__)
     Base class for VibeVoice causal language model outputs.
     """
 )
-class VibeVoiceCausalLMOutputWithPast(ModelOutput):
+class VibeVoiceOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -57,18 +57,18 @@ class VibeVoiceCausalLMOutputWithPast(ModelOutput):
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The hidden states at the last layer of the model.
     attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
+
     loss: Optional[torch.FloatTensor] = None
     diffusion_loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 class VibeVoiceRMSNorm(Qwen2RMSNorm):
@@ -306,7 +306,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         input_features_mask: Optional[torch.BoolTensor] = None,
         acoustic_loss_mask: Optional[torch.BoolTensor] = None,
         **kwargs,
-    ) -> Union[tuple, VibeVoiceCausalLMOutputWithPast]:
+    ) -> Union[tuple, VibeVoiceOutputWithPast]:
         """
         Args:
             input_features (`torch.FloatTensor`, *optional*):
@@ -339,14 +339,15 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        last_hidden_state = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        logits = self.lm_head(last_hidden_state[:, slice_indices, :])
 
         loss = None
         if labels is not None:
             # TODO (ebezzam) loss according to original implementation
+            # or use loss from language model? (see Flamingo)
             # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L400
             raise ValueError("Language modeling loss computation not implemented yet.")
 
@@ -356,13 +357,14 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         if acoustic_loss_mask is not None:
             raise ValueError("Diffusion loss computation not implemented yet.")
 
-        return VibeVoiceCausalLMOutputWithPast(
+        return VibeVoiceOutputWithPast(
             loss=loss,
             diffusion_loss=diffusion_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            last_hidden_state=hidden_states,
+            last_hidden_state=last_hidden_state,
             attentions=outputs.attentions,
+            hidden_states=outputs.hidden_states,
         )
 
 
