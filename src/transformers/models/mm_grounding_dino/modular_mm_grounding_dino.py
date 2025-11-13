@@ -17,8 +17,7 @@ import math
 import torch
 from torch import nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments

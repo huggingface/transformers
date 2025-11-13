@@ -20,10 +20,10 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-import transformers.initialization as init
 from transformers import PreTrainedModel
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 
+from ... import initialization as init
 from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoModelForKeypointDetection
 

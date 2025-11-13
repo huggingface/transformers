@@ -29,8 +29,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask

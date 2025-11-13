@@ -19,7 +19,6 @@ from typing import Optional, Union
 import torch
 import torch.utils.checkpoint
 
-import transformers.initialization as init
 from transformers.models.sam2.configuration_sam2 import Sam2Config, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig
 from transformers.models.sam2.modeling_sam2 import (
     Sam2Attention,
@@ -33,6 +32,7 @@ from transformers.models.sam2.modeling_sam2 import (
 )
 from transformers.utils.generic import TransformersKwargs, check_model_inputs
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack

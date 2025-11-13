@@ -22,8 +22,7 @@ from typing import Any, Optional, Union
 import torch
 from torch import nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin

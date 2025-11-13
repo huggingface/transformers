@@ -44,8 +44,7 @@ from torch import Tensor, nn
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
-import transformers.initialization as init
-
+from . import initialization as init
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_checkpoint_conversion_mapping
 from .core_model_loading import WeightConverter, convert_and_load_state_dict_in_model, revert_weight_conversion

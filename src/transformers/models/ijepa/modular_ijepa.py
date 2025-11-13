@@ -3,9 +3,9 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-import transformers.initialization as init
 from transformers.models.ijepa.configuration_ijepa import IJepaConfig
 
+from ... import initialization as init
 from ...modeling_outputs import BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int

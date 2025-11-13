@@ -32,8 +32,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer

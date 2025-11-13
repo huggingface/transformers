@@ -23,8 +23,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast

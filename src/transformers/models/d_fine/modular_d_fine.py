@@ -19,8 +19,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2CLS
 from ...configuration_utils import PreTrainedConfig
 from ...image_transforms import corners_to_center_format

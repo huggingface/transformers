@@ -28,8 +28,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput

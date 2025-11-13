@@ -30,9 +30,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-import transformers.initialization as init
 from transformers.utils.generic import OutputRecorder
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput

@@ -23,8 +23,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig

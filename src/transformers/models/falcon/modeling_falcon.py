@@ -23,8 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import get_activation
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin

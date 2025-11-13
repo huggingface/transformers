@@ -23,8 +23,7 @@ import torch
 import torch.nn.functional as F
 from torch import Size, Tensor, nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin

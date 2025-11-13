@@ -22,8 +22,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter

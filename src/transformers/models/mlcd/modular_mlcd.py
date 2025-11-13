@@ -18,8 +18,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel

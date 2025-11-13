@@ -19,8 +19,7 @@ from typing import Optional, Union
 import torch
 from torch import Tensor, nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_timm_available, requires_backends

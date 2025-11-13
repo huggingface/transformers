@@ -24,12 +24,11 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import LayerNorm as FusedLayerNorm
 
-import transformers.initialization as init
-
 from ....activations import ACT2FN
 from ....modeling_utils import PreTrainedModel
 from ....utils import add_start_docstrings, logging
 from ....utils.logging import tqdm
+from ... import initialization as init
 from .configuration_jukebox import ATTENTION_PATTERNS, JukeboxConfig, JukeboxPriorConfig, JukeboxVQVAEConfig
 
 

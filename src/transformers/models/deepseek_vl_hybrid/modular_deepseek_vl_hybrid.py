@@ -18,8 +18,7 @@ import torch
 import torch.nn as nn
 from torchvision.transforms.v2 import functional as F
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,

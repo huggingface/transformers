@@ -24,8 +24,7 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...integrations.deepspeed import is_deepspeed_available
 from ...modeling_outputs import ModelOutput
 from ...utils import (

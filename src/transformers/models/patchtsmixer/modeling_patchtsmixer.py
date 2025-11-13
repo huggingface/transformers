@@ -22,10 +22,10 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-import transformers.initialization as init
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput
 
+from ... import initialization as init
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack

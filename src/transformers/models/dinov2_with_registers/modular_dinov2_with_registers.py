@@ -19,8 +19,6 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-import transformers.initialization as init
-
 from ....transformers.models.dinov2.modeling_dinov2 import (
     Dinov2Backbone,
     Dinov2Encoder,
@@ -29,6 +27,7 @@ from ....transformers.models.dinov2.modeling_dinov2 import (
     Dinov2PatchEmbeddings,
     Dinov2PreTrainedModel,
 )
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack

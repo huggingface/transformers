@@ -23,8 +23,7 @@ from typing import Optional
 import torch
 from torch import Tensor, nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel

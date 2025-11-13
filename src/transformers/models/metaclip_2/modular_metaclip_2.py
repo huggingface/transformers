@@ -3,8 +3,7 @@ from typing import Optional
 import torch
 from torch import nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...processing_utils import Unpack

@@ -19,8 +19,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
