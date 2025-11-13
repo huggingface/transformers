@@ -1238,6 +1238,7 @@ class SamHQPromptEncoder(nn.Module):
 class SamHQModel(SamHQPreTrainedModel):
     input_modalities = ["image", "text"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamHQTwoWayAttentionBlock, index=2)}
+    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1248,7 +1249,6 @@ class SamHQModel(SamHQPreTrainedModel):
         config.mask_decoder_config._attn_implementation = config._attn_implementation
 
         self.mask_decoder = SamHQMaskDecoder(config.mask_decoder_config)
-
         self.post_init()
 
     def get_input_embeddings(self):
