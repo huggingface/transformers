@@ -26,6 +26,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+import transformers.initialization as init
 from transformers.activations import ACT2FN
 from transformers.models.jamba.modeling_jamba import HybridMambaAttentionDynamicCache
 from transformers.models.llama.modeling_llama import (
@@ -924,9 +925,9 @@ class FalconH1PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, FalconH1Mixer):
-            nn.init.ones_(module.dt_bias)
-            nn.init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
-            nn.init.ones_(module.D)
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
 
 
 def compute_mup_vector(config):

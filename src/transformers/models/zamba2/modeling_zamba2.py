@@ -28,6 +28,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -1226,10 +1228,10 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            nn.init.copy_(module.dt_bias, inv_dt)
+            init.copy_(module.dt_bias, inv_dt)
 
             A = torch.arange(1, module.num_heads + 1)
-            nn.init.copy_(module.A_log, torch.log(A))
+            init.copy_(module.A_log, torch.log(A))
             nn.module.ones_(module.D)
 
 

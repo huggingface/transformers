@@ -27,6 +27,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -798,9 +800,9 @@ class ZambaPreTrainedModel(PreTrainedModel):
         std = self.config.initializer_range
         super()._init_weights(module)
         if isinstance(module, ZambaMambaMixer):
-            nn.init.normal_(module.x_proj_weight, mean=0.0, std=std)
+            init.normal_(module.x_proj_weight, mean=0.0, std=std)
             dt_init_std = self.config.mamba_dt_rank**-0.5
-            nn.init.uniform_(module.dt_proj_weight, -dt_init_std, dt_init_std)
+            init.uniform_(module.dt_proj_weight, -dt_init_std, dt_init_std)
 
             mamba_head_dim = self.config.mamba_expand * self.config.hidden_size // self.config.n_mamba_heads
             dt = torch.exp(
@@ -810,12 +812,12 @@ class ZambaPreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            nn.init.copy_(module.dt_proj_bias, inv_dt)
+            init.copy_(module.dt_proj_bias, inv_dt)
 
             A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
             A = A.expand(module.intermediate_size, -1).contiguous()
-            nn.init.copy_(module.A_log, torch.log(A).reshape(module.n_mamba_heads, module.mamba_head_dim, -1))
-            nn.init.ones_(module.D)
+            init.copy_(module.A_log, torch.log(A).reshape(module.n_mamba_heads, module.mamba_head_dim, -1))
+            init.ones_(module.D)
 
 
 @auto_docstring

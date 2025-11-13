@@ -27,6 +27,8 @@ from typing import Any, Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -153,10 +155,10 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         factor = self.config.initializer_range
         if isinstance(module, InstructBlipVideoVisionEmbeddings):
-            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
-            nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
+            init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
+            init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
         elif isinstance(module, (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel)):
-            nn.init.zeros_(module.query_tokens)
+            init.zeros_(module.query_tokens)
 
 
 # Adapted from transformers.models.siglip.modeling_siglip.eager_attention_forward -> InstructBlipVideo doesn't cast attn weights to fp32

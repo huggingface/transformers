@@ -23,6 +23,8 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN, QuickGELUActivation
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
@@ -927,24 +929,24 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             attn_std = self.config.hidden_size**-0.5
             fc_std = (2 * self.config.hidden_size) ** -0.5
             for block in module.transformer.resblocks:
-                nn.init.normal_(block.attn.in_proj_weight, std=attn_std * std)
-                nn.init.zeros(block.attn.in_proj_bias)
-                nn.init.normal_(block.attn.out_proj.weight, std=proj_std * std)
-                nn.init.normal_(block.mlp.c_fc.weight, std=fc_std * std)
-                nn.init.normal_(block.mlp.c_proj.weight, std=proj_std * std)
+                init.normal_(block.attn.in_proj_weight, std=attn_std * std)
+                init.zeros(block.attn.in_proj_bias)
+                init.normal_(block.attn.out_proj.weight, std=proj_std * std)
+                init.normal_(block.mlp.c_fc.weight, std=fc_std * std)
+                init.normal_(block.mlp.c_proj.weight, std=proj_std * std)
 
-            nn.init.normal_(module.embeddings.class_embedding, std=attn_std * std)
-            nn.init.normal_(module.embeddings.position_embedding.weight, std=attn_std * std)
+            init.normal_(module.embeddings.class_embedding, std=attn_std * std)
+            init.normal_(module.embeddings.position_embedding.weight, std=attn_std * std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding)):
-            nn.init.normal_(module.weight, mean=0.0, std=0.05 * std)
+            init.normal_(module.weight, mean=0.0, std=0.05 * std)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, BridgeTowerForContrastiveLearning):
-            nn.init.constant_(module.logit_scale, self.config.logit_scale_init_value)
+            init.constant_(module.logit_scale, self.config.logit_scale_init_value)
 
         if isinstance(module, (nn.Linear, BridgeTowerMLMHead)) and module.bias is not None:
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.bias)
 
 
 class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):

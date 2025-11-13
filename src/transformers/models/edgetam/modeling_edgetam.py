@@ -30,6 +30,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+import transformers.initialization as init
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
 from ...activations import ACT2FN
@@ -313,7 +314,7 @@ class EdgeTamPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, EdgeTamModel):
             if module.no_memory_embedding is not None:
-                nn.init.zeros_(module.no_memory_embedding)
+                init.zeros_(module.no_memory_embedding)
 
 
 # copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding

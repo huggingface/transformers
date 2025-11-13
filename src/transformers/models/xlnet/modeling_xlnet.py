@@ -26,6 +26,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN, get_activation
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
@@ -651,9 +653,9 @@ class XLNetPreTrainedModel(PreTrainedModel):
                 module.r_w_bias,
                 module.seg_embed,
             ]:
-                nn.init.normal_(param, mean=0.0, std=self.config.initializer_range)
+                init.normal_(param, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, XLNetModel):
-            nn.init.normal_(module.mask_emb, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.mask_emb, mean=0.0, std=self.config.initializer_range)
 
 
 @dataclass

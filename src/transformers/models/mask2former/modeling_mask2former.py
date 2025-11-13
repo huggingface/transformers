@@ -23,6 +23,8 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_layers import GradientCheckpointingLayer
@@ -2111,11 +2113,11 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             if module.input_projections is not None:
                 for input_projection in module.input_projections:
                     if not isinstance(input_projection, nn.Sequential):
-                        nn.init.xavier_uniform_(input_projection.weight, gain=xavier_std)
-                        nn.init.constant_(input_projection.bias, 0)
+                        init.xavier_uniform_(input_projection.weight, gain=xavier_std)
+                        init.constant_(input_projection.bias, 0)
 
         elif isinstance(module, Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight, 0.0)
+            init.constant_(module.sampling_offsets.weight, 0.0)
             thetas = torch.arange(module.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / module.n_heads)
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
@@ -2126,41 +2128,41 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
 
-            nn.init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
 
-            nn.init.constant_(module.attention_weights.weight, 0.0)
-            nn.init.constant_(module.attention_weights.bias, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight)
-            nn.init.constant_(module.value_proj.bias, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight)
-            nn.init.constant_(module.output_proj.bias, 0.0)
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
 
         elif isinstance(module, Mask2FormerMaskedAttentionDecoderLayer):
             for p in module.parameters():
                 if p.dim() > 1:
-                    nn.init.xavier_uniform_(p, gain=xavier_std)
-            nn.init.zeros_(module.cross_attn.in_proj_bias)
+                    init.xavier_uniform_(p, gain=xavier_std)
+            init.zeros_(module.cross_attn.in_proj_bias)
 
         elif isinstance(module, Mask2FormerPixelDecoder):
-            nn.init.normal_(module.level_embed, std=0)
+            init.normal_(module.level_embed, std=0)
 
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
 
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            nn.init.ones_(module.weight)
-            nn.init.zeros_(module.bias)
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
 
         elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
+                init.zeros_(module.weight[module.padding_idx])
 
         if hasattr(module, "reference_points"):
-            nn.init.xavier_uniform_(module.reference_points.weight, gain=1.0)
-            nn.init.constant_(module.reference_points.bias, 0.0)
+            init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            init.constant_(module.reference_points.bias, 0.0)
 
 
 @auto_docstring

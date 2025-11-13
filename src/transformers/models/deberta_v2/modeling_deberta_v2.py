@@ -21,6 +21,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -698,7 +700,7 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         super()._init_weights(module)
         if isinstance(module, (LegacyDebertaV2LMPredictionHead, DebertaV2LMPredictionHead)):
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.bias)
 
 
 @auto_docstring

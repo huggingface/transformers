@@ -27,6 +27,8 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationConfig, GenerationMixin
@@ -128,7 +130,7 @@ class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, KyutaiSpeechToTextFlexibleLinear):
-            nn.init.normal_(module.weight)
+            init.normal_(module.weight)
 
 
 class KyutaiSpeechToTextConv1dPaddingCache:

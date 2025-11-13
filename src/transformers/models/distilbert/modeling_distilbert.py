@@ -26,6 +26,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import get_activation
 from ...configuration_utils import PreTrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -304,7 +306,7 @@ class DistilBertPreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         super()._init_weights(module)
         if isinstance(module, Embeddings) and self.config.sinusoidal_pos_embds:
-            nn.init.copy_(
+            init.copy_(
                 module.position_embeddings.weight,
                 create_sinusoidal_embeddings(
                     self.config.max_position_embeddings,

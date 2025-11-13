@@ -24,6 +24,8 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
+import transformers.initialization as init
+
 from ...integrations.deepspeed import is_deepspeed_available
 from ...modeling_outputs import ModelOutput
 from ...utils import (
@@ -898,44 +900,44 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
                     shape = module.weight.shape
                     scale = 1.0 / max(1, shape[1])
                     std = math.sqrt(scale)
-                    nn.init.normal_(module.weight, std=std)
+                    init.normal_(module.weight, std=std)
                 elif module.init == "relu":
                     shape = module.weight.shape
                     scale = 2.0 / max(1, shape[1])
                     std = math.sqrt(scale)
-                    nn.init.normal_(module.weight, std=std)
+                    init.normal_(module.weight, std=std)
                 elif module.init == "glorot":
-                    nn.init.xavier_uniform_(module.weight, gain=1)
+                    init.xavier_uniform_(module.weight, gain=1)
                 elif module.init == "gating":
-                    nn.init.zeros_(module.weight)
+                    init.zeros_(module.weight)
                     if module.bias:
-                        nn.init.ones(module.bias)
+                        init.ones(module.bias)
                 elif module.init == "normal":
-                    nn.init.kaiming_normal_(module.weight, nonlinearity="linear")
+                    init.kaiming_normal_(module.weight, nonlinearity="linear")
                 elif module.init == "final":
-                    nn.init.zeros_(module.weight)
+                    init.zeros_(module.weight)
         elif isinstance(module, EsmFoldInvariantPointAttention):
             softplus_inverse_1 = 0.541324854612918
-            nn.init.constant_(module.head_weights, softplus_inverse_1)
+            init.constant_(module.head_weights, softplus_inverse_1)
         elif isinstance(module, EsmFoldTriangularSelfAttentionBlock):
-            nn.init.zeros_(module.tri_mul_in.linear_z.weight)
-            nn.init.zeros_(module.tri_mul_in.linear_z.bias)
-            nn.init.zeros_(module.tri_mul_out.linear_z.weight)
-            nn.init.zeros_(module.tri_mul_out.linear_z.bias)
-            nn.init.zeros_(module.tri_att_start.mha.linear_o.weight)
-            nn.init.zeros_(module.tri_att_start.mha.linear_o.bias)
-            nn.init.zeros_(module.tri_att_end.mha.linear_o.weight)
-            nn.init.zeros_(module.tri_att_end.mha.linear_o.bias)
+            init.zeros_(module.tri_mul_in.linear_z.weight)
+            init.zeros_(module.tri_mul_in.linear_z.bias)
+            init.zeros_(module.tri_mul_out.linear_z.weight)
+            init.zeros_(module.tri_mul_out.linear_z.bias)
+            init.zeros_(module.tri_att_start.mha.linear_o.weight)
+            init.zeros_(module.tri_att_start.mha.linear_o.bias)
+            init.zeros_(module.tri_att_end.mha.linear_o.weight)
+            init.zeros_(module.tri_att_end.mha.linear_o.bias)
 
-            nn.init.zeros_(module.sequence_to_pair.o_proj.weight)
-            nn.init.zeros_(module.sequence_to_pair.o_proj.bias)
-            nn.init.zeros_(module.pair_to_sequence.linear.weight)
-            nn.init.zeros_(module.seq_attention.o_proj.weight)
-            nn.init.zeros_(module.seq_attention.o_proj.bias)
-            nn.init.zeros_(module.mlp_seq.mlp[-2].weight)
-            nn.init.zeros_(module.mlp_seq.mlp[-2].bias)
-            nn.init.zeros_(module.mlp_pair.mlp[-2].weight)
-            nn.init.zeros_(module.mlp_pair.mlp[-2].bias)
+            init.zeros_(module.sequence_to_pair.o_proj.weight)
+            init.zeros_(module.sequence_to_pair.o_proj.bias)
+            init.zeros_(module.pair_to_sequence.linear.weight)
+            init.zeros_(module.seq_attention.o_proj.weight)
+            init.zeros_(module.seq_attention.o_proj.bias)
+            init.zeros_(module.mlp_seq.mlp[-2].weight)
+            init.zeros_(module.mlp_seq.mlp[-2].bias)
+            init.zeros_(module.mlp_pair.mlp[-2].weight)
+            init.zeros_(module.mlp_pair.mlp[-2].bias)
         else:
             super()._init_weights(module)
 
@@ -954,12 +956,12 @@ class EsmFoldSelfAttention(nn.Module):
         self.gated = gated
         if gated:
             self.g_proj = nn.Linear(embed_dim, embed_dim)
-            nn.init.zeros_(self.g_proj.weight)
-            nn.init.ones_(self.g_proj.bias)
+            init.zeros_(self.g_proj.weight)
+            init.ones_(self.g_proj.bias)
 
         self.rescale_factor = self.head_width**-0.5
 
-        nn.init.zeros_(self.o_proj.bias)
+        init.zeros_(self.o_proj.bias)
 
     def forward(self, x, mask=None, bias=None, indices=None):
         """
@@ -1032,8 +1034,8 @@ class EsmFoldSequenceToPair(nn.Module):
         self.proj = nn.Linear(sequence_state_dim, inner_dim * 2, bias=True)
         self.o_proj = nn.Linear(2 * inner_dim, pairwise_state_dim, bias=True)
 
-        nn.init.zeros_(self.proj.bias)
-        nn.init.zeros_(self.o_proj.bias)
+        init.zeros_(self.proj.bias)
+        init.zeros_(self.o_proj.bias)
 
     def forward(self, sequence_state):
         """

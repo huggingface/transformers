@@ -26,6 +26,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+import transformers.initialization as init
 from transformers.utils.generic import check_model_inputs
 
 from ...activations import ACT2FN
@@ -415,7 +416,7 @@ class CsmPreTrainedModel(PreTrainedModel):
         if isinstance(module, CsmCodebooksHead):
             num_codebooks = module.num_codebooks
             for i in range(num_codebooks - 1):
-                nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+                init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring

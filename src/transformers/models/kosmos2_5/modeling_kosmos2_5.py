@@ -22,6 +22,8 @@ from typing import Any, Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -1238,19 +1240,19 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
         elif isinstance(self, (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)):
             std = self.config.text_config.init_std
         if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, (nn.LayerNorm, Kosmos2_5LayerNorm)):
-            nn.init.ones_(module.weight)
+            init.ones_(module.weight)
             if getattr(module, "bias", None) is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, Kosmos2_5ImageToTextProjection):
-            nn.init.normal_(module.latent_query, mean=0.0, std=1.0)
+            init.normal_(module.latent_query, mean=0.0, std=1.0)
 
 
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):

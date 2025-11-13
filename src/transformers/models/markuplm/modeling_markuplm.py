@@ -22,6 +22,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -515,7 +517,7 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, MarkupLMLMPredictionHead):
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.bias)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):

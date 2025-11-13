@@ -21,6 +21,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+import transformers.initialization as init
+
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
@@ -291,7 +293,7 @@ class GraniteSpeechPreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         super()._init_weights(module)
         if isinstance(module, GraniteSpeechEncoderProjector):
-            nn.init.normal_(module.query)
+            init.normal_(module.query)
 
 
 @auto_docstring(

@@ -21,6 +21,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -421,9 +423,9 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Idefics2MultiheadAttentionPoolingHead):
-            nn.init.normal_(module.probe)
+            init.normal_(module.probe)
         elif isinstance(module, Idefics2PerceiverResampler):
-            nn.init.ones_(module.latents)
+            init.ones_(module.latents)
 
 
 @auto_docstring(

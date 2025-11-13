@@ -22,6 +22,8 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, KLDivLoss, LogSoftmax
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -464,14 +466,14 @@ class VisualBertPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if hasattr(module, "bias") and module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, VisualBertLMPredictionHead):
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.bias)
 
 
 @dataclass

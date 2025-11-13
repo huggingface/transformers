@@ -20,6 +20,8 @@ import numpy as np
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -90,7 +92,7 @@ class InformerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, InformerSinusoidalPositionalEmbedding):
-            nn.init.copy_(module.weight, module.create_weight())
+            init.copy_(module.weight, module.create_weight())
 
 
 class InformerAttention(BartAttention):

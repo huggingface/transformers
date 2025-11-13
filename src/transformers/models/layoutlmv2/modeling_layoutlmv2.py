@@ -21,6 +21,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -464,11 +466,11 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, LayoutLMv2SelfAttention):
             if self.config.fast_qkv:
-                nn.init.zeros_(module.q_bias)
-                nn.init.zeros_(module.v_bias)
+                init.zeros_(module.q_bias)
+                init.zeros_(module.v_bias)
         elif isinstance(module, LayoutLMv2Model):
             if hasattr(module, "visual_segment_embedding"):
-                nn.init.normal_(module.visual_segment_embedding, mean=0.0, std=self.config.initializer_range)
+                init.normal_(module.visual_segment_embedding, mean=0.0, std=self.config.initializer_range)
 
 
 def my_convert_sync_batchnorm(module, process_group=None):

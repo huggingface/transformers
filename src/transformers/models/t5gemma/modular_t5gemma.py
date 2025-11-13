@@ -19,6 +19,8 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn as nn
 
+import transformers.initialization as init
+
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
@@ -640,16 +642,16 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5
-            nn.init.normal_(module.out_proj.weight, mean=0.0, std=std * scale)
+            init.normal_(module.out_proj.weight, mean=0.0, std=std * scale)
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
-                nn.init.zeros_(module.out_proj.bias)
+                init.zeros_(module.out_proj.bias)
         elif isinstance(module, T5GemmaLMHead):
             if not self.config.tie_word_embeddings:
                 scale = module.out_proj.weight.shape[0] ** -0.5
-                nn.init.normal_(module.out_proj.weight, mean=0.0, std=std * scale)
+                init.normal_(module.out_proj.weight, mean=0.0, std=std * scale)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            nn.init.zeros_(module.weight)
+            init.zeros_(module.weight)
 
     def _shift_right(self, input_ids):
         """

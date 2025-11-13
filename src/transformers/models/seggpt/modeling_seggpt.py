@@ -22,6 +22,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -600,22 +602,22 @@ class SegGptPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.trunc_normal_(module.weight, mean=0.0, std=std)
+            init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, SegGptLayerNorm)):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, SegGptAttention):
-            nn.init.trunc_normal_(module.rel_pos_h, mean=0.0, std=std)
-            nn.init.trunc_normal_(module.rel_pos_w, mean=0.0, std=std)
+            init.trunc_normal_(module.rel_pos_h, mean=0.0, std=std)
+            init.trunc_normal_(module.rel_pos_w, mean=0.0, std=std)
         elif isinstance(module, SegGptEmbeddings):
-            nn.init.trunc_normal_(module.position_embeddings, mean=0.0, std=std)
-            nn.init.normal_(module.mask_token, std=std)
-            nn.init.normal_(module.segment_token_input, std=std)
-            nn.init.normal_(module.segment_token_prompt, std=std)
-            nn.init.normal_(module.type_token_semantic, std=std)
-            nn.init.normal_(module.type_token_instance, std=std)
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=std)
+            init.normal_(module.mask_token, std=std)
+            init.normal_(module.segment_token_input, std=std)
+            init.normal_(module.segment_token_prompt, std=std)
+            init.normal_(module.type_token_semantic, std=std)
+            init.normal_(module.type_token_instance, std=std)
 
 
 @auto_docstring

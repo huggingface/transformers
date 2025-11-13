@@ -22,6 +22,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+import transformers.initialization as init
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput
 
@@ -691,17 +692,17 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
         if isinstance(module, PatchTSMixerPositionalEncoding):
             # initialize positional encoding
             if self.config.positional_encoding_type == "random":
-                nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
+                init.normal_(module.position_enc, mean=0.0, std=0.1)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, PatchTSMixerBatchNorm):
-            nn.init.zeros_(module.batchnorm.bias)
-            nn.init.ones_(module.batchnorm.weight)
+            init.zeros_(module.batchnorm.bias)
+            init.ones_(module.batchnorm.weight)
         elif isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.init_std)
+            init.normal_(module.weight, mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
 
 
 class PatchTSMixerPretrainHead(nn.Module):

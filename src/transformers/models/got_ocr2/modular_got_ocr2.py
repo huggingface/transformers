@@ -19,6 +19,8 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+import transformers.initialization as init
+
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
@@ -294,11 +296,11 @@ class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
-                nn.init.zeros_(module.rel_pos_h)
-                nn.init.zeros_(module.rel_pos_w)
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
-                nn.init.zeros_(module.pos_embed)
+                init.zeros_(module.pos_embed)
 
 
 class GotOcr2Model(LlavaModel):

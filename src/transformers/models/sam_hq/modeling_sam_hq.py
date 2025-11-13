@@ -29,6 +29,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+import transformers.initialization as init
 from transformers.modeling_outputs import ModelOutput
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
@@ -434,11 +435,11 @@ class SamHQPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, SamHQVisionAttention):
             if module.use_rel_pos:
-                nn.init.zeros_(module.rel_pos_h)
-                nn.init.zeros_(module.rel_pos_w)
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, SamHQVisionEncoder):
             if self.config.use_abs_pos:
-                nn.init.zeros_(module.pos_embed)
+                init.zeros_(module.pos_embed)
 
 
 class SamHQPatchEmbeddings(nn.Module):

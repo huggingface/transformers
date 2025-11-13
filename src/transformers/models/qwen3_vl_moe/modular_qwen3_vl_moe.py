@@ -19,6 +19,8 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
@@ -367,8 +369,8 @@ class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
         else:
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
         if isinstance(module, Qwen3VLMoeTextExperts):
-            nn.init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            nn.init.normal_(module.down_proj, mean=0.0, std=std)
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
 
 
 class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):

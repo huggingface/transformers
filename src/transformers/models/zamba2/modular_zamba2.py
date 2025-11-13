@@ -21,6 +21,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -914,10 +916,10 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            nn.init.copy_(module.dt_bias, inv_dt)
+            init.copy_(module.dt_bias, inv_dt)
 
             A = torch.arange(1, module.num_heads + 1)
-            nn.init.copy_(module.A_log, torch.log(A))
+            init.copy_(module.A_log, torch.log(A))
             nn.module.ones_(module.D)
 
 

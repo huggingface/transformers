@@ -23,6 +23,8 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, SmoothL1Loss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN, gelu
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -679,7 +681,7 @@ class LxmertPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, LxmertLMPredictionHead):
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.bias)
 
 
 @auto_docstring

@@ -22,6 +22,8 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_layers import GradientCheckpointingLayer
@@ -373,14 +375,14 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, InternVLVisionEmbeddings):
-            nn.init.zeros_(module.cls_token)
+            init.zeros_(module.cls_token)
             if module.mask_token is not None:
-                nn.init.zeros_(module.mask_token)
+                init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
-                nn.init.zeros_(module.position_embeddings)
+                init.zeros_(module.position_embeddings)
         elif isinstance(module, InternVLVisionLayer):
-            nn.init.constant_(module.lambda_1, self.config.layer_scale_init_value)
-            nn.init.constant_(module.lambda_2, self.config.layer_scale_init_value)
+            init.constant_(module.lambda_1, self.config.layer_scale_init_value)
+            init.constant_(module.lambda_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring

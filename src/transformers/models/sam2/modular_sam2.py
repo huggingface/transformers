@@ -23,6 +23,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -682,12 +684,12 @@ class Sam2PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Sam2HieraDetModel):
             if module.pos_embed is not None:
-                nn.init.zeros_(module.pos_embed)
+                init.zeros_(module.pos_embed)
             if module.pos_embed_window is not None:
-                nn.init.zeros_(module.pos_embed_window)
+                init.zeros_(module.pos_embed_window)
         if isinstance(module, Sam2Model):
             if module.no_memory_embedding is not None:
-                nn.init.zeros_(module.no_memory_embedding)
+                init.zeros_(module.no_memory_embedding)
 
 
 class Sam2HieraDetModel(Sam2PreTrainedModel):

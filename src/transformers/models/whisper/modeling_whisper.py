@@ -23,6 +23,8 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -542,10 +544,10 @@ class WhisperPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, WhisperEncoder):
-            nn.init.copy_(module.embed_positions.weight, sinusoids(*module.embed_positions.weight.shape))
+            init.copy_(module.embed_positions.weight, sinusoids(*module.embed_positions.weight.shape))
         elif isinstance(module, WhisperForAudioClassification):
             if self.config.use_weighted_layer_sum:
-                nn.init.constant_(module.layer_weights, 1.0 / (self.config.num_hidden_layers + 1))
+                init.constant_(module.layer_weights, 1.0 / (self.config.num_hidden_layers + 1))
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """

@@ -22,6 +22,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN, gelu
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -50,7 +52,7 @@ class MPNetPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, MPNetLMHead):
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.bias)
 
 
 class MPNetEmbeddings(nn.Module):

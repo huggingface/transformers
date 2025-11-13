@@ -20,6 +20,8 @@ import numpy as np
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
@@ -197,7 +199,7 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, DINOv3ConvNextLayer):
             if module.gamma is not None:
-                nn.init.constant_(module.gamma, self.config.layer_scale_init_value)
+                init.constant_(module.gamma, self.config.layer_scale_init_value)
 
 
 @auto_docstring

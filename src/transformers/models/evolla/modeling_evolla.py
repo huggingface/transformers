@@ -27,6 +27,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -1258,11 +1260,11 @@ class EvollaPreTrainedModel(PreTrainedModel):
         std = self.config.initializer_range
         super()._init_weights(module)
         if isinstance(module, EvollaSequenceAlignerCrossAttention):
-            nn.init.zeros_(module.gate_attention)
-            nn.init.zeros_(module.gate_ffw)
-            nn.init.ones_(module.attention_norm.weight)
+            init.zeros_(module.gate_attention)
+            init.zeros_(module.gate_ffw)
+            init.ones_(module.attention_norm.weight)
         elif isinstance(module, EvollaSequenceCompressorResampler):
-            nn.init.normal_(module.latents, mean=0.0, std=std)
+            init.normal_(module.latents, mean=0.0, std=std)
 
 
 class EvollaModel(EvollaPreTrainedModel):

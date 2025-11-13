@@ -30,6 +30,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+import transformers.initialization as init
 from transformers.utils.generic import OutputRecorder
 
 from ...activations import ACT2FN
@@ -561,12 +562,12 @@ class Sam2PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Sam2HieraDetModel):
             if module.pos_embed is not None:
-                nn.init.zeros_(module.pos_embed)
+                init.zeros_(module.pos_embed)
             if module.pos_embed_window is not None:
-                nn.init.zeros_(module.pos_embed_window)
+                init.zeros_(module.pos_embed_window)
         if isinstance(module, Sam2Model):
             if module.no_memory_embedding is not None:
-                nn.init.zeros_(module.no_memory_embedding)
+                init.zeros_(module.no_memory_embedding)
 
 
 class Sam2HieraDetModel(Sam2PreTrainedModel):

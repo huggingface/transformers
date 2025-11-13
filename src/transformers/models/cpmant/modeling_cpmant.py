@@ -22,6 +22,8 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -530,9 +532,9 @@ class CpmAntPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, CpmAntLayerNorm):
-            nn.init.ones_(module.weight)
+            init.ones_(module.weight)
         elif isinstance(module, CpmAntSegmentPositionEmbedding):
-            nn.init.normal_(module.relative_attention_bias, mean=0.0, std=self.config.init_std)
+            init.normal_(module.relative_attention_bias, mean=0.0, std=self.config.init_std)
 
 
 @auto_docstring

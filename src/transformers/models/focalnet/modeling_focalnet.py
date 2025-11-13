@@ -22,6 +22,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
@@ -587,11 +589,11 @@ class FocalNetPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, FocalNetEmbeddings):
             if module.mask_token is not None:
-                nn.init.zeros_(module.mask_token)
+                init.zeros_(module.mask_token)
         elif isinstance(module, FocalNetLayer):
             if self.config.use_layerscale:
-                nn.init.constant_(module.gamma_1, self.config.layerscale_value)
-                nn.init.constant_(module.gamma_2, self.config.layerscale_value)
+                init.constant_(module.gamma_1, self.config.layerscale_value)
+                init.constant_(module.gamma_2, self.config.layerscale_value)
 
 
 @auto_docstring

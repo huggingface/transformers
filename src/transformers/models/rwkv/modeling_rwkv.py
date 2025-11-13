@@ -22,6 +22,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -399,12 +401,12 @@ class RwkvPreTrainedModel(PreTrainedModel):
                 * 0.5
             )
 
-            nn.init.copy_(module.time_decay, decay_speed)
-            nn.init.copy_(module.time_first, torch.ones_like(module.time_first * math.log(0.3) + zigzag))
+            init.copy_(module.time_decay, decay_speed)
+            init.copy_(module.time_first, torch.ones_like(module.time_first * math.log(0.3) + zigzag))
 
-            nn.init.copy_(module.time_mix_key, torch.pow(time_weight, ratio_1_to_almost0))
-            nn.init.copy_(module.time_mix_value, torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
-            nn.init.copy_(module.time_mix_receptance, torch.pow(time_weight, 0.5 * ratio_1_to_almost0))
+            init.copy_(module.time_mix_key, torch.pow(time_weight, ratio_1_to_almost0))
+            init.copy_(module.time_mix_value, torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
+            init.copy_(module.time_mix_receptance, torch.pow(time_weight, 0.5 * ratio_1_to_almost0))
         elif isinstance(module, RwkvFeedForward):
             layer_id = module.layer_id
             num_hidden_layers = module.config.num_hidden_layers
@@ -419,28 +421,28 @@ class RwkvPreTrainedModel(PreTrainedModel):
             )
             time_weight = time_weight[None, None, :]
 
-            nn.init.copy_(module.time_mix_key, torch.pow(time_weight, ratio_1_to_almost0))
-            nn.init.copy_(module.time_mix_receptance, torch.pow(time_weight, ratio_1_to_almost0))
+            init.copy_(module.time_mix_key, torch.pow(time_weight, ratio_1_to_almost0))
+            init.copy_(module.time_mix_receptance, torch.pow(time_weight, ratio_1_to_almost0))
         elif isinstance(module, nn.Linear):
             shape = module.weight.shape
             gain = 1.0
             scale = 1.0  # extra scale for gain
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
             if shape[0] > shape[1]:
                 gain = math.sqrt(shape[0] / shape[1])
             if shape[0] == self.config.vocab_size and shape[1] == self.config.hidden_size:  # final projection?
                 scale = 0.5
 
             gain *= scale
-            nn.init.orthogonal_(module.weight, gain=gain)
+            init.orthogonal_(module.weight, gain=gain)
         elif isinstance(module, nn.Embedding):
             shape = module.weight.shape
             gain = 1e-4 * math.sqrt(max(shape[0], shape[1]))
-            nn.init.orthogonal_(module.weight, gain=gain)
+            init.orthogonal_(module.weight, gain=gain)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.ones_(module.weight)
-            nn.init.zeros_(module.bias)
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
 
 
 @dataclass

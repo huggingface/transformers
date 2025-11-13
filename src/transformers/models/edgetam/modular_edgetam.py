@@ -17,9 +17,9 @@
 from typing import Optional, Union
 
 import torch
-import torch.nn as nn
 import torch.utils.checkpoint
 
+import transformers.initialization as init
 from transformers.models.sam2.configuration_sam2 import Sam2Config, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig
 from transformers.models.sam2.modeling_sam2 import (
     Sam2Attention,
@@ -180,7 +180,7 @@ class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, EdgeTamModel):
             if module.no_memory_embedding is not None:
-                nn.init.zeros_(module.no_memory_embedding)
+                init.zeros_(module.no_memory_embedding)
 
 
 @auto_docstring(

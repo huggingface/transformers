@@ -20,6 +20,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -143,7 +145,7 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
             else self.config.text_config.initializer_range
         )
         if hasattr(module, "class_embedding"):
-            nn.init.normal_(module.class_embedding, mean=0.0, std=std)
+            init.normal_(module.class_embedding, mean=0.0, std=std)
 
 
 @auto_docstring(

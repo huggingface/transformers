@@ -22,6 +22,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import functional as F
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -440,9 +442,9 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
         """Initialize the weights."""
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, JetMoeParallelExperts):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, JetMoeMoA | JetMoeMoE):
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.bias)
 
 
 @auto_docstring

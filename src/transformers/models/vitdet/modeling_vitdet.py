@@ -21,6 +21,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
@@ -583,28 +585,28 @@ class VitDetPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, VitDetEmbeddings):
-            nn.init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, VitDetAttention) and self.config.use_relative_position_embeddings:
-            nn.init.trunc_normal_(module.rel_pos_h, mean=0.0, std=self.config.initializer_range)
-            nn.init.trunc_normal_(module.rel_pos_w, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.rel_pos_h, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.rel_pos_w, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, VitDetResBottleneckBlock):
             for layer in [module.conv1, module.conv2, module.conv3]:
-                nn.init.kaiming_normal_(layer.weight, mode="fan_out", nonlinearity="relu")
+                init.kaiming_normal_(layer.weight, mode="fan_out", nonlinearity="relu")
                 if layer.bias is not None:
-                    nn.init.constant_(layer.bias, 0)
+                    init.constant_(layer.bias, 0)
             for layer in [module.norm1, module.norm2]:
-                nn.init.ones_(layer.weight)
-                nn.init.zeros_(layer.bias)
+                init.ones_(layer.weight)
+                init.zeros_(layer.bias)
             # zero init last norm layer.
-            nn.init.zeros_(module.norm3.weight)
-            nn.init.zeros_(module.norm3.bias)
+            init.zeros_(module.norm3.weight)
+            init.zeros_(module.norm3.bias)
 
 
 @auto_docstring

@@ -24,6 +24,8 @@ from typing import Optional
 import torch
 from torch import Tensor, nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput
 from ...modeling_layers import GradientCheckpointingLayer
@@ -707,9 +709,9 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, MaskFormerSwinEmbeddings):
             if module.position_embeddings is not None:
-                nn.init.zeros_(module.position_embeddings)
+                init.zeros_(module.position_embeddings)
         elif isinstance(module, MaskFormerSwinSelfAttention):
-            nn.init.zeros_(module.relative_position_bias_table)
+            init.zeros_(module.relative_position_bias_table)
 
 
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):

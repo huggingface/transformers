@@ -26,6 +26,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+import transformers.initialization as init
 from transformers.activations import ACT2FN
 
 from ...cache_utils import Cache
@@ -1205,13 +1206,13 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeHybridParallelExperts):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, GraniteMoeHybridMambaLayer):
-            nn.init.ones_(module.dt_bias)
-            nn.init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
-            nn.init.ones_(module.D)
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
         elif isinstance(module, GraniteMoeHybridRMSNormGated):
-            nn.init.ones_(module.weight)
+            init.ones_(module.weight)
 
 
 @auto_docstring

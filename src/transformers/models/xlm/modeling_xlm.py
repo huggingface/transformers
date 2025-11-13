@@ -26,6 +26,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import gelu, get_activation
 from ...cache_utils import DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -49,8 +51,8 @@ logger = logging.get_logger(__name__)
 def create_sinusoidal_embeddings(n_pos, dim, out):
     position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
     out.requires_grad = False
-    nn.init.copy_(out[:, 0::2], torch.FloatTensor(np.sin(position_enc[:, 0::2])))
-    nn.init.copy_(out[:, 1::2], torch.FloatTensor(np.cos(position_enc[:, 1::2])))
+    init.copy_(out[:, 0::2], torch.FloatTensor(np.sin(position_enc[:, 0::2])))
+    init.copy_(out[:, 1::2], torch.FloatTensor(np.cos(position_enc[:, 1::2])))
     out.detach_()
 
 
@@ -619,17 +621,17 @@ class XLMPreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         if isinstance(module, nn.Embedding):
             if self.config is not None and self.config.embed_init_std is not None:
-                nn.init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
+                init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
             if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
+                init.zeros_(module.weight[module.padding_idx])
         if isinstance(module, nn.Linear):
             if self.config is not None and self.config.init_std is not None:
-                nn.init.normal_(module.weight, mean=0, std=self.config.init_std)
+                init.normal_(module.weight, mean=0, std=self.config.init_std)
                 if module.bias is not None:
-                    nn.init.constant_(module.bias, 0.0)
+                    init.constant_(module.bias, 0.0)
         if isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         if isinstance(module, XLMModel) and self.config.sinusoidal_embeddings:
             create_sinusoidal_embeddings(
                 self.config.max_position_embeddings, self.config.emb_dim, out=module.position_embeddings.weight

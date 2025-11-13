@@ -20,6 +20,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
@@ -251,8 +253,8 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, PoolFormerLayer):
             if hasattr(module, "layer_scale_1"):
-                nn.init.constant_(module.layer_scale_1, self.config.layer_scale_init_value)
-                nn.init.constant_(module.layer_scale_2, self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_1, self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring

@@ -22,6 +22,7 @@ import numpy as np
 import torch
 from torch import nn
 
+import transformers.initialization as init
 from transformers.models.arcee.modeling_arcee import ArceeMLP
 from transformers.models.dinov2.modeling_dinov2 import (
     Dinov2DropPath,
@@ -347,19 +348,19 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, DINOv3ViTEmbeddings):
-            nn.init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.config.num_register_tokens > 0:
-                nn.init.trunc_normal_(module.register_tokens, mean=0.0, std=self.config.initializer_range)
-            nn.init.zeros_(module.mask_token)
+                init.trunc_normal_(module.register_tokens, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.mask_token)
         elif isinstance(module, DINOv3ViTLayerScale):
-            nn.init.constant_(module.lambda1, self.config.layerscale_value)
+            init.constant_(module.lambda1, self.config.layerscale_value)
 
 
 @auto_docstring
