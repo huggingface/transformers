@@ -295,7 +295,10 @@ def eager_attention_forward(
         attn_weights = attn_weights * softcap
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        if multi_head_attention:
+            attn_weights = attn_weights + causal_mask.unsqueeze(2)
+        else:
+            attn_weights = attn_weights + causal_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
