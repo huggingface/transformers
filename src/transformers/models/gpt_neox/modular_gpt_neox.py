@@ -125,7 +125,7 @@ def eager_attention_forward(
 ):
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    if attention_mask is not None:  # no matter the length, we just slice it
+    if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)

@@ -217,7 +217,7 @@ def eager_attention_forward(
         attn_weights = attn_weights / softcap
         attn_weights = torch.tanh(attn_weights)
         attn_weights = attn_weights * softcap
-    if attention_mask is not None:  # no matter the length, we just slice it
+    if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
     # upcast attention to fp32
