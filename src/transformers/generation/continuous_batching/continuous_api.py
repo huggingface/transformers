@@ -564,7 +564,7 @@ class ContinuousBatchProcessor:
         out_tokens = self._sync()
         for i, state in enumerate(self.requests_in_batch):
 
-            # If the request has no remaining prompt ids, it means prefill has already or just finished
+            # If the request has no remaining prompt ids, it means prefill has already ended or just finished
             if len(state.remaining_prompt_ids) == 0:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
@@ -582,7 +582,6 @@ class ContinuousBatchProcessor:
             elif state.status == RequestStatus.PREFILLING_SPLIT:
                 self.cache.mark_blocks_as_complete(state)
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
-            # DEBUG: there is a dangling if, but idk if it ever happens. Adding an error to catch it.
             else:
                 raise ValueError(f"Request {state.request_id} is in an unexpected state: {state.status}")
 
