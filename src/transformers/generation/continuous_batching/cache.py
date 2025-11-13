@@ -190,7 +190,9 @@ class PagedAttentionCache:
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=getattr(generation_config, "num_blocks", None),
             max_batch_tokens=getattr(generation_config, "max_batch_tokens", None),
-            max_memory_percent=getattr(generation_config, "max_memory", 0.9),
+            max_memory_percent=getattr(
+                generation_config, "max_memory", 0.8
+            ),  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
             cache_dtype=self.dtype,
         )
 
@@ -454,7 +456,7 @@ class PagedAttentionMemoryHandler:
         self,
         num_blocks: Optional[int] = None,
         max_batch_tokens: Optional[int] = None,
-        max_memory_percent: float = 0.9,
+        max_memory_percent: float = 0.8,  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
         cache_dtype: torch.dtype = torch.float16,
     ) -> tuple[int, int]:
         """Determine optimal number of blocks and maximum number of tokens per batch based on available memory and
@@ -494,7 +496,7 @@ class PagedAttentionMemoryHandler:
 
     def compute_num_blocks_and_max_batch_tokens(
         self,
-        max_memory_percent: float = 0.9,
+        max_memory_percent: float,
         cache_dtype: torch.dtype = torch.float16,
         m: float = 0.01,
     ) -> tuple[int, int]:
@@ -550,7 +552,7 @@ class PagedAttentionMemoryHandler:
     def compute_max_batch_tokens(
         self,
         num_blocks: int,
-        max_memory_percent: float = 0.9,
+        max_memory_percent: float,
         cache_dtype: torch.dtype = torch.float16,
     ) -> int:
         """Calculate maximum batch tokens M given a fixed number of cache blocks. The formula for M is given by:
@@ -578,7 +580,7 @@ class PagedAttentionMemoryHandler:
     def compute_num_blocks(
         self,
         max_batch_tokens: int,
-        max_memory_percent: float = 0.9,
+        max_memory_percent: float,
         cache_dtype: torch.dtype = torch.float16,
     ) -> int:
         """Calculate number of cache blocks N given a fixed maximum token per token M. The formula for N is given by:
