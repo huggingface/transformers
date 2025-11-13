@@ -679,6 +679,7 @@ class ModelTesterMixin:
             "Owlv2TextModelTest": 12,
             "Owlv2ForObjectDetectionTest": 12,
             "Qwen2_5OmniThinkerForConditionalGenerationModelTest": 4,
+            "Qwen3OmniMoeThinkerForConditionalGenerationTester": 4,
             "SamHQModelTest": 12,
             "Swin2SRModelTest": 3,
             "XLNetModelTest": 3,
