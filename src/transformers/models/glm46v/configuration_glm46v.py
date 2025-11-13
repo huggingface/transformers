@@ -77,8 +77,8 @@ class Glm46VConfig(PreTrainedConfig):
         video_token_id=151344,
         image_start_token_id=151339,
         image_end_token_id=151340,
-        video_start_token_id=151361,
-        video_end_token_id=151362,
+        video_start_token_id=151341,
+        video_end_token_id=151342,
         **kwargs,
     ):
         if isinstance(vision_config, dict):

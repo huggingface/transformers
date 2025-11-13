@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..glm4v.configuration_glm4v import Glm4vConfig
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
 from ..glm4v.image_processing_glm4v_fast import Glm4vImageProcessorFast
-from ..glm4v.modeling_glm4v import Glm4vModel, Glm4vPreTrainedModel
+from ..glm4v.modeling_glm4v import Glm4vModel, Glm4vPreTrainedModel, Glm4vForConditionalGeneration
 from ..glm4v.processing_glm4v import Glm4vProcessor
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 
@@ -38,8 +38,8 @@ class Glm46VConfig(Glm4vConfig):
         video_token_id=151344,
         image_start_token_id=151339,
         image_end_token_id=151340,
-        video_start_token_id=151361,
-        video_end_token_id=151362,
+        video_start_token_id=151341,
+        video_end_token_id=151342,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -74,6 +74,10 @@ class Glm46VModel(Glm4vModel):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
+
+
+class Glm46VForConditionalGeneration(Glm4vForConditionalGeneration):
+    pass
 
 
 class Glm46VProcessor(Glm4vProcessor):
@@ -158,9 +162,10 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
 
 
 __all__ = [
-    "Glm46VModel",
     "Glm46VConfig",
+    "Glm46VModel",
     "Glm46VPreTrainedModel",
+    "Glm46VForConditionalGeneration",
     "Glm46VProcessor",
     "Glm46VImageProcessor",
     "Glm46VImageProcessorFast",
