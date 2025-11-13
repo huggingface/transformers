@@ -244,6 +244,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("longformer", "LongformerConfig"),
         ("longt5", "LongT5Config"),
         ("luke", "LukeConfig"),
+        ("lw_detr", "LwDetrConfig"),
+        ("lw_detr_vit", "LwDetrViTConfig"),
         ("lxmert", "LxmertConfig"),
         ("m2m_100", "M2M100Config"),
         ("mamba", "MambaConfig"),
@@ -695,6 +697,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("longformer", "Longformer"),
         ("longt5", "LongT5"),
         ("luke", "LUKE"),
+        ("lw_detr", "LwDetr"),
+        ("lw_detr_vit", "LwDetrVit"),
         ("lxmert", "LXMERT"),
         ("m2m_100", "M2M100"),
         ("madlad-400", "MADLAD-400"),
@@ -1008,6 +1012,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
         ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
+        ("lw_detr_vit", "lw_detr"),
         ("parakeet_ctc", "parakeet"),
     ]
 )
