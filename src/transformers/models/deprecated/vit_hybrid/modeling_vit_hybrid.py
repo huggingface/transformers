@@ -33,7 +33,7 @@ from ....utils import (
     torch_int,
 )
 from ....utils.backbone_utils import load_backbone
-from ... import initialization as init
+from .... import initialization as init
 from .configuration_vit_hybrid import ViTHybridConfig
 
 

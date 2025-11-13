@@ -34,7 +34,7 @@ from ....utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
-from ... import initialization as init
+from .... import initialization as init
 from .configuration_transfo_xl import TransfoXLConfig
 from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax
 

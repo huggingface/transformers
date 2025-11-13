@@ -23,7 +23,7 @@ from ....cache_utils import Cache
 from ....modeling_outputs import MoECausalLMOutputWithPast, MoEModelOutputWithPastAndCrossAttentions
 from ....modeling_utils import PreTrainedModel
 from ....utils import DUMMY_INPUTS, DUMMY_MASK
-from ... import initialization as init
+from .... import initialization as init
 from .configuration_gptsan_japanese import GPTSanJapaneseConfig
 
 

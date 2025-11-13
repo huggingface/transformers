@@ -33,7 +33,7 @@ from ....utils import (
     logging,
     replace_return_docstrings,
 )
-from ... import initialization as init
+from .... import initialization as init
 from .configuration_trajectory_transformer import TrajectoryTransformerConfig
 
 
