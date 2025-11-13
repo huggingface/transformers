@@ -923,7 +923,6 @@ class FalconH1PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        std = self.config.initializer_range
         if isinstance(module, FalconH1Mixer):
             nn.init.ones_(module.dt_bias)
             nn.init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))

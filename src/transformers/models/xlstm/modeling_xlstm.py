@@ -1258,7 +1258,8 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                 if "igate" in self._module_name_map(module):
                     nn.init.copy_(module.bias, -10.0 * torch.ones_like(module.bias))
                 elif "fgate" in self._module_name_map(module):
-                    nn.init.copy_(module.bias, 
+                    nn.init.copy_(
+                        module.bias,
                         torch.linspace(
                             3.0,
                             6.0,
@@ -1266,22 +1267,30 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                         ).to(
                             device=module.bias.device,
                             dtype=module.bias.dtype,
-                        )
+                        ),
                     )
             elif self.config.weight_mode == "fused" and "gate" in self._module_name_map(module):
                 nn.init.zeros_(module.weight)
 
-                nn.init.copy_(module.bias[: self.config.num_heads], module.bias[: self.config.num_heads] - module.bias[
-                    : self.config.num_heads
-                ] - 10.0 * torch.ones_like(module.bias))
-                nn.init.copy_(module.bias[: self.config.num_heads], module.bias[: self.config.num_heads] - module.bias[self.config.num_heads :] + torch.linspace(
-                    3.0,
-                    6.0,
-                    module.bias.shape[-1],
-                ).to(
-                    device=module.bias.device,
-                    dtype=module.bias.dtype,
-                ))
+                nn.init.copy_(
+                    module.bias[: self.config.num_heads],
+                    module.bias[: self.config.num_heads]
+                    - module.bias[: self.config.num_heads]
+                    - 10.0 * torch.ones_like(module.bias),
+                )
+                nn.init.copy_(
+                    module.bias[: self.config.num_heads],
+                    module.bias[: self.config.num_heads]
+                    - module.bias[self.config.num_heads :]
+                    + torch.linspace(
+                        3.0,
+                        6.0,
+                        module.bias.shape[-1],
+                    ).to(
+                        device=module.bias.device,
+                        dtype=module.bias.dtype,
+                    ),
+                )
             elif "proj_down" in self._module_name_map(module):
                 wang_init_method(dim=module.weight.shape[1], n_layers=self.config.num_hidden_layers)(module.weight)
             elif "out_proj" in self._module_name_map(module):

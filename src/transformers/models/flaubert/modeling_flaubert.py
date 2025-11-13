@@ -688,9 +688,14 @@ class FlaubertPreTrainedModel(PreTrainedModel):
             nn.init.zeros_(module.bias)
             nn.init.ones_(module.weight)
         if isinstance(module, FlaubertModel) and self.config.sinusoidal_embeddings:
-            nn.init.copy_(module.position_embeddings.weight, create_sinusoidal_embeddings(
-                self.config.max_position_embeddings, self.config.emb_dim, out=torch.empty_like(module.position_embeddings.weight)
-            ))
+            nn.init.copy_(
+                module.position_embeddings.weight,
+                create_sinusoidal_embeddings(
+                    self.config.max_position_embeddings,
+                    self.config.emb_dim,
+                    out=torch.empty_like(module.position_embeddings.weight),
+                ),
+            )
 
 
 @auto_docstring

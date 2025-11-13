@@ -550,7 +550,7 @@ class MobileBertPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
-        if isinstance(module,  NoNorm):
+        if isinstance(module, NoNorm):
             nn.init.zeros_(module.bias)
             nn.init.ones_(module.weight)
         elif isinstance(module, MobileBertLMPredictionHead):

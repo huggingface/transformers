@@ -29,7 +29,6 @@ from ...modeling_outputs import ModelOutput
 from ...utils import (
     ContextManagers,
     auto_docstring,
-    is_scipy_available,
     logging,
 )
 from .modeling_esm import EsmModel, EsmPreTrainedModel
@@ -205,6 +204,7 @@ def dict_multimap(fn, dicts):
             new_dict[k] = fn(all_v)
 
     return new_dict
+
 
 class EsmFoldLinear(nn.Linear):
     """

@@ -848,7 +848,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
                 nn.init.ones_(module.alpha_dense)
             elif self.config.alpha_initializer in {"normal", "gaussian", "random"}:
                 nn.init.normal_(module.alpha_cross_attn, mean=0.0, std=self.config.alphas_initializer_range)
-                nn.init.normal_(module.alpha_dense., mean=0.0, std=self.config.alphas_initializer_range)
+                nn.init.normal_(module.alpha_dense, mean=0.0, std=self.config.alphas_initializer_range)
         elif isinstance(module, IdeficsPerceiverResampler):
             nn.init.normal_(module.latents)
 

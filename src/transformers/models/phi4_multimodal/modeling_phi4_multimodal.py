@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import math
-import warnings
 from collections.abc import Callable
 from typing import Optional, Union
 
@@ -229,6 +228,7 @@ def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
         nn.init.uniform_(tensor, -bound, bound)
     else:
         raise ValueError(f"invalid distribution {distribution}")
+
 
 def lecun_normal_(tensor):
     variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")

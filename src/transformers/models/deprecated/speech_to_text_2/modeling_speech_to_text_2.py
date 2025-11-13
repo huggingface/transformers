@@ -374,7 +374,6 @@ class Speech2Text2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        std = self.config.init_std
         if isinstance(module, Speech2Text2SinusoidalPositionalEmbedding):
             weight = module.get_embedding(*module.weight.shape, module.padding_idx)
             nn.init.copy_(module.weight, weight)

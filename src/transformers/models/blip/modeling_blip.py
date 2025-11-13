@@ -431,7 +431,6 @@ class BlipPreTrainedModel(PreTrainedModel):
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=std)
 
 
-
 class BlipEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a

@@ -808,7 +808,9 @@ class ClvpPreTrainedModel(PreTrainedModel):
         elif isinstance(module, ClvpForCausalLM):
             for name, p in module.named_parameters():
                 if name == "c_proj.weight":
-                    nn.init.normal_(p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers))
+                    nn.init.normal_(
+                        p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers)
+                    )
         elif isinstance(module, ClvpModelForConditionalGeneration):
             nn.init.constant_(module.logit_scale, self.config.logit_scale_init_value)
 

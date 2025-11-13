@@ -547,7 +547,7 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.out_vision_proj.weight)
             nn.init.zeros_(module.out_vision_proj.bias)
             nn.init.xavier_uniform_(module.out_text_proj.weight)
-            nn.init.zeros_(module.out_text_proj.bias.)
+            nn.init.zeros_(module.out_text_proj.bias)
         elif isinstance(module, MMGroundingDinoFusionLayer):
             nn.init.constant_(module.vision_param, 1e-4)
             nn.init.constant_(module.text_param, 1e-4)

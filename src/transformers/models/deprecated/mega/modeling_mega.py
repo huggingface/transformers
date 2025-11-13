@@ -1345,7 +1345,11 @@ class MegaPreTrainedModel(PreTrainedModel):
                 if self.config.ema_projection_size > 1:
                     idx = torch.tensor(list(range(1, self.config.ema_projection_size, 2)))
                     val.index_fill_(0, idx, -1.0)
-                nn.init.copy_(module.ema_expansion_matrix, torch.normal(mean=0.0, std=self.config.ema_beta_range, size=module.ema_expansion_matrix.shape) + val)
+                nn.init.copy_(
+                    module.ema_expansion_matrix,
+                    torch.normal(mean=0.0, std=self.config.ema_beta_range, size=module.ema_expansion_matrix.shape)
+                    + val,
+                )
                 # gamma & omega
                 nn.init.normal_(module.kernel_projection_matrix, mean=0.0, std=self.config.ema_gamma_omega_range)
                 nn.init.normal_(module.residual_weight, mean=0.0, std=self.config.ema_gamma_omega_range)

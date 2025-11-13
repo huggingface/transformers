@@ -719,6 +719,7 @@ class CaninePreTrainedModel(PreTrainedModel):
     base_model_prefix = "canine"
     supports_gradient_checkpointing = True
 
+
 @auto_docstring
 class CanineModel(CaninePreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):

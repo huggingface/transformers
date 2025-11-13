@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional, Union

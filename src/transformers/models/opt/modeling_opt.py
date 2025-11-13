@@ -303,6 +303,7 @@ class OPTPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _can_compile_fullgraph = True
 
+
 class OPTDecoder(OPTPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`OPTDecoderLayer`]

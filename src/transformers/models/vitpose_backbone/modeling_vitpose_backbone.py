@@ -370,6 +370,7 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
         elif isinstance(module, VitPoseBackboneEmbeddings):
             nn.init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
 
+
 @auto_docstring(
     custom_intro="""
     The VitPose backbone useful for downstream tasks.
