@@ -28,3 +28,7 @@
 [[autodoc]] Glm46VModel
     - forward
 
+## Glm46VForConditionalGeneration
+
+[[autodoc]] Glm46VForConditionalGeneration
+    - forward
