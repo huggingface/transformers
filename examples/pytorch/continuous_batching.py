@@ -30,27 +30,24 @@ from transformers.generation import GenerationConfig
 from transformers.generation.continuous_batching.requests import logger
 
 
-SLIDING_WINDOW = 0
-MODEL_ID = "google/gemma-2-2b-it" if SLIDING_WINDOW > 0 else "meta-llama/Meta-Llama-3-8B"
-FORCE_MAX_LENGTH = False  # should be False unless you are debugging sliding window features
-SKIP_SPECIAL_TOKENS = False
-
-
 def generate_simple(
-    attn_impl: str, simple_batch_inputs: list[int], generation_config: GenerationConfig
+    model_id: str,
+    sliding_window: int,
+    attn_impl: str,
+    simple_batch_inputs: list[int],
+    generation_config: GenerationConfig,
 ) -> dict[str, str]:
     attn_impl = {
         "sdpa": "sdpa",
         "eager": "eager",
-        "paged_attention": "eager",  # TODO: this does not work on AMD docker
         "flash_paged": "flash_attention_2",  # TODO: this does not work on AMD docker
         "kernels-community/flash-attn": "eager",
     }[attn_impl]
 
-    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.bfloat16, attn_implementation=attn_impl)
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, attn_implementation=attn_impl)
     model = model.cuda().eval()
-    if getattr(model.config, "sliding_window", None) is not None:
-        model.config.sliding_window = SLIDING_WINDOW
+    if sliding_window > 0 and getattr(model.config, "sliding_window", None) is not None:
+        model.config.sliding_window = sliding_window
 
     decoded_outputs = {}
     for input_ids in tqdm(simple_batch_inputs, desc="Generating outputs without CB"):
@@ -59,12 +56,14 @@ def generate_simple(
         # attention_mask = torch.ones_like(input_ids)
         outputs = model.generate(input_ids, generation_config=generation_config, use_model_defaults=False)
         generated_tokens = outputs[0][input_ids.shape[1] :]
-        decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=SKIP_SPECIAL_TOKENS)
+        decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=False)
         decoded_outputs[key] = decoded_output
     return decoded_outputs
 
 
-def setup_metrics():
+def maybe_setup_metrics(use_metrics: bool) -> None:
+    if not use_metrics:
+        return
     try:
         from opentelemetry import metrics, trace
         from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
@@ -119,7 +118,7 @@ def batch_generate(
     token_count = 0
     data = []
     for i, request in enumerate(batch_outputs):
-        input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=SKIP_SPECIAL_TOKENS)
+        input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=False)
         # The key is used to tie back to the output of unbatched generation
         key = " ".join(map(str, batch_outputs[request].prompt_ids))
         data.append({"input": input_text, "key": key})
@@ -127,7 +126,7 @@ def batch_generate(
         # Try to decode the output
         try:
             output_text = tokenizer.decode(
-                batch_outputs[request].generated_tokens, skip_special_tokens=SKIP_SPECIAL_TOKENS
+                batch_outputs[request].generated_tokens, skip_special_tokens=False
             )
             token_count += len(batch_outputs[request].generated_tokens[1:])
             data[-1]["cb_outputs"] = output_text
@@ -182,68 +181,74 @@ def batch_generate(
 
 
 if __name__ == "__main__":
-    # Parse args
     parser = argparse.ArgumentParser()
+
+    # Continuous batching parameters
     parser.add_argument("--num-blocks", "-n", type=int, default=None)
     parser.add_argument("--max-batch-tokens", "-b", type=int, default=None)
 
+    # Model parameters
+    parser.add_argument("--sliding-window", type=int, default=0)
     parser.add_argument("--attn", type=str, default="kernels-community/flash-attn", help="Attention implementation")
+
+    # Performance parameters
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
 
+    # Benchmark parameters
     parser.add_argument("--samples", type=int, default=500, help="Number of samples to generate")
     parser.add_argument("--add-prefix", action="store_true", help="Add a prefix to the samples")
+    parser.add_argument("--compare", action="store_true", help="Compare CB generation with classic generate")
+    parser.add_argument("--profile ", type=str, default=None)
+    parser.add_argument("--metrics", action="store_true")
+    parser.add_argument("--force-max-length", action="store_true", help="Force generation to stop at max length")
 
+    # Display parameters
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
     parser.add_argument("--log-level", type=str, default="INFO")
     parser.add_argument("--output-file", type=str, default=None)
-    parser.add_argument("--compare", action="store_true")
-    parser.add_argument("--metrics", action="store_true")
-    parser.add_argument("--profile", type=str, default=None)
+
     args = parser.parse_args()
 
-    # Set log level
+
+    # Create model
+    model_id = "google/gemma-2-2b-it" if args.sliding_window > 0 else "meta-llama/Meta-Llama-3-8B"
+    model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=args.attn, dtype=torch.bfloat16)
+    model = model.cuda().eval()
+
+    if args.sliding_window > 0 and getattr(model.config, "sliding_window", None) is not None:
+        print(f"Setting sliding window from {model.config.sliding_window} to {args.sliding_window}")
+        model.config.sliding_window = args.sliding_window
+
+
+    # Set up diagnostics
     logger.setLevel(args.log_level.upper())
+    maybe_setup_metrics(args.metrics)
 
-    # If turned on, we setup metrics
-    if args.metrics:
-        setup_metrics()
 
-    # Set matmul precision if not none
+    # Set up performance
     if args.matmul_precision != "none":
         torch.set_float32_matmul_precision(args.matmul_precision)
-    # Parse cuda graph argument
-    if args.cuda_graph is not None:
-        use_cuda_graph = {
-            "none": None,
-            "yes": True, "y": True, "true": True, "t": True, "1": True,
-            "no": False, "n": False, "false": False, "f": False, "0": False,
-        }[args.cuda_graph.lower()]  # fmt: skip
-    else:
-        use_cuda_graph = None
 
-    # Prepare model
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
-        attn_implementation=args.attn,
-        dtype=torch.bfloat16,
-    )
-    model = model.cuda().eval()
-    if getattr(model.config, "sliding_window", None) is not None:
-        print(f"Setting sliding window from {model.config.sliding_window} to {SLIDING_WINDOW}")
-        model.config.sliding_window = SLIDING_WINDOW
+    cuda_graph_arg = args.cuda_graph.lower() if args.cuda_graph is not None else None
+    use_cuda_graph = {
+        "none": None, None: None,
+        "yes": True, "y": True, "true": True, "t": True, "1": True,
+        "no": False, "n": False, "false": False, "f": False, "0": False,
+    }[cuda_graph_arg]  # fmt: skip
 
-    # If turned on, we compile the model
     if args.compile:
         model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
 
+
     # Prepare tokenizer and dataset
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, padding_side="left")
+    tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
     dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
     dataset = dataset.select(range(args.samples))
 
+    # Add prefixes to the samples if asked
     def random_prefix() -> str:
         if not args.add_prefix:
             return ""
@@ -261,7 +266,7 @@ if __name__ == "__main__":
     generation_config = GenerationConfig(
         max_new_tokens=512,
         use_cuda_graph=use_cuda_graph,
-        eos_token_id=tokenizer.pad_token_id if FORCE_MAX_LENGTH else tokenizer.eos_token_id,
+        eos_token_id=tokenizer.pad_token_id if args.force_max_length else tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
         do_sample=not args.compare,
         temperature=0.8,
