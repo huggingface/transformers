@@ -554,7 +554,7 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
             module.embedding.weight.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, Pop2PianoForConditionalGeneration):
             module.shared.weight.normal_(mean=0.0, std=factor * 1.0)
-            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+            if hasattr(module, "lm_head"):
                 module.lm_head.weight.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, Pop2PianoDenseActDense):
             module.wi.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
@@ -583,8 +583,6 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
             module.o.weight.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
-        elif isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=factor)
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
