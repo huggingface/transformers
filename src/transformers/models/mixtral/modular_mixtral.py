@@ -265,7 +265,7 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
 class MixtralPreTrainedModel(MistralPreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(MixtralTopKRouter, index=0),
         "hidden_states": MixtralDecoderLayer,
         "attentions": MixtralAttention,
     }
