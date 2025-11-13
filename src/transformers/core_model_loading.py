@@ -35,6 +35,7 @@ from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, DTensor, Replicat
 from .utils import is_torch_greater_or_equal, logging
 from .utils.quantization_config import QuantizationMethod
 
+
 _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 if _is_dtensor_available:
@@ -519,7 +520,7 @@ def set_param_for_module(
     missing_keys: MutableSet[str],
     misc: MutableMapping[str, Any],
     distributed_operation: Optional[TensorParallelLayer],
-    hf_quantizer,
+    hf_quantizer: HfQuantizer
 ):
     with log_to_misc(layer_name, misc, layer_name):
         module_path, _, param_name = layer_name.rpartition(".")

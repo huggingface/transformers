@@ -63,7 +63,7 @@ class Bnb4bitQuantize(ConversionOps):
                 self.hf_quantizer.param_quant_stats = defaultdict(dict)
             self.hf_quantizer.param_quant_stats[module_name].update({full_name: value})
             # TODO: for now, we remove it in the missing keys
-            # Another solution would be to save all these stats to the linear4bit and setattr + we do a processing where we recreate the quant_state 
+            # Another solution would be to save all these stats to the linear4bit and setattr + we do a processing where we recreate the quant_state
             missing_keys.discard(full_name)
             # We are ready for quantization in this case (note, the +1 is for the weight itself)
             if len(self.hf_quantizer.param_quant_stats[module_name]) == len(self.hf_quantizer.bnb_keys) + 1:
@@ -141,8 +141,8 @@ def _replace_with_bnb_linear(
                             )
                             from bitsandbytes.functional import QuantState
                             # hack to create the correct keys in the state dict
-                            module.weight.quant_state = QuantState(absmax=torch.empty(1),  
-                                                                   code=torch.empty(1),                                                               
+                            module.weight.quant_state = QuantState(absmax=torch.empty(1),
+                                                                   code=torch.empty(1),
                                                                    shape=(1,),
                                                                    offset=torch.empty(1),
                                                                    quant_type=quantization_config.bnb_4bit_quant_type,

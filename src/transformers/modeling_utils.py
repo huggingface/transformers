@@ -48,7 +48,6 @@ from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_checkpoint_conversion_mapping
 from .core_model_loading import (
     WeightConverter,
-    _infer_parameter_dtype,
     convert_and_load_state_dict_in_model,
     revert_weight_conversion,
 )
