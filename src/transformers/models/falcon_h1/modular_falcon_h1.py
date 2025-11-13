@@ -920,21 +920,23 @@ class FalconH1PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
-        for name, param in module.named_parameters(recurse=True):
-            if not param.requires_grad:
-                continue
-            if "layernorm" in name.lower() and "weight" in name:
-                # LayerNorm weights usually initialized to 1
-                param.data.fill_(1.0)
-            elif "bias" in name:
-                param.data.zero_()
-            else:
-                try:
-                    param.data.normal_(mean=0.0, std=std)
-                except Exception as e:
-                    print(f"Skipping init for {name} due to error: {e}")
+        if isinstance(module, nn.Module):
+            for name, param in module.named_parameters(recurse=True):
+                if not param.requires_grad:
+                    continue
+                if "layernorm" in name.lower() and "weight" in name:
+                    # LayerNorm weights usually initialized to 1
+                    param.fill_(1.0)
+                elif "bias" in name:
+                    param.zero_()
+                else:
+                    try:
+                        param.normal_(mean=0.0, std=std)
+                    except Exception as e:
+                        print(f"Skipping init for {name} due to error: {e}")
 
 
 def compute_mup_vector(config):

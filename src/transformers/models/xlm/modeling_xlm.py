@@ -614,21 +614,22 @@ class XLMPreTrainedModel(PreTrainedModel):
             langs_list = None
         return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Embedding):
             if self.config is not None and self.config.embed_init_std is not None:
                 nn.init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         if isinstance(module, nn.Linear):
             if self.config is not None and self.config.init_std is not None:
                 nn.init.normal_(module.weight, mean=0, std=self.config.init_std)
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0.0)
         if isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         if isinstance(module, XLMModel) and self.config.sinusoidal_embeddings:
             create_sinusoidal_embeddings(
                 self.config.max_position_embeddings, self.config.emb_dim, out=module.position_embeddings.weight
@@ -921,7 +922,7 @@ class XLMPredLayer(nn.Module):
     """
 )
 class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["pred_layer.proj.weight"]
+    _tied_weights_keys = {"pred_layer.proj.weight": "transformer.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

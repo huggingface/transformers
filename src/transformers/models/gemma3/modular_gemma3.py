@@ -569,13 +569,14 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
         "SiglipMultiheadAttentionPoolingHead",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3MultiModalProjector):
-            module.mm_input_projection_weight.data.zero_()
+            module.mm_input_projection_weight.zero_()
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.data.zero_()
+            module.weight.zero_()
 
 
 def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
