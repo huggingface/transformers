@@ -697,6 +697,7 @@ def _validate_yarn_parameters(
         "original_max_position_embeddings",
         "mscale",
         "mscale_all_dim",
+        "truncate"
     }
     received_keys = set(rope_parameters.keys())
     rope_type = rope_parameters["rope_type"]
