@@ -31,7 +31,7 @@ from transformers.generation.continuous_batching.requests import logger
 
 
 def generate_without_cb(
-    model_id: str, sliding_window: int, attn_impl: str, batched_inputs: list[int], generation_config: GenerationConfig,
+    model_id: str, sliding_window: int, attn_impl: str, batched_inputs: list[int], generation_config: GenerationConfig
 ) -> dict[str, str]:
     # Setup model and tokenizer
     model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, attn_implementation=attn_impl)
@@ -117,9 +117,7 @@ def batch_generate(
 
         # Try to decode the output
         try:
-            output_text = tokenizer.decode(
-                batch_outputs[request].generated_tokens, skip_special_tokens=False
-            )
+            output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=False)
             token_count += len(batch_outputs[request].generated_tokens[1:])
             data[-1]["cb_outputs"] = output_text
         except Exception as e:
@@ -197,7 +195,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-
     # Create model
     model_id = "google/gemma-2-2b-it" if args.sliding_window > 0 else "meta-llama/Llama-3.1-8B-Instruct"
     has_system_role = args.sliding_window == 0
@@ -229,7 +226,6 @@ if __name__ == "__main__":
     if args.compile:
         model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
 
-
     # Prepare tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
@@ -259,7 +255,6 @@ if __name__ == "__main__":
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
         batched_inputs.append(inputs["input_ids"])
 
-
     # Prepare generation config
     generation_cfg = GenerationConfig(
         max_new_tokens=512,
@@ -275,7 +270,9 @@ if __name__ == "__main__":
 
     # If we need to compare, we need to generate the reference outputs
     if args.compare:
-        expected_outputs = generate_without_cb(model_id, args.sliding_window, args.attn, batched_inputs, generation_cfg)
+        expected_outputs = generate_without_cb(
+            model_id, args.sliding_window, args.attn, batched_inputs, generation_cfg
+        )
     else:
         expected_outputs = None
 

@@ -819,6 +819,16 @@ class ContinuousBatchingManager:
             block: Whether to wait for the thread to stop
             timeout: Maximum time to wait for the thread to stop
         """
+        if self.batch_processor is not None:
+            logger.warning("\nBatch processor was not initialized.")
+        else:
+            if self.batch_processor.cache.use_prefix_sharing:
+                logger.warning(
+                    f"\nPrefix sharing was on. Total prefix length: {self.batch_processor.cache._total_prefix_length}"
+                )
+            else:
+                logger.warning("\nPrefix sharing was off.")
+
         if self._generation_thread is None:
             logger.warning("Manager not started.")
             return
@@ -1163,5 +1173,6 @@ class ContinuousMixin:
         except Exception as e:
             logger.error(f"Error during batch generation: {e}", exc_info=True)
         finally:
+            logger.debug("Generate batch is finished.")  # a dummy log needed for the logs of stop to show. Won't show.
             manager.stop(block=True, timeout=5.0)
         return results
