@@ -148,7 +148,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         from accelerate import init_empty_weights
 
         from transformers import AutoModelForMaskedLM, Blip2ForConditionalGeneration, MptForCausalLM, OPTForCausalLM
-        from transformers.integrations.bitsandbytes import get_keys_to_not_convert
+        from transformers.quantizers.base import get_keys_to_not_convert
 
         model_id = "mosaicml/mpt-7b"
         config = AutoConfig.from_pretrained(model_id, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7")

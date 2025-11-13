@@ -103,7 +103,7 @@ class Bnb8bitQuantize(ConversionOps):
         # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
         # Since weights are saved in the correct "orientation", we skip transposing when loading.
         if issubclass(module.source_cls, Conv1D) and not self.hf_quantizer.pre_quantized:
-            param_value = param_value.T
+            value = value.T
 
         old_value = getattr(module, tensor_name)
         kwargs = old_value.__dict__

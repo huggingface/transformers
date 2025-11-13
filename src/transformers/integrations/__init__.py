@@ -33,7 +33,6 @@ _import_structure = {
     ],
     "bitsandbytes": [
         "dequantize_and_replace",
-        "get_keys_to_not_convert",
         "replace_with_bnb_linear",
         "validate_bnb_backend_availability",
         "Bnb4bitQuantize",
@@ -180,7 +179,6 @@ if TYPE_CHECKING:
     from .bitsandbytes import (
         Bnb4bitQuantize,
         dequantize_and_replace,
-        get_keys_to_not_convert,
         replace_with_bnb_linear,
         validate_bnb_backend_availability,
     )
