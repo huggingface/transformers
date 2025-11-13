@@ -1000,6 +1000,8 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
         if isinstance(module, Qwen3NextExperts):
             module.gate_up_proj.normal_(mean=0.0, std=self.config.initializer_range)
             module.down_proj.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, Qwen3NextSparseMoeBlock):
+            module.gate.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 class Qwen3NextModel(Qwen3NextPreTrainedModel):

@@ -411,7 +411,7 @@ class GenerationMixin(ContinuousMixin):
                     "Generation config file not found, using a generation config created from the model config."
                 )
             # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
-            if hasattr(self, "load_custom_generate"):
+            if hasattr(self, "load_custom_generate") and trust_remote_code:
                 try:
                     custom_generate = self.load_custom_generate(
                         pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **repo_loading_kwargs
@@ -2175,7 +2175,7 @@ class GenerationMixin(ContinuousMixin):
             return False
 
         # Base logic
-        valid_hardware = self.device.type == "cuda" or bool(
+        valid_hardware = self.device.type in ["cuda", "xpu"] or bool(
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
         using_compilable_cache = (

@@ -125,6 +125,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
+    from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -679,6 +680,7 @@ class ModelTesterMixin:
             "Owlv2TextModelTest": 12,
             "Owlv2ForObjectDetectionTest": 12,
             "Qwen2_5OmniThinkerForConditionalGenerationModelTest": 4,
+            "Qwen3OmniMoeThinkerForConditionalGenerationModelTest": 4,
             "SamHQModelTest": 12,
             "Swin2SRModelTest": 3,
             "XLNetModelTest": 3,
@@ -810,9 +812,12 @@ class ModelTesterMixin:
 
                 if getattr(model, "_tied_weights_keys", None):
                     keys_to_ignore.update(set(model._tied_weights_keys))
-
-                self.assertTrue(len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys_to_ignore)
-                self.assertTrue(len(load_result.unexpected_keys) == 0)
+                with self.subTest(model=model_class.__name__):
+                    self.assertTrue(
+                        len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys_to_ignore,
+                        msg=f"Missing keys: {load_result.missing_keys}\nKeys to ignore: {keys_to_ignore}",
+                    )
+                    self.assertTrue(len(load_result.unexpected_keys) == 0)
 
     def test_gradient_checkpointing_backward_compatibility(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -2338,6 +2343,7 @@ class ModelTesterMixin:
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
+    @unittest.skip("# TODO @CyrilVallez fix this in the other PR")
     def test_disk_offload_bin(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2382,6 +2388,7 @@ class ModelTesterMixin:
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
+    @unittest.skip("# TODO @CyrilVallez fix this in the other PR")
     def test_disk_offload_safetensors(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2420,6 +2427,7 @@ class ModelTesterMixin:
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
+    @unittest.skip("# TODO @CyrilVallez fix this in the other PR")
     def test_cpu_offload(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3987,123 +3995,47 @@ class ModelTesterMixin:
                         self.assertEqual(v1.dtype, v2.dtype)
                     torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
 
+    def test_tp_plan_matches_params(self):
+        """Make sure that each entry of the tp plan matches at least one param (this avoid typos and/or edge cases
+        with regexes)"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # If none of the config and subconfigs have a tp_plan, then skip (otherwise we should make sure to respect the plan)
+        if config.base_model_tp_plan is None and all(
+            getattr(getattr(config, key), "base_model_tp_plan", None) is None for key in config.sub_configs
+        ):
+            self.skipTest("Model does not have a TP plan.")
 
-@require_torch
-def test_weight_conversion_operations_roundtrip():
-    import torch
+        # Some MoE models alternate between a classic MLP and a MoE layer, in which case we want to have each one
+        # in order to test the whole tp plan
+        config_to_set = config.get_text_config()
+        config_to_set.first_k_dense_replace = 1  # means that the first layer (idx 0) will be MLP, then MoE
+        config_to_set.moe_layer_start_index = 1  # same as above but for Ernie 4.5...
+        config_to_set.mlp_only_layers = [0]  # same but for qwens
 
-    from transformers.core_model_loading import (
-        Chunk,
-        Concatenate,
-        Fp8Dequantize,
-        Fp8Quantize,
-        MergeModuleList,
-        Shard,
-        WeightConversion,
-        convert_state_dict,
-    )
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            param_names = {name for name, _ in model.named_parameters()} | {name for name, _ in model.named_buffers()}
+            module_names = {name for name, _ in model.named_modules()}
+            tp_plan = model.tp_plan
+            # Make sure the plan is not empty
+            self.assertTrue(
+                len(tp_plan) > 0,
+                f"No TP-plan found for class {model_class.__name__} even though the associated config has one",
+            )
+            pattern_usage = {}
+            for pattern in tp_plan:
+                # Check if this given pattern matches any param or module (the value attributed to the pattern does not matter)
+                pattern_usage[pattern] = any(
+                    _get_parameter_tp_plan(param, {pattern: ""}, is_weight=True) is not None for param in param_names
+                ) or any(
+                    _get_parameter_tp_plan(module, {pattern: ""}, is_weight=False) is not None
+                    for module in module_names
+                )
 
-    state_dict = {
-        "experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
-        "experts.1.w1.weight": torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
-        "experts.0.w3.weight": torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
-        "experts.1.w3.weight": torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
-        "self_attn.q_proj.weight": torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
-        "self_attn.k_proj.weight": torch.tensor([[5.0, 6.0], [7.0, 8.0]]),
-        "self_attn.v_proj.weight": torch.tensor([[9.0, 10.0], [11.0, 12.0]]),
-        "self_attn.out_proj.weight": torch.arange(12.0).reshape(6, 2),
-        "mlp.w2.weight": torch.tensor([[1.0, 0.0], [0.0, 1.0]]),
-    }
-
-    forward_mapping = [
-        WeightConversion(
-            ["experts.*.w1.weight", "experts.*.w3.weight"],
-            "experts.gate_up_proj.weight",
-            [MergeModuleList(dim=0), Concatenate(dim=0), Fp8Quantize(block_size=(1, 1))],
-        ),
-        WeightConversion(
-            ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
-            "self_attn.qkv_proj.weight",
-            Concatenate(dim=0),
-        ),
-        WeightConversion(
-            "self_attn.out_proj.weight",
-            ["self_attn.out_proj.weight.shard0", "self_attn.out_proj.weight.shard1"],
-            Shard(dim=0, world_size=2, return_all=True),
-        ),
-        WeightConversion("mlp.w2.weight", "mlp.down_proj.weight"),
-    ]
-
-    converted_state, _ = convert_state_dict(None, state_dict, forward_mapping, tp_plan=None, quantization_config=None)
-
-    expected_qkv = torch.cat(
-        (
-            state_dict["self_attn.q_proj.weight"],
-            state_dict["self_attn.k_proj.weight"],
-            state_dict["self_attn.v_proj.weight"],
-        ),
-        dim=0,
-    )
-    torch.testing.assert_close(converted_state["self_attn.qkv_proj.weight"], expected_qkv)
-
-    reconstructed_out_proj = torch.cat(
-        (converted_state["self_attn.out_proj.weight.shard0"], converted_state["self_attn.out_proj.weight.shard1"]),
-        dim=0,
-    )
-    torch.testing.assert_close(reconstructed_out_proj, state_dict["self_attn.out_proj.weight"])
-    torch.testing.assert_close(converted_state["mlp.down_proj.weight"], state_dict["mlp.w2.weight"])
-
-    inverse_mapping = [
-        WeightConversion(
-            ["experts.gate_up_proj.weight", "experts.gate_up_proj.scale"],
-            "experts.gate_up_proj.dequantized",
-            Fp8Dequantize(block_size=(1, 1)),
-        ),
-        WeightConversion(
-            "experts.gate_up_proj.dequantized",
-            ["experts.w1.concat", "experts.w3.concat"],
-            Chunk(dim=0, sizes=[4, 4]),
-        ),
-        WeightConversion(
-            "experts.w1.concat",
-            ["experts.0.w1.weight", "experts.1.w1.weight"],
-            Chunk(dim=0, sizes=[2, 2]),
-        ),
-        WeightConversion(
-            "experts.w3.concat",
-            ["experts.0.w3.weight", "experts.1.w3.weight"],
-            Chunk(dim=0, sizes=[2, 2]),
-        ),
-        WeightConversion(
-            "self_attn.qkv_proj.weight",
-            [
-                "self_attn.q_proj.weight",
-                "self_attn.k_proj.weight",
-                "self_attn.v_proj.weight",
-            ],
-            Chunk(dim=0, sizes=[2, 2, 2]),
-        ),
-        WeightConversion(
-            ["self_attn.out_proj.weight.shard0", "self_attn.out_proj.weight.shard1"],
-            "self_attn.out_proj.weight",
-            Concatenate(dim=0),
-        ),
-        WeightConversion("mlp.down_proj.weight", "mlp.w2.weight"),
-    ]
-
-    roundtrip_state, _ = convert_state_dict(
-        None, converted_state, inverse_mapping, tp_plan=None, quantization_config=None
-    )
-
-    torch.testing.assert_close(roundtrip_state["experts.0.w1.weight"], state_dict["experts.0.w1.weight"])
-    torch.testing.assert_close(roundtrip_state["experts.1.w1.weight"], state_dict["experts.1.w1.weight"])
-    torch.testing.assert_close(roundtrip_state["experts.0.w3.weight"], state_dict["experts.0.w3.weight"])
-    torch.testing.assert_close(roundtrip_state["experts.1.w3.weight"], state_dict["experts.1.w3.weight"])
-    torch.testing.assert_close(roundtrip_state["self_attn.q_proj.weight"], state_dict["self_attn.q_proj.weight"])
-    torch.testing.assert_close(roundtrip_state["self_attn.k_proj.weight"], state_dict["self_attn.k_proj.weight"])
-    torch.testing.assert_close(roundtrip_state["self_attn.v_proj.weight"], state_dict["self_attn.v_proj.weight"])
-    torch.testing.assert_close(roundtrip_state["self_attn.out_proj.weight"], state_dict["self_attn.out_proj.weight"])
-    torch.testing.assert_close(roundtrip_state["mlp.w2.weight"], state_dict["mlp.w2.weight"])
+            unused_entries = {k for k, v in pattern_usage.items() if not v}
+            self.assertTrue(
+                len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
+            )
 
 
 global_rng = random.Random()

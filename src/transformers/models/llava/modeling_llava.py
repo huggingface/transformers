@@ -110,7 +110,6 @@ class LlavaMultiModalProjector(nn.Module):
 @auto_docstring
 class LlavaPreTrainedModel(PreTrainedModel):
     config: LlavaConfig
-    base_model_prefix = ""
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -129,8 +128,6 @@ class LlavaPreTrainedModel(PreTrainedModel):
     """
 )
 class LlavaModel(LlavaPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
-
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)

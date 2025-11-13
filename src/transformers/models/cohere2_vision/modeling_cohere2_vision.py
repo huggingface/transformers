@@ -129,7 +129,6 @@ class Cohere2VisionCausalLMOutputWithPast(ModelOutput):
 @auto_docstring
 class Cohere2VisionPreTrainedModel(PreTrainedModel):
     config: Cohere2VisionConfig
-    base_model_prefix = "model"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -143,6 +142,7 @@ class Cohere2VisionPreTrainedModel(PreTrainedModel):
         "hidden_states": "DecoderLayer",
         "attentions": "Attention",
     }
+    base_model_prefix = "model"
 
 
 @auto_docstring(

@@ -76,6 +76,15 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = True
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
+            module.experts.gate_up_proj.normal_(mean=0.0, std=std)
+            module.experts.down_proj.normal_(mean=0.0, std=std)
+            module.router.weight.normal_(mean=0.0, std=std)
+
 
 def _get_feat_extract_output_lengths(input_lengths):
     """
@@ -1292,7 +1301,7 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(nn.Module):
     def apply_interleaved_mrope(self, freqs, mrope_section):
         """Apply interleaved MRoPE to 3D rotary embeddings.
         Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
-        interleaved [THTHWHTHW...TT], preserving frequency continuity.
+        interleaved [THWTHWTHW...TT], preserving frequency continuity.
         args:
             x: (3, bs, seq_len, head_dim // 2)
             mrope_section: (3,)

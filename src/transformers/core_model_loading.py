@@ -126,7 +126,7 @@ def build_glob_alt(
         elif not pat_src.startswith(r"\^") and not pat_src.startswith(r".*"):
             prefix_src = ".*"
 
-        parts.append(f"(?P<{name}>{prefix_src}{pat_src})")
+        parts.append(f"(?P<{name}>{prefix_src}{pat_src}.*)")
 
     alt_src = "|".join(parts).replace("\\^", "^").replace("\\.", r"\.")
     try:
@@ -177,11 +177,10 @@ class Chunk(ConversionOps):
         self.reverse_op = Concatenate
 
     def convert(self, value: torch.Tensor, *args, **kwargs) -> list[torch.Tensor]:
-        if not isinstance(value, torch.Tensor):
-            raise TypeError("Chunk expects a torch.Tensor as input.")
-        if self.sizes is not None:
-            return list(torch.split(value, self.sizes, dim=self.dim))
-        return list(torch.chunk(value, self.chunks, dim=self.dim))
+        # chunk requires a single tensor input
+        if len(value) != 1 or len(value[0]) != 1:
+            raise ValueError("Chunk operation requires a single tensor input.")
+        return list(torch.chunk(value[0][0], self.chunks, dim=self.dim))
 
 
 class Concatenate(ConversionOps):
@@ -545,11 +544,8 @@ def set_param_for_module(
                 if not use_dtensor:
                     # we convert to local
                     param_value = param_value.to_local()
-            
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
-
-        # to skip any inplace method that modifies the param data
         param_value = get_loaded_parameter_class(param_value.__class__)(from_existing=param_value)
 
         # Remove from missing keys (it's either mismatched, or all good)
@@ -611,7 +607,7 @@ def convert_and_load_state_dict_in_model(
         matched_pattern = match_glob(original_key, weight_pattern_alt, weight_pattern_by_group_name)
         if matched_pattern is not None:
             converter = source_to_target[matched_pattern]  # TODO make sure its the ref
-            sub_with_extractor = partial(re.sub, _glob_to_regex_src(matched_pattern), string=original_key)
+            sub_with_extractor = partial(re.sub, matched_pattern.replace("*", r"(\d+)"), string=original_key)
             entry_key = "|".join(converter.target_keys)
             target_key = "|".join(map(sub_with_extractor, [k.replace("*", "\\1") for k in converter.target_keys]))
             entry: ConversionEntry = by_conversion_pattern.setdefault(entry_key, ConversionEntry(converter))
@@ -624,8 +620,8 @@ def convert_and_load_state_dict_in_model(
         _dtype = dtype
         new_target_key = []  # test_load_with_mismatched_shapes for AutoModel.from_pretrained(AutoForCausal, vocab=10)
         for t in target_key.split("|"):
-            if t.startswith(prefix) and meta_model_state_dict.get(t.replace(f"{prefix}.", "")) is not None:
-                t = t.replace(f"{prefix}.", "")
+            if t.startswith(prefix) and meta_model_state_dict.get(re.sub(f"^{prefix}.", "", t, count=1)) is not None:
+                t = re.sub(f"^{prefix}.", "", t, count=1)
             elif meta_model_state_dict.get(f"{prefix}.{t}") is not None:
                 t = f"{prefix}.{t}"
             new_target_key.append(t)
@@ -686,6 +682,9 @@ def convert_and_load_state_dict_in_model(
             converter = group.weight_converter
             operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
             for layer_name, tensors_for_this_layer in group.collected_tensors.items():
+                pbar.update(1)
+                pbar.set_postfix({"Materializing param": layer_name})
+                pbar.refresh()
                 concrete_target_keys = layer_name.split("|")
                 try:
                     if bool(set(concrete_target_keys) - unexpected_keys):
@@ -722,13 +721,10 @@ def convert_and_load_state_dict_in_model(
                                 converter.distributed_operation,
                                 hf_quantizer
                             )
-                except Exception as e :
-                    raise e
-            del group
 
-            # Update progress bar
-            pbar.update()
-            pbar.refresh()
+                except SkipLayer:
+                    continue
+            del group
 
     model.inverse_converters = inverse_converters
     thread_pool.shutdown(wait=False)
@@ -737,7 +733,7 @@ def convert_and_load_state_dict_in_model(
 
 # TODO this is not done yet!
 def revert_weight_conversion(model, state_dict):
-    mapping = getattr(model, "", {})  # IDK why but setting this will fail all llava.
+    mapping = getattr(model, "_checkpoint_conversion_mapping", {})  # IDK why but setting this will fail all llava.
     reverse_key_mapping = [(v, k) for k, v in mapping.items()]
     original_state_dict = {}
     for key, value in state_dict.items():

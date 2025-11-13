@@ -794,7 +794,6 @@ class MllamaRotaryEmbedding(nn.Module):
 @auto_docstring
 class MllamaPreTrainedModel(PreTrainedModel):
     config: MllamaConfig
-    base_model_prefix = ""
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -1437,7 +1436,11 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     """
 )
 class MllamaModel(MllamaPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
+    base_model_prefix = ""
+    _checkpoint_conversion_mapping = {
+        "language_model.model": "language_model",
+        "model.vision_model": "vision_model",
+    }
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
@@ -1578,10 +1581,10 @@ class MllamaModel(MllamaPreTrainedModel):
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_model": "model.vision_model",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^language_model.lm_head": "lm_head",
+        r"^language_model.model": "model.language_model",
+        r"^vision_model": "model.vision_model",
+        r"^multi_modal_projector": "model.multi_modal_projector",
+        r"^language_model.lm_head": "lm_head",
     }
     # _tied_weights_keys = {"lm_head.weight": "model.language_moddel.embed_tokens.weight"}
 

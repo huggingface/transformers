@@ -472,18 +472,13 @@ def _end_ptr(tensor: torch.Tensor) -> int:
     return stop
 
 
-def _get_tied_weight_keys(module: nn.Module, prefix=""):
-    tied_weight_keys = []
-    if getattr(module, "_tied_weights_keys", None) is not None:
-        value_names = list(module._tied_weights_keys.keys())
-        names = [f"{prefix}.{k}" if prefix else k for k in value_names]
-        tied_weight_keys.extend(names)
-    if getattr(module, "_dynamic_tied_weights_keys", None) is not None:
-        names = [f"{prefix}.{k}" if prefix else k for k in module._dynamic_tied_weights_keys]
-        tied_weight_keys.extend(names)
-    for name, submodule in module.named_children():
-        local_prefix = f"{prefix}.{name}" if prefix else name
-        tied_weight_keys.extend(_get_tied_weight_keys(submodule, prefix=local_prefix))
+def _get_tied_weight_keys(module: nn.Module) -> list[str]:
+    tied_weight_keys: list[str] = []
+    for name, submodule in module.named_modules():
+        tied = getattr(submodule, "_tied_weights_keys", {}) or {}
+        tied_weights_dict = list(tied.keys())
+        # tied_weights_dict.extend(tied.values())
+        tied_weight_keys.extend([f"{name}.{k}" if name else k for k in tied_weights_dict])
     return tied_weight_keys
 
 
@@ -678,7 +673,7 @@ def _get_resolved_checkpoint_files(
                     if resolved_archive_file is not None:
                         is_sharded = True
                     elif use_safetensors:
-                        if revision == "main":
+                        if revision == "main" and not is_offline_mode():
                             resolved_archive_file, revision, is_sharded = auto_conversion(
                                 pretrained_model_name_or_path, **cached_file_kwargs
                             )
@@ -2297,7 +2292,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         elif isinstance(module, nn.Embedding):
             if getattr(module, "weight", None) is not None:
                 module.weight.normal_(mean=0.0, std=std)
-            if getattr(self.config, "pad_token_id", None) is not None:
+            if getattr(
+                self.config, "pad_token_id", None
+            ) is not None and self.config.pad_token_id < module.weight.size(0):
                 module.weight[self.config.pad_token_id].zero_()
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
@@ -3289,19 +3286,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         module_map[name + f".{key}"] = module
             state_dict = model_to_save.state_dict()
 
-        if (
-            any(
-                allowed_name in class_name.__name__.lower()
-                for class_name in self.__class__.__mro__[:-1]
-                for allowed_name in VLMS
-            )
-            or save_original_format
-        ):
-            # MEGA BIG TODO HERE: self._conversion_ops needs to be used to save the final ckpt
-            # using what was loaded. Actually self._conversion_ops wont work because we need it
-            # even if the files are not legacy -> thus no conversion happened
-            state_dict = revert_weight_conversion(self, state_dict)
-
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
             for smp_to_hf, _ in smp.state.module_manager.translate_functions:
@@ -3388,9 +3372,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if len(error_names) > 0:
                 suggested_fix = {v: k for k, v in list(shared_ptrs.values())} if shared_ptrs else None
                 raise RuntimeError(
-                    f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined"
-                    f"as being shared in `_tied_weight_keys`. You should probably add: `_tied_weight_keys = {suggested_fix}. If a whole module is shared you can use it directly",
+                    f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined. We found `_tied_weights_keys` to be: {_tied_weights_keys}.\n"
+                    "This can also just mean that the module's tied weight keys are wrong vs the actual tied weights in the model.",
                 )
+
+        if (
+            any(
+                allowed_name in class_name.__name__.lower()
+                for class_name in self.__class__.__mro__[:-1]
+                for allowed_name in VLMS
+            )
+            or save_original_format
+        ):
+            # MEGA BIG TODO HERE: self._conversion_ops needs to be used to save the final ckpt
+            # using what was loaded. Actually self._conversion_ops wont work because we need it
+            # even if the files are not legacy -> thus no conversion happened
+            state_dict = revert_weight_conversion(self, state_dict)
 
         # Shard the model if it is too big.
         if not _hf_peft_config_loaded:
@@ -3947,7 +3944,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if key_mapping is None and any(
             allowed_name in class_name.__name__.lower() for class_name in cls.__mro__[:-1] for allowed_name in VLMS
         ):
-            key_mapping = cls._checkpoint_conversion_mapping
+            key_mapping = copy.copy(cls._checkpoint_conversion_mapping)
 
         if distributed_config is not None and tp_plan is None:
             tp_plan = "auto"
@@ -4042,9 +4039,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         weight_conversions: Optional[list[WeightConverter]] = None
         model_type = getattr(config, "model_type", None)
         if model_type is not None:
-            weight_conversions = get_checkpoint_conversion_mapping().get(model_type)
+            weight_conversions = get_checkpoint_conversion_mapping(model_type)
             if weight_conversions is None:
-                weight_conversions = get_checkpoint_conversion_mapping()["legacy"]
+                weight_conversions = get_checkpoint_conversion_mapping("legacy")
             if key_mapping is not None:
                 weight_conversions.extend([WeightConverter(k, v) for k, v in key_mapping.items()])
 
@@ -4144,7 +4141,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype=dtype,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
-            key_mapping=key_mapping,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
         )
@@ -4221,7 +4217,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         dtype: Optional[torch.dtype] = None,
         hf_quantizer: Optional[HfQuantizer] = None,
         device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
-        key_mapping: Optional[dict[str, str]] = None,
         weights_only: bool = True,
         weight_mapping: Optional[Sequence[WeightConverter]] = None,
     ):
@@ -4246,17 +4241,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         keys = sorted(device_map.keys(), key=len, reverse=True)
         tp_plan = getattr(model, "_tp_plan", None)
         error_msgs = []
-        misc = {}
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
+            # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
+            missing_keys, unexpected_keys, mismatched_keys, misc = set(), set(), set(), set()
         else:
             all_pointer = set()
-            if checkpoint_files is not None:
+            if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
                 pattern = re.compile(r"(" + "|".join(map(re.escape, keys)) + r")")
                 if sharded_metadata is None:
                     k_v_iterator = dict.fromkeys(
-                        safe_open(checkpoint_files[0], framework="pt").keys(), "model.safetensors"
+                        safe_open(checkpoint_files[0], framework="pt").keys(), checkpoint_files[0].rsplit("/", 1)[1]
                     ).items()
                 else:
                     k_v_iterator = sharded_metadata["weight_map"].items()
@@ -4279,6 +4275,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
             elif state_dict is not None:
                 merged_state_dict = state_dict
+            elif checkpoint_files is not None:
+                merged_state_dict = {}
+                for ckpt_file in checkpoint_files:
+                    merged_state_dict.update(load_state_dict(ckpt_file))
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
 
@@ -4305,7 +4305,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model._move_missing_keys_from_meta_to_cpu(miss_and_mismatched, dtype, hf_quantizer)
 
         # correctly initialize the missing (and potentially mismatched) keys
-        model._initialize_missing_keys(miss_and_mismatched, is_quantized)
+        model._initialize_missing_keys(is_quantized)
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys, False)
 
         # We make sure we tie after _init_. We need the missing keys to remove the ones we do tie, and not random remove
@@ -4561,7 +4561,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
                     _load_parameter_into_model(self, key, value)
 
-    def _initialize_missing_keys(self, missing_keys: list[str], is_quantized: bool) -> None:
+    def _initialize_missing_keys(self, is_quantized: bool) -> None:
         """
         Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
         `_initialize_weights`. Indeed, since the corresponding weights are missing from the state dict, they will not be replaced and need to
@@ -4582,16 +4582,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             self.initialize_weights()
 
+        # Replace the loaded parameters class back to nn.Parameter (they were changed to easily skip initialization
+        # when performed in-place on the tensors)
         for name, p in list(self.named_parameters()) + list(self.named_buffers()):
             # We get back the original parameter that we stored in _original. This attribute was created when we initialized LoadedParam when loading the checkpoints.
             if hasattr(p, "_original"):
-                if '.' in name:
+                if "." in name:
                     module, name = name.rsplit(".", 1)
                     module = self.get_submodule(module)
                 else:
                     module = self
                 setattr(module, name, p._original)
-
 
     def _adjust_missing_and_unexpected_keys(
         self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool

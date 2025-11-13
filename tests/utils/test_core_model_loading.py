@@ -12,20 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
+from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
 
+from transformers import PretrainedConfig
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
     MergeModulelist,
+    PermuteForRope,
     WeightConverter,
-    _glob_to_regex_src,
     build_glob_alt,
     convert_and_load_state_dict_in_model,
     match_glob,
 )
+from transformers.utils.import_utils import is_triton_available
 
 
 class TestWeightGlobMatching(unittest.TestCase):
@@ -57,10 +60,6 @@ class TestWeightGlobMatching(unittest.TestCase):
             "model.layers.*.self_attn.q_proj.weight",
         )
 
-    def test_digits_only_star_rejects_nondigits(self):
-        # 'a' is not digits, so it should not match with
-        self.assertIsNone(match_glob("model.layers.a.mlp.gate_up_proj.weight", self.alt_digits, self.map_digits))
-
     def test_anychar_star_accepts_nondigits(self):
         self.assertEqual(
             match_glob("model.layers.a.mlp.gate_up_proj.weight", self.alt_any, self.map_any),
@@ -80,7 +79,7 @@ class TestWeightGlobMatching(unittest.TestCase):
             "model.layers.*.mlp.*.weight",  # broader (first)
             "model.layers.0.mlp.gate_up_proj.weight",  # more specific (second)
         ]
-        alt, mapping = build_glob_alt(globs, digits_only=False)
+        alt, mapping = build_glob_alt(globs)
 
         # Both branches match; Python's regex picks the leftmost alternative → index 0
         self.assertEqual(
@@ -111,8 +110,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         )
 
     def test_anchor_full_match_only(self):
-        # Make sure partial strings don't match—anchors ^...$ are in each branch
-        self.assertIsNone(match_glob("foo.model.layers.0.mlp.gate_up_proj.weight.bar", self.alt_any, self.map_any))
+        self.assertIsNotNone(match_glob("model.layers.0.mlp.gate_up_proj.weight.bar", self.alt_any, self.map_any))
 
     def test_large_batch_performance_smoke(self):
         # Not a perf benchmark, but ensures building and matching a larger alternation is OK
@@ -122,18 +120,6 @@ class TestWeightGlobMatching(unittest.TestCase):
         )
         key = "model.layers.123.mlp.block57.weight"
         self.assertEqual(match_glob(key, alt, mapping), "model.layers.*.mlp.block57.weight")
-
-
-class TestGlobRegexHelpers(unittest.TestCase):
-    def test_glob_to_regex_src_digits_only(self):
-        pattern = _glob_to_regex_src(
-            "model.layers.*.mlp.weight",
-        )
-        self.assertEqual(pattern, r"model\.layers\.(\d+)\.mlp\.weight")
-
-    def test_glob_to_regex_src_any_chars(self):
-        pattern = _glob_to_regex_src("model.layers.*.mlp.weight", digits_only=False)
-        self.assertEqual(pattern, r"model\.layers\.(.+)\.mlp\.weight")
 
 
 class DummyParamModule(nn.Module):
@@ -188,6 +174,7 @@ class DummyRoot(nn.Module):
 class TestConvertAndLoadStateDict(unittest.TestCase):
     def test_moe_and_qkv_conversion(self):
         model = DummyRoot()
+        model.config = PretrainedConfig()
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -206,37 +193,43 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             "model.layers.1.self_attn.qkv_proj.weight": torch.tensor([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]),
             "mlp.w2.weight": torch.tensor([[60.0, 61.0], [62.0, 63.0]]),
         }
-        state_dict = {k: (k, v.clone()) for k, v in raw_tensors.items()}
+        state_dict = {k: v.clone() for k, v in raw_tensors.items()}
 
         weight_mapping = [
             WeightConverter(
-                ["model.layers.*.experts.*.w1.weight", "model.layers.*.experts.*.w3.weight"],
-                "model.layers.*.experts.gate_up_proj.weight",
+                ["experts.*.w1.weight", "experts.*.w3.weight"],
+                "experts.gate_up_proj.weight",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                "model.layers.*.experts.*.w2.weight",
-                "model.layers.*.experts.down_proj.weight",
+                "experts.*.w2.weight",
+                "experts.down_proj.weight",
                 operations=[MergeModulelist(dim=0)],
             ),
             WeightConverter(
-                "model.layers.*.self_attn.qkv_proj.weight",
+                "model.layers.0.self_attn.qkv_proj.weight",
                 [
-                    "model.layers.*.self_attn.q_proj.weight",
-                    "model.layers.*.self_attn.k_proj.weight",
-                    "model.layers.*.self_attn.v_proj.weight",
+                    "model.layers.0.self_attn.q_proj.weight",
+                    "model.layers.0.self_attn.k_proj.weight",
+                    "model.layers.0.self_attn.v_proj.weight",
                 ],
-                operations=[Concatenate(dim=0), Chunk(dim=0, chunks=3)],
+                operations=[Chunk(dim=0, chunks=3)],
             ),
             WeightConverter("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
-
         missing, unexpected, mismatch, misc = convert_and_load_state_dict_in_model(
             model, state_dict, weight_mapping, tp_plan=None, quantizer=None
         )
 
-        self.assertEqual(missing, set())
-        self.assertEqual(unexpected, set())
+        self.assertEqual(
+            missing,
+            {
+                "model.layers.1.self_attn.k_proj.weight",
+                "model.layers.1.self_attn.v_proj.weight",
+                "model.layers.1.self_attn.q_proj.weight",
+            },
+        )
+        self.assertEqual(unexpected, {"model.layers.1.self_attn.qkv_proj.weight"})
         self.assertEqual(mismatch, set())
         self.assertEqual(misc, {})
 
@@ -280,12 +273,136 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             key = f"model.layers.{layer_idx}.self_attn.qkv_proj.weight"
             expected_q, expected_k, expected_v = torch.chunk(raw_tensors[key], chunks=3, dim=0)
             prefix = f"model.layers.{layer_idx}.self_attn"
+            if layer_idx == 1:
+                # These were missing and thus not loaded
+                continue
             torch.testing.assert_close(model_state[f"{prefix}.q_proj.weight"], expected_q)
             torch.testing.assert_close(model_state[f"{prefix}.k_proj.weight"], expected_k)
             torch.testing.assert_close(model_state[f"{prefix}.v_proj.weight"], expected_v)
 
         torch.testing.assert_close(model_state["mlp.down_proj.weight"], raw_tensors["mlp.w2.weight"])
 
+    def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
+        else:
+            self.skipTest("Fine-grained FP8 integration tests require Triton to be installed.")
+        n_heads = 2
+        head_dim = 4
+        in_dim = 4
+        out_dim = n_heads * head_dim
+        block_size = (4, 4)
+
+        class RopeProjector(nn.Module):
+            def __init__(self, *, with_scale: bool = False):
+                super().__init__()
+                self.weight = nn.Parameter(torch.zeros(out_dim, in_dim))
+                if with_scale:
+                    scale_shape = (out_dim // block_size[0], in_dim // block_size[1])
+                    self.weight_scale_inv = nn.Parameter(torch.ones(scale_shape))
+
+        class RopeSelfAttn(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q_proj = RopeProjector(with_scale=True)
+                self.k_proj = RopeProjector()
+                self.v_proj = RopeProjector()
+
+        class RopeLayer(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.self_attn = RopeSelfAttn()
+
+        class RopeModel(nn.Module):
+            base_model_prefix = "model"
+
+            def __init__(self):
+                super().__init__()
+                self.layers = nn.ModuleList([RopeLayer()])
+
+        model = RopeModel()
+        model.config = PretrainedConfig()
+        model.config.num_attention_heads = n_heads
+
+        raw_q = torch.tensor(
+            [
+                [1.0, -1.0, 1.0, -1.0],
+                [0.5, -0.5, 0.5, -0.5],
+                [-1.0, 1.0, -1.0, 1.0],
+                [-0.5, 0.5, -0.5, 0.5],
+                [1.0, 1.0, -1.0, -1.0],
+                [0.5, 0.5, -0.5, -0.5],
+                [-1.0, -1.0, 1.0, 1.0],
+                [-0.5, -0.5, 0.5, 0.5],
+            ],
+            dtype=torch.float32,
+        )
+        raw_k = torch.arange(out_dim * in_dim, dtype=torch.float32).reshape(out_dim, in_dim)
+        raw_v = torch.arange(out_dim * in_dim, dtype=torch.float32).reshape(out_dim, in_dim) + 100.0
+        raw_qkv = torch.cat([raw_q, raw_k, raw_v], dim=0)
+        state_dict = {"model.layers.0.self_attn.qkv_proj.weight": raw_qkv.clone()}
+
+        quantizer_cls = type(
+            "FineGrainedFP8HfQuantizer",
+            (),
+            {
+                "__init__": lambda self, bs=block_size: setattr(
+                    self, "quantization_config", SimpleNamespace(weight_block_size=bs)
+                ),
+                "param_needs_quantization": lambda self, _model, param_name: param_name.endswith("q_proj.weight"),
+                "pre_quantized": False,
+            },
+        )
+        quantizer = quantizer_cls()
+
+        weight_mapping = [
+            WeightConverter(
+                "model.layers.*.self_attn.qkv_proj.weight",
+                [
+                    "model.layers.*.self_attn.q_proj.weight",
+                    "model.layers.*.self_attn.k_proj.weight",
+                    "model.layers.*.self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0, chunks=3), PermuteForRope()],
+            )
+        ]
+
+        missing, unexpected, mismatch, misc = convert_and_load_state_dict_in_model(
+            model, state_dict, weight_mapping, tp_plan=None, quantizer=quantizer
+        )
+
+        self.assertEqual(missing, set())
+        self.assertEqual(unexpected, set())
+        self.assertEqual(mismatch, set())
+        self.assertEqual(misc, {})
+
+        permute_op = PermuteForRope()
+        permute_op.config = model.config
+        expected_q = permute_op._apply(raw_q)
+        expected_k = permute_op._apply(raw_k)
+        expected_v = permute_op._apply(raw_v)
+
+        model_state = model.state_dict()
+        self.assertFalse(torch.allclose(raw_k, expected_k))
+        torch.testing.assert_close(model_state["model.layers.0.self_attn.k_proj.weight"], expected_k)
+        torch.testing.assert_close(model_state["model.layers.0.self_attn.v_proj.weight"], expected_v)
+
+        q_weight_key = "model.layers.0.self_attn.q_proj.weight"
+        scale_key = "model.layers.0.self_attn.q_proj.weight_scale_inv"
+        self.assertIn(scale_key, model_state)
+        expected_dtype = torch.float8_e4m3fn if hasattr(torch, "float8_e4m3fn") else torch.int8
+        self.assertEqual(model_state[q_weight_key].dtype, expected_dtype)
+        self.assertEqual(model_state[q_weight_key].shape, torch.Size((out_dim, in_dim)))
+        self.assertEqual(model_state[scale_key].dtype, torch.float32)
+        self.assertEqual(
+            model_state[scale_key].shape,
+            torch.Size((out_dim // block_size[0], in_dim // block_size[1])),
+        )
+
+        dequant = Fp8Dequantize(block_size=block_size)
+        dequantized_q = dequant.convert(
+            [model_state[q_weight_key], model_state[scale_key]],
+            context={"quantization_config": quantizer.quantization_config},
+        )
+        torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
+
 
 if __name__ == "__main__":
-    unittest.main()

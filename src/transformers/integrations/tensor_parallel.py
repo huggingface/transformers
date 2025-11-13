@@ -141,6 +141,16 @@ def _blocks_to_block_sizes(total_size: int, blocks: int | list[int]) -> list[int
         return [single_size] * blocks
 
 
+def replace_layer_number_by_wildcard(name: str) -> str:
+    """
+    Replace the numbers in the `name` by wildcards, only if they are in-between dots (`.`) or if they are between
+    a dot (`.`) and the end of the string.
+    This matches how modules are named/numbered when using a nn.ModuleList or nn.Sequential, but will NOT match
+    numbers in a parameter name itself, e.g. if the param is named `"w1"` or `"w2"`.
+    """
+    return re.sub(r"\.\d+(\.|$)", lambda m: ".*" + m.group(1), name)
+
+
 def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weight=True) -> str | None:
     """
     Get the TP style for a parameter from the TP plan.
@@ -151,11 +161,11 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
     not parent classes for `post_init` calls
     """
-    generic_param_name = re.sub(r"\d+", "*", parameter_name)
+    generic_param_name = replace_layer_number_by_wildcard(parameter_name)
     if generic_param_name in tp_plan:
         return tp_plan[generic_param_name]
-    elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan and is_weight:
-        return tp_plan[generic_param_name.rsplit(".", 1)[0]]
+    elif is_weight and "." in generic_param_name and (module_name := generic_param_name.rsplit(".", 1)[0]) in tp_plan:
+        return tp_plan[module_name]
     return None
 
 
@@ -731,11 +741,6 @@ class PackedColwiseParallel(ColwiseParallel):
         rank = rank if rank is not None else self.rank
         return get_packed_weights(param, empty_param, device_mesh, rank, -2).to(param_casting_dtype), [Shard(-2)]
 
-    def create_nn_parameter(
-        self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh
-    ):
-        return nn.Parameter(param, requires_grad=param.is_floating_point())
-
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where
@@ -1308,7 +1313,7 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
     if tp_plan is None:
         return
 
-    generic_keys = {re.sub(r"\d+", "*", key) for key in expected_keys}
+    generic_keys = {replace_layer_number_by_wildcard(key) for key in expected_keys}
     unsharded_layers = set(generic_keys)
     unused_rules = tp_plan
 

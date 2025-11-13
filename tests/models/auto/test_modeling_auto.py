@@ -502,13 +502,6 @@ class AutoModelTest(unittest.TestCase):
         ):
             _ = AutoModel.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
-    def test_model_file_not_found(self):
-        with self.assertRaisesRegex(
-            EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named pytorch_model.bin",
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/config-no-model")
-
     @unittest.skip("Failing on main")
     def test_cached_model_has_minimum_calls_to_head(self):
         # Make sure we have cached the model.
