@@ -574,9 +574,11 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         std = self.config.initializer_range
         if isinstance(module, FalconMambaMixer):
+            # S4D real initialization. These are not discretized!
+            # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
             A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
             A = A.expand(module.intermediate_size, -1).contiguous()
-            init.copy_(module.A, torch.log(A))
+            init.copy_(module.A_log, torch.log(A))
             init.ones_(module.D)
 
             dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale
@@ -614,11 +616,9 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
                 p /= math.sqrt(self.config.num_hidden_layers)
 
         if isinstance(module, nn.Linear):
-            if not getattr(module.weight, "_no_reinit", False):
-                init.normal_(module.weight, std=std)
+            init.normal_(module.weight, std=std)
             if module.bias is not None:
-                if not getattr(module.bias, "_no_reinit", False):
-                    init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, FalconMambaRMSNorm):
             init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):

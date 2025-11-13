@@ -1401,7 +1401,7 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
             init.constant_(module.output_proj.bias, 0.0)
         elif isinstance(module, GroundingDinoBiMultiHeadAttention):
             init.xavier_uniform_(module.vision_proj.weight)
-            module.vision_proj.bias.fill_(0)
+            init.zeros_(module.vision_proj.bias)
             init.xavier_uniform_(module.text_proj.weight)
             init.zeros_(module.text_proj.bias)
             init.xavier_uniform_(module.values_vision_proj.weight)
