@@ -51,6 +51,7 @@ Granite Speech is a multimodal speech-to-text model that can transcribe audio an
 
 ```python
 from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
+from datasets import load_dataset, Audio
 import torch
 
 # Load model and processor
@@ -61,12 +62,13 @@ model = GraniteSpeechForConditionalGeneration.from_pretrained(
 )
 processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
 
-# Prepare audio input (16kHz sampling rate required)
-# audio can be a file path, numpy array, or tensor
-audio_input = "path/to/audio.wav"
+# Load audio from dataset (16kHz sampling rate required)
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+audio = ds['audio'][0]['array']
 
 # Process audio
-inputs = processor(audio=audio_input, return_tensors="pt").to(model.device)
+inputs = processor(audio=audio, return_tensors="pt").to(model.device)
 
 # Generate transcription
 generated_ids = model.generate(**inputs, max_new_tokens=256)
@@ -80,6 +82,7 @@ For instruction-following with audio, use the chat template to format prompts pr
 
 ```python
 from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
+from datasets import load_dataset, Audio
 import torch
 
 model = GraniteSpeechForConditionalGeneration.from_pretrained(
@@ -89,23 +92,25 @@ model = GraniteSpeechForConditionalGeneration.from_pretrained(
 )
 processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
 
+# Load audio from dataset
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+audio = ds['audio'][0]['array']
+
 # Prepare chat-formatted inputs with audio
 messages = [
     {"role": "user", "content": "Transcribe the following audio:"}
 ]
 
-# Apply chat template and add audio
+# Apply chat template to format the prompt
 text = processor.tokenizer.apply_chat_template(
     messages, 
     tokenize=False, 
     add_generation_prompt=True
 )
 
-inputs = processor(
-    text=text,
-    audio="path/to/audio.wav",
-    return_tensors="pt"
-).to(model.device)
+# Process text and audio together
+inputs = processor(text=text, audio=audio, return_tensors="pt").to(model.device)
 
 # Generate transcription
 generated_ids = model.generate(**inputs, max_new_tokens=512)
@@ -119,6 +124,7 @@ Process multiple audio files efficiently:
 
 ```python
 from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
+from datasets import load_dataset, Audio
 import torch
 
 model = GraniteSpeechForConditionalGeneration.from_pretrained(
@@ -128,11 +134,13 @@ model = GraniteSpeechForConditionalGeneration.from_pretrained(
 )
 processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
 
-# Multiple audio files
-audio_files = ["audio1.wav", "audio2.wav", "audio3.wav"]
+# Load multiple audio samples from dataset
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+audio_samples = [ds['audio'][i]['array'] for i in range(3)]
 
 # Process batch
-inputs = processor(audio=audio_files, return_tensors="pt", padding=True).to(model.device)
+inputs = processor(audio=audio_samples, return_tensors="pt", padding=True).to(model.device)
 
 # Generate for all inputs
 generated_ids = model.generate(**inputs, max_new_tokens=256)
