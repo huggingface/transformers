@@ -22,6 +22,8 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -520,7 +522,7 @@ class BrosPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, BrosRelationExtractor):
-            nn.init.normal_(module.dummy_node, std=std)
+            init.normal_(module.dummy_node, std=std)
 
 
 @auto_docstring

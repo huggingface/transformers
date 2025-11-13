@@ -28,6 +28,8 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -220,12 +222,12 @@ def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
     variance = 1.0 / denom
 
     if distribution == "truncated_normal":
-        nn.init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
+        init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
     elif distribution == "normal":
-        nn.init.normal_(tensor, std=math.sqrt(variance))
+        init.normal_(tensor, std=math.sqrt(variance))
     elif distribution == "uniform":
         bound = math.sqrt(3 * variance)
-        nn.init.uniform_(tensor, -bound, bound)
+        init.uniform_(tensor, -bound, bound)
     else:
         raise ValueError(f"invalid distribution {distribution}")
 
@@ -265,34 +267,34 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
                 if isinstance(self.config, Phi4MultimodalVisionConfig)
                 else self.config.hidden_size
             )
-            nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+            init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
         elif isinstance(module, nn.Embedding):
             default_flax_embed_init(module.weight)
         elif isinstance(module, Phi4MultimodalVisionAttention):
-            nn.init.normal_(module.q_proj.weight)
-            nn.init.normal_(module.k_proj.weight)
-            nn.init.normal_(module.v_proj.weight)
-            nn.init.normal_(module.out_proj.weight)
-            nn.init.zeros_(module.q_proj.bias)
-            nn.init.zeros_(module.k_proj.bias)
-            nn.init.zeros_(module.v_proj.bias)
-            nn.init.zeros_(module.out_proj.bias)
+            init.normal_(module.q_proj.weight)
+            init.normal_(module.k_proj.weight)
+            init.normal_(module.v_proj.weight)
+            init.normal_(module.out_proj.weight)
+            init.zeros_(module.q_proj.bias)
+            init.zeros_(module.k_proj.bias)
+            init.zeros_(module.v_proj.bias)
+            init.zeros_(module.out_proj.bias)
         elif isinstance(module, Phi4MultimodalVisionMLP):
-            nn.init.normal_(module.fc1.weight)
-            nn.init.normal_(module.fc2.weight)
-            nn.init.normal_(module.fc1.bias, std=1e-6)
-            nn.init.normal_(module.fc2.bias, std=1e-6)
+            init.normal_(module.fc1.weight)
+            init.normal_(module.fc2.weight)
+            init.normal_(module.fc1.bias, std=1e-6)
+            init.normal_(module.fc2.bias, std=1e-6)
         elif isinstance(module, Phi4MultimodalVisionMultiheadAttentionPoolingHead):
-            nn.init.normal_(module.probe)
-            nn.init.normal_(module.attention.in_proj_weight)
-            nn.init.zeros_(module.attention.in_proj_bias)
+            init.normal_(module.probe)
+            init.normal_(module.attention.in_proj_weight)
+            init.zeros_(module.attention.in_proj_bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             lecun_normal_(module.weight)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 class Phi4MultimodalVisionEmbeddings(nn.Module):
@@ -878,8 +880,8 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
-            nn.init.zeros_(module.b1)
-            nn.init.zeros_(module.b2)
+            init.zeros_(module.b1)
+            init.zeros_(module.b2)
 
 
 def unfold_tensor(tensor, max_seq_len):
@@ -1437,8 +1439,8 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Phi4MultimodalImageEmbedding):
-            nn.init.zeros_(module.global_img_feature_extensor)
-            nn.init.zeros_(module.sub_img_feature_extensor)
+            init.zeros_(module.global_img_feature_extensor)
+            init.zeros_(module.sub_img_feature_extensor)
 
 
 class Phi4MultimodalRotaryEmbedding(nn.Module):

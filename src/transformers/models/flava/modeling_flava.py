@@ -23,6 +23,8 @@ from typing import Any, Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -670,17 +672,17 @@ class FlavaPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, FlavaMaskedPredictionHead):
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.bias)
         elif isinstance(module, FlavaImageEmbeddings):
-            nn.init.zeros_(module.cls_token)
-            nn.init.zeros_(module.position_embeddings)
+            init.zeros_(module.cls_token)
+            init.zeros_(module.position_embeddings)
             if module.mask_token is not None:
-                nn.init.zeros_(module.mask_token)
+                init.zeros_(module.mask_token)
         elif isinstance(module, FlavaMultimodalModel):
             if module.use_cls_token:
-                nn.init.zeros_(module.cls_token)
+                init.zeros_(module.cls_token)
         elif isinstance(module, FlavaModel):
-            nn.init.constant_(module.logit_scale, self.config.logit_scale_init_value)
+            init.constant_(module.logit_scale, self.config.logit_scale_init_value)
 
 
 @auto_docstring

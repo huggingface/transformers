@@ -21,6 +21,8 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+import transformers.initialization as init
+
 from ....activations import ACT2FN
 from ....cache_utils import Cache
 from ....modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
@@ -376,7 +378,7 @@ class Speech2Text2PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Speech2Text2SinusoidalPositionalEmbedding):
             weight = module.get_embedding(*module.weight.shape, module.padding_idx)
-            nn.init.copy_(module.weight, weight)
+            init.copy_(module.weight, weight)
 
 
 SPEECH_TO_TEXT_2_START_DOCSTRING = r"""

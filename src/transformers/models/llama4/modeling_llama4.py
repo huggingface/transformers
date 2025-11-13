@@ -22,6 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import transformers.initialization as init
 from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 
 from ...activations import ACT2FN
@@ -481,11 +482,11 @@ class Llama4PreTrainedModel(PreTrainedModel):
             else self.config.text_config.initializer_range
         )
         if isinstance(module, Llama4TextExperts):
-            nn.init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            nn.init.normal_(module.down_proj, mean=0.0, std=std)
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, Llama4VisionModel):
-            nn.init.normal_(module.class_embedding, std=module.scale)
-            nn.init.normal_(module.positional_embedding_vlm, std=module.scale)
+            init.normal_(module.class_embedding, std=module.scale)
+            init.normal_(module.positional_embedding_vlm, std=module.scale)
 
 
 @auto_docstring

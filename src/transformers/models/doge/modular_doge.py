@@ -24,6 +24,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
@@ -546,12 +548,12 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DogeAttention):
             if hasattr(module, "A"):
-                nn.init.zeros_(module.A)
+                init.zeros_(module.A)
         elif isinstance(module, DogeDecoderLayer):
             if hasattr(module, "input_residual"):
-                nn.init.ones_(module.input_residual)
+                init.ones_(module.input_residual)
             if hasattr(module, "post_attention_residual"):
-                nn.init.ones_(module.post_attention_residual)
+                init.ones_(module.post_attention_residual)
 
 
 class DogeModel(MixtralModel):

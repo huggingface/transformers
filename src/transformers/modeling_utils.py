@@ -42,8 +42,9 @@ from safetensors import safe_open
 from safetensors.torch import save_file as safe_save_file
 from torch import Tensor, nn
 from torch.distributions import constraints
-from torch.nn import init
 from torch.utils.checkpoint import checkpoint
+
+import transformers.initialization as init
 
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_checkpoint_conversion_mapping
@@ -920,13 +921,13 @@ def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
 
     try:
         for name in TORCH_INIT_FUNCTIONS:
-            if hasattr(init, name):
-                originals[name] = getattr(init, name)
-                setattr(init, name, make_wrapper(originals[name]))
+            if hasattr(nn.init, name):
+                originals[name] = getattr(nn.init, name)
+                setattr(nn.init, name, make_wrapper(originals[name]))
         yield
     finally:
         for name, fn in originals.items():
-            setattr(init, name, fn)
+            setattr(nn.init, name, fn)
 
 
 class PipelineParallel(Enum):
@@ -2284,16 +2285,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
             if getattr(module, "weight", None) is not None:
-                nn.init.normal_(module.weight, mean=0.0, std=std)
+                init.normal_(module.weight, mean=0.0, std=std)
             if getattr(module, "bias", None) is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             if getattr(module, "weight", None) is not None:
-                nn.init.normal_(module.weight, mean=0.0, std=std)
+                init.normal_(module.weight, mean=0.0, std=std)
             if getattr(
                 self.config, "pad_token_id", None
             ) is not None and self.config.pad_token_id < module.weight.size(0):
-                nn.init.zeros_(module.weight[self.config.pad_token_id])
+                init.zeros_(module.weight[self.config.pad_token_id])
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
             module._reset_parameters()
@@ -2306,15 +2307,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ):
             # Norms can exist without weights (in which case they are None from torch primitives)
             if hasattr(module, "weight") and module.weight is not None:
-                nn.init.ones_(module.weight)
+                init.ones_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
-            nn.init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
         if isinstance(getattr(module, "down_proj", None), nn.Parameter):
-            nn.init.normal_(module.down_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
         if isinstance(getattr(module, "gate", None), nn.Parameter):
-            nn.init.normal_(module.gate, mean=0.0, std=std)
+            init.normal_(module.gate, mean=0.0, std=std)
 
     def _initialize_weights(self, module):
         """

@@ -23,6 +23,8 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -693,17 +695,17 @@ class Data2VecVisionPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, Data2VecVisionEmbeddings):
-            nn.init.zeros_(module.cls_token)
+            init.zeros_(module.cls_token)
             if module.mask_token is not None:
-                nn.init.zeros_(module.mask_token)
+                init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
-                nn.init.zeros_(module.position_embeddings)
+                init.zeros_(module.position_embeddings)
         elif isinstance(module, Data2VecVisionRelativePositionBias):
-            nn.init.zeros_(module.relative_position_bias_table)
+            init.zeros_(module.relative_position_bias_table)
         elif isinstance(module, Data2VecVisionLayer):
             if module.lambda_1 is not None:
-                nn.init.constant_(module.lambda_1, self.config.layer_scale_init_value)
-                nn.init.constant_(module.lambda_2, self.config.layer_scale_init_value)
+                init.constant_(module.lambda_1, self.config.layer_scale_init_value)
+                init.constant_(module.lambda_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring

@@ -25,6 +25,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -795,11 +797,11 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, DonutSwinEmbeddings):
             if module.mask_token is not None:
-                nn.init.zeros_(module.mask_token)
+                init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
-                nn.init.zeros_(module.position_embeddings)
+                init.zeros_(module.position_embeddings)
         elif isinstance(module, DonutSwinSelfAttention):
-            nn.init.zeros_(module.relative_position_bias_table)
+            init.zeros_(module.relative_position_bias_table)
 
 
 @auto_docstring

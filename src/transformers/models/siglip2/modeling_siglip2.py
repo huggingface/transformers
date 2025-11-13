@@ -29,6 +29,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -360,12 +362,12 @@ def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
     variance = 1.0 / denom
 
     if distribution == "truncated_normal":
-        nn.init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
+        init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
     elif distribution == "normal":
-        nn.init.normal_(tensor, std=math.sqrt(variance))
+        init.normal_(tensor, std=math.sqrt(variance))
     elif distribution == "uniform":
         bound = math.sqrt(3 * variance)
-        nn.init.uniform_(tensor, -bound, bound)
+        init.uniform_(tensor, -bound, bound)
     else:
         raise ValueError(f"invalid distribution {distribution}")
 
@@ -410,42 +412,42 @@ class Siglip2PreTrainedModel(PreTrainedModel):
                 if isinstance(self.config, Siglip2Config)
                 else self.config.hidden_size
             )
-            nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+            init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
         elif isinstance(module, nn.Embedding):
             default_flax_embed_init(module.weight)
         elif isinstance(module, Siglip2Attention):
-            nn.init.xavier_uniform_(module.q_proj.weight)
-            nn.init.xavier_uniform_(module.k_proj.weight)
-            nn.init.xavier_uniform_(module.v_proj.weight)
-            nn.init.xavier_uniform_(module.out_proj.weight)
-            nn.init.zeros_(module.q_proj.bias)
-            nn.init.zeros_(module.k_proj.bias)
-            nn.init.zeros_(module.v_proj.bias)
-            nn.init.zeros_(module.out_proj.bias)
+            init.xavier_uniform_(module.q_proj.weight)
+            init.xavier_uniform_(module.k_proj.weight)
+            init.xavier_uniform_(module.v_proj.weight)
+            init.xavier_uniform_(module.out_proj.weight)
+            init.zeros_(module.q_proj.bias)
+            init.zeros_(module.k_proj.bias)
+            init.zeros_(module.v_proj.bias)
+            init.zeros_(module.out_proj.bias)
         elif isinstance(module, Siglip2MLP):
-            nn.init.xavier_uniform_(module.fc1.weight)
-            nn.init.xavier_uniform_(module.fc2.weight)
-            nn.init.normal_(module.fc1.bias, std=1e-6)
-            nn.init.normal_(module.fc2.bias, std=1e-6)
+            init.xavier_uniform_(module.fc1.weight)
+            init.xavier_uniform_(module.fc2.weight)
+            init.normal_(module.fc1.bias, std=1e-6)
+            init.normal_(module.fc2.bias, std=1e-6)
         elif isinstance(module, Siglip2MultiheadAttentionPoolingHead):
-            nn.init.xavier_uniform_(module.probe)
-            nn.init.xavier_uniform_(module.attention.in_proj_weight)
-            nn.init.zeros_(module.attention.in_proj_bias)
+            init.xavier_uniform_(module.probe)
+            init.xavier_uniform_(module.attention.in_proj_weight)
+            init.zeros_(module.attention.in_proj_bias)
         elif isinstance(module, Siglip2Model):
-            nn.init.zeros_(module.logit_scale)
-            nn.init.zeros_(module.logit_bias)
+            init.zeros_(module.logit_scale)
+            init.zeros_(module.logit_bias)
         elif isinstance(module, Siglip2ForImageClassification):
-            nn.init.normal_(
+            init.normal_(
                 module.classifier.weight,
                 std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
             )
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             lecun_normal_(module.weight)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 class Siglip2Encoder(nn.Module):

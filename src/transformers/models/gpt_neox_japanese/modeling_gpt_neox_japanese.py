@@ -21,6 +21,8 @@ from typing import Optional, Union
 import torch
 from torch import Tensor, nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -55,7 +57,7 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, GPTNeoXJapaneseAttention):
             if module.dense_bias is not None:
-                nn.init.zeros_(module.dense_bias)
+                init.zeros_(module.dense_bias)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->GPTNeoXJapanese

@@ -24,6 +24,8 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -441,7 +443,7 @@ class PegasusPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, PegasusSinusoidalPositionalEmbedding):
-            nn.init.copy_(module.weight, module.create_weight())
+            init.copy_(module.weight, module.create_weight())
 
 
 class PegasusEncoder(PegasusPreTrainedModel):
@@ -500,7 +502,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
             self.config.d_model,
             self.padding_idx,
         )
-        nn.init.copy_(self.embed_positions.weight, self.embed_positions.create_weight())
+        init.copy_(self.embed_positions.weight, self.embed_positions.create_weight())
         self.embed_positions.to(self.device)
 
     def get_position_embeddings(self) -> nn.Embedding:
@@ -672,7 +674,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
             self.config.d_model,
             self.padding_idx,
         )
-        nn.init.copy_(self.embed_positions.weight, self.embed_positions.create_weight())
+        init.copy_(self.embed_positions.weight, self.embed_positions.create_weight())
         self.embed_positions.to(self.device)
 
     def get_position_embeddings(self) -> nn.Embedding:

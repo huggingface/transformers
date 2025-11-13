@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+import transformers.initialization as init
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
 from ...activations import ACT2FN
@@ -1008,11 +1009,11 @@ class SamPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, SamVisionAttention):
             if module.use_rel_pos:
-                nn.init.zeros_(module.rel_pos_h)
-                nn.init.zeros_(module.rel_pos_w)
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, SamVisionEncoder):
             if self.config.use_abs_pos:
-                nn.init.zeros_(module.pos_embed)
+                init.zeros_(module.pos_embed)
 
 
 class SamVisionEncoder(SamPreTrainedModel):

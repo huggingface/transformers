@@ -20,6 +20,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ....activations import ACT2FN
 from ....file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ....integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -397,8 +399,8 @@ class MCTCTPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, MCTCTLayerNorm):
-            nn.init.ones_(module.singleton_weight)
-            nn.init.zeros_(module.singleton_bias)
+            init.ones_(module.singleton_weight)
+            init.zeros_(module.singleton_bias)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """

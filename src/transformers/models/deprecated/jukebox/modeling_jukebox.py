@@ -24,6 +24,8 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import LayerNorm as FusedLayerNorm
 
+import transformers.initialization as init
+
 from ....activations import ACT2FN
 from ....modeling_utils import PreTrainedModel
 from ....utils import add_start_docstrings, logging
@@ -604,20 +606,20 @@ class JukeboxVQVAE(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):  # embed_tokens
-            nn.init.normal_(module.weight, mean=0.0, std=0.02 * self.config.init_scale)
+            init.normal_(module.weight, mean=0.0, std=0.02 * self.config.init_scale)
         elif isinstance(module, JukeboxConv1D):
             if self.config.zero_out:
-                nn.init.zeros_(module.weight)
+                init.zeros_(module.weight)
             else:
-                nn.init.normal_(module.weight, mean=0.0, std=0.02 * self.config.init_scale)
+                init.normal_(module.weight, mean=0.0, std=0.02 * self.config.init_scale)
         elif isinstance(module, JukeboxResConv1DBlock) and self.config.zero_out:
-            nn.init.zeros_(module.conv1d_2.weight)
-            nn.init.zeros_(module.conv1d_2.bias)
+            init.zeros_(module.conv1d_2.weight)
+            init.zeros_(module.conv1d_2.bias)
         if isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         if isinstance(module, nn.Linear) and module.bias is not None:
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.bias)
 
     def __init__(self, config: JukeboxVQVAEConfig):
         super().__init__(config)
@@ -1796,28 +1798,28 @@ class JukeboxPrior(PreTrainedModel):
         init_scale = self.config.init_scale
 
         if isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=0.02 * init_scale)
+            init.normal_(module.weight, mean=0.0, std=0.02 * init_scale)
         elif isinstance(module, JukeboxConv1D):
             if self.config.zero_out:
-                nn.init.zeros_(module.weight)
+                init.zeros_(module.weight)
             else:
-                nn.init.normal_(module.weight, mean=0.0, std=0.02 * init_scale)
+                init.normal_(module.weight, mean=0.0, std=0.02 * init_scale)
         elif isinstance(module, JukeboxPositionalEmbedding):
-            nn.init.normal_(module.pos_emb, mean=0.0, std=0.01 * init_scale)
+            init.normal_(module.pos_emb, mean=0.0, std=0.01 * init_scale)
         elif isinstance(module, JukeboxRangeEmbedding):
-            nn.init.normal_(module.emb.weight, mean=0.0, std=0.01 * init_scale)
+            init.normal_(module.emb.weight, mean=0.0, std=0.01 * init_scale)
         elif isinstance(module, JukeboxConditionalAutoregressive) and hasattr(module, "lm_head"):
-            nn.init.normal_(module.lm_head.weight, mean=0.0, std=0.02 * init_scale)
+            init.normal_(module.lm_head.weight, mean=0.0, std=0.02 * init_scale)
         elif isinstance(module, JukeboxConditionalAutoregressive) and hasattr(module, "start_token"):
-            nn.init.normal_(module.start_token, mean=0.0, std=0.01 * init_scale)
+            init.normal_(module.start_token, mean=0.0, std=0.01 * init_scale)
         elif isinstance(module, JukeboxResConv1DBlock) and self.config.zero_out:
-            nn.init.zeros_(module.conv1d_2.weight)
-            nn.init.zeros_(module.conv1d_2.bias)
+            init.zeros_(module.conv1d_2.weight)
+            init.zeros_(module.conv1d_2.bias)
         if isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         if isinstance(module, nn.Linear) and module.bias is not None:
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.bias)
 
     def __init__(self, config: JukeboxPriorConfig, level=None, nb_priors=3, vqvae_encoder=None, vqvae_decoder=None):
         super().__init__(config)

@@ -23,6 +23,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...modeling_layers import GradientCheckpointingLayer
@@ -513,7 +515,7 @@ class TapasPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, TapasLMPredictionHead):
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.bias)
 
 
 @auto_docstring
@@ -809,11 +811,11 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             self.column_output_weights = nn.Parameter(torch.zeros(config.hidden_size))
         else:
             self.output_weights = nn.Parameter(torch.empty(config.hidden_size))
-            nn.init.normal_(
+            init.normal_(
                 self.output_weights, std=config.initializer_range
             )  # here, a truncated normal is used in the original implementation
             self.column_output_weights = nn.Parameter(torch.empty(config.hidden_size))
-            nn.init.normal_(
+            init.normal_(
                 self.column_output_weights, std=config.initializer_range
             )  # here, a truncated normal is used in the original implementation
         self.output_bias = nn.Parameter(torch.zeros([]))

@@ -23,6 +23,8 @@ import torch
 import torch.nn.functional as F
 from torch import Size, Tensor, nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
@@ -614,8 +616,8 @@ class NemotronPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, NemotronLayerNorm1P):
-            nn.init.ones_(module.weight)
-            nn.init.zeros_(module.bias)
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
 
 
 @auto_docstring

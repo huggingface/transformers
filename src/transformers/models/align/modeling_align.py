@@ -22,6 +22,8 @@ from typing import Any, Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -828,20 +830,20 @@ class AlignPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, AlignModel):
-            nn.init.xavier_uniform_(module.text_projection.weight)
-            nn.init.zeros_(module.text_projection.bias)
-            nn.init.constant_(module.temperature, self.config.temperature_init_value)
+            init.xavier_uniform_(module.text_projection.weight)
+            init.zeros_(module.text_projection.bias)
+            init.constant_(module.temperature, self.config.temperature_init_value)
         elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
+                init.zeros_(module.weight[module.padding_idx])
         if isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 @auto_docstring(

@@ -28,6 +28,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import transformers.initialization as init
 from transformers.utils.generic import check_model_inputs
 
 from ...activations import ACT2FN
@@ -291,11 +292,11 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
-                nn.init.zeros_(module.rel_pos_h)
-                nn.init.zeros_(module.rel_pos_w)
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
-                nn.init.zeros_(module.pos_embed)
+                init.zeros_(module.pos_embed)
 
 
 @dataclass

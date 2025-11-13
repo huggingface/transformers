@@ -23,6 +23,8 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
@@ -414,8 +416,8 @@ class Blip2PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, Blip2VisionEmbeddings):
-            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=std)
-            nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=std)
+            init.trunc_normal_(module.position_embedding, mean=0.0, std=std)
+            init.trunc_normal_(module.class_embedding, mean=0.0, std=std)
         elif isinstance(
             module,
             (
@@ -426,7 +428,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
                 Blip2ForImageTextRetrieval,
             ),
         ):
-            nn.init.zeros_(module.query_tokens)
+            init.zeros_(module.query_tokens)
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->Blip2

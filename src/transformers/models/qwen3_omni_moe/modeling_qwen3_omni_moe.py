@@ -31,6 +31,8 @@ from torch import nn
 from torch.nn import Parameter
 from torch.nn import functional as F
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -1607,10 +1609,10 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, Qwen3OmniMoeThinkerTextExperts):
-            nn.init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            nn.init.normal_(module.down_proj, mean=0.0, std=std)
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, Qwen3OmniMoeThinkerTextTopKRouter):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
 
 
 @use_kernel_forward_from_hub("RMSNorm")

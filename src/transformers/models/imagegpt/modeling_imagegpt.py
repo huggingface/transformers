@@ -21,6 +21,8 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -381,9 +383,7 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
             for name, p in module.named_parameters():
                 if "c_proj" in name and "weight" in name:
                     # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                    nn.init.normal_(
-                        p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer)
-                    )
+                    init.normal_(p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer))
 
 
 @auto_docstring

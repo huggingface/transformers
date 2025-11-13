@@ -25,6 +25,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+import transformers.initialization as init
+
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
@@ -445,15 +447,15 @@ class GptOssPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, GptOssExperts):
-            nn.init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            nn.init.zeros_(module.gate_up_proj_bias)
-            nn.init.normal_(module.down_proj, mean=0.0, std=std)
-            nn.init.zeros_(module.down_proj_bias)
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.zeros_(module.gate_up_proj_bias)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+            init.zeros_(module.down_proj_bias)
         elif isinstance(module, GptOssAttention):
-            nn.init.normal_(module.sinks, mean=0.0, std=std)
+            init.normal_(module.sinks, mean=0.0, std=std)
         elif isinstance(module, GptOssTopKRouter):
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            nn.init.normal_(module.bias, mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.bias, mean=0.0, std=std)
 
 
 @auto_docstring

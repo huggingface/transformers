@@ -25,6 +25,8 @@ from typing import Any, Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -471,9 +473,9 @@ class DbrxPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, DbrxExpertGLU):
-            nn.init.normal_(module.w1, mean=0.0, std=std)
-            nn.init.normal_(module.v1, mean=0.0, std=std)
-            nn.init.normal_(module.w2, mean=0.0, std=std)
+            init.normal_(module.w1, mean=0.0, std=std)
+            init.normal_(module.v1, mean=0.0, std=std)
+            init.normal_(module.w2, mean=0.0, std=std)
 
 
 @auto_docstring

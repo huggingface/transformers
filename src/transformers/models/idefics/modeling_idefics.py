@@ -27,6 +27,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -838,19 +840,19 @@ class IdeficsPreTrainedModel(PreTrainedModel):
         # base should be used for training from scratch and it contains the correct code.
         super()._init_weights(module)
         if isinstance(module, IdeficsVisionEmbeddings):
-            nn.init.normal_(module.class_embedding)
+            init.normal_(module.class_embedding)
         elif isinstance(module, IdeficsGatedCrossAttentionLayer):
             if self.config.alpha_initializer == "zeros":
-                nn.init.zeros_(module.alpha_cross_attn)
-                nn.init.zeros_(module.alpha_dense)
+                init.zeros_(module.alpha_cross_attn)
+                init.zeros_(module.alpha_dense)
             elif self.config.alpha_initializer == "ones":
-                nn.init.ones_(module.alpha_cross_attn)
-                nn.init.ones_(module.alpha_dense)
+                init.ones_(module.alpha_cross_attn)
+                init.ones_(module.alpha_dense)
             elif self.config.alpha_initializer in {"normal", "gaussian", "random"}:
-                nn.init.normal_(module.alpha_cross_attn, mean=0.0, std=self.config.alphas_initializer_range)
-                nn.init.normal_(module.alpha_dense, mean=0.0, std=self.config.alphas_initializer_range)
+                init.normal_(module.alpha_cross_attn, mean=0.0, std=self.config.alphas_initializer_range)
+                init.normal_(module.alpha_dense, mean=0.0, std=self.config.alphas_initializer_range)
         elif isinstance(module, IdeficsPerceiverResampler):
-            nn.init.normal_(module.latents)
+            init.normal_(module.latents)
 
 
 @auto_docstring

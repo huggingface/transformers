@@ -23,6 +23,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+import transformers.initialization as init
+
 from ....cache_utils import Cache
 from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_utils import PreTrainedModel
@@ -87,19 +89,19 @@ class TrajectoryTransformerPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if isinstance(module, nn.Linear) and module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, EinLinear):
             for i in range(module.n_models):
-                nn.init.kaiming_uniform_(module.weight[i], a=math.sqrt(5) / self.config.kaiming_initializer_range)
+                init.kaiming_uniform_(module.weight[i], a=math.sqrt(5) / self.config.kaiming_initializer_range)
                 if module.bias is not None:
-                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight[i])
+                    fan_in, _ = init._calculate_fan_in_and_fan_out(module.weight[i])
                     bound = (1 / math.sqrt(fan_in)) * self.config.initializer_range
-                    nn.init.uniform_(module.bias[i], -bound, bound)
+                    init.uniform_(module.bias[i], -bound, bound)
 
 
 TRAJECTORY_TRANSFORMER_START_DOCSTRING = r"""
@@ -158,11 +160,11 @@ class EinLinear(nn.Module):
 
     def reset_parameters(self):
         for i in range(self.n_models):
-            nn.init.kaiming_uniform_(self.weight[i], a=math.sqrt(5))
+            init.kaiming_uniform_(self.weight[i], a=math.sqrt(5))
             if self.bias is not None:
-                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight[i])
+                fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight[i])
                 bound = 1 / math.sqrt(fan_in)
-                nn.init.uniform_(self.bias[i], -bound, bound)
+                init.uniform_(self.bias[i], -bound, bound)
 
     def forward(self, input):
         """

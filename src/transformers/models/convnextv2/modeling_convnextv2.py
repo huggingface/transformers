@@ -19,6 +19,8 @@ from typing import Optional
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BackboneOutput,
@@ -265,8 +267,8 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, ConvNextV2GRN):
-            nn.init.zeros_(module.weight)
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.weight)
+            init.zeros_(module.bias)
 
 
 @auto_docstring

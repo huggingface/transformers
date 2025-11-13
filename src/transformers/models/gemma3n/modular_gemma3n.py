@@ -21,6 +21,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
@@ -1879,11 +1881,11 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
-            nn.init.ones_(module.weight)
+            init.ones_(module.weight)
         elif isinstance(module, Gemma3nAudioAttention):
-            nn.init.zeros_(module.per_dim_scale)
+            init.zeros_(module.per_dim_scale)
         elif isinstance(module, Gemma3nTextAltUp):
-            nn.init.zeros_(module.correct_output_scale)
+            init.zeros_(module.correct_output_scale)
 
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")

@@ -22,6 +22,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...modeling_layers import GradientCheckpointingLayer
@@ -386,9 +388,7 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
             for name, p in module.named_parameters():
                 if "c_proj" in name and "weight" in name:
                     # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                    nn.init.normal_(
-                        p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer)
-                    )
+                    init.normal_(p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer))
 
 
 class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):

@@ -29,6 +29,8 @@ from torch import nn
 from torch.autograd.function import Function
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
@@ -1849,7 +1851,7 @@ class ReformerPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, AxialPositionEmbeddings):
             for weight in module.weights:
-                nn.init.normal_(weight, std=self.config.axial_norm_std)
+                init.normal_(weight, std=self.config.axial_norm_std)
 
 
 @dataclass

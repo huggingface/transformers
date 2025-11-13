@@ -27,6 +27,8 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
@@ -575,14 +577,14 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
         if isinstance(module, FalconMambaMixer):
             A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
             A = A.expand(module.intermediate_size, -1).contiguous()
-            nn.init.copy_(module.A, torch.log(A))
-            nn.init.ones_(module.D)
+            init.copy_(module.A, torch.log(A))
+            init.ones_(module.D)
 
             dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale
             if self.config.time_step_init_scheme == "constant":
-                nn.init.constant_(module.dt_proj.weight, dt_init_std)
+                init.constant_(module.dt_proj.weight, dt_init_std)
             elif self.config.time_step_init_scheme == "random":
-                nn.init.uniform_(module.dt_proj.weight, -dt_init_std, dt_init_std)
+                init.uniform_(module.dt_proj.weight, -dt_init_std, dt_init_std)
 
             dt = torch.exp(
                 torch.rand(self.config.intermediate_size)
@@ -591,12 +593,12 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            nn.init.copy_(module.dt_proj.bias, inv_dt)
+            init.copy_(module.dt_proj.bias, inv_dt)
 
-            nn.init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
+            init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
             if module.conv1d.bias is not None:
-                nn.init.zeros_(module.conv1d.bias)
-            nn.init.kaiming_uniform_(module.out_proj.weight, a=math.sqrt(5))
+                init.zeros_(module.conv1d.bias)
+            init.kaiming_uniform_(module.out_proj.weight, a=math.sqrt(5))
 
             if self.config.rescale_prenorm_residual:
                 # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
@@ -614,14 +616,14 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, nn.Linear):
             if not getattr(module.weight, "_no_reinit", False):
-                nn.init.normal_(module.weight, std=std)
+                init.normal_(module.weight, std=std)
             if module.bias is not None:
                 if not getattr(module.bias, "_no_reinit", False):
-                    nn.init.zeros_(module.bias)
+                    init.zeros_(module.bias)
         elif isinstance(module, FalconMambaRMSNorm):
-            nn.init.ones_(module.weight)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, std=std)
+            init.normal_(module.weight, std=std)
 
 
 @dataclass

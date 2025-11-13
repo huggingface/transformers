@@ -22,6 +22,8 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ....activations import ACT2FN
 from ....modeling_outputs import (
     BaseModelOutputWithNoAttention,
@@ -346,17 +348,17 @@ class GraphormerMultiheadAttention(nn.Module):
         if self.qkv_same_dim:
             # Empirically observed the convergence to be much better with
             # the scaled initialization
-            nn.init.xavier_uniform_(self.k_proj.weight, gain=1 / math.sqrt(2))
-            nn.init.xavier_uniform_(self.v_proj.weight, gain=1 / math.sqrt(2))
-            nn.init.xavier_uniform_(self.q_proj.weight, gain=1 / math.sqrt(2))
+            init.xavier_uniform_(self.k_proj.weight, gain=1 / math.sqrt(2))
+            init.xavier_uniform_(self.v_proj.weight, gain=1 / math.sqrt(2))
+            init.xavier_uniform_(self.q_proj.weight, gain=1 / math.sqrt(2))
         else:
-            nn.init.xavier_uniform_(self.k_proj.weight)
-            nn.init.xavier_uniform_(self.v_proj.weight)
-            nn.init.xavier_uniform_(self.q_proj.weight)
+            init.xavier_uniform_(self.k_proj.weight)
+            init.xavier_uniform_(self.v_proj.weight)
+            init.xavier_uniform_(self.q_proj.weight)
 
-        nn.init.xavier_uniform_(self.out_proj.weight)
+        init.xavier_uniform_(self.out_proj.weight)
         if self.out_proj.bias is not None:
-            nn.init.constant_(self.out_proj.bias, 0.0)
+            init.constant_(self.out_proj.bias, 0.0)
 
     def forward(
         self,
@@ -714,17 +716,17 @@ class GraphormerPreTrainedModel(PreTrainedModel):
         Initialize the weights specific to the Graphormer Model.
         """
         if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight.data, mean=0.0, std=0.02)
+            init.normal_(module.weight.data, mean=0.0, std=0.02)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         if isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight.data, mean=0.0, std=0.02)
+            init.normal_(module.weight.data, mean=0.0, std=0.02)
             if module.padding_idx is not None:
-                nn.init.zeros_(module.weight.data[module.padding_idx])
+                init.zeros_(module.weight.data[module.padding_idx])
         if isinstance(module, GraphormerMultiheadAttention):
-            nn.init.normal_(module.q_proj.weight.data, mean=0.0, std=0.02)
-            nn.init.normal_(module.k_proj.weight.data, mean=0.0, std=0.02)
-            nn.init.normal_(module.v_proj.weight.data, mean=0.0, std=0.02)
+            init.normal_(module.q_proj.weight.data, mean=0.0, std=0.02)
+            init.normal_(module.k_proj.weight.data, mean=0.0, std=0.02)
+            init.normal_(module.v_proj.weight.data, mean=0.0, std=0.02)
 
     @torch.no_grad()
     def _init_weights(
@@ -738,9 +740,9 @@ class GraphormerPreTrainedModel(PreTrainedModel):
         """
         super()._init_weights(module)
         if isinstance(module, GraphormerMultiheadAttention):
-            nn.init.normal_(module.q_proj.weight, mean=0.0, std=0.02)
-            nn.init.normal_(module.k_proj.weight, mean=0.0, std=0.02)
-            nn.init.normal_(module.v_proj.weight, mean=0.0, std=0.02)
+            init.normal_(module.q_proj.weight, mean=0.0, std=0.02)
+            init.normal_(module.k_proj.weight, mean=0.0, std=0.02)
+            init.normal_(module.v_proj.weight, mean=0.0, std=0.02)
             module.reset_parameters()
         elif isinstance(module, GraphormerGraphEncoder):
             if module.apply_graphormer_init:

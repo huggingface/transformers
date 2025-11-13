@@ -26,6 +26,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -471,7 +473,7 @@ class GraniteMoeSharedPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeSharedParallelExperts):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 class GraniteMoeSharedRotaryEmbedding(nn.Module):

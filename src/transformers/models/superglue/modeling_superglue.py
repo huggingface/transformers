@@ -20,6 +20,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
 from transformers import PreTrainedModel
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 
@@ -474,7 +475,7 @@ class SuperGluePreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if hasattr(module, "bin_score"):
-            nn.init.ones_(module.bin_score)
+            init.ones_(module.bin_score)
 
 
 @auto_docstring(

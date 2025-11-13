@@ -23,6 +23,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -209,8 +211,8 @@ class LayoutLMv3PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, LayoutLMv3Model):
             if self.config.visual_embed:
-                nn.init.zeros_(module.cls_token)
-                nn.init.zeros_(module.pos_embed)
+                init.zeros_(module.cls_token)
+                init.zeros_(module.pos_embed)
 
 
 class LayoutLMv3SelfAttention(nn.Module):

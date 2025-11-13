@@ -19,6 +19,8 @@ from typing import Optional, Union
 import torch
 from torch import Tensor, nn
 
+import transformers.initialization as init
+
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_timm_available, requires_backends
@@ -131,9 +133,9 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         initialization, while all other weights should be loaded from the checkpoint.
         """
         if isinstance(module, (nn.Linear)):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """

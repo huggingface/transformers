@@ -22,6 +22,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2CLS
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
@@ -567,20 +569,20 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
             ) // self.config.patch_stride + 1
             # initialize cls_token
             if self.config.use_cls_token:
-                nn.init.normal_(module.cls_token, std=0.02)
+                init.normal_(module.cls_token, std=0.02)
                 num_patches += 1
             # initialize positional encoding
-            nn.init.copy_(module.position_enc, module._init_pe(self.config, num_patches))
+            init.copy_(module.position_enc, module._init_pe(self.config, num_patches))
         elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, PatchTSTBatchNorm):
-            nn.init.zeros_(module.batchnorm.bias)
-            nn.init.ones_(module.batchnorm.weight)
+            init.zeros_(module.batchnorm.bias)
+            init.ones_(module.batchnorm.weight)
         elif isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.init_std)
+            init.normal_(module.weight, mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (PatchTSTEncoder)):

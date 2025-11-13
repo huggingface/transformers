@@ -26,6 +26,8 @@ import numpy as np
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
@@ -254,7 +256,7 @@ class InformerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, InformerSinusoidalPositionalEmbedding):
-            nn.init.copy_(module.weight, module.create_weight())
+            init.copy_(module.weight, module.create_weight())
 
 
 def eager_attention_forward(

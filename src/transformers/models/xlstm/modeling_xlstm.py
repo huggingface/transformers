@@ -21,6 +21,8 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+import transformers.initialization as init
+
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -1211,7 +1213,7 @@ def small_init_method(dim):
     std = (2 / (5 * dim)) ** (1 / 2)
 
     def init_(tensor):
-        return nn.init.normal_(tensor, mean=0.0, std=std)
+        return init.normal_(tensor, mean=0.0, std=std)
 
     return init_
 
@@ -1223,7 +1225,7 @@ def wang_init_method(n_layers, dim):
     std = 2 / n_layers / dim ** (1 / 2)
 
     def init_(tensor):
-        return nn.init.normal_(tensor, mean=0.0, std=std)
+        return init.normal_(tensor, mean=0.0, std=std)
 
     return init_
 
@@ -1251,14 +1253,14 @@ class xLSTMPreTrainedModel(PreTrainedModel):
             small_init_method(self.config.hidden_size)(self.embeddings.weight)
         elif isinstance(module, nn.Linear):
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
             if self.config.weight_mode == "single" and "gate" in self._module_name_map(module):
-                nn.init.zeros_(module.weight)
+                init.zeros_(module.weight)
 
                 if "igate" in self._module_name_map(module):
-                    nn.init.copy_(module.bias, -10.0 * torch.ones_like(module.bias))
+                    init.copy_(module.bias, -10.0 * torch.ones_like(module.bias))
                 elif "fgate" in self._module_name_map(module):
-                    nn.init.copy_(
+                    init.copy_(
                         module.bias,
                         torch.linspace(
                             3.0,
@@ -1270,15 +1272,15 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                         ),
                     )
             elif self.config.weight_mode == "fused" and "gate" in self._module_name_map(module):
-                nn.init.zeros_(module.weight)
+                init.zeros_(module.weight)
 
-                nn.init.copy_(
+                init.copy_(
                     module.bias[: self.config.num_heads],
                     module.bias[: self.config.num_heads]
                     - module.bias[: self.config.num_heads]
                     - 10.0 * torch.ones_like(module.bias),
                 )
-                nn.init.copy_(
+                init.copy_(
                     module.bias[: self.config.num_heads],
                     module.bias[: self.config.num_heads]
                     - module.bias[self.config.num_heads :]
@@ -1298,9 +1300,9 @@ class xLSTMPreTrainedModel(PreTrainedModel):
             elif module.weight is not None:
                 small_init_method(self.config.hidden_size)(module.weight)
         elif isinstance(module, xLSTMRMSNorm) or hasattr(module, "_layer_normalize"):
-            nn.init.ones_(module.weight)
+            init.ones_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
 
 
 class xLSTMCache:

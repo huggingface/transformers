@@ -32,6 +32,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
 
+import transformers.initialization as init
 from transformers.utils.generic import OutputRecorder
 
 from ...activations import ACT2FN
@@ -783,16 +784,16 @@ class EdgeTamVideoPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, EdgeTamVideoModel):
             if module.no_memory_positional_encoding is not None:
-                nn.init.zeros_(module.no_memory_positional_encoding)
+                init.zeros_(module.no_memory_positional_encoding)
             if module.memory_temporal_positional_encoding is not None:
-                nn.init.zeros_(module.memory_temporal_positional_encoding)
+                init.zeros_(module.memory_temporal_positional_encoding)
             if module.no_object_pointer is not None:
-                nn.init.zeros_(module.no_object_pointer)
+                init.zeros_(module.no_object_pointer)
             if module.occlusion_spatial_embedding_parameter is not None:
-                nn.init.zeros_(module.occlusion_spatial_embedding_parameter)
+                init.zeros_(module.occlusion_spatial_embedding_parameter)
         if isinstance(module, EdgeTamVideoMemoryFuserCXBlock):
             if module.scale is not None:
-                nn.init.zeros_(module.scale)
+                init.zeros_(module.scale)
 
 
 class EdgeTamVideoInferenceCache:

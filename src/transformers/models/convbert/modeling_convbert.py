@@ -22,6 +22,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN, get_activation
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -113,10 +115,10 @@ class ConvBertPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, SeparableConv1D):
-            nn.init.zeros_(module.bias)
+            init.zeros_(module.bias)
         elif isinstance(module, GroupedLinearLayer):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            nn.init.zeros_(module.bias)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.bias)
 
 
 class SeparableConv1D(nn.Module):

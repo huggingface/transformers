@@ -20,6 +20,8 @@ from typing import Optional
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
@@ -380,8 +382,8 @@ class VivitPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, VivitEmbeddings):
-            nn.init.zeros_(module.cls_token)
-            nn.init.zeros_(module.position_embeddings)
+            init.zeros_(module.cls_token)
+            init.zeros_(module.position_embeddings)
 
 
 @auto_docstring

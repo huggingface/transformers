@@ -19,6 +19,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import transformers.initialization as init
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
@@ -947,25 +949,25 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
 
         init_std = self.config.initializer_range
         if isinstance(module, VJEPA2AttentivePooler):
-            nn.init.trunc_normal_(module.query_tokens, std=init_std)
+            init.trunc_normal_(module.query_tokens, std=init_std)
             for i, layer in enumerate(module.self_attention_layers, 1):
                 std = init_std / (i**0.5)
-                nn.init.trunc_normal_(layer.self_attn.out_proj.weight, std=std)
-                nn.init.trunc_normal_(layer.mlp.fc2.weight, std=std)
+                init.trunc_normal_(layer.self_attn.out_proj.weight, std=std)
+                init.trunc_normal_(layer.mlp.fc2.weight, std=std)
             std = init_std / (len(module.self_attention_layers) + 1) ** 0.5
-            nn.init.trunc_normal_(module.cross_attention_layer.mlp.fc2.weight, std=std)
+            init.trunc_normal_(module.cross_attention_layer.mlp.fc2.weight, std=std)
         elif isinstance(module, VJEPA2PredictorEmbeddings):
             if module.zero_init_mask_tokens:
-                nn.init.zeros_(module.mask_tokens)
+                init.zeros_(module.mask_tokens)
             else:
-                nn.init.trunc_normal_(module.mask_tokens, std=init_std)
+                init.trunc_normal_(module.mask_tokens, std=init_std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
-            nn.init.trunc_normal_(module.weight, std=init_std)
+            init.trunc_normal_(module.weight, std=init_std)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 @auto_docstring
