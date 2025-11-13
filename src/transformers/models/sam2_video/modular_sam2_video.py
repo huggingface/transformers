@@ -27,8 +27,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs

@@ -22,9 +22,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import transformers.initialization as init
 from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin

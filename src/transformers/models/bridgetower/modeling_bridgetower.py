@@ -23,8 +23,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN, QuickGELUActivation
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask

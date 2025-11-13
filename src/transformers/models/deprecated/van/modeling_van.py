@@ -21,8 +21,6 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-import transformers.initialization as init
-
 from ....activations import ACT2FN
 from ....modeling_outputs import (
     BaseModelOutputWithNoAttention,
@@ -31,6 +29,7 @@ from ....modeling_outputs import (
 )
 from ....modeling_utils import PreTrainedModel
 from ....utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ... import initialization as init
 from .configuration_van import VanConfig
 
 

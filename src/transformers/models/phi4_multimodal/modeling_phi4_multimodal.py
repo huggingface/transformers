@@ -28,8 +28,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin

@@ -21,8 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import Tensor, nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer

@@ -21,8 +21,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter

@@ -24,7 +24,6 @@ from typing import Optional, TypedDict, Union
 import torch
 from torch import nn
 
-import transformers.initialization as init
 from transformers.activations import ACT2FN
 from transformers.models.jamba.modeling_jamba import HybridMambaAttentionDynamicCache, JambaAttentionDecoderLayer
 from transformers.models.llama.modeling_llama import (
@@ -43,6 +42,7 @@ from transformers.models.mamba2.modeling_mamba2 import (
     segment_sum,
 )
 
+from ... import initialization as init
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel

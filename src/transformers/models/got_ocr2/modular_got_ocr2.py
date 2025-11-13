@@ -19,8 +19,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel

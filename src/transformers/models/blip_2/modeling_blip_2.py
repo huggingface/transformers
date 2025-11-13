@@ -23,8 +23,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer

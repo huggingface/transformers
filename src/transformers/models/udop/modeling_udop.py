@@ -28,13 +28,13 @@ import torch
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
-import transformers.initialization as init
 from transformers import UdopConfig
 from transformers.modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin

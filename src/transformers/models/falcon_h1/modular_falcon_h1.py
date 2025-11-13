@@ -26,7 +26,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-import transformers.initialization as init
 from transformers.activations import ACT2FN
 from transformers.models.jamba.modeling_jamba import HybridMambaAttentionDynamicCache
 from transformers.models.llama.modeling_llama import (
@@ -46,6 +45,7 @@ from transformers.models.mamba2.modeling_mamba2 import (
     segment_sum,
 )
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs

@@ -20,8 +20,7 @@ from typing import Optional
 import torch
 from torch import nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
 from ...utils.backbone_utils import load_backbone

@@ -24,9 +24,9 @@ from typing import Optional
 
 from torch import nn
 
-import transformers.initialization as init
 from transformers import AutoModelForImageTextToText
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available

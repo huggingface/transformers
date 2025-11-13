@@ -22,7 +22,6 @@ import numpy as np
 import torch
 from torch import nn
 
-import transformers.initialization as init
 from transformers.models.arcee.modeling_arcee import ArceeMLP
 from transformers.models.dinov2.modeling_dinov2 import (
     Dinov2DropPath,
@@ -33,6 +32,7 @@ from transformers.models.dinov2.modeling_dinov2 import (
 from transformers.models.llama.modeling_llama import LlamaMLP
 from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotate_half
 
+from ... import initialization as init
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS

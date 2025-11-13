@@ -23,8 +23,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, SmoothL1Loss
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN, gelu
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging

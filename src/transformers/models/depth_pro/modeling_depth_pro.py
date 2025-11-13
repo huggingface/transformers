@@ -22,8 +22,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ..auto import AutoModel

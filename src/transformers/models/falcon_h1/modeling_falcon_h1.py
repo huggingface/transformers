@@ -31,9 +31,9 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-import transformers.initialization as init
 from transformers.activations import ACT2FN
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub

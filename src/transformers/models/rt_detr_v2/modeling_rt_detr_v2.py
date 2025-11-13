@@ -27,8 +27,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_outputs import BaseModelOutput

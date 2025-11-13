@@ -21,8 +21,6 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-import transformers.initialization as init
-
 from ....activations import ACT2FN
 from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
@@ -35,6 +33,7 @@ from ....utils import (
     torch_int,
 )
 from ....utils.backbone_utils import load_backbone
+from ... import initialization as init
 from .configuration_vit_hybrid import ViTHybridConfig
 
 

@@ -21,8 +21,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...modeling_outputs import ModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging

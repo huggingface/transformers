@@ -27,8 +27,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_timm_available, requires_backends
 from ...integrations import use_kernel_forward_from_hub

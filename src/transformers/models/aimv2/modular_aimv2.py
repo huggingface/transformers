@@ -22,8 +22,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling

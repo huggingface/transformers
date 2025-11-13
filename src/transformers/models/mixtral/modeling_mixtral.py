@@ -31,9 +31,9 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-import transformers.initialization as init
 from transformers.utils.generic import check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin

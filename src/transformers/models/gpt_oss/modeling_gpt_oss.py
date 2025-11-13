@@ -25,8 +25,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-import transformers.initialization as init
-
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations.hub_kernels import use_kernel_forward_from_hub

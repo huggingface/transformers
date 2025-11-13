@@ -24,8 +24,6 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-import transformers.initialization as init
-
 from ....activations import ACT2FN
 from ....file_utils import (
     ModelOutput,
@@ -43,6 +41,7 @@ from ....modeling_utils import PreTrainedModel
 from ....pytorch_utils import meshgrid
 from ....utils import is_accelerate_available, is_torchvision_available, logging, requires_backends
 from ....utils.backbone_utils import load_backbone
+from ... import initialization as init
 from .configuration_deta import DetaConfig
 
 
