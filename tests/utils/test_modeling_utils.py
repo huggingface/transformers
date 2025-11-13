@@ -575,37 +575,37 @@ class ModelUtilsTest(TestCasePlus):
         """
         # Load without dtype specified
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA)
-        self.assertEqual(model.language_model.dtype, torch.float32)
-        self.assertEqual(model.vision_tower.dtype, torch.float32)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float32)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # should be able to set dtype as a simple string and the model loads it correctly
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, dtype="float32")
-        self.assertEqual(model.language_model.dtype, torch.float32)
-        self.assertEqual(model.vision_tower.dtype, torch.float32)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float32)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, dtype=torch.float16)
-        self.assertEqual(model.language_model.dtype, torch.float16)
-        self.assertEqual(model.vision_tower.dtype, torch.float16)
+        self.assertEqual(model.model.language_model.dtype, torch.float16)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float16)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # should be able to set dtype as a dict for each sub-config
         model = LlavaForConditionalGeneration.from_pretrained(
             TINY_LLAVA, dtype={"text_config": "float32", "vision_config": "float16", "": "bfloat16"}
         )
-        self.assertEqual(model.language_model.dtype, torch.float32)
-        self.assertEqual(model.vision_tower.dtype, torch.float16)
-        self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float16)
+        self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # should be able to set the values as torch.dtype (not str)
         model = LlavaForConditionalGeneration.from_pretrained(
             TINY_LLAVA, dtype={"text_config": torch.float32, "vision_config": torch.float16, "": torch.bfloat16}
         )
-        self.assertEqual(model.language_model.dtype, torch.float32)
-        self.assertEqual(model.vision_tower.dtype, torch.float16)
-        self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float16)
+        self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # should be able to set the values in configs directly and pass it to `from_pretrained`
@@ -614,17 +614,17 @@ class ModelUtilsTest(TestCasePlus):
         config.vision_config.dtype = torch.bfloat16
         config.dtype = torch.float16
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, dtype="auto")
-        self.assertEqual(model.language_model.dtype, torch.float32)
-        self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
-        self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float16)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.bfloat16)
+        self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.float16)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # but if the model has `_keep_in_fp32_modules` then those modules should be in fp32 no matter what
         LlavaForConditionalGeneration._keep_in_fp32_modules = ["multi_modal_projector"]
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, dtype="auto")
-        self.assertEqual(model.language_model.dtype, torch.float32)
-        self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
-        self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.bfloat16)
+        self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
@@ -3142,7 +3142,7 @@ class TestGetDecoder(unittest.TestCase):
         model = GPT2LMHeadModel(cfg)
         dec = model.get_decoder()
 
-        assert dec is model, f"GPT2 get_decoder() should return self (fallback), got {type(dec)}"
+        assert dec is model.transformer, f"GPT2 get_decoder() should return self (fallback), got {type(dec)}"
 
     def test_model_without_get_decoder(self):
         """Test edge case where model has model attribute but no get_decoder method."""
@@ -3202,4 +3202,4 @@ class TestGetDecoder(unittest.TestCase):
         model = LlavaForConditionalGeneration(cfg)
         dec = model.get_decoder()
 
-        assert dec is model.language_model, f"LLaVA get_decoder() should return language_model, got {type(dec)}"
+        assert dec is model.model.language_model, f"LLaVA get_decoder() should return language_model, got {type(dec)}"
