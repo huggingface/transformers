@@ -839,6 +839,7 @@ class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        "videos_kwargs": {"return_metadata": True},
     }
 
 
@@ -857,8 +858,6 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
-
-    image_processor_class = "AutoImageProcessor"
 
     @property
     def model_input_names(self):
@@ -924,9 +923,16 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             image_grid_thw = image_inputs["image_grid_thw"]
 
         if videos is not None:
-            fps = output_kwargs["videos_kwargs"].get("fps", 2.0)
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
+
+            # Get video metadata
+            if not kwargs.get("return_metadata"):
+                video_metadata = videos_inputs.pop("video_metadata")
+            else:
+                video_metadata = videos_inputs["video_metadata"]
+
+            fps = [metadata.sampled_fps for metadata in video_metadata]
 
             if isinstance(fps, (int, float)):
                 second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)

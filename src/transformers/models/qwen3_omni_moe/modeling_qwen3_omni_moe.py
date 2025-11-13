@@ -1292,7 +1292,7 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(nn.Module):
     def apply_interleaved_mrope(self, freqs, mrope_section):
         """Apply interleaved MRoPE to 3D rotary embeddings.
         Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
-        interleaved [THTHWHTHW...TT], preserving frequency continuity.
+        interleaved [THWTHWTHW...TT], preserving frequency continuity.
         args:
             x: (3, bs, seq_len, head_dim // 2)
             mrope_section: (3,)
@@ -1340,8 +1340,8 @@ class Qwen3OmniMoeThinkerTextExperts(nn.ModuleList):
         """
         Args:
             hidden_states: (batch_size * sequence_length, hidden_dim)
-            selected_experts: (batch_size * sequence_length, top_k)
-            routing_weights: (batch_size * sequence_length, top_k)
+            top_k_index: (batch_size * sequence_length, top_k)
+            top_k_weights: (batch_size * sequence_length, top_k)
         Returns:
             (batch_size * sequence_length, hidden_dim)
         """
@@ -2724,8 +2724,8 @@ class Qwen3OmniMoeTalkerTextExperts(nn.ModuleList):
         """
         Args:
             hidden_states: (batch_size * sequence_length, hidden_dim)
-            selected_experts: (batch_size * sequence_length, top_k)
-            routing_weights: (batch_size * sequence_length, top_k)
+            top_k_index: (batch_size * sequence_length, top_k)
+            top_k_weights: (batch_size * sequence_length, top_k)
         Returns:
             (batch_size * sequence_length, hidden_dim)
         """
