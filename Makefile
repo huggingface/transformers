@@ -135,3 +135,29 @@ build-release:
 	python setup.py bdist_wheel
 	python setup.py sdist
 	python utils/check_build.py
+
+# Load checkpoints and verify they are accessible
+export XDG_CACHE_HOME=/tmp/cache/
+export HF_HOME=/tmp/cache/hf
+
+/tmp/backbone.pth:
+	wget -O $@ "https://dinov3.llamameta.net/dinov3_vit7b16/dinov3_vit7b16_pretrain_lvd1689m-a955f4ea.pth?Policy=eyJTdGF0ZW1lbnQiOlt7InVuaXF1ZV9oYXNoIjoiajEybnhqNWl2cGVtZDhvMDc0ZzF0bTFtIiwiUmVzb3VyY2UiOiJodHRwczpcL1wvZGlub3YzLmxsYW1hbWV0YS5uZXRcLyoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3NjMyMjM1NDd9fX1dfQ__&Signature=FkDkgcYMlUa1Oq%7E-emh1yXIIuj89OBh9O8PHcPhTEzw5MHLwggBnLQYGwbPGyLySCz8sfLN2YyXnk47gHHZLITGv%7EkFCGG4cFHN0inQIUqZIwRkghz9QMRqAAIxL1VnajHpGlfmewPhpS8Dawi8V99LOwZ3YQ9GKq3Uif5Re98VXgkL3Qj0KvMXvA%7Ez7w5zh8ZPCW3ggVDsKAf1P-Y66sohOQEwuCQbkycqwwXsXPkw%7EPSw68Ct9dpASlIpXZp-4SFobbTtvbpQ2C6R0E8M7OOkFVH4%7E%7E0W-n-xJpkSDdfrm7B2BWjZ2eDBMI3w4kcexVICP6smbFUZUbIY3uXIV8Q__&Key-Pair-Id=K15QRJLYKIFSLZ&Download-Request-ID=1511531990180009"
+
+/tmp/lc.pth:
+	wget -O $@ "https://dinov3.llamameta.net/dinov3_vit7b16/dinov3_vit7b16_imagenet1k_linear_head-90d8ed92.pth?Policy=eyJTdGF0ZW1lbnQiOlt7InVuaXF1ZV9oYXNoIjoiajEybnhqNWl2cGVtZDhvMDc0ZzF0bTFtIiwiUmVzb3VyY2UiOiJodHRwczpcL1wvZGlub3YzLmxsYW1hbWV0YS5uZXRcLyoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3NjMyMjM1NDd9fX1dfQ__&Signature=FkDkgcYMlUa1Oq%7E-emh1yXIIuj89OBh9O8PHcPhTEzw5MHLwggBnLQYGwbPGyLySCz8sfLN2YyXnk47gHHZLITGv%7EkFCGG4cFHN0inQIUqZIwRkghz9QMRqAAIxL1VnajHpGlfmewPhpS8Dawi8V99LOwZ3YQ9GKq3Uif5Re98VXgkL3Qj0KvMXvA%7Ez7w5zh8ZPCW3ggVDsKAf1P-Y66sohOQEwuCQbkycqwwXsXPkw%7EPSw68Ct9dpASlIpXZp-4SFobbTtvbpQ2C6R0E8M7OOkFVH4%7E%7E0W-n-xJpkSDdfrm7B2BWjZ2eDBMI3w4kcexVICP6smbFUZUbIY3uXIV8Q__&Key-Pair-Id=K15QRJLYKIFSLZ&Download-Request-ID=1511531990180009"
+
+dinov3/requirements.txt:
+	git clone https://github.com/facebookresearch/dinov3.git
+
+get_checkpoints: /tmp/backbone.pth /tmp/lc.pth dinov3/requirements.txt
+
+.venv:
+	pip install uv && uv venv && uv pip install -r  dinov3/requirements.txt -e ".[torch]"
+	
+load_checkpoints: get_checkpoints dinov3/requirements.txt
+	uv venv --clear
+	uv pip install -r dinov3/requirements.txt
+	uv run python test_torchhubload.py
+
+load_hf: .venv get_checkpoints
+	uv run python test_load_hf.py
