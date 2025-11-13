@@ -4241,7 +4241,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
                 pattern = re.compile(r"(" + "|".join(map(re.escape, keys)) + r")")
                 if sharded_metadata is None:
-                    k_v_iterator = dict.fromkeys(safe_open(checkpoint_files[0], framework="pt").keys(), "model.safetensors").items()
+                    k_v_iterator = dict.fromkeys(safe_open(checkpoint_files[0], framework="pt").keys(), checkpoint_files[0].rsplit("/", 1)[1]).items()
                 else:
                     k_v_iterator = sharded_metadata["weight_map"].items()
 
