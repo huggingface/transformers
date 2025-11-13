@@ -51,7 +51,15 @@ class DeepseekOcrImageProcessorKwargs(ImagesKwargs, total=False):
     max_crops: int
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    This image processor produces two tensors:
+      * `pixel_values`: the global 1024x1024 image view that feeds both the SAM and CLIP encoder branches.
+      * `pixel_values_local`: a batch of up to `max_crops` high-resolution 640x640 crops per image (padded with zeros).
+    Metadata tensors (`num_local_crops`, `image_spatial_crop`, `num_img_tokens`) describe how many local crops are valid
+    and how they should be spatially reassembled before projection.
+    """
+)
 class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     size = {"height": 1024, "width": 1024}

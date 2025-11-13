@@ -1562,21 +1562,14 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         image_spatial_crops=None,
     ):
         """
-        Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
+        Packs local-crop + global grids into the same newline/separator layout LlavaNext expects.
 
-        Args:
-            image_features (`list[torch.Tensor]` of length num_images, each of shape `(num_patches, image_length, embed_dim)`)
-                List of image feature tensor, each contains all the visual feature of all patches.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-                Actual image size of each images (H, W).
-            vision_feature_select_strategy (`str`)
-                The feature selection strategy used to select the vision feature from the vision backbone.
-            image_newline (`torch.Tensor` of shape `(embed_dim)`)
-                New line embedding vector.
-        Returns:
-            image_features (`torch.Tensor` of shape `(all_feat_len, embed_dim)`)
-            feature_lens (`list[int]`)
-                token length of each image in image_features
+        Contrary to LlavaNext, DeepSeek-OCR receives a list of feature
+        groups where each entry already separates local crops and the global 1024 view. We therefore:
+          * reshape each local grid back to (height_crop_num × crop_grid, width_crop_num × crop_grid) and append a
+            newline embedding per row,
+          * reshape the global feature grid and append its newline,
+          * finally, append the learned view separator that delimits image blocks.
         """
         newline_token = image_newline if image_newline is not None else self.image_newline
         new_image_features = []
@@ -1760,9 +1753,10 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
-                Global view of images downsampled to 1024x1024 for processing by both SAM and CLIP encoders.
+                Global view (1024x1024) consumed by SAM + CLIP. This is injected wherever `<image>` placeholders appear.
             pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
-                High-resolution local crops (640x640) extracted from images for detailed OCR processing.
+                Optional high-resolution (640x640) crops. When provided, they are stitched into the packed feature grid
+                ahead of the global features.
             num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
                 Number of valid local crops for each image in the batch.
         """

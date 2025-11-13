@@ -912,6 +912,16 @@ class DeepseekOcrModel(LlavaNextModel):
         image_newline=None,
         image_spatial_crops=None,
     ):
+        """
+        Packs local-crop + global grids into the same newline/separator layout LlavaNext expects.
+
+        Contrary to LlavaNext, DeepSeek-OCR receives a list of feature
+        groups where each entry already separates local crops and the global 1024 view. We therefore:
+          * reshape each local grid back to (height_crop_num × crop_grid, width_crop_num × crop_grid) and append a
+            newline embedding per row,
+          * reshape the global feature grid and append its newline,
+          * finally, append the learned view separator that delimits image blocks.
+        """
         newline_token = image_newline if image_newline is not None else self.image_newline
         new_image_features = []
 
@@ -1093,9 +1103,10 @@ class DeepseekOcrModel(LlavaNextModel):
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
-                Global view of images downsampled to 1024x1024 for processing by both SAM and CLIP encoders.
+                Global view (1024x1024) consumed by SAM + CLIP. This is injected wherever `<image>` placeholders appear.
             pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
-                High-resolution local crops (640x640) extracted from images for detailed OCR processing.
+                Optional high-resolution (640x640) crops. When provided, they are stitched into the packed feature grid
+                ahead of the global features.
             num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
                 Number of valid local crops for each image in the batch.
         """
