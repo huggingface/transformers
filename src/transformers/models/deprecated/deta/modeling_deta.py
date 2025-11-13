@@ -41,7 +41,7 @@ from ....modeling_utils import PreTrainedModel
 from ....pytorch_utils import meshgrid
 from ....utils import is_accelerate_available, is_torchvision_available, logging, requires_backends
 from ....utils.backbone_utils import load_backbone
-from ... import initialization as init
+from .... import initialization as init
 from .configuration_deta import DetaConfig
 
 

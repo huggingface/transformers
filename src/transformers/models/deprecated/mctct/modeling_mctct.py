@@ -30,7 +30,7 @@ from ....modeling_outputs import BaseModelOutput, CausalLMOutput
 from ....modeling_utils import PreTrainedModel
 from ....pytorch_utils import apply_chunking_to_forward
 from ....utils import logging
-from ... import initialization as init
+from .... import initialization as init
 from .configuration_mctct import MCTCTConfig
 
 

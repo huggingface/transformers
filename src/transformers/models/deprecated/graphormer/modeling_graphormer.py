@@ -29,7 +29,7 @@ from ....modeling_outputs import (
 )
 from ....modeling_utils import PreTrainedModel
 from ....utils import logging
-from ... import initialization as init
+from .... import initialization as init
 from .configuration_graphormer import GraphormerConfig
 
 
