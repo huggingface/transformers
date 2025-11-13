@@ -25,6 +25,44 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class Glm46VConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
+    GLM-4.6V model according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Glm4vTextConfig`):
+            The config object or dictionary of the text backbone.
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Glm4vVisionConfig`):
+            The config object or dictionary of the vision backbone.
+        image_token_id (`int`, *optional*, defaults to 151343):
+            The image token index to encode the image prompt.
+        video_token_id (`int`, *optional*, defaults to 151344):
+            The video token index to encode the image prompt.
+        image_start_token_id (`int`, *optional*, defaults to 151339):
+            The image start token index to encode the start of image.
+        image_end_token_id (`int`, *optional*, defaults to 151340):
+            The image end token index to encode the end of image.
+        video_start_token_id (`int`, *optional*, defaults to 151361):
+            The video start token index to encode the start of video.
+        video_end_token_id (`int`, *optional*, defaults to 151362):
+            The video end token index to encode the end of video.
+
+    ```python
+    >>> from transformers import Glm46VForConditionalGeneration, Glm46VConfig
+
+    >>> # Initializing a GLM-4.6V style configuration
+    >>> configuration = Glm46VConfig()
+
+    >>> # Initializing a model from the GLM-4.6V style configuration
+    >>> model = Glm4vForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "glm46v"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -37,8 +75,8 @@ class Glm46VConfig(PreTrainedConfig):
         video_token_id=151344,
         image_start_token_id=151339,
         image_end_token_id=151340,
-        video_start_token_id=151341,
-        video_end_token_id=151342,
+        video_start_token_id=151361,
+        video_end_token_id=151362,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
