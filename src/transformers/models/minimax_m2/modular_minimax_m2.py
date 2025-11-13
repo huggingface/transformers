@@ -117,8 +117,6 @@ class MiniMaxM2Config(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        use_qk_norm (`Optional`, *optional*, defaults to `True`):
-            Whether to use layer normalization on the query and key states.
 
     ```python
     >>> from transformers import MiniMaxM2Model, MiniMaxM2Config
@@ -180,7 +178,6 @@ class MiniMaxM2Config(PreTrainedConfig):
         router_aux_loss_coef: Optional[float] = 0.001,
         router_jitter_noise: Optional[float] = 0.0,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        use_qk_norm: Optional[bool] = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -218,7 +215,6 @@ class MiniMaxM2Config(PreTrainedConfig):
         rope_config_validation(self)
 
         rotary_dim = kwargs.pop("rotary_dim", head_dim)
-        self.use_qk_norm = use_qk_norm
         self.partial_rotary_factor = kwargs.pop("partial_rotary_factor", 1.0)
 
         if self.head_dim is not None:
