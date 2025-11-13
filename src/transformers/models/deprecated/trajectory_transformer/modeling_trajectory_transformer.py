@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from .... import initialization as init
 from ....cache_utils import Cache
 from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_utils import PreTrainedModel
@@ -33,7 +34,6 @@ from ....utils import (
     logging,
     replace_return_docstrings,
 )
-from .... import initialization as init
 from .configuration_trajectory_transformer import TrajectoryTransformerConfig
 
 
