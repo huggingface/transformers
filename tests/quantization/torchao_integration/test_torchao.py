@@ -62,6 +62,8 @@ if is_torchao_available():
         from torchao.dtypes import Int4CPULayout
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.11.0"):
         from torchao.dtypes import Int4XPULayout
+    if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.15.0"):
+        from torchao.quantization import FqnToConfig
 
 
 def check_torchao_int4_wo_quantized(test_module, qlayer):
@@ -378,6 +380,154 @@ class TorchAoTest(unittest.TestCase):
         ]
         self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
 
+    @require_torchao_version_greater_or_equal("0.15.0")
+    def test_fqn_to_config_regex_precedence(self):
+        linear1_config = Int8WeightOnlyConfig()
+        linear2_config = Float8WeightOnlyConfig()
+        config = FqnToConfig(
+            {
+                r"re:model\.layers\..+\.self_attn\.q_proj.weight": None,
+                "model.layers.3.self_attn.q_proj.weight": linear2_config,
+                "_default": linear1_config,
+            }
+        )
+        quant_config = TorchAoConfig(quant_type=config)
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            device_map=self.device,
+            quantization_config=quant_config,
+        )
+        self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, Float8Tensor))
+        self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.k_proj.weight, AffineQuantizedTensor))
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+        input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        EXPECTED_OUTPUT = [
+            "What are we having for dinner?\n\nJessica: (smiling)",
+            "What are we having for dinner?\n\nJess: (smiling) I",
+        ]
+        self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
+
+    @require_torchao_version_greater_or_equal("0.15.0")
+    def test_fqn_to_config_param_over_module_regex_precedence(self):
+        linear1_config = Int8WeightOnlyConfig()
+        linear2_config = Float8WeightOnlyConfig()
+        config = FqnToConfig(
+            {
+                r"re:model\.layers\..+\.self_attn\.q_proj.weight": None,
+                r"re:model\.layers\..+\.self_attn\.q_proj": linear2_config,
+                "_default": linear1_config,
+            }
+        )
+        quant_config = TorchAoConfig(quant_type=config)
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            device_map=self.device,
+            quantization_config=quant_config,
+        )
+        self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.k_proj.weight, AffineQuantizedTensor))
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+        input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        EXPECTED_OUTPUT = [
+            "What are we having for dinner?\n\nJessica: (smiling)",
+            "What are we having for dinner?\n\nJess: (smiling) I",
+        ]
+        self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
+
+    @require_torchao_version_greater_or_equal("0.15.0")
+    def test_fqn_to_config_param_over_module_precedence(self):
+        linear1_config = Int8WeightOnlyConfig()
+        linear2_config = Float8WeightOnlyConfig()
+        config = FqnToConfig(
+            {
+                "model.layers.3.self_attn.q_proj.weight": None,
+                "model.layers.3.self_attn.q_proj": linear2_config,
+                "_default": linear1_config,
+            }
+        )
+        quant_config = TorchAoConfig(quant_type=config)
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            device_map=self.device,
+            quantization_config=quant_config,
+        )
+        self.assertTrue(not isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.k_proj.weight, AffineQuantizedTensor))
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+        input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        EXPECTED_OUTPUT = [
+            "What are we having for dinner?\n\nJessica: (smiling)",
+            "What are we having for dinner?\n\nJess: (smiling) I",
+        ]
+        self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
+
+    @require_torchao_version_greater_or_equal("0.15.0")
+    def test_fqn_to_config_exact_over_regex_precedence(self):
+        linear1_config = Int8WeightOnlyConfig()
+        linear2_config = Float8WeightOnlyConfig()
+        config = FqnToConfig(
+            {
+                "model.layers.3.self_attn.q_proj.weight": None,
+                "model.layers.1.self_attn.q_proj": linear1_config,
+                r"re:model\.layers\..+\.self_attn\.q_proj.weight": linear2_config,
+            }
+        )
+        quant_config = TorchAoConfig(quant_type=config)
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            device_map=self.device,
+            quantization_config=quant_config,
+        )
+        self.assertTrue(not isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(isinstance(quantized_model.model.layers[2].self_attn.q_proj.weight, Float8Tensor))
+
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+        input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        EXPECTED_OUTPUT = [
+            "What are we having for dinner?\n\nJessica: (smiling)",
+            "What are we having for dinner?\n\nJess: (smiling) I",
+        ]
+        self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
+
+    @require_torchao_version_greater_or_equal("0.15.0")
+    def test_fqn_to_config_non_weight_param(self):
+        linear1_config = Int8WeightOnlyConfig()
+        linear2_config = Float8WeightOnlyConfig()
+        config = FqnToConfig(
+            {
+                r"re:.*gate_up_proj": linear2_config,
+                "model.layers.0.feed_forward.experts.gate_up_proj": None,
+                "_default": linear1_config,
+            }
+        )
+        quant_config = TorchAoConfig(quant_type=config)
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            "jcaip/Llama-4-Scout-17B-two-layers-only-testing",
+            device_map="auto",
+            dtype=torch.bfloat16,
+            quantization_config=quant_config,
+        )
+
+        self.assertTrue(isinstance(quantized_model.model.layers[1].feed_forward.experts.gate_up_proj, Float8Tensor))
+        self.assertTrue(
+            not isinstance(quantized_model.model.layers[0].feed_forward.experts.gate_up_proj, Float8Tensor)
+        )
+        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
+
 
 @require_torch_accelerator
 class TorchAoAcceleratorTest(TorchAoTest):
@@ -580,6 +730,8 @@ class TorchAoSafeSerializationTest(TorchAoSerializationTest):
     def setUpClass(cls):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
+        # placeholder
+        cls.quant_scheme = torchao.quantization.Float8WeightOnlyConfig()
 
     def tearDown(self):
         gc.collect()
@@ -710,10 +862,9 @@ class TorchAoSerializationFP8AcceleratorTest(TorchAoSerializationTest):
 
         from torchao.quantization import Float8WeightOnlyConfig
 
+        super().setUpClass()
         cls.quant_scheme = Float8WeightOnlyConfig()
         cls.quant_scheme_kwargs = {}
-
-        super().setUpClass()
 
         cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
 
@@ -732,10 +883,9 @@ class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
 
         from torchao.quantization import Int8DynamicActivationInt4WeightConfig
 
+        super().setUpClass()
         cls.quant_scheme = Int8DynamicActivationInt4WeightConfig()
         cls.quant_scheme_kwargs = {}
-
-        super().setUpClass()
 
         cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
 

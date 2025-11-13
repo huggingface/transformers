@@ -422,7 +422,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 #### 1. Skip quantization for certain layers
 
-With `ModuleFqnToConfig` we can specify a default configuration for all layers while skipping quantization for certain layers.
+With `FqnToConfig` we can specify a default configuration for all layers while skipping quantization for certain layers.
 
 ```py
 import torch
@@ -430,11 +430,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 
 model_id = "meta-llama/Llama-3.1-8B-Instruct"
 
-from torchao.quantization import Int4WeightOnlyConfig, ModuleFqnToConfig
+from torchao.quantization import Int4WeightOnlyConfig, FqnToConfig
 config = Int4WeightOnlyConfig(group_size=128)
 
 # set default to int4 (for linears), and skip quantizing `model.layers.0.self_attn.q_proj`
-quant_config = ModuleFqnToConfig({"_default": config, "model.layers.0.self_attn.q_proj": None})
+quant_config = FqnToConfig({"_default": config, "model.layers.0.self_attn.q_proj": None})
 quantization_config = TorchAoConfig(quant_type=quant_config)
 quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", dtype=torch.bfloat16, quantization_config=quantization_config)
 # lm_head is not quantized and model.layers.0.self_attn.q_proj is not quantized
@@ -459,7 +459,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 
 model_id = "facebook/opt-125m"
 
-from torchao.quantization import Int4WeightOnlyConfig, ModuleFqnToConfig, Int8DynamicActivationInt4WeightConfig, IntxWeightOnlyConfig, PerAxis, MappingType
+from torchao.quantization import Int4WeightOnlyConfig, FqnToConfig, Int8DynamicActivationInt4WeightConfig, IntxWeightOnlyConfig, PerAxis, MappingType
 
 weight_dtype = torch.int8
 granularity = PerAxis(0)
@@ -470,7 +470,7 @@ embedding_config = IntxWeightOnlyConfig(
     mapping_type=mapping_type,
 )
 linear_config = Int8DynamicActivationInt4WeightConfig(group_size=128)
-quant_config = ModuleFqnToConfig({"_default": linear_config, "model.decoder.embed_tokens": embedding_config, "model.decoder.embed_positions": None})
+quant_config = FqnToConfig({"_default": linear_config, "model.decoder.embed_tokens": embedding_config, "model.decoder.embed_positions": None})
 # set `include_embedding` to True in order to include embedding in quantization
 # when `include_embedding` is True, we'll remove input embedding from `modules_not_to_convert` as well
 quantization_config = TorchAoConfig(quant_type=quant_config, include_embedding=True)
@@ -521,7 +521,7 @@ from torchao.quantization import (
     IntxWeightOnlyConfig,
     PerRow,
     PerAxis,
-    ModuleFqnToConfig,
+    FqnToConfig,
     Float8Tensor,
     Int4TilePackedTo4dTensor,
     IntxUnpackedToInt8Tensor,
@@ -550,7 +550,7 @@ qconfig_dict = {
 
     "_default": intxwo,
 }
-quant_config = ModuleFqnToConfig(qconfig_dict)
+quant_config = FqnToConfig(qconfig_dict)
 quantization_config = TorchAoConfig(quant_type=quant_config)
 quantized_model = AutoModelForCausalLM.from_pretrained(
     model_id,
