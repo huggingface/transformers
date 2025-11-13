@@ -1,5 +1,4 @@
-# coding=utf-8
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +16,13 @@
 import copy
 import unittest
 
-from transformers import AutoModel, AutoProcessor, Glm46VConfig, Glm46VModel, is_torch_available
+from transformers import (
+    AutoProcessor,
+    Glm46VConfig,
+    Glm46VForConditionalGeneration,
+    Glm46VModel,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -167,7 +172,7 @@ class Glm46VVisionText2TextModelTester:
 
 @require_torch
 class Glm46VModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Glm46VModel) if is_torch_available() else ()
+    all_model_classes = (Glm46VModel, Glm46VForConditionalGeneration) if is_torch_available() else ()
 
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     _is_composite = True
@@ -309,7 +314,9 @@ class Glm46VIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = AutoModel.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto")
+        model = Glm46VForConditionalGeneration.from_pretrained(
+            "THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto"
+        )
 
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -346,7 +353,9 @@ class Glm46VIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = AutoModel.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto")
+        model = Glm46VForConditionalGeneration.from_pretrained(
+            "THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto"
+        )
         batch_messages = [self.message] * 2
         inputs = self.processor.apply_chat_template(
             batch_messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -370,7 +379,9 @@ class Glm46VIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_with_video(self):
         processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", max_image_size={"longest_edge": 50176})
-        model = AutoModel.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", dtype=torch.float16, device_map="auto")
+        model = Glm46VForConditionalGeneration.from_pretrained(
+            "THUDM/GLM-4.1V-9B-Thinking", dtype=torch.float16, device_map="auto"
+        )
         questions = ["Describe this video."]
         video_urls = ["https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"]
         messages = [
@@ -406,7 +417,9 @@ class Glm46VIntegrationTest(unittest.TestCase):
     @slow
     @require_deterministic_for_xpu
     def test_small_model_integration_test_expand(self):
-        model = AutoModel.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto")
+        model = Glm46VForConditionalGeneration.from_pretrained(
+            "THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto"
+        )
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
@@ -436,7 +449,9 @@ class Glm46VIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
-        model = AutoModel.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto")
+        model = Glm46VForConditionalGeneration.from_pretrained(
+            "THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto"
+        )
         message_wo_image = [
             {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
         ]
@@ -467,7 +482,9 @@ class Glm46VIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
-        model = AutoModel.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto")
+        model = Glm46VForConditionalGeneration.from_pretrained(
+            "THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto"
+        )
         batched_messages = [self.message, self.message2]
         inputs = self.processor.apply_chat_template(
             batched_messages,
@@ -497,7 +514,7 @@ class Glm46VIntegrationTest(unittest.TestCase):
     @require_flash_attn
     @require_torch_gpu
     def test_small_model_integration_test_batch_flashatt2(self):
-        model = AutoModel.from_pretrained(
+        model = Glm46VForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
@@ -532,7 +549,7 @@ class Glm46VIntegrationTest(unittest.TestCase):
     @require_flash_attn
     @require_torch_gpu
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
-        model = AutoModel.from_pretrained(
+        model = Glm46VForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
