@@ -304,9 +304,14 @@ class DistilBertPreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         super()._init_weights(module)
         if isinstance(module, Embeddings) and self.config.sinusoidal_pos_embds:
-            nn.init.copy_(module.position_embeddings.weight, create_sinusoidal_embeddings(
-                self.config.max_position_embeddings, self.config.dim, torch.empty_like(module.position_embeddings.weight)
-            ))
+            nn.init.copy_(
+                module.position_embeddings.weight,
+                create_sinusoidal_embeddings(
+                    self.config.max_position_embeddings,
+                    self.config.dim,
+                    torch.empty_like(module.position_embeddings.weight),
+                ),
+            )
 
 
 @auto_docstring

@@ -793,7 +793,7 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
-        elif isinstance(module, DonutSwinEmbeddings):
+        if isinstance(module, DonutSwinEmbeddings):
             if module.mask_token is not None:
                 nn.init.zeros_(module.mask_token)
             if module.position_embeddings is not None:

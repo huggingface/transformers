@@ -541,7 +541,6 @@ class WhisperPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        std = self.config.init_std
         if isinstance(module, WhisperEncoder):
             nn.init.copy_(module.embed_positions.weight, sinusoids(*module.embed_positions.weight.shape))
         elif isinstance(module, WhisperForAudioClassification):

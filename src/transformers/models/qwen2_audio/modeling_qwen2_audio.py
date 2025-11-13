@@ -257,6 +257,7 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
+
 @auto_docstring(
     custom_intro="""
     The audio model from Qwen2Audio without any head or projection on top.

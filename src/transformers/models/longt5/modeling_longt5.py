@@ -1214,7 +1214,9 @@ class LongT5PreTrainedModel(PreTrainedModel):
             if module.has_relative_attention_bias:
                 nn.init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
                 if isinstance(module, LongT5TransientGlobalAttention):
-                    nn.init.normal_(module.global_relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
+                    nn.init.normal_(
+                        module.global_relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5)
+                    )
 
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right with T5->LongT5
     def _shift_right(self, input_ids):

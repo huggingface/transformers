@@ -17,7 +17,7 @@
 import collections.abc
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torch import nn

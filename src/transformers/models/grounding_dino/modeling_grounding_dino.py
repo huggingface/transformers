@@ -1390,7 +1390,7 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            
+
             nn.init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
             nn.init.constant_(module.attention_weights.weight, 0.0)
             nn.init.constant_(module.attention_weights.bias, 0.0)

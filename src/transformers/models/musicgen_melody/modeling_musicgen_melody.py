@@ -387,6 +387,7 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
+
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder with MUSICGEN->MUSICGEN_MELODY,Musicgen->MusicgenMelody
 class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
     """

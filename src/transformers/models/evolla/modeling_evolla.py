@@ -518,7 +518,6 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
     }
 
 
-
 class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def __init__(self, config: SaProtConfig):
         super().__init__(config)

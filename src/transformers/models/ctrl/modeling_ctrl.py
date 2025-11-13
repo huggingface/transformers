@@ -26,7 +26,6 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import Conv1D
 from ...utils import (
     auto_docstring,
     logging,

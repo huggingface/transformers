@@ -586,7 +586,7 @@ class T5PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.dense.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.dense, "bias") and module.dense.bias is not None:
                 nn.init.zeros_(module.dense.bias)
-            nn.init.normal_(module.out_proj.weight., mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            nn.init.normal_(module.out_proj.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
                 nn.init.zeros_(module.out_proj.bias)
         elif isinstance(module, T5DenseActDense):

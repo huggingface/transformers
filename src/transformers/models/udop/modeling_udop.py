@@ -283,7 +283,7 @@ class UdopPreTrainedModel(PreTrainedModel):
         elif isinstance(module, UdopDenseActDense):
             nn.init.normal_(module.wi.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                nn.init.zeros_(module.wi.bias.)
+                nn.init.zeros_(module.wi.bias)
             nn.init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 nn.init.zeros_(module.wo.bias)

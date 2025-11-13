@@ -666,7 +666,6 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
 
 
-
 class NllbMoeEncoder(NllbMoePreTrainedModel):
     _can_record_outputs = {
         "hidden_states": NllbMoeEncoderLayer,
