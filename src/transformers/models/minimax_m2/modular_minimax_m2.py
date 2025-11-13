@@ -278,10 +278,8 @@ class MiniMaxM2Attention(Glm4MoeAttention):
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
-        self.use_qk_norm = config.use_qk_norm
-        if self.use_qk_norm:
-            self.q_norm = MiniMaxM2RMSNorm(self.head_dim * config.num_attention_heads, eps=config.rms_norm_eps)
-            self.k_norm = MiniMaxM2RMSNorm(self.head_dim * config.num_key_value_heads, eps=config.rms_norm_eps)
+        self.q_norm = MiniMaxM2RMSNorm(self.head_dim * config.num_attention_heads, eps=config.rms_norm_eps)
+        self.k_norm = MiniMaxM2RMSNorm(self.head_dim * config.num_key_value_heads, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -299,9 +297,9 @@ class MiniMaxM2Attention(Glm4MoeAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        if self.use_qk_norm:  # main diff from Llama
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
+        # main diff from Llama
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
         key_states = key_states.view(hidden_shape)
         query_states = query_states.view(hidden_shape)
