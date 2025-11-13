@@ -85,10 +85,10 @@ class Glm46VConfig(PreTrainedConfig):
         **kwargs,
     ):
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "glm4v")
+            vision_config["model_type"] = vision_config.get("model_type", "glm4v_vision")
             self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
-            self.vision_config = CONFIG_MAPPING["glm4v"]()
+            self.vision_config = CONFIG_MAPPING["glm4v_vision"]()
 
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config.get("model_type", "glm4v_text")

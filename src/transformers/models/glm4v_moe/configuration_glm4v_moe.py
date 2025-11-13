@@ -80,7 +80,7 @@ class Glm4vMoeVisionConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "glm4v_moe"
+    model_type = "glm4v_moe_vision"
     base_config_key = "vision_config"
 
     def __init__(
