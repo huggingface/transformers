@@ -777,9 +777,6 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
     def get_encoder(self):
         return self.model.get_encoder()
 
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_output_embeddings(self):
         return self.proj_out
 

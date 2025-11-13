@@ -1708,9 +1708,6 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
     def get_encoder(self):
         return self.prophetnet.encoder
 
-    def get_decoder(self):
-        return self.prophetnet.decoder
-
 
 @auto_docstring(
     custom_intro="""
@@ -1749,12 +1746,6 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
             self._tie_embedding_weights(self.prophetnet.decoder.word_embeddings, self.lm_head)
-
-    def set_decoder(self, decoder):
-        self.prophetnet.decoder = decoder
-
-    def get_decoder(self):
-        return self.prophetnet.decoder
 
     @auto_docstring
     def forward(

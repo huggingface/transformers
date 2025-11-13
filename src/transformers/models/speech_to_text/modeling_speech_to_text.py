@@ -1036,9 +1036,6 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
     def get_encoder(self):
         return self.model.get_encoder()
 
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     @auto_docstring
     def forward(
         self,

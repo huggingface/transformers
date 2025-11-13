@@ -1076,19 +1076,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             vision_feature_layer=vision_feature_layer,
         )
 
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
-
     @can_return_tuple
     @auto_docstring
     def forward(

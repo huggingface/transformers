@@ -1548,12 +1548,6 @@ class InformerForPrediction(InformerPreTrainedModel):
     def output_params(self, dec_output):
         return self.parameter_projection(dec_output)
 
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     @torch.jit.ignore
     def output_distribution(self, params, loc=None, scale=None, trailing_n=None) -> torch.distributions.Distribution:
         sliced_params = params

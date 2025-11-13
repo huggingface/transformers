@@ -1919,12 +1919,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
-        return self.led.get_encoder()
-
-    def get_decoder(self):
-        return self.led.get_decoder()
-
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
     ) -> nn.Embedding:

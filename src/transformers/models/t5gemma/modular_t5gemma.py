@@ -1030,9 +1030,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     def get_encoder(self):
         return self.model.encoder
 
-    def get_decoder(self):
-        return self.model.decoder
-
     @can_return_tuple
     @auto_docstring
     def forward(

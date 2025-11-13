@@ -216,9 +216,6 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
     def get_encoder(self):
         return self.model.get_encoder()
 
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
     ) -> nn.Embedding:

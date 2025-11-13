@@ -1058,9 +1058,6 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel, GenerationMixin):
     def get_encoder(self):
         return self.model.get_encoder()
 
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     @auto_docstring
     def forward(
         self,
