@@ -74,10 +74,6 @@ print(processor.batch_decode(output, skip_special_tokens=True, clean_up_tokeniza
 
 [[autodoc]] LlavaNextVideoProcessor
 
-## LlavaNextVideoImageProcessor
-
-[[autodoc]] LlavaNextVideoImageProcessor
-
 ## LlavaNextVideoForConditionalGeneration
 
 [[autodoc]] LlavaNextVideoForConditionalGeneration

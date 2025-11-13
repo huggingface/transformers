@@ -98,11 +98,6 @@ print(generated_text)
 
 [[autodoc]] InstructBlipVideoProcessor
 
-## InstructBlipVideoImageProcessor
-
-[[autodoc]] InstructBlipVideoImageProcessor
-    - preprocess
-
 ## InstructBlipVideoVisionModel
 
 [[autodoc]] InstructBlipVideoVisionModel
