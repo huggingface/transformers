@@ -826,6 +826,8 @@ class ContinuousBatchingManager:
         if block:
             self.join(stop_trigger_time, timeout)
 
+        self.batch_processor = None
+
     def join(self, stop_trigger_time: float, timeout: Optional[float] = None) -> None:
         """Wait for the background thread to finish.
 
