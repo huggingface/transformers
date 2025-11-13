@@ -149,7 +149,7 @@ class RobertaTokenizer(TokenizersBackend):
             }
 
         if merges is not None:
-            self._merges = merges
+            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
         else:
             self._merges = []
 

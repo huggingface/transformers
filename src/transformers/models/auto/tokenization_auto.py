@@ -70,6 +70,9 @@ else:
 logger = logging.get_logger(__name__)
 
 # V5: Simplified mapping - single tokenizer class per model type (always prefer tokenizers-based)
+REGISTERED_TOKENIZER_CLASSES: dict[str, type[Any]] = {}
+REGISTERED_FAST_ALIASES: dict[str, type[Any]] = {}
+
 TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
     [
         ("aimv2", "CLIPTokenizerFast" if is_tokenizers_available() else None),
@@ -194,7 +197,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("layoutlmv2", "LayoutLMv2Tokenizer" if is_tokenizers_available() else None),
         ("layoutlmv3", "LayoutLMv3Tokenizer" if is_tokenizers_available() else None),
         ("layoutxlm", "LayoutXLMTokenizer" if is_tokenizers_available() else None),
-        ("led", "LEDTokenizerFast" if is_tokenizers_available() else None),
+        ("led", "LEDTokenizer" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("llama", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("llama4", "LlamaTokenizerFast" if is_tokenizers_available() else None),
@@ -379,6 +382,12 @@ def load_merges(merges_file):
 
 
 def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
+    if class_name in REGISTERED_FAST_ALIASES:
+        return REGISTERED_FAST_ALIASES[class_name]
+
+    if class_name in REGISTERED_TOKENIZER_CLASSES:
+        return REGISTERED_TOKENIZER_CLASSES[class_name]
+
     if class_name == "PreTrainedTokenizerFast":
         return TokenizersBackend
 
@@ -608,6 +617,9 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
         files_loaded = [spm_file] if spm_file else []
         kwargs["backend"] = "sentencepiece"
         kwargs["files_loaded"] = files_loaded
+        if tokenizer_class is not None and issubclass(tokenizer_class, SentencePieceBackend):
+            logger.info("Loading tokenizer with SentencePiece backend using tokenizer class")
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
     # Route to tokenizers backend (default)
@@ -670,6 +682,11 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                     files_loaded = [spm_file]
                     kwargs["backend"] = "sentencepiece"
                     kwargs["files_loaded"] = files_loaded
+                    if tokenizer_class is not None and issubclass(tokenizer_class, SentencePieceBackend):
+                        logger.info(
+                            "Falling back to SentencePiece backend using tokenizer class that inherits from SentencePieceBackend."
+                        )
+                        return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                     return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                 # If no fallback available, try calling tokenizer class directly as last resort
                 if hasattr(tokenizer_class, "from_pretrained"):
@@ -694,6 +711,13 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
             files_loaded = [spm_file]
             kwargs["backend"] = "sentencepiece"
             kwargs["files_loaded"] = files_loaded
+            if tokenizer_class is not None and SentencePieceBackend is not None and issubclass(
+                tokenizer_class, SentencePieceBackend
+            ):
+                logger.info(
+                    "Falling back to SentencePiece backend using tokenizer class that inherits from SentencePieceBackend."
+                )
+                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         raise ValueError(
@@ -1067,7 +1091,6 @@ class AutoTokenizer:
             slow_tokenizer_class: (Deprecated) The slow tokenizer to register.
             fast_tokenizer_class: (Deprecated) The fast tokenizer to register.
         """
-        # V5: Support both new single-tokenizer API and legacy slow/fast API for BC for now
         if tokenizer_class is None:
             # Legacy: prefer fast over slow
             if fast_tokenizer_class is not None:
@@ -1076,6 +1099,13 @@ class AutoTokenizer:
                 tokenizer_class = slow_tokenizer_class
             else:
                 raise ValueError("You need to pass a `tokenizer_class`")
+
+        for candidate in (slow_tokenizer_class, fast_tokenizer_class, tokenizer_class):
+            if candidate is not None:
+                REGISTERED_TOKENIZER_CLASSES[candidate.__name__] = candidate
+
+        if slow_tokenizer_class is not None and fast_tokenizer_class is not None:
+            REGISTERED_FAST_ALIASES[slow_tokenizer_class.__name__] = fast_tokenizer_class
 
         TOKENIZER_MAPPING.register(config_class, tokenizer_class, exist_ok=exist_ok)
 

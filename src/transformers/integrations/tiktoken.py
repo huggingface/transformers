@@ -23,6 +23,9 @@ def convert_tiktoken_to_fast(encoding: Any, output_dir: str):
     save_file = output_dir / "tiktoken" / TIKTOKEN_VOCAB_FILE
     tokenizer_file = output_dir / TOKENIZER_FILE
 
+    # Create parent directory for save_file
+    save_file.parent.mkdir(parents=True, exist_ok=True)
+
     save_file_absolute = str(save_file.absolute())
     output_file_absolute = str(tokenizer_file.absolute())
 
@@ -34,8 +37,13 @@ def convert_tiktoken_to_fast(encoding: Any, output_dir: str):
             encoding = get_encoding(encoding)
 
         dump_tiktoken_bpe(encoding._mergeable_ranks, save_file_absolute)
-    except ImportError:
-        raise ValueError("`tiktoken` is required to save a `tiktoken` file. Install it with `pip install tiktoken`.")
+    except ImportError as e:
+        error_msg = str(e)
+        if "blobfile" in error_msg.lower():
+            raise ValueError(
+                "`blobfile` is required to save a `tiktoken` file. Install it with `pip install blobfile`."
+            ) from e
+        raise ValueError("`tiktoken` is required to save a `tiktoken` file. Install it with `pip install tiktoken`.") from e
 
     tokenizer = TikTokenConverter(
         vocab_file=save_file_absolute, pattern=encoding._pat_str, additional_special_tokens=encoding._special_tokens

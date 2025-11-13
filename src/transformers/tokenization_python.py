@@ -973,7 +973,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             # [BOS] seq0 [EOS] or [BOS] seq0 [EOS] seq1 [EOS]
             if token_ids_1 is None:
                 return [1] + ([0] * len(token_ids_0)) + [1]
-            return [1] + ([0] * len(token_ids_0)) + [1] + [1] + ([0] * len(token_ids_1)) + [1]
+            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
 
         elif self.special_tokens_pattern == "cls_double_sep":
             # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
