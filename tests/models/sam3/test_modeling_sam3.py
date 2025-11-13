@@ -1166,31 +1166,6 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
             top_pp_box, torch.tensor([86.8687, 147.5269, 104.4475, 159.6138]).to(torch_device), atol=1e-4, rtol=1e-4
         )
 
-    # Todo add exact values
-    def test_inference_point_prompt(self):
-        """Test inference with point prompts."""
-        raw_image = prepare_coco_cat_image()
-        # Points in image coordinates
-        img_width, img_height = raw_image.size
-        # Click on cat's ear region (approximate center)
-        point1 = [img_width * 0.3, img_height * 0.3]
-        point2 = [img_width * 0.4, img_height * 0.35]
-
-        input_points = [[point1, point2]]
-        input_points_labels = [[1, 1]]  # Both positive
-
-        inputs = self.processor(
-            images=raw_image, input_points=input_points, input_points_labels=input_points_labels, return_tensors="pt"
-        ).to(torch_device)
-
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-
-        # Check exact output shapes
-        self.assertEqual(outputs.pred_masks.shape, (1, 200, 288, 288))
-        self.assertEqual(outputs.pred_boxes.shape, (1, 200, 4))
-        self.assertEqual(outputs.pred_logits.shape, (1, 200))
-
     def test_inference_combined_prompts(self):
         """Test inference with combined text and geometry prompts (text + negative box from batched_inference notebook)."""
         raw_image = prepare_coco_kitchen_image()

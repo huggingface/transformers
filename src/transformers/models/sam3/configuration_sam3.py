@@ -206,8 +206,6 @@ class Sam3VisionConfig(PreTrainedConfig):
             backbone_config = Sam3ViTConfig()
 
         self.backbone_config = backbone_config
-        # Use backbone's hidden_size for the entire vision model
-        self.hidden_size = backbone_config.hidden_size
 
         # Neck
         self.backbone_channel_list = backbone_channel_list
@@ -245,32 +243,6 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
             Epsilon for layer normalization.
         roi_size (`int`, *optional*, defaults to 7):
             ROI size for box pooling operations.
-        add_cls_token (`bool`, *optional*, defaults to `True`):
-            Whether to add a CLS token to the geometry prompts.
-        add_post_encode_projection (`bool`, *optional*, defaults to `True`):
-            Whether to add a projection layer after encoding.
-        mask_fuser_hidden_size (`int`, *optional*, defaults to 256):
-            Hidden dimension for mask fuser.
-        mask_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            Activation function for mask fuser.
-        mask_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-6):
-            Initial value for layer scale in mask fuser.
-        mask_fuser_num_layers (`int`, *optional*, defaults to 2):
-            Number of layers in mask fuser.
-        mask_fuser_kernel_size (`int`, *optional*, defaults to 7):
-            Kernel size for mask fuser convolutions.
-        mask_fuser_padding (`int`, *optional*, defaults to 3):
-            Padding for mask fuser convolutions.
-        mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
-            Kernel size for mask downsampler.
-        mask_downsampler_stride (`int`, *optional*, defaults to 2):
-            Stride for mask downsampler.
-        mask_downsampler_padding (`int`, *optional*, defaults to 1):
-            Padding for mask downsampler.
-        mask_downsampler_total_stride (`int`, *optional*, defaults to 4):
-            Total stride for mask downsampler.
-        mask_downsampler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            Activation function for mask downsampler.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing weight matrices.
     """
@@ -288,19 +260,6 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
         hidden_dropout=0.0,
         layer_norm_eps=1e-6,
         roi_size=7,
-        add_cls_token=True,
-        add_post_encode_projection=True,
-        mask_fuser_hidden_size=256,
-        mask_fuser_hidden_act="gelu",
-        mask_fuser_layer_scale_init_value=1e-6,
-        mask_fuser_num_layers=2,
-        mask_fuser_kernel_size=7,
-        mask_fuser_padding=3,
-        mask_downsampler_kernel_size=3,
-        mask_downsampler_stride=2,
-        mask_downsampler_padding=1,
-        mask_downsampler_total_stride=4,
-        mask_downsampler_hidden_act="gelu",
         initializer_range=0.02,
         **kwargs,
     ):
@@ -314,20 +273,6 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.layer_norm_eps = layer_norm_eps
         self.roi_size = roi_size
-        self.add_cls_token = add_cls_token
-        self.add_post_encode_projection = add_post_encode_projection
-        # Mask encoder parameters
-        self.mask_fuser_hidden_size = mask_fuser_hidden_size
-        self.mask_fuser_hidden_act = mask_fuser_hidden_act
-        self.mask_fuser_layer_scale_init_value = mask_fuser_layer_scale_init_value
-        self.mask_fuser_num_layers = mask_fuser_num_layers
-        self.mask_fuser_kernel_size = mask_fuser_kernel_size
-        self.mask_fuser_padding = mask_fuser_padding
-        self.mask_downsampler_kernel_size = mask_downsampler_kernel_size
-        self.mask_downsampler_stride = mask_downsampler_stride
-        self.mask_downsampler_padding = mask_downsampler_padding
-        self.mask_downsampler_total_stride = mask_downsampler_total_stride
-        self.mask_downsampler_hidden_act = mask_downsampler_hidden_act
         self.initializer_range = initializer_range
 
 
@@ -392,8 +337,6 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
             Number of decoder layers.
         num_queries (`int`, *optional*, defaults to 200):
             Number of object queries.
-        num_instances (`int`, *optional*, defaults to 4):
-            Number of instances per query.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads.
         intermediate_size (`int`, *optional*, defaults to 2048):
@@ -419,7 +362,6 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
         hidden_size=256,
         num_layers=6,
         num_queries=200,
-        num_instances=4,
         num_attention_heads=8,
         intermediate_size=2048,
         dropout=0.1,
@@ -435,7 +377,6 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.num_queries = num_queries
-        self.num_instances = num_instances
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.dropout = dropout

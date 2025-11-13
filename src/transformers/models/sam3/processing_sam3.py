@@ -87,7 +87,7 @@ def box_area(boxes):
 @requires(backends=("torch",))
 class Sam3Processor(ProcessorMixin):
     r"""
-    Constructs a SAM3 processor which wraps a SAM3 image processor and an 2D points & Bounding boxes processor into a
+    Constructs a SAM3 processor which wraps a SAM3 image processor and bounding boxes processing into a
     single processor.
 
     [`Sam2Processor`] offers all the functionalities of [`Sam2ImageProcessorFast`] and [`Sam2VideoProcessor`]. See the docstring of
@@ -101,7 +101,7 @@ class Sam3Processor(ProcessorMixin):
         target_size (`int`, *optional*):
             The target size (target_size, target_size) to which the image will be resized.
         point_pad_value (`int`, *optional*, defaults to -10):
-            The value used for padding input points.
+            The value used for padding input boxes.
     """
 
     def __init__(
@@ -116,8 +116,6 @@ class Sam3Processor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         segmentation_maps: Optional[ImageInput] = None,
-        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
-        input_points_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
         input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
         input_boxes_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
         original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
@@ -125,8 +123,7 @@ class Sam3Processor(ProcessorMixin):
         **kwargs,
     ) -> BatchEncoding:
         r"""
-        This method uses [`Sam2ImageProcessorFast.__call__`] method to prepare image(s) for the model. It also prepares 2D
-        points and bounding boxes for the model if they are provided.
+        This method uses [`Sam3ImageProcessorFast.__call__`] method to prepare image(s) for the model. It also prepares bounding boxes for the model if they are provided.
 
         Args:
             images (`ImageInput`, *optional*):
@@ -135,14 +132,10 @@ class Sam3Processor(ProcessorMixin):
                 The text to process.
             segmentation_maps (`ImageInput`, *optional*):
                 The segmentation maps to process.
-            input_points (`list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
-                The points to add to the frame.
-            input_points_labels (`list[list[list[int]]]`, `torch.Tensor`, *optional*):
-                The labels for the points.
             input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
-                The bounding boxes to add to the frame.
+                The bounding boxes to process.
             input_boxes_labels (`list[list[int]]`, `torch.Tensor`, *optional*):
-                The labels for the boxes.
+                The labels for the bounding boxes.
             original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
                 The original sizes of the images.
             return_tensors (`str` or `TensorType`, *optional*):
@@ -155,9 +148,7 @@ class Sam3Processor(ProcessorMixin):
             - `pixel_values` (`torch.Tensor`): The processed image(s).
             - `original_sizes` (`list[list[float]]`): The original sizes of the images.
             - `labels` (`torch.Tensor`): The processed segmentation maps (if provided).
-            - `input_points` (`torch.Tensor`): The processed points.
-            - `input_points_labels` (`torch.Tensor`): The processed labels.
-            - `input_boxes_labels` (`torch.Tensor`): The processed labels.
+            - `input_boxes_labels` (`torch.Tensor`): The processed labels for the bounding boxes.
             - `input_boxes` (`torch.Tensor`): The processed bounding boxes.
         """
         if images is not None:
@@ -180,28 +171,15 @@ class Sam3Processor(ProcessorMixin):
             raise ValueError(
                 "original_sizes must be of length 1 or len(images). If you are passing a single image, you must pass a single original_size."
             )
-        text = self._resolve_text_prompts(text, input_points, input_boxes)
+        text = self._resolve_text_prompts(text, input_boxes)
 
         encoding_image_processor.update(
             self.tokenizer(text, return_tensors=return_tensors, padding="max_length", max_length=32)
         )
 
-        # Process input points, labels, and boxes if provided
-        if input_points is not None or input_points_labels is not None or input_boxes is not None:
+        # Process input boxes if provided
+        if input_boxes is not None:
             # Validate and convert inputs to standardized format
-            processed_points = self._validate_single_input(
-                input_points,
-                expected_depth=3,
-                input_name="points",
-                expected_format="[image level, point level, point coordinates]",
-                expected_coord_size=2,
-            )
-            processed_points_labels = self._validate_single_input(
-                input_points_labels,
-                expected_depth=2,
-                input_name="labels",
-                expected_format="[image level, point level]",
-            )
             processed_boxes = self._validate_single_input(
                 input_boxes,
                 expected_depth=3,
@@ -217,21 +195,10 @@ class Sam3Processor(ProcessorMixin):
             )
 
             # Get padding requirements for all inputs
-            if processed_points is not None:
-                points_max_dims = self._get_nested_dimensions(processed_points)[:2]
-            if processed_points_labels is not None:
-                labels_max_dims = self._get_nested_dimensions(processed_points_labels)[:2]
             if processed_boxes is not None:
                 boxes_max_dims = self._get_nested_dimensions(processed_boxes)[:2]
             if processed_boxes_labels is not None:
                 boxes_labels_max_dims = self._get_nested_dimensions(processed_boxes_labels)[:2]
-
-            # Ensure points and labels have consistent dimensions
-            if processed_points is not None and processed_points_labels is not None:
-                if points_max_dims != labels_max_dims:
-                    raise ValueError(
-                        "Input points and labels have inconsistent dimensions. Please ensure they have the same dimensions."
-                    )
 
             # Ensure boxes and labels have consistent dimensions
             if processed_boxes is not None and processed_boxes_labels is not None:
@@ -241,17 +208,6 @@ class Sam3Processor(ProcessorMixin):
                     )
 
             # Pad and normalize all inputs to final tensor format
-            if processed_points is not None:
-                padded_points = self._pad_nested_list(processed_points, points_max_dims + [2])
-                final_points = torch.tensor(padded_points, dtype=torch.float32)
-                self._normalize_tensor_coordinates(final_points, original_sizes, preserve_padding=True)
-                encoding_image_processor.update({"input_points": final_points})
-
-            if processed_points_labels is not None:
-                padded_points_labels = self._pad_nested_list(processed_points_labels, labels_max_dims)
-                final_labels = torch.tensor(padded_points_labels, dtype=torch.int64)
-                encoding_image_processor.update({"input_points_labels": final_labels})
-
             if processed_boxes is not None:
                 padded_boxes = self._pad_nested_list(processed_boxes, boxes_max_dims + [4])
                 final_boxes = torch.tensor(padded_boxes, dtype=torch.float32)
@@ -337,13 +293,13 @@ class Sam3Processor(ProcessorMixin):
         else:
             raise ValueError(f"Unsupported data type: {type(data)}")
 
-    def _resolve_text_prompts(self, text, input_points, input_boxes):
+    def _resolve_text_prompts(self, text, input_boxes):
         """
         Resolve text prompts by setting defaults based on prompt types.
         """
         # If no text provided, infer default based on prompt type
         if text is None:
-            return "geometric" if input_points else "visual" if input_boxes else None
+            return "visual" if input_boxes else None
 
         if not isinstance(text, (list, tuple)):
             return text
@@ -356,19 +312,11 @@ class Sam3Processor(ProcessorMixin):
                 f"The number of text prompts must match the number of input boxes. "
                 f"Got {len(text)} text prompts and {len(input_boxes)} input boxes."
             )
-        if input_points and len(text) != len(input_points):
-            raise ValueError(
-                f"The number of text prompts must match the number of input points. "
-                f"Got {len(text)} text prompts and {len(input_points)} input points."
-            )
 
         # Fill in None values with defaults based on corresponding prompt
-        for i in range(len(text)):
-            if text[i] is None:
-                if input_points and input_points[i] is not None:
-                    text[i] = "geometric"
-                elif input_boxes and input_boxes[i] is not None:
-                    text[i] = "visual"
+        for i, text_value in enumerate(text):
+            if text_value is None and input_boxes and input_boxes[i] is not None:
+                text[i] = "visual"
 
         return text
 
@@ -536,7 +484,7 @@ class Sam3Processor(ProcessorMixin):
                     expected_format (`str`):
                         The expected format of the input.
                     expected_coord_size (`int`, *optional*):
-                        Expected coordinate size (2 for points, 4 for boxes, None for labels).
+                        Expected coordinate size (4 for boxes, None for labels).
         .
         """
         if data is None:
@@ -577,10 +525,10 @@ class Sam3Processor(ProcessorMixin):
             is_bounding_box (`bool`, *optional*, defaults to `False`):
                 Whether coordinates are bounding boxes.
             preserve_padding (`bool`, *optional*, defaults to `False`):
-                Whether to preserve padding values (for points).
+                Whether to preserve padding values (for boxes).
         """
         if preserve_padding:
-            # For points: avoid normalizing pad values
+            # For boxes: avoid normalizing pad values
             mask = tensor != self.point_pad_value
             coord_mask = mask.all(dim=-1, keepdim=True)
 

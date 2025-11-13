@@ -86,7 +86,7 @@ class Sam3GeometryEncoderOutput(ModelOutput):
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_prompts, hidden_size)`):
-            Encoded geometry prompt features (points, boxes, masks combined).
+            Encoded geometry prompt features (boxes).
         attention_mask (`torch.BoolTensor` of shape `(batch_size, num_prompts)`, *optional*):
             Attention mask for geometry prompts where True indicates valid positions and False indicates padding.
     """
@@ -785,14 +785,12 @@ class Sam3PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, Sam3LayerNorm)):
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             module.weight.data.fill_(1.0)
             if module.bias is not None:
                 module.bias.data.zero_()
         if isinstance(module, Sam3ViTEmbeddings):
             module.position_embeddings.data.normal_(mean=0.0, std=std)
-        if isinstance(module, Sam3MaskFuserCXBlock):
-            module.scale.data.fill_(self.config.geometry_encoder_config.mask_fuser_layer_scale_init_value)
 
 
 @auto_docstring
@@ -989,7 +987,9 @@ class Sam3VisionNeck(nn.Module):
         # Create one FPN layer per scale factor
         self.fpn_layers = nn.ModuleList(
             [
-                Sam3FPNLayer(in_channels=config.hidden_size, fpn_dim=config.fpn_hidden_size, scale_factor=scale)
+                Sam3FPNLayer(
+                    in_channels=config.backbone_config.hidden_size, fpn_dim=config.fpn_hidden_size, scale_factor=scale
+                )
                 for scale in config.scale_factors
             ]
         )
@@ -1059,153 +1059,6 @@ class Sam3VisionModel(Sam3PreTrainedModel):
         )
 
 
-class Sam3LayerNorm(nn.LayerNorm):
-    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
-    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
-    """
-
-    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
-        super().__init__(normalized_shape, eps=eps, **kwargs)
-        if data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {data_format}")
-        self.data_format = data_format
-
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
-        """
-        if self.data_format == "channels_first":
-            features = features.permute(0, 2, 3, 1)
-            features = super().forward(features)
-            features = features.permute(0, 3, 1, 2)
-        else:
-            features = super().forward(features)
-        return features
-
-
-class Sam3MaskFuserCXBlock(GradientCheckpointingLayer):
-    def __init__(self, config: Sam3GeometryEncoderConfig):
-        super().__init__()
-        self.depthwise_conv = nn.Conv2d(
-            config.mask_fuser_hidden_size,
-            config.mask_fuser_hidden_size,
-            kernel_size=config.mask_fuser_kernel_size,
-            padding=config.mask_fuser_padding,
-            groups=config.mask_fuser_hidden_size,
-        )  # depthwise conv
-        self.layer_norm = Sam3LayerNorm(config.mask_fuser_hidden_size, eps=1e-6, data_format="channels_first")
-        self.activation = ACT2FN[config.mask_fuser_hidden_act]
-        self.pointwise_conv1 = nn.Linear(
-            config.mask_fuser_hidden_size, config.mask_fuser_hidden_size * 4
-        )  # pointwise/1x1 convs, implemented with linear layers
-        self.pointwise_conv2 = nn.Linear(config.mask_fuser_hidden_size * 4, config.mask_fuser_hidden_size)
-        self.scale = nn.Parameter(torch.ones(config.mask_fuser_hidden_size), requires_grad=True)
-
-    def forward(self, hidden_states):
-        input = hidden_states
-        hidden_states = self.depthwise_conv(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = hidden_states.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
-        hidden_states = self.pointwise_conv1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.pointwise_conv2(hidden_states)
-        hidden_states = self.scale * hidden_states
-        hidden_states = hidden_states.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
-
-        hidden_states = input + hidden_states
-        return hidden_states
-
-
-class Sam3MaskFuser(nn.Module):
-    def __init__(self, config: Sam3GeometryEncoderConfig):
-        super().__init__()
-        self.layers = nn.ModuleList([Sam3MaskFuserCXBlock(config) for _ in range(config.mask_fuser_num_layers)])
-
-    def forward(self, hidden_states):
-        # normally hidden_states: (N, C, H, W)
-        for layer in self.layers:
-            hidden_states = layer(hidden_states)
-        return hidden_states
-
-
-class Sam3MaskDownSamplerLayer(nn.Module):
-    def __init__(self, config: Sam3GeometryEncoderConfig, in_channels: int, out_channels: int):
-        super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size=config.mask_downsampler_kernel_size,
-            stride=config.mask_downsampler_stride,
-            padding=config.mask_downsampler_padding,
-        )
-        self.layer_norm = Sam3LayerNorm(out_channels, eps=1e-6, data_format="channels_first")
-        self.activation = ACT2FN[config.mask_downsampler_hidden_act]
-
-    def forward(self, x):
-        return self.activation(self.layer_norm(self.conv(x)))
-
-
-class Sam3MaskDownSampler(nn.Module):
-    """
-    Progressively downsample a mask by total_stride, each time by stride.
-    Note that LayerNorm is applied per *token*, like in ViT.
-
-    With each downsample (by a factor stride**2), channel capacity increases by the same factor.
-    In the end, we linearly project to embed_dim channels.
-    """
-
-    def __init__(self, config: Sam3GeometryEncoderConfig):
-        super().__init__()
-
-        num_layers = int(math.log2(config.mask_downsampler_total_stride) // math.log2(config.mask_downsampler_stride))
-
-        self.layers = nn.ModuleList()
-        self.activation = ACT2FN[config.mask_downsampler_hidden_act]
-        mask_in_chans, mask_out_chans = 1, 1
-        for _ in range(num_layers):
-            mask_out_chans = mask_in_chans * (config.mask_downsampler_stride**2)
-            self.layers.append(Sam3MaskDownSamplerLayer(config, mask_in_chans, mask_out_chans))
-            mask_in_chans = mask_out_chans
-
-        self.final_conv = nn.Conv2d(mask_out_chans, config.mask_fuser_hidden_size, kernel_size=1)
-
-    def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
-        x = self.final_conv(x)
-        return x
-
-
-class Sam3FusedMaskEncoder(nn.Module):
-    def __init__(self, config: Sam3GeometryEncoderConfig):
-        super().__init__()
-
-        hidden_size = config.hidden_size
-        self.mask_downsampler = Sam3MaskDownSampler(config)
-        self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
-        self.mask_fuser = Sam3MaskFuser(config)
-        self.position_encoding = Sam3SinePositionEmbedding(num_pos_feats=hidden_size // 2, normalize=True)
-
-    def forward(
-        self,
-        vision_features: torch.Tensor,
-        masks: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        ## Process masks
-        masks = self.mask_downsampler(masks)
-        ## Fuse pixel_features and downsampled masks
-
-        vision_features = self.feature_projection(vision_features)
-        vision_features = vision_features + masks
-        vision_features = self.mask_fuser(vision_features)
-
-        vision_pos_enc = self.position_encoding(vision_features.shape, vision_features.device, vision_features.dtype)
-
-        return vision_features, vision_pos_enc
-
-
 class Sam3GeometryEncoderLayer(nn.Module):
     def __init__(self, config: Sam3GeometryEncoderConfig):
         super().__init__()
@@ -1248,12 +1101,12 @@ class Sam3GeometryEncoderLayer(nn.Module):
 
 class Sam3GeometryEncoder(nn.Module):
     """
-    Encoder for geometric prompts (points, boxes, masks).
+    Encoder for geometric prompts (boxes).
 
-    Points and boxes can be encoded using three approaches:
+    Boxes are encoded using three approaches:
      - Direct projection: linear projection from coordinate space to hidden_size
-     - Pooling: pool features from the backbone at the specified location (ROI align for boxes, grid sample for points)
-     - Position encoding: use position encoding of the point or box center
+     - Pooling: pool features from the backbone at the specified location (ROI align for boxes)
+     - Position encoding: use position encoding of the box center
 
     These encodings are combined additively and further processed with transformer layers.
     """
@@ -1268,18 +1121,10 @@ class Sam3GeometryEncoder(nn.Module):
         self.label_embed = nn.Embedding(2, self.hidden_size)
         self.cls_embed = nn.Embedding(1, self.hidden_size)
 
-        # Point encoding layers
-        self.points_direct_project = nn.Linear(2, self.hidden_size)
-        self.points_pool_project = nn.Linear(self.hidden_size, self.hidden_size)
-        self.points_pos_enc_project = nn.Linear(self.hidden_size, self.hidden_size)
-
         # Box encoding layers
         self.boxes_direct_project = nn.Linear(4, self.hidden_size)
         self.boxes_pool_project = nn.Conv2d(self.hidden_size, self.hidden_size, self.roi_size)
         self.boxes_pos_enc_project = nn.Linear(self.hidden_size + 2, self.hidden_size)
-
-        # Mask encoding
-        self.mask_encoder = Sam3FusedMaskEncoder(config)
 
         # Image feature normalization
         self.vision_layer_norm = nn.LayerNorm(self.hidden_size)
@@ -1310,35 +1155,6 @@ class Sam3GeometryEncoder(nn.Module):
         pos_x, pos_y = self.position_encoding.encode_1d_positions(center_x, center_y)
         pos = torch.cat((pos_y, pos_x, height[:, None], width[:, None]), dim=1)
         return pos
-
-    def _encode_points(self, points, points_mask, points_labels, vision_features):
-        """Encode point prompts using direct projection, pooling, and position encoding."""
-        batch_size, num_points = points.shape[:2]
-
-        points_embed = self.points_direct_project(points)
-
-        # Pool features from vision backbone using grid sampling
-        # Points are [batch_size, num_points, 2], normalized in [0, 1]
-        # Grid needs to be [batch_size, height, width, 2] normalized in [-1, 1]
-        grid = points.unsqueeze(2)  # [batch_size, num_points, 1, 2]
-        grid = (grid * 2) - 1
-        sampled_features = torch.nn.functional.grid_sample(vision_features, grid, align_corners=False)
-        sampled_features = sampled_features.squeeze(-1).permute(0, 2, 1)
-        pooled_projection = self.points_pool_project(sampled_features)
-        points_embed = points_embed + pooled_projection
-
-        # Add position encoding
-        x, y = points.unbind(-1)
-        pos_enc_x, pos_enc_y = self.position_encoding.encode_1d_positions(x.flatten(), y.flatten())
-        pos_enc_x = pos_enc_x.view(batch_size, num_points, pos_enc_x.shape[-1])
-        pos_enc_y = pos_enc_y.view(batch_size, num_points, pos_enc_y.shape[-1])
-        pos_enc = torch.cat([pos_enc_x, pos_enc_y], dim=-1)
-        pos_projection = self.points_pos_enc_project(pos_enc)
-        points_embed = points_embed + pos_projection
-
-        # Add label embeddings (positive/negative)
-        label_embed = self.label_embed(points_labels.long())
-        return label_embed + points_embed, points_mask
 
     def _encode_boxes(self, boxes, boxes_mask, boxes_labels, vision_features):
         """Encode box prompts. Mask convention: True=valid, False=padding."""
@@ -1376,61 +1192,28 @@ class Sam3GeometryEncoder(nn.Module):
         label_embed = self.label_embed(boxes_labels.long())
         return label_embed + boxes_embed, boxes_mask
 
-    def _encode_masks(self, masks: torch.Tensor, masks_mask: torch.Tensor, vision_features: torch.Tensor):
-        """Encode mask prompts using the fused mask encoder"""
-        batch_size, num_masks = masks.shape[:2]
-
-        masks_embed, pos_enc = self.mask_encoder(
-            vision_features=vision_features,
-            masks=masks.reshape(batch_size * num_masks, *masks.shape[2:]).float(),
-        )
-
-        # Flatten spatial dimensions and add position encoding
-        height, width = masks_embed.shape[-2:]
-        num_tokens_per_mask = height * width
-        masks_embed = masks_embed + pos_enc
-        # Reshape: [batch_size * num_masks, C, H, W] -> [batch_size, num_masks*H*W, C]
-        masks_embed = masks_embed.view(batch_size, num_masks, masks_embed.shape[1], -1)
-        masks_embed = masks_embed.flatten(1, 2).transpose(1, 2)
-
-        # Expand attention mask for all mask tokens
-        masks_mask = masks_mask.repeat_interleave(num_tokens_per_mask, dim=1)
-        return masks_embed, masks_mask
-
     def forward(
         self,
-        point_embeddings: torch.Tensor,
-        point_mask: torch.Tensor,
-        point_labels: torch.Tensor,
         box_embeddings: torch.Tensor,
         box_mask: torch.Tensor,
         box_labels: torch.Tensor,
-        mask_embeddings: Optional[torch.Tensor],
-        mask_mask: Optional[torch.Tensor],
         img_feats: tuple[torch.Tensor, ...],
-        img_sizes: tuple[tuple[int, int], ...],
         img_pos_embeds: Optional[tuple[torch.Tensor, ...]] = None,
     ):
         """
         Forward pass for encoding geometric prompts.
 
         Args:
-            point_embeddings: Point coordinates [batch_size, num_points, 2]
-            point_mask: Attention mask for points [batch_size, num_points]
-            point_labels: Labels for points (positive/negative) [batch_size, num_points]
             box_embeddings: Box coordinates in CxCyWH format [batch_size, num_boxes, 4]
             box_mask: Attention mask for boxes [batch_size, num_boxes]
             box_labels: Labels for boxes (positive/negative) [batch_size, num_boxes]
-            mask_embeddings: Optional mask prompts [batch_size, num_masks, height, width]
-            mask_mask: Optional attention mask for masks [batch_size, num_masks]
             img_feats: Image features from vision encoder
-            img_sizes: Spatial dimensions of image features
             img_pos_embeds: Optional position embeddings for image features
 
         Returns:
             Sam3GeometryEncoderOutput containing encoded geometry features and attention mask.
         """
-        batch_size = point_embeddings.shape[0] if point_embeddings.numel() > 0 else box_embeddings.shape[0]
+        batch_size = box_embeddings.shape[0]
 
         # Prepare vision features for cross-attention: flatten spatial dimensions
         vision_feats = img_feats[-1]  # [B, C, H, W]
@@ -1439,25 +1222,12 @@ class Sam3GeometryEncoder(nn.Module):
         vision_pos_embeds_flat = vision_pos_embeds.flatten(2).transpose(1, 2)  # [B, H*W, C]
 
         # Normalize image features for pooling operations
-        height, width = img_sizes[-1]
         img_feats_last = img_feats[-1]  # [B, C, H, W]
         img_feats_last = img_feats_last.permute(0, 2, 3, 1)  # [B, H, W, C]
         normalized_img_feats = self.vision_layer_norm(img_feats_last)
         normalized_img_feats = normalized_img_feats.permute(0, 3, 1, 2)  # [B, C, H, W]
 
-        if mask_embeddings is not None:
-            masks_embed, masks_mask = self._encode_masks(mask_embeddings, mask_mask, normalized_img_feats)
-            if point_embeddings.size(1) == 0 and box_embeddings.size(1) == 0:
-                return Sam3GeometryEncoderOutput(
-                    last_hidden_state=masks_embed,
-                    attention_mask=masks_mask,
-                )
-
-        prompt_embeds, prompt_mask = self._encode_points(
-            point_embeddings, point_mask, point_labels, normalized_img_feats
-        )
-        boxes_embeds, boxes_mask = self._encode_boxes(box_embeddings, box_mask, box_labels, normalized_img_feats)
-        prompt_embeds, prompt_mask = concat_padded_sequences(prompt_embeds, prompt_mask, boxes_embeds, boxes_mask)
+        prompt_embeds, prompt_mask = self._encode_boxes(box_embeddings, box_mask, box_labels, normalized_img_feats)
 
         # Add CLS token (always valid)
         cls_embed = self.cls_embed.weight.view(1, self.hidden_size).unsqueeze(0).expand(batch_size, -1, -1)
@@ -1486,10 +1256,6 @@ class Sam3GeometryEncoder(nn.Module):
 
         # Final output normalization
         prompt_embeds = self.output_layer_norm(prompt_embeds)
-
-        # Concatenate mask embeddings if present
-        if mask_embeddings is not None:
-            prompt_embeds, prompt_mask = concat_padded_sequences(prompt_embeds, prompt_mask, masks_embed, masks_mask)
 
         return Sam3GeometryEncoderOutput(
             last_hidden_state=prompt_embeds,
@@ -1875,13 +1641,12 @@ class Sam3DetrDecoderLayer(nn.Module):
 
 class Sam3DetrDecoder(Sam3PreTrainedModel):
     """
-    DETR-style decoder with box refinement, presence token, and instance queries.
+    DETR-style decoder with box refinement and presence token.
 
     Simplified version that assumes:
     - Box refinement is always enabled
     - Intermediate outputs are always returned
     - BoxRPB (relative position bias) with log-scale encoding
-    - Instance queries are used (num_instances=4)
     - Presence token is used
     """
 
@@ -1897,7 +1662,6 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         super().__init__(config)
         self.config = config
         self.hidden_size = config.hidden_size
-        self.num_instances = config.num_instances
 
         self.layers = nn.ModuleList([Sam3DetrDecoderLayer(config) for _ in range(config.num_layers)])
 
@@ -1907,9 +1671,6 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
 
         self.query_embed = nn.Embedding(config.num_queries, config.hidden_size)
         self.reference_points = nn.Embedding(config.num_queries, 4)
-
-        self.instance_query_embed = nn.Embedding(self.num_instances, config.hidden_size)
-        self.instance_reference_points = nn.Embedding(self.num_instances, 4)
 
         self.presence_token = nn.Embedding(1, config.hidden_size)
         self.presence_head = Sam3DecoderMLP(config.hidden_size, config.hidden_size, 1, 3)
@@ -1987,7 +1748,6 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         vision_pos_encoding: torch.Tensor,
         text_mask: Optional[torch.Tensor] = None,
         spatial_shapes: Optional[torch.Tensor] = None,
-        is_instance_prompt: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
@@ -1999,23 +1759,16 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
             vision_pos_encoding: Vision position encoding [batch_size, height*width, hidden_size]
             text_mask: Text padding mask [batch_size, seq_len] where True=valid, False=padding
             spatial_shapes: Spatial shapes [num_levels, 2]
-            is_instance_prompt: Whether this is an instance prompt
 
         Returns:
             Sam3DETRDecoderOutput containing decoder outputs from all layers.
         """
         batch_size = vision_features.shape[0]
 
-        if is_instance_prompt:
-            hidden_states = self.instance_query_embed.weight.unsqueeze(0).expand(batch_size, -1, -1)
-            reference_boxes = self.instance_reference_points.weight.unsqueeze(0).expand(batch_size, -1, -1)
-        else:
-            hidden_states = self.query_embed.weight.unsqueeze(0).expand(batch_size, -1, -1)
-            reference_boxes = self.reference_points.weight.unsqueeze(0).expand(batch_size, -1, -1)
+        hidden_states = self.query_embed.weight.unsqueeze(0).expand(batch_size, -1, -1)
+        reference_boxes = self.reference_points.weight.unsqueeze(0).expand(batch_size, -1, -1)
         reference_boxes = reference_boxes.sigmoid()
-        presence_token = None
-        if not is_instance_prompt:
-            presence_token = self.presence_token.weight.unsqueeze(0).expand(batch_size, -1, -1)
+        presence_token = self.presence_token.weight.unsqueeze(0).expand(batch_size, -1, -1)
 
         intermediate_outputs = []
         intermediate_boxes = [reference_boxes]
@@ -2500,12 +2253,8 @@ class Sam3Model(Sam3PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         text_embeds: Optional[torch.FloatTensor] = None,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_points_labels: Optional[torch.LongTensor] = None,
         input_boxes: Optional[torch.FloatTensor] = None,
         input_boxes_labels: Optional[torch.LongTensor] = None,
-        input_masks: Optional[torch.FloatTensor] = None,
-        use_instance_query: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3ImageSegmentationOutput:
         r"""
@@ -2517,19 +2266,10 @@ class Sam3Model(Sam3PreTrainedModel):
         text_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Pre-computed text embeddings. Can be used to easily reuse text embeddings. If provided, `input_ids`
             should not be passed. Mutually exclusive with `input_ids`.
-        input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`, *optional*):
-            Normalized point coordinates in [0, 1] range, in (x, y) format.
-        input_points_labels (`torch.LongTensor` of shape `(batch_size, num_points)`, *optional*):
-            Labels for points: 1 (positive), 0 (negative), -10 (padding).
         input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`, *optional*):
             Normalized box coordinates in [0, 1] range, in (cx, cy, w, h) format.
         input_boxes_labels (`torch.LongTensor` of shape `(batch_size, num_boxes)`, *optional*):
             Labels for boxes: 1 (positive), 0 (negative).
-        input_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`, *optional*):
-            Mask prompts to guide segmentation.
-        use_instance_query (`bool`, *optional*, defaults to `False`):
-            Whether to use instance queries for multi-mask output.
-
 
         Example:
 
@@ -2579,34 +2319,12 @@ class Sam3Model(Sam3PreTrainedModel):
             text_features = text_embeds
 
         text_mask = attention_mask.bool() if attention_mask is not None else None
-        has_geometry_prompts = (
-            (input_points is not None and input_points.numel() > 0)
-            or (input_boxes is not None and input_boxes.numel() > 0)
-            or (input_masks is not None and input_masks.numel() > 0)
-        )
+        has_geometry_prompts = input_boxes is not None and input_boxes.numel() > 0
 
         geometry_prompt_features = None
         geometry_prompt_mask = None
 
         if has_geometry_prompts:
-            if input_points is not None and input_points.numel() > 0:
-                point_embeddings = input_points  # [batch_size, num_points, 2]
-                point_labels = (
-                    input_points_labels
-                    if input_points_labels is not None
-                    else torch.ones_like(point_embeddings[..., 0], dtype=torch.long)
-                )
-                point_mask = (
-                    (input_points_labels != -10)
-                    if input_points_labels is not None
-                    else torch.ones(batch_size, input_points.shape[1], dtype=torch.bool, device=device)
-                )
-                point_labels = torch.where(point_labels == -10, 0, point_labels)
-            else:
-                point_embeddings = torch.zeros(batch_size, 0, 2, dtype=text_features.dtype, device=device)
-                point_labels = torch.zeros(batch_size, 0, dtype=torch.long, device=device)
-                point_mask = torch.zeros(batch_size, 0, dtype=torch.bool, device=device)
-
             if input_boxes is not None and input_boxes.numel() > 0:
                 box_embeddings = input_boxes  # [batch_size, num_boxes, 4]
                 box_labels = (
@@ -2625,26 +2343,11 @@ class Sam3Model(Sam3PreTrainedModel):
                 box_labels = torch.zeros(batch_size, 0, dtype=torch.long, device=device)
                 box_mask = torch.zeros(batch_size, 0, dtype=torch.bool, device=device)
 
-            if input_masks is not None and input_masks.numel() > 0:
-                mask_embeddings = input_masks  # [batch_size, num_masks, H, W]
-                mask_mask = torch.ones(batch_size, mask_embeddings.shape[1], dtype=torch.bool, device=device)
-            else:
-                mask_embeddings = None
-                mask_mask = None
-
-            img_sizes = tuple((feat.shape[-2], feat.shape[-1]) for feat in fpn_hidden_states)
-
             geometry_outputs = self.geometry_encoder(
-                point_embeddings=point_embeddings,
-                point_mask=point_mask,
-                point_labels=point_labels,
                 box_embeddings=box_embeddings,
                 box_mask=box_mask,
                 box_labels=box_labels,
-                mask_embeddings=mask_embeddings,
-                mask_mask=mask_mask,
                 img_feats=fpn_hidden_states,
-                img_sizes=img_sizes,
                 img_pos_embeds=fpn_position_encoding,
             )
 
@@ -2689,7 +2392,6 @@ class Sam3Model(Sam3PreTrainedModel):
             vision_pos_encoding=encoder_outputs.pos_embeds_flattened,
             text_mask=combined_prompt_mask,
             spatial_shapes=encoder_outputs.spatial_shapes,
-            is_instance_prompt=use_instance_query,
             **kwargs,
         )
 
