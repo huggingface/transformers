@@ -111,7 +111,7 @@ def build_glob_alt(
         elif not pat_src.startswith(r"\^") and not pat_src.startswith(r".*"):
             prefix_src = ".*"
 
-        parts.append(f"(?P<{name}>{prefix_src}{pat_src})")
+        parts.append(f"(?P<{name}>{prefix_src}{pat_src}.*)")
 
     alt_src = "|".join(parts).replace("\\^", "^").replace("\\.", r"\.")
     try:
