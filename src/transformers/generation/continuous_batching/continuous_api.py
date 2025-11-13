@@ -16,6 +16,7 @@
 import queue
 import threading
 from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 from itertools import count
@@ -1060,6 +1061,15 @@ class ContinuousBatchingManager:
 
 class ContinuousMixin:
     """Mixin class for models to add continuous batching capabilities."""
+
+    @contextmanager
+    def continuous_batching_context_manager(self, **kwargs) -> Generator[ContinuousBatchingManager]:
+        manager = self.init_continuous_batching(**kwargs)
+        manager.start()
+        try:
+            yield manager
+        finally:
+            manager.stop(block=True)
 
     def init_continuous_batching(
         self,
