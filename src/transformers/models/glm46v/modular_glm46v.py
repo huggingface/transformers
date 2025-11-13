@@ -44,7 +44,7 @@ class Glm46VConfig(Glm4vConfig):
     ):
         if isinstance(vision_config, dict):
             vision_config["model_type"] = vision_config.get("model_type", "glm4v")
-            self.vision_config = CONFIG_MAPPING["vision_config"](**vision_config)
+            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             self.vision_config = CONFIG_MAPPING["glm4v"]()
 
