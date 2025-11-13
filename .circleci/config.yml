@@ -68,6 +68,8 @@ jobs:
             - store_artifacts:
                 path: test_preparation
 
+            - run: apt-get install -y curl
+
             - run:
                 name: "Retrieve Artifact Paths"
                 # [reference] https://circleci.com/docs/api/v2/index.html#operation/getJobArtifacts
