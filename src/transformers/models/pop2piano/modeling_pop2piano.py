@@ -583,6 +583,8 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
             module.o.weight.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+        elif isinstance(module, nn.Linear):
+            module.weight.normal_(mean=0.0, std=factor)
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
