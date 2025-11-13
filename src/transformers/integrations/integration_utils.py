@@ -38,7 +38,7 @@ from transformers.utils.import_utils import _is_package_available
 
 
 if os.getenv("WANDB_MODE") == "offline":
-    print("⚙️  Running in WANDB offline mode")
+    print("[INFO] Running in WANDB offline mode")
 
 from .. import PreTrainedModel, TrainingArguments
 from .. import __version__ as version
