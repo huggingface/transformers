@@ -571,6 +571,7 @@ class OwlViTEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`OwlViTEncoderLayer`].
+
     Args:
         config: OwlViTConfig
     """
@@ -587,6 +588,20 @@ class OwlViTEncoder(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
+        r"""
+        Args:
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+        """
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -1396,13 +1411,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> OwlViTObjectDetectionOutput:
         r"""
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the last hidden state. See `text_model_last_hidden_state` and
+            `vision_model_last_hidden_state` under returned tensors for more detail.
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids).
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the last hidden state. See `text_model_last_hidden_state` and
-            `vision_model_last_hidden_state` under returned tensors for more detail.
 
         Examples:
         ```python
