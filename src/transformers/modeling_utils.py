@@ -1497,9 +1497,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
         # Current submodel should register its tied weights keys only if the config is asking for it
         if not self.config.tie_word_embeddings and not self.config.tie_encoder_decoder:
-            self._tied_weights_keys = {}
+            self.all_tied_weights_keys = {}
         else:
-            self._tied_weights_keys = self._tied_weights_keys.copy() if self._tied_weights_keys is not None else {}
+            self.all_tied_weights_keys = self._tied_weights_keys.copy() if self._tied_weights_keys is not None else {}
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
@@ -1514,8 +1514,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             # Always attach the keys of the children (if the children's config says to NOT tie, then it's empty)
-            if tied_keys := getattr(module, "_tied_weights_keys", None):
-                self._tied_weights_keys.update({f"{name}.{k}": f"{name}.{v}" for k, v in tied_keys.copy().items()})
+            if tied_keys := getattr(module, "all_tied_weights_keys", None):
+                self.all_tied_weights_keys.update({f"{name}.{k}": f"{name}.{v}" for k, v in tied_keys.copy().items()})
 
         # Maybe initialize the weights and tie the keys
         self.init_weights()
@@ -2387,7 +2387,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         If you call this function, it will always tie. There is only 1 tricky case, if all weights are missing, you still want to mention that
         the ones you tied were missing.
         """
-        mapping = getattr(self, "_tied_weights_keys", None)
+        mapping = getattr(self, "all_tied_weights_keys", None)
         if not isinstance(mapping, dict):
             return
 
@@ -4262,7 +4262,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 k.__exit__(None, None, None)
 
         # Marks tied weights as `_is_hf_initialized` to avoid initializing them
-        for tied_param in model._tied_weights_keys.keys():
+        for tied_param in model.all_tied_weights_keys.keys():
             # It's always a proper weight except for 2 or 3 old models where it's a regex or module set to None
             # -> just skip it in those cases (they will just re-init before tying, so they loose the added optimization)
             try:
@@ -4530,7 +4530,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # The tied weight keys are in the "missing" usually, but they should not be moved (they will be tied anyway)
         # This is especially important because if they are moved, they will lose the `_is_hf_initialized` flag, and they
         # will be re-initialized for nothing (which can be quite long)
-        for key in missing_keys - self._tied_weights_keys.keys():
+        for key in missing_keys - self.all_tied_weights_keys.keys():
             param = model_state_dict[key]
             # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
             if param.device == torch.device("meta"):
