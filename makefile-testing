@@ -26,7 +26,7 @@ load_hf:
 	uv pip install -e ".[torch]"
 	uv run python test_load_hf.py
 
-/tmp/dinov3_vit7b16_lc_output.pth: load_checkpoints
+/tmp/dinov3_vit7b16_lc_output.pth: load_hf
 
 /tmp/dinov3_vit7b16_lc_output_hf.pth: load_torch
 
@@ -35,3 +35,17 @@ compare_results: /tmp/dinov3_vit7b16_lc_output.pth /tmp/dinov3_vit7b16_lc_output
 	. /tmp/uv_project_env/bin/activate && \
 	uv pip install torch numpy
 	uv run python compare_tensors.py /tmp/dinov3_vit7b16_lc_output.pth /tmp/dinov3_vit7b16_lc_output_hf.pth
+
+modular:
+	uv venv --clear
+	. /tmp/uv_project_env/bin/activate && \
+	uv pip install -e ".[dev]"
+	uv run python utils/modular_model_converter.py  dinov3_vit
+
+integration:
+	uv venv --clear
+	. /tmp/uv_project_env/bin/activate && \
+	uv pip install -e ".[dev]" pillow
+	uv run python integration.py
+
+	

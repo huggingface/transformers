@@ -539,8 +539,7 @@ class DINOv3ViTForImageClassification(DINOv3ViTPreTrainedModel):
 
         sequence_output = outputs.last_hidden_state  # batch_size, sequence_length, hidden_size
         cls_token = sequence_output[:, 0]
-        patch_tokens = sequence_output[:, 1:]
-
+        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens :]
         linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
         logits = self.classifier(linear_input)
 

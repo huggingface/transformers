@@ -13,10 +13,9 @@ def compare_tensors(filepath1, filepath2):
         print("❌ Shapes differ!")
         return
     
-    if torch.allclose(tensor1, tensor2, atol=1e-2):
+    if torch.allclose(tensor1, tensor2, atol=1e-3):
         print("✓ Tensors are equal (within tolerance)")
     else:
-        breakpoint()
         max_diff = (tensor1 - tensor2).abs().max().item()
         mean_diff = (tensor1 - tensor2).abs().mean().item()
         print(f"❌ Tensors differ")

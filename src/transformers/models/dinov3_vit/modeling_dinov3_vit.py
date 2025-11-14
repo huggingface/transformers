@@ -35,7 +35,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.backbone_utils import BackboneMixin
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import check_model_inputs
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
 
@@ -644,8 +644,7 @@ class DINOv3ViTForImageClassification(DINOv3ViTPreTrainedModel):
 
         sequence_output = outputs.last_hidden_state  # batch_size, sequence_length, hidden_size
         cls_token = sequence_output[:, 0]
-        patch_tokens = sequence_output[:, 1:]
-
+        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens :]
         linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
         logits = self.classifier(linear_input)
 
@@ -661,6 +660,4 @@ class DINOv3ViTForImageClassification(DINOv3ViTPreTrainedModel):
         )
 
 
-__all__ = ["DINOv3ViTForImageClassification", "DINOv3ViTModel", "DINOv3ViTPreTrainedModel", "DINOv3ViTBackbone"]
-
-
+__all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel", "DINOv3ViTBackbone", "DINOv3ViTForImageClassification"]

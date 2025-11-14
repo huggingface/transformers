@@ -277,7 +277,12 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model_name = "facebook/dinov3-vits16-pretrain-lvd1689m"
         model = DINOv3ViTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
+        
+    @slow
+    def test_model_for_image_classification_from_pretrained(self):
+        model_name = "dimidagd/dinov3-vit7b16-pretrain-lvd1689m-imagenet1k-lc"
+        model = DINOv3ViTForImageClassification.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -295,6 +300,27 @@ class DINOv3ViTModelIntegrationTest(unittest.TestCase):
             if is_vision_available()
             else None
         )
+
+
+    @slow
+    def test_inference_lc_head_imagenet(self):
+#        tensor = torch.ones(1,3,224,224).to(model.device)
+#        expected_output_std = 0.7570638656616211
+#        expected_output_mean = 6.4013e-03
+        model = DINOv3ViTModel.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m").to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        
+#        self.assertAlmostEqual(outputs.logits.std().item(), expected_output_std, places=4)
+#        self.assertAlmostEqual(outputs.logits.mean().item(), expected_output_mean, places=4)
+
 
     @slow
     def test_inference_no_head(self):
