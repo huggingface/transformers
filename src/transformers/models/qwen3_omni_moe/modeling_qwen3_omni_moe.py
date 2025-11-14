@@ -82,9 +82,9 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
-            module.experts.gate_up_proj.normal_(mean=0.0, std=std)
-            module.experts.down_proj.normal_(mean=0.0, std=std)
-            module.router.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.experts.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.experts.down_proj, mean=0.0, std=std)
+            init.normal_(module.router.weight, mean=0.0, std=std)
 
 
 def _get_feat_extract_output_lengths(input_lengths):

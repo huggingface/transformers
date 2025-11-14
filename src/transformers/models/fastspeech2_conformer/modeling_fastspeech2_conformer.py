@@ -1008,7 +1008,7 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
             init.zeros_(module.bias)
             init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_()
+            init.normal_(module.weight)
             if module.padding_idx is not None:
                 init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, FastSpeech2ConformerAttention):

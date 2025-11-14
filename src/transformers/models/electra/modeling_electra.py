@@ -1302,7 +1302,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
         self.generator_predictions = ElectraGeneratorPredictions(config)
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size)
 
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.generator_lm_head

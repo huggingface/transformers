@@ -755,7 +755,7 @@ class GroupViTPreTrainedModel(PreTrainedModel):
 
         init_range = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=init_range)
+            init.normal_(module.weight, mean=0.0, std=init_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
