@@ -163,7 +163,7 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
 
     def test_tokenizer_batch_encode_plus(self):
         self.tokenizer.src_lang = "en"
-        ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
+        ids = self.tokenizer(self.src_text).input_ids[0]
         self.assertListEqual(self.expected_src_tokens, ids)
 
     def test_tokenizer_decode_ignores_language_codes(self):

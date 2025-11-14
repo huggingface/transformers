@@ -65,7 +65,7 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizerFast:
         pretrained_name = pretrained_name or cls.tmpdirname
-        return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     @unittest.skip(reason="No slow tokenizer")
     def test_added_tokens_serialization(self):
@@ -161,7 +161,7 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.tokenizer_class.from_pretrained(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
                 r_output = tokenizer_r.encode("Hey this is a <special> token")

@@ -52,7 +52,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         """
         Assert that the created tokens are the same than the hard-coded ones
         """
-        tokenizer = self.get_rust_tokenizer()
+        tokenizer = self.get_tokenizer()
 
         INPUT_SENTENCES = ["The quick brown fox</s>", "jumps over the lazy dog</s>"]
         TARGET_TOKENS = [[2175, 23714, 73173, 144252, 2], [77, 132619, 3478, 368, 109586, 35433, 2]]
@@ -66,7 +66,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=6):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_r = self.get_tokenizer(pretrained_name, **kwargs)
                 # tokenizer_r.pad_token = None # Hotfixing padding = None
                 # Simple input
                 s = "This is a simple input"
@@ -123,7 +123,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         Tests the tokenizer downloaded from here:
             - https://huggingface.co/bigscience/tokenizer/
         """
-        tokenizer = self.get_rust_tokenizer()
+        tokenizer = self.get_tokenizer()
         ds = load_dataset("facebook/xnli", "all_languages", split="test", streaming=True)
 
         sample_data = next(iter(ds))["premise"]  # pick up one data
@@ -135,7 +135,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_jinja
     def test_tokenization_for_chat(self):
-        tokenizer = self.get_rust_tokenizer()
+        tokenizer = self.get_tokenizer()
         tokenizer.chat_template = "{% for message in messages %}{{ message.content }}{{ eos_token }}{% endfor %}"
         test_chats = [
             [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
@@ -156,8 +156,8 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertListEqual(tokenized_chat, expected_tokens)
 
     def test_add_prefix_space_fast(self):
-        tokenizer_w_prefix = self.get_rust_tokenizer(add_prefix_space=True)
-        tokenizer_wo_prefix = self.get_rust_tokenizer(add_prefix_space=False)
+        tokenizer_w_prefix = self.get_tokenizer(add_prefix_space=True)
+        tokenizer_wo_prefix = self.get_tokenizer(add_prefix_space=False)
         tokens_w_prefix = tokenizer_w_prefix.tokenize("Hey")
         tokens_wo_prefix = tokenizer_wo_prefix.tokenize("Hey")
         self.assertNotEqual(tokens_w_prefix, tokens_wo_prefix)

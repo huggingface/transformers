@@ -108,7 +108,9 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUpClass()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = PegasusTokenizer(SAMPLE_VOCAB, offset=0, mask_token_sent=None, mask_token="[MASK]")
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        _, vocab_scores, _ = extractor.extract()
+        tokenizer = PegasusTokenizer(vocab=vocab_scores, offset=0, mask_token_sent=None, mask_token="[MASK]")
         tokenizer.save_pretrained(cls.tmpdirname)
 
     @cached_property

@@ -103,7 +103,7 @@ class RagTokenizerTest(TestCase):
         return DPRQuestionEncoderTokenizer.from_pretrained(os.path.join(self.tmpdirname, "dpr_tokenizer"))
 
     def get_bart_tokenizer(self) -> RobertaTokenizer:
-        return RobertaTokenizerz.from_pretrained(os.path.join(self.tmpdirname, "bart_tokenizer"))
+        return RobertaTokenizer.from_pretrained(os.path.join(self.tmpdirname, "bart_tokenizer"))
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
