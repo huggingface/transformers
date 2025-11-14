@@ -2592,7 +2592,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # NOTE: new models need to use existing names for layers if possible, so this list doesn't grow infinitely
         if modality in ["image", "video"]:
             possible_module_names = ["vision_tower", "visual", "vision_model", "vision_encoder", "image_tower"]
-        if modality == "audio":
+        elif modality == "audio":
             possible_module_names = ["audio_tower", "audio_encoder"]
         elif modality is None:
             possible_module_names = ["text_encoder", "encoder"]
@@ -2604,7 +2604,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 return getattr(self, name)
 
         if self.base_model is not self and hasattr(self.base_model, "get_encoder"):
-            return self.base_model.get_encoder()
+            return self.base_model.get_encoder(modality=modality)
 
         # If this is a base transformer model (no encoder/model attributes), return self
         return self
@@ -2632,7 +2632,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if self.base_model is not self:
             if hasattr(self.base_model, "set_encoder"):
-                self.base_model.set_encoder(encoder)
+                self.base_model.set_encoder(encoder, modality=modality)
             else:
                 self.model = encoder
 

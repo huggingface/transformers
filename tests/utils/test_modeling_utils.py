@@ -40,6 +40,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     BartConfig,
     BartForConditionalGeneration,
+    BartModel,
     CLIPTextModelWithProjection,
     DynamicCache,
     GPT2Config,
@@ -110,6 +111,8 @@ if is_torch_available():
         BertModel,
         CLIPTextModel,
         GenerationMixin,
+        MusicgenConfig,
+        MusicgenForConditionalGeneration,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -3203,3 +3206,210 @@ class TestGetDecoder(unittest.TestCase):
         dec = model.get_decoder()
 
         assert dec is model.model.language_model, f"LLaVA get_decoder() should return language_model, got {type(dec)}"
+
+
+class TestGetEncoder(unittest.TestCase):
+    def test_seq2seq_lm_get_encoder_returns_encoder(self):
+        cfg = BartConfig(
+            vocab_size=128,
+            d_model=32,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=4,
+            decoder_attention_heads=4,
+            encoder_ffn_dim=64,
+            decoder_ffn_dim=64,
+        )
+        model = BartForConditionalGeneration(cfg)
+        encoder = model.get_encoder()
+
+        assert encoder is model.model.encoder, (
+            f"Expected get_encoder() to return model.model.encoder, got {type(encoder)}"
+        )
+
+    def test_base_model_returns_encoder(self):
+        cfg = BartConfig(
+            vocab_size=128,
+            d_model=32,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=4,
+            decoder_attention_heads=4,
+            encoder_ffn_dim=64,
+            decoder_ffn_dim=64,
+        )
+        model = BartModel(cfg)
+        encoder = model.get_encoder()
+
+        assert encoder is model.encoder, f"Expected get_encoder() to return  model.encoder, got {type(encoder)}"
+
+    def test_decoder_only_model_returns_self(self):
+        """Test that decoder-only models (no encoder) return self."""
+        cfg = MistralConfig(
+            vocab_size=128,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+        )
+        model = MistralModel(cfg)
+        encoder = model.get_encoder()
+
+        assert encoder is model, f"Base model get_encoder() should return self, got {type(encoder)}"
+
+    def test_when_encoder_has_different_name(self):
+        """Test models with non-standard name for encoder modular (Musicgen has `self.model.text_encoder`)."""
+        cfg = MusicgenConfig(
+            text_encoder={
+                "model_type": "t5",
+                "vocab_size": 99,
+                "d_model": 32,
+                "d_ff": 37,
+                "num_layers": 2,
+                "num_heads": 2,
+            },
+            audio_encoder={
+                "model_type": "encodec",
+                "hidden_size": 99,
+                "compress": 1,
+                "num_filters": 2,
+                "codebook_size": 32,
+                "codebook_dim": 32,
+            },
+            decoder={
+                "vocab_size": 99,
+                "ffn_dim": 32,
+                "num_attention_heads": 2,
+                "hidden_size": 32,
+                "num_hidden_layers": 2,
+            },
+        )
+        model = MusicgenForConditionalGeneration(cfg)
+        encoder = model.get_encoder()
+
+        assert encoder is model.text_encoder, (
+            f"MusicgenForConditionalGeneration get_encoder() should return model.model.text_encoder, got {type(encoder)}"
+        )
+
+    def test_audio_encoder(self):
+        """Test models with multiple modality encoders (Musicgen has `self.model.audio_encoder`)."""
+        cfg = MusicgenConfig(
+            text_encoder={
+                "model_type": "t5",
+                "vocab_size": 99,
+                "d_model": 32,
+                "d_ff": 37,
+                "num_layers": 2,
+                "num_heads": 2,
+            },
+            audio_encoder={
+                "model_type": "encodec",
+                "hidden_size": 99,
+                "compress": 1,
+                "num_filters": 2,
+                "codebook_size": 32,
+                "codebook_dim": 32,
+            },
+            decoder={
+                "vocab_size": 99,
+                "ffn_dim": 32,
+                "num_attention_heads": 2,
+                "hidden_size": 32,
+                "num_hidden_layers": 2,
+            },
+        )
+        model = MusicgenForConditionalGeneration(cfg)
+        encoder = model.get_encoder(modality="audio")
+
+        assert encoder is model.audio_encoder, (
+            f"MusicgenForConditionalGeneration get_encoder(modality='audio') should return model.model.audio_encoder, got {type(encoder)}"
+        )
+
+    def test_non_existant_modality_throws_error(self):
+        """Test that an error is thrown when a rquested modality does not exist."""
+        cfg = MistralConfig(
+            vocab_size=128,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+        )
+        model = MistralModel(cfg)
+        with self.assertRaises(ValueError):
+            _ = model.get_encoder(modality="3d")
+
+    def test_encoder_return_self_when_modality_not_found(self):
+        """Test that `self` is returned if the model has no encoder for requested modality."""
+        cfg = MistralConfig(
+            vocab_size=128,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+        )
+        model = MistralModel(cfg)
+        encoder = model.get_encoder(modality="image")
+
+        assert encoder is model, f"Mistral get_encoder(modality='image') should return self, got {type(encoder)}"
+
+    def test_model_without_get_encoder(self):
+        """Test edge case where model has model attribute but no get_encoder method."""
+
+        class MockInnerModel:
+            """Mock model without get_encoder method."""
+
+            pass
+
+        class MockWrapperModel:
+            """Mock wrapper with model attribute but inner has no get_encoder."""
+
+            def __init__(self):
+                self.model = MockInnerModel()
+
+            def get_encoder(self):
+                if hasattr(self, "encoder"):
+                    return self.encoder
+                if hasattr(self, "model"):
+                    inner = self.model
+                    if hasattr(inner, "get_encoder") and type(inner) is not type(self):
+                        return inner.get_encoder()
+                    return inner
+                return self
+
+        wrapper = MockWrapperModel()
+        encoder = wrapper.get_encoder()
+
+        assert encoder is wrapper.model, f"Should return inner model when no get_encoder, got {type(encoder)}"
+
+    def test_vision_language_model(self):
+        """Test vision-language models like LLaVA can find the modality encoder ("image")."""
+        text_config = MistralConfig(
+            vocab_size=128,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+        )
+
+        vision_config = {
+            "hidden_size": 32,
+            "intermediate_size": 64,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_channels": 3,
+            "image_size": 224,
+            "patch_size": 16,
+        }
+
+        cfg = LlavaConfig(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config,
+            vocab_size=128,
+        )
+
+        model = LlavaForConditionalGeneration(cfg)
+        image_encoder = model.get_encoder(modality="image")
+
+        assert image_encoder is model.model.vision_tower, (
+            f"LLaVA get_encoder(modality='image') should return vision_tower, got {type(image_encoder)}"
+        )
