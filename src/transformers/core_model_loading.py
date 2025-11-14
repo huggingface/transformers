@@ -616,9 +616,9 @@ def convert_and_load_state_dict_in_model(
                 if quantizer.__class__.__name__ == "FineGrainedFP8HfQuantizer":
                     from .integrations.finegrained_fp8 import Fp8Quantize
 
-                    converter.quantization_operation = Fp8Quantize()  # TODO support other methods
-                else:
-                    raise ValueError("This quantization method is gonna be supported SOOOON")
+                    converter.quantization_operation = Fp8Quantize()
+                # Other quantizers (BNB, HQQ, etc.) handle quantization when the parameter is set into the module,
+                # rather than as a conversion operation in the weight loading pipeline
             else:
                 _dtype = dtype
                 matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
