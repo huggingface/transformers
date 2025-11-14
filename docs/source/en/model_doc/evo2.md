@@ -48,9 +48,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] Evo2ForCausalLM
 
-## Evo2ForQuestionAnswering
-
-[[autodoc]] Evo2ForQuestionAnswering
 
 ## Evo2Model
 
@@ -61,11 +58,3 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] Evo2PreTrainedModel
     - forward
-
-## Evo2ForSequenceClassification
-
-[[autodoc]] Evo2ForSequenceClassification
-
-## Evo2ForTokenClassification
-
-[[autodoc]] Evo2ForTokenClassification
