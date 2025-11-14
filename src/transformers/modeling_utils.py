@@ -4302,14 +4302,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
-        # Remove tied weights keys and etc
         miss_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
         model._move_missing_keys_from_meta_to_cpu(miss_and_mismatched, dtype, hf_quantizer)
 
-        # correctly initialize the missing (and potentially mismatched) keys
+        # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialzed` flag)
         model._initialize_missing_keys(is_quantized)
 
-        # We make sure we tie after _init_. We need the missing keys to remove the ones we do tie, and not random remove
+        # Tie the weights
         model.tie_weights(missing_keys)
 
         # Post-processing for tensor parallelism
