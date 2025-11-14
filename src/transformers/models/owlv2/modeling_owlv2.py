@@ -500,7 +500,8 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
+        causal_attention_mask: torch.Tensor,
+        output_attentions: Optional[bool] = False,
     ) -> tuple[torch.FloatTensor]:
         """
         Args:
@@ -518,7 +519,8 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            **kwargs,
+            causal_attention_mask=causal_attention_mask,
+            output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
 
@@ -528,6 +530,9 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
 
         return outputs
 
@@ -1480,13 +1485,13 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Owlv2ObjectDetectionOutput:
         r"""
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the last hidden state. See `text_model_last_hidden_state` and
+            `vision_model_last_hidden_state` under returned tensors for more detail.
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids).
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the last hidden state. See `text_model_last_hidden_state` and
-            `vision_model_last_hidden_state` under returned tensors for more detail.
 
         Examples:
         ```python
