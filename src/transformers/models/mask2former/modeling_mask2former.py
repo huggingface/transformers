@@ -23,6 +23,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_layers import GradientCheckpointingLayer
@@ -2111,11 +2112,11 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             if module.input_projections is not None:
                 for input_projection in module.input_projections:
                     if not isinstance(input_projection, nn.Sequential):
-                        nn.init.xavier_uniform_(input_projection.weight, gain=xavier_std)
-                        nn.init.constant_(input_projection.bias, 0)
+                        init.xavier_uniform_(input_projection.weight, gain=xavier_std)
+                        init.constant_(input_projection.bias, 0)
 
         elif isinstance(module, Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight, 0.0)
+            init.constant_(module.sampling_offsets.weight, 0.0)
             thetas = torch.arange(module.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / module.n_heads)
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
@@ -2125,42 +2126,43 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
 
-            nn.init.constant_(module.attention_weights.weight, 0.0)
-            nn.init.constant_(module.attention_weights.bias, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight)
-            nn.init.constant_(module.value_proj.bias, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight)
-            nn.init.constant_(module.output_proj.bias, 0.0)
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
 
         elif isinstance(module, Mask2FormerMaskedAttentionDecoderLayer):
             for p in module.parameters():
                 if p.dim() > 1:
-                    nn.init.xavier_uniform_(p, gain=xavier_std)
-            module.cross_attn.in_proj_bias.zero_()
+                    init.xavier_uniform_(p, gain=xavier_std)
+            init.zeros_(module.cross_attn.in_proj_bias)
 
         elif isinstance(module, Mask2FormerPixelDecoder):
-            nn.init.normal_(module.level_embed, std=0)
+            init.normal_(module.level_embed, std=0)
 
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
 
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
 
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
         if hasattr(module, "reference_points"):
-            nn.init.xavier_uniform_(module.reference_points.weight, gain=1.0)
-            nn.init.constant_(module.reference_points.bias, 0.0)
+            init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            init.constant_(module.reference_points.bias, 0.0)
 
 
 @auto_docstring
