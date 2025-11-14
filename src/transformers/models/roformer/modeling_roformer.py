@@ -638,10 +638,19 @@ class RoFormerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, RoFormerSinusoidalPositionalEmbedding):
+        if isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, RoFormerSinusoidalPositionalEmbedding):
             init.copy_(module.weight, module.create_weight())
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, nn.LayerNorm):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
         elif isinstance(module, RoFormerLMPredictionHead):
             init.zeros_(module.bias)
 
