@@ -744,21 +744,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
     # Flaky logits
     _supports_sdpa = False
     _supports_flex_attn = True
-
     _can_compile_fullgraph = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
 
 
 class PegasusXEncoder(PegasusXPreTrainedModel):

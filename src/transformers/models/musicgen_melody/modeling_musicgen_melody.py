@@ -26,6 +26,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import (
@@ -391,16 +392,17 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_factor
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
 
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder with MUSICGEN->MUSICGEN_MELODY,Musicgen->MusicgenMelody
@@ -1312,9 +1314,9 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         # Projection layers still need to be initialized.
         std = self.decoder.config.initializer_factor
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
 
     def get_text_encoder(self):
         return self.text_encoder

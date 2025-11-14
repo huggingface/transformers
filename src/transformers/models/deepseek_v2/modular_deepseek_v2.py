@@ -20,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -436,7 +437,7 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2Moe):
-            module.gate.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV2Model(LlamaModel):

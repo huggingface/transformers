@@ -44,6 +44,7 @@ from torch import Tensor, nn
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
+from . import initialization as init
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_checkpoint_conversion_mapping
 from .core_model_loading import WeightConverter, convert_and_load_state_dict_in_model, revert_weight_conversion
@@ -471,9 +472,7 @@ def _get_tied_weight_keys(module: nn.Module) -> list[str]:
     tied_weight_keys: list[str] = []
     for name, submodule in module.named_modules():
         tied = getattr(submodule, "_tied_weights_keys", {}) or {}
-        tied_weights_dict = list(tied.keys())
-        # tied_weights_dict.extend(tied.values())
-        tied_weight_keys.extend([f"{name}.{k}" if name else k for k in tied_weights_dict])
+        tied_weight_keys.extend([f"{name}.{k}" if name else k for k in tied.keys()])
     return tied_weight_keys
 
 
@@ -899,35 +898,6 @@ def _get_dtype(
                 sub_config.dtype = default_dtype
 
     return config, dtype, dtype_orig
-
-
-@contextmanager
-def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
-    import torch.nn.init as init
-
-    originals = {}
-
-    def make_wrapper(fn):
-        @wraps(fn)
-        def wrapped(*args, **kwargs):
-            # Tensor can come positionally or as a kwarg (e.g. via DeviceContext)
-            t = args[0] if args else kwargs.get("tensor", kwargs.get("input"))
-            if t is not None and getattr(t, flag_name, False):
-                # mimic init.* return convention (returns the tensor)
-                return t
-            return fn(*args, **kwargs)  # TODO we could set is init here.
-
-        return wrapped
-
-    try:
-        for name in TORCH_INIT_FUNCTIONS:
-            if hasattr(init, name):
-                originals[name] = getattr(init, name)
-                setattr(init, name, make_wrapper(originals[name]))
-        yield
-    finally:
-        for name, fn in originals.items():
-            setattr(init, name, fn)
 
 
 class PipelineParallel(Enum):
@@ -1521,26 +1491,35 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
         modules properly initialized (such as weight initialization).
-
-        This is also used when the user is running distributed code. We add hooks to the modules here, according to
-        the model's tp_plan!
         """
-        self.init_weights()
-        self._backward_compatibility_gradient_checkpointing()
-
+        # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
+        # easily available
         self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
+        # Current submodel should register its tied weights keys only if the config is asking for it
+        if not self.config.tie_word_embeddings and not self.config.tie_encoder_decoder:
+            self.all_tied_weights_keys = {}
+        else:
+            self.all_tied_weights_keys = self._tied_weights_keys.copy() if self._tied_weights_keys is not None else {}
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
             self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
             self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
         for name, module in self.named_children():
+            # Parallel plans
             if plan := getattr(module, "_ep_plan", None):
                 self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            # Always attach the keys of the children (if the children's config says to NOT tie, then it's empty)
+            if tied_keys := getattr(module, "all_tied_weights_keys", None):
+                self.all_tied_weights_keys.update({f"{name}.{k}": f"{name}.{v}" for k, v in tied_keys.copy().items()})
+
+        # Maybe initialize the weights and tie the keys
+        self.init_weights()
+        self._backward_compatibility_gradient_checkpointing()
 
     @property
     def tp_plan(self) -> dict[str, str]:
@@ -2275,22 +2254,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         if hasattr(self.config, "initializer_range"):
             std = self.config.initializer_range or 0.02
+        elif hasattr(self.config, "init_std"):
+            std = self.config.init_std
+        elif hasattr(self.config, "initializer_factor"):
+            std = self.config.initializer_factor
         else:
             # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
             if getattr(module, "weight", None) is not None:
-                module.weight.normal_(mean=0.0, std=std)
+                init.normal_(module.weight, mean=0.0, std=std)
             if getattr(module, "bias", None) is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             if getattr(module, "weight", None) is not None:
-                module.weight.normal_(mean=0.0, std=std)
-            if getattr(
-                self.config, "pad_token_id", None
-            ) is not None and self.config.pad_token_id < module.weight.size(0):
-                module.weight[self.config.pad_token_id].zero_()
+                init.normal_(module.weight, mean=0.0, std=std)
+                # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+                if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                    init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
             module._reset_parameters()
@@ -2303,15 +2285,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ):
             # Norms can exist without weights (in which case they are None from torch primitives)
             if hasattr(module, "weight") and module.weight is not None:
-                module.weight.fill_(1.0)
+                init.ones_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
         if isinstance(getattr(module, "down_proj", None), nn.Parameter):
-            module.down_proj.normal_(mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
         if isinstance(getattr(module, "gate", None), nn.Parameter):
-            module.gate.normal_(mean=0.0, std=std)
+            init.normal_(module.gate, mean=0.0, std=std)
 
     def _initialize_weights(self, module):
         """
@@ -2324,7 +2306,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         module._is_hf_initialized = True
 
     @torch.no_grad()
-    @guard_nn_init_functions()
+    @init.guard_torch_init_functions()
     def initialize_weights(self):
         """
         This is equivalent to calling `self.apply(self._initialize_weights)`, but correctly handles composite models.
@@ -2355,12 +2337,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Let the magic happen with this simple call
         self.smart_apply(self._initialize_weights)
 
-    def tie_weight_source_and_target(
-        self,
-        top_level: "PreTrainedModel",
-        missing_keys: Optional[set[str]] = None,
-        module_prefix: str = "",
-    ):
+    def tie_weights(self, missing_keys: Optional[set[str]] = None):
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
         and the encoder and decoder. This relies on the `_tied_weights_keys` dict.
@@ -2409,22 +2386,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         If you call this function, it will always tie. There is only 1 tricky case, if all weights are missing, you still want to mention that
         the ones you tied were missing.
         """
-        mapping = getattr(self, "_tied_weights_keys", None)
+        # TODO Cyril: using this fixed set of keys (set in post_init()) does not allow to switch the config flag and re-tie
+        mapping = getattr(self, "all_tied_weights_keys", None)
         if not isinstance(mapping, dict):
-            return
-        if (  # we only tie for ourselves, so we look at our config
-            not self.config.tie_word_embeddings
-            and not self.config.tie_encoder_decoder  # if missing keys is None we init?
-        ):
             return
 
         # TODO let's pray this is not too slow :)
-        top_level_params = dict(top_level.named_parameters(remove_duplicate=False)) | dict(
-            top_level.named_buffers(remove_duplicate=False)
+        top_level_params = dict(self.named_parameters(remove_duplicate=False)) | dict(
+            self.named_buffers(remove_duplicate=False)
         )
         for target_name, source_name in mapping.items():
-            source_name = f"^{module_prefix}.{source_name}" if module_prefix else "^" + source_name
-            target_name = f"^{module_prefix}.{target_name}" if module_prefix else "^" + target_name
+            source_name = "^" + source_name
+            target_name = "^" + target_name
 
             source_is_there = bool(missing_keys) and not re.search(
                 source_name, "\n".join(missing_keys), flags=re.MULTILINE
@@ -2440,10 +2413,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 for target_n, source_n in zip(target_params, cycle(source_params)):
                     if "." in target_n:
                         parent_path, last = target_n.rsplit(".", 1)
-                        parent = top_level.get_submodule(parent_path)
+                        parent = self.get_submodule(parent_path)
                     else:
                         parent_path, last = "", target_n
-                        parent = top_level  # top-level
+                        parent = self  # top-level
                     setattr(parent, last, top_level_params[source_n])
                     self._adjust_bias(parent, top_level_params[source_n])
                     if missing_keys and source_is_there:  # test_model_weights_reload_no_missing_tied_weights
@@ -2469,19 +2442,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
-
-    def tie_weights(self, missing_keys: Optional[set[str]] = None):
-        """
-        Recursively (for all submodels) tie all the weights of the model.
-        """
-        # Note that `self` is included in `self.modules` so we also apply to current PreTrainedModel with this call
-        if missing_keys is None:
-            # called from `post_init`
-            self.tie_weight_source_and_target(self, missing_keys, "")
-        else:  # this is from_pretrained, so its not called on every sub module
-            for module_prefix, module in self.named_modules():
-                if isinstance(module, PreTrainedModel):
-                    module.tie_weight_source_and_target(self, missing_keys, module_prefix)
 
     def _get_no_split_modules(self, device_map: str):
         """
@@ -4301,18 +4261,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for k in all_pointer:
                 k.__exit__(None, None, None)
 
+        # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
+        model.mark_tied_weights_as_initialized()
+
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
-        # Remove tied weights keys and etc
         miss_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
         model._move_missing_keys_from_meta_to_cpu(miss_and_mismatched, dtype, hf_quantizer)
 
-        # correctly initialize the missing (and potentially mismatched) keys
+        # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialzed` flag)
         model._initialize_missing_keys(is_quantized)
-        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys, False)
 
-        # We make sure we tie after _init_. We need the missing keys to remove the ones we do tie, and not random remove
+        # Tie the weights
         model.tie_weights(missing_keys)
+
+        # Adjust missing and unexpected keys
+        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys)
 
         # Post-processing for tensor parallelism
         if device_mesh is not None:
@@ -4556,7 +4520,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         model_state_dict = self.state_dict()
-        for key in missing_keys:
+        # The tied weight keys are in the "missing" usually, but they should not be moved (they will be tied anyway)
+        # This is especially important because if they are moved, they will lose the `_is_hf_initialized` flag, and they
+        # will be re-initialized for nothing (which can be quite long)
+        for key in missing_keys - self.all_tied_weights_keys.keys():
             param = model_state_dict[key]
             # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
             if param.device == torch.device("meta"):
@@ -4585,23 +4552,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             self.initialize_weights()
 
-        # Replace the loaded parameters class back to nn.Parameter (they were changed to easily skip initialization
-        # when performed in-place on the tensors)
-        for name, p in list(self.named_parameters()) + list(self.named_buffers()):
-            # We get back the original parameter that we stored in _original. This attribute was created when we initialized LoadedParam when loading the checkpoints.
-            if hasattr(p, "_original"):
-                if "." in name:
-                    module, name = name.rsplit(".", 1)
-                    module = self.get_submodule(module)
-                else:
-                    module = self
-                setattr(module, name, p._original)
-
     def _adjust_missing_and_unexpected_keys(
-        self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool
+        self, missing_keys: set[str], unexpected_keys: set[str]
     ) -> tuple[set[str], set[str]]:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors.
+        Also, set the `_is_hf_initialized` on tied weight keys, to avoid initializing them as they are going to
+        be tied anyway.
         """
         # Old checkpoints may have keys for rotary_emb.inv_freq forach layer, however we moved this buffer to the main model
         # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
@@ -4625,13 +4582,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if ignore_unexpected_regex is not None:
             unexpected_keys = {key for key in unexpected_keys if ignore_unexpected_regex.search(key) is None}
 
-        # Note: only the unexpected keys should remove the added prefix here, to correctly display the original name
-        # in the warnings. For missing keys, we should show the prefix in the warning as it's part of the final model
-        if loading_task_model_from_base_state_dict:
-            _prefix = f"{self.base_model_prefix}."
-            unexpected_keys = {k.removeprefix(_prefix) for k in unexpected_keys}
-
         return missing_keys, unexpected_keys
+
+    def mark_tied_weights_as_initialized(self):
+        """Adds the `_is_hf_initialized` flag on parameters that will be tied, in order to avoid initializing them
+        later as they will be tied (overwritten) anyway.
+        This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
+        running inits on them is very costly."""
+        for tied_param in self.all_tied_weights_keys.keys():
+            # It's always a proper weight except for 2 or 3 old models where it's a regex or module set to None
+            # -> just skip it in those cases (they will just re-init before tying, so they loose the added optimization)
+            try:
+                param = self.get_parameter(tied_param)
+                param._is_hf_initialized = True
+            except AttributeError:
+                pass
 
     def get_parameter_or_buffer(self, target: str):
         """

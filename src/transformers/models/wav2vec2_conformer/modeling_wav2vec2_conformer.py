@@ -14,6 +14,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
@@ -860,39 +861,39 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
             module.project_q.reset_parameters()
         # gumbel softmax requires special init
         elif isinstance(module, Wav2Vec2ConformerGumbelVectorQuantizer):
-            module.weight_proj.weight.normal_(mean=0.0, std=1)
-            module.weight_proj.bias.zero_()
-            nn.init.uniform_(module.codevectors)
+            init.normal_(module.weight_proj.weight, mean=0.0, std=1)
+            init.zeros_(module.weight_proj.bias)
+            init.uniform_(module.codevectors)
         elif isinstance(module, Wav2Vec2ConformerSelfAttention):
             if hasattr(module, "pos_bias_u"):
-                nn.init.xavier_uniform_(module.pos_bias_u)
+                init.xavier_uniform_(module.pos_bias_u)
             if hasattr(module, "pos_bias_v"):
-                nn.init.xavier_uniform_(module.pos_bias_v)
+                init.xavier_uniform_(module.pos_bias_v)
         elif isinstance(module, Wav2Vec2ConformerPositionalConvEmbedding):
-            nn.init.normal_(
+            init.normal_(
                 module.conv.weight,
                 mean=0,
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
-            nn.init.constant_(module.conv.bias, 0)
+            init.constant_(module.conv.bias, 0)
         elif isinstance(module, Wav2Vec2ConformerFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            nn.init.uniform_(module.projection.weight, a=-k, b=k)
-            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+            init.uniform_(module.projection.weight, a=-k, b=k)
+            init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
 
     def _get_feat_extract_output_lengths(
         self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
@@ -1646,7 +1647,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.num_labels = config.num_labels
 
-        self.init_weights()
+        self.post_init()
 
     def freeze_feature_encoder(self):
         """
@@ -1802,7 +1803,7 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
 
         self.objective = AMSoftmaxLoss(config.xvector_output_dim, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     def freeze_feature_encoder(self):
         """

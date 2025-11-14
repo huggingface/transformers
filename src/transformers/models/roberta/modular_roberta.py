@@ -21,6 +21,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import gelu
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
@@ -168,19 +169,9 @@ class RobertaPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, RobertaLMHead):
-            module.bias.zero_()
+        super()._init_weights(module)
+        if isinstance(module, RobertaLMHead):
+            init.zeros_(module.bias)
 
 
 class RobertaModel(BertModel):

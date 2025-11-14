@@ -24,6 +24,7 @@ from typing import Optional
 import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput
 from ...modeling_layers import GradientCheckpointingLayer
@@ -704,18 +705,12 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, MaskFormerSwinEmbeddings):
+        super()._init_weights(module)
+        if isinstance(module, MaskFormerSwinEmbeddings):
             if module.position_embeddings is not None:
-                module.position_embeddings.zero_()
+                init.zeros_(module.position_embeddings)
         elif isinstance(module, MaskFormerSwinSelfAttention):
-            module.relative_position_bias_table.zero_()
+            init.zeros_(module.relative_position_bias_table)
 
 
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
@@ -730,6 +725,8 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
 
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
+
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings

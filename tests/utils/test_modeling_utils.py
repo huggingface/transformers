@@ -134,6 +134,7 @@ if is_torch_available():
             super().__init__(config)
             self.linear = nn.Linear(5, 5)
             self.linear_2 = nn.Linear(5, 5)
+            self.post_init()
 
         def forward(self, x):
             return self.linear_2(self.linear(x))
@@ -147,6 +148,7 @@ if is_torch_available():
             super().__init__(config)
             self.linear = nn.Linear(50, 50)
             self.linear_2 = nn.Linear(50, 50)
+            self.post_init()
 
         def forward(self, x):
             return self.linear_2(self.linear(x))
@@ -160,17 +162,20 @@ if is_torch_available():
             super().__init__(config)
             self.linear = nn.Linear(50, 50)
             self.linear_2 = nn.Linear(50, 50)
+            self.post_init()
 
         def forward(self, x):
             return self.linear_2(self.linear(x))
 
     class BaseModelWithTiedWeights(PreTrainedModel):
         config_class = PreTrainedConfig
+        _tied_weights_keys = {"linear_2.weight": "linear.weight"}
 
         def __init__(self, config):
             super().__init__(config)
             self.linear = nn.Linear(5, 5)
             self.linear_2 = nn.Linear(5, 5)
+            self.post_init()
 
         def forward(self, x):
             return self.linear_2(self.linear(x))
@@ -193,6 +198,7 @@ if is_torch_available():
             # linear is a common name between Base and Head on purpose.
             self.linear = nn.Linear(5, 5)
             self.linear2 = nn.Linear(5, 5)
+            self.post_init()
 
         def forward(self, x):
             return self.linear2(self.linear(self.base(x)))
@@ -209,6 +215,7 @@ if is_torch_available():
             # direct params and submodules is helpful for testing offloading logic
             self.weight = nn.Parameter(torch.rand((5, 5)))
             self.base = BaseModel(config)
+            self.post_init()
 
         def forward(self, x):
             return self.base(x @ self.weight.T)
@@ -225,6 +232,7 @@ if is_torch_available():
             self.submodule = ModelWithDirectParam(config)
             # needed so model can have at least one module on accelerator
             self.linear = nn.Linear(5, 5)
+            self.post_init()
 
         def forward(self, x):
             return self.linear(self.submodule(x))
@@ -232,6 +240,7 @@ if is_torch_available():
     class ModelWithHeadAndTiedWeights(PreTrainedModel):
         base_model_prefix = "base"
         config_class = PreTrainedConfig
+        _tied_weights_keys = {"decoder.weight": "base.linear.weight"}
 
         def _init_weights(self, module):
             pass
@@ -240,6 +249,7 @@ if is_torch_available():
             super().__init__(config)
             self.base = BaseModel(config)
             self.decoder = nn.Linear(5, 5)
+            self.post_init()
 
         def forward(self, x):
             return self.decoder(self.base(x))
@@ -1412,6 +1422,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertIs(new_model.linear.weight, new_model.linear_2.weight)
 
             # With head
+            model = BaseModel(PreTrainedConfig())
             model.save_pretrained(tmp_dir)
             new_model, load_info = ModelWithHeadAndTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
             self.assertIs(new_model.base.linear.weight, new_model.decoder.weight)

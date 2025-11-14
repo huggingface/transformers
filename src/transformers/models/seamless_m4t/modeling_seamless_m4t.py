@@ -23,6 +23,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -1347,37 +1348,38 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, SeamlessM4TConformerSelfAttention):
             if hasattr(module, "pos_bias_u"):
-                nn.init.xavier_uniform_(module.pos_bias_u)
+                init.xavier_uniform_(module.pos_bias_u)
             if hasattr(module, "pos_bias_v"):
-                nn.init.xavier_uniform_(module.pos_bias_v)
+                init.xavier_uniform_(module.pos_bias_v)
         elif isinstance(module, SeamlessM4TConformerPositionalConvEmbedding):
-            nn.init.normal_(
+            init.normal_(
                 module.conv.weight,
                 mean=0,
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
-            nn.init.constant_(module.conv.bias, 0)
+            init.constant_(module.conv.bias, 0)
         elif isinstance(module, SeamlessM4TConformerFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            nn.init.uniform_(module.projection.weight, a=-k, b=k)
-            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+            init.uniform_(module.projection.weight, a=-k, b=k)
+            init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
         kernel_size, stride = self.config.adaptor_kernel_size, self.config.adaptor_stride
@@ -2400,22 +2402,6 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
 
         return hidden_states, lengths
 
-    @torch.no_grad()
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights."""
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
         if hasattr(nn.utils.parametrizations, "weight_norm"):
@@ -2973,11 +2959,11 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.text_decoder = SeamlessM4TDecoder(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4TCodeHifiGan(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_encoder(self):
         return self.text_encoder
@@ -3617,9 +3603,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.text_decoder = SeamlessM4TDecoder(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
         self.current_modality = current_modality
         if current_modality == "speech":
             self.main_input_name = "input_features"
@@ -3627,6 +3610,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
         # these models already call post_init in their initialization
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4TCodeHifiGan(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def set_modality(self, modality="text"):
         if modality == "text":

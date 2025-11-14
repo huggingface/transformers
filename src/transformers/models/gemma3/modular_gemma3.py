@@ -19,6 +19,7 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
@@ -573,10 +574,10 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3MultiModalProjector):
-            module.mm_input_projection_weight.zero_()
+            init.zeros_(module.mm_input_projection_weight)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.zero_()
+            init.zeros_(module.weight)
 
 
 def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:

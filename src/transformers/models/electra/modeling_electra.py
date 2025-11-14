@@ -532,21 +532,6 @@ class ElectraPreTrainedModel(PreTrainedModel):
         "cross_attentions": ElectraCrossAttention,
     }
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-
 
 @dataclass
 @auto_docstring(
@@ -1317,7 +1302,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
         self.generator_predictions = ElectraGeneratorPredictions(config)
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size)
 
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.generator_lm_head

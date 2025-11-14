@@ -26,6 +26,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from .... import initialization as init
 from ....activations import ACT2FN
 from ....cache_utils import Cache
 from ....modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
@@ -443,16 +444,17 @@ class OpenLlamaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             if self.config.use_stable_embedding:
-                torch.nn.init.xavier_normal_(module.weight)
+                init.xavier_normal_(module.weight)
             else:
-                module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
 
 OPEN_LLAMA_INPUTS_DOCSTRING = r"""

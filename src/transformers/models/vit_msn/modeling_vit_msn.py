@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
@@ -374,17 +375,17 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, ViTMSNEmbeddings):
-            module.cls_token.zero_()
-            module.position_embeddings.zero_()
+            init.zeros_(module.cls_token)
+            init.zeros_(module.position_embeddings)
             if module.mask_token is not None:
-                module.mask_token.zero_()
+                init.zeros_(module.mask_token)
 
 
 @auto_docstring

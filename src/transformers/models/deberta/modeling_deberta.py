@@ -20,6 +20,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -617,22 +618,12 @@ class DebertaPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, DebertaLayerNorm)):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, DisentangledSelfAttention):
-            module.q_bias.zero_()
-            module.v_bias.zero_()
+        super()._init_weights(module)
+        if isinstance(module, DisentangledSelfAttention):
+            init.zeros_(module.q_bias)
+            init.zeros_(module.v_bias)
         elif isinstance(module, (LegacyDebertaLMPredictionHead, DebertaLMPredictionHead)):
-            module.bias.zero_()
+            init.zeros_(module.bias)
 
 
 @auto_docstring

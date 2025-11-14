@@ -146,6 +146,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
+        self.post_init()
+
     def get_encoder(self):
         return self.encoder
 

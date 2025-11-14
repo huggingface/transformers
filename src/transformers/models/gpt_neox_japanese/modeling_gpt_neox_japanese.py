@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -47,26 +48,15 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
     base_model_prefix = "gpt_neox_japanese"
     _no_split_modules = ["GPTNeoXJapaneseLayer"]
     _skip_keys_device_placement = "past_key_values"
-
     _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, GPTNeoXJapaneseAttention):
+        super()._init_weights(module)
+        if isinstance(module, GPTNeoXJapaneseAttention):
             if module.dense_bias is not None:
-                module.dense_bias.zero_()
+                init.zeros_(module.dense_bias)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->GPTNeoXJapanese

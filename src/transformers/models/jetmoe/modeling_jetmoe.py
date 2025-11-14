@@ -26,6 +26,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -585,20 +586,11 @@ class JetMoePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, JetMoeRMSNorm):
-            module.weight.fill_(1.0)
-        elif isinstance(module, JetMoeParallelExperts):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+        super()._init_weights(module)
+        if isinstance(module, JetMoeParallelExperts):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, JetMoeMoA | JetMoeMoE):
-            module.bias.zero_()
+            init.zeros_(module.bias)
 
 
 @auto_docstring

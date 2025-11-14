@@ -45,6 +45,7 @@ from transformers.models.mamba2.modeling_mamba2 import (
     segment_sum,
 )
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -922,21 +923,11 @@ class FalconH1PreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Module):
-            for name, param in module.named_parameters(recurse=True):
-                if not param.requires_grad:
-                    continue
-                if "layernorm" in name.lower() and "weight" in name:
-                    # LayerNorm weights usually initialized to 1
-                    param.fill_(1.0)
-                elif "bias" in name:
-                    param.zero_()
-                else:
-                    try:
-                        param.normal_(mean=0.0, std=std)
-                    except Exception as e:
-                        print(f"Skipping init for {name} due to error: {e}")
+        super()._init_weights(module)
+        if isinstance(module, FalconH1Mixer):
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
 
 
 def compute_mup_vector(config):

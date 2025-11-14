@@ -32,6 +32,7 @@ from torch import Tensor
 
 from transformers.utils.generic import OutputRecorder
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -558,26 +559,15 @@ class Sam2PreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, Sam2LayerNorm)):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+        super()._init_weights(module)
         if isinstance(module, Sam2HieraDetModel):
             if module.pos_embed is not None:
-                module.pos_embed.zero_()
+                init.zeros_(module.pos_embed)
             if module.pos_embed_window is not None:
-                module.pos_embed_window.zero_()
+                init.zeros_(module.pos_embed_window)
         if isinstance(module, Sam2Model):
             if module.no_memory_embedding is not None:
-                module.no_memory_embedding.zero_()
+                init.zeros_(module.no_memory_embedding)
 
 
 class Sam2HieraDetModel(Sam2PreTrainedModel):

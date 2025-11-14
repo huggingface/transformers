@@ -19,6 +19,7 @@ import math
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import Wav2Vec2BaseModelOutput
@@ -149,26 +150,26 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
         """Initialize the weights"""
         if isinstance(module, Data2VecAudioFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            nn.init.uniform_(module.projection.weight, a=-k, b=k)
-            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+            init.uniform_(module.projection.weight, a=-k, b=k)
+            init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, Data2VecAudioPositionalConvLayer):
-            nn.init.constant_(module.conv.bias, 0)
+            init.constant_(module.conv.bias, 0)
         elif isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
             if module.weight is not None:
-                module.weight.fill_(1.0)
+                init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
 
     def _get_adapters(self):
         raise AttributeError("Not needed for Data2VecAudio")

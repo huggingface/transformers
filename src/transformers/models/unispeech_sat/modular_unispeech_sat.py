@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...modeling_outputs import ModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -163,34 +164,34 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         # gumbel softmax requires special init
         if isinstance(module, UniSpeechSatGumbelVectorQuantizer):
-            module.weight_proj.weight.normal_(mean=0.0, std=1)
-            module.weight_proj.bias.zero_()
-            nn.init.uniform_(module.codevectors)
+            init.normal_(module.weight_proj.weight, mean=0.0, std=1)
+            init.zeros_(module.weight_proj.bias)
+            init.uniform_(module.codevectors)
         elif isinstance(module, UniSpeechSatPositionalConvEmbedding):
-            nn.init.normal_(
+            init.normal_(
                 module.conv.weight,
                 mean=0,
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
-            nn.init.constant_(module.conv.bias, 0)
+            init.constant_(module.conv.bias, 0)
         elif isinstance(module, UniSpeechSatFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            nn.init.uniform_(module.projection.weight, a=-k, b=k)
-            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+            init.uniform_(module.projection.weight, a=-k, b=k)
+            init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """

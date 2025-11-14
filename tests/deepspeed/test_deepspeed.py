@@ -56,6 +56,7 @@ from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_dev
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
     from tests.trainer.test_trainer import (  # noqa
         RegressionModelConfig,
@@ -292,8 +293,8 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             def _init_weights(self, module):
                 super()._init_weights(module)
                 if module is self.new_head:
-                    self.new_head.weight.data.fill_(-100.0)
-                    self.new_head.bias.data.fill_(+100.0)
+                    nn.init.constant_(self.new_head.weight.data, -100.0)
+                    nn.init.constant_(self.new_head.bias.data, 100.0)
 
         ds_config = {
             "train_batch_size": 1,

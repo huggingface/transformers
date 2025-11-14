@@ -520,17 +520,6 @@ class XLMProphetNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "prophetnet"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.init_std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.init_std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id

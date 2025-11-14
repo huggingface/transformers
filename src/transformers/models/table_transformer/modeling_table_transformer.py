@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -699,16 +700,17 @@ class TableTransformerPreTrainedModel(PreTrainedModel):
         std = self.config.init_std
 
         if isinstance(module, TableTransformerLearnedPositionEmbedding):
-            nn.init.uniform_(module.row_embeddings.weight)
-            nn.init.uniform_(module.column_embeddings.weight)
+            init.uniform_(module.row_embeddings.weight)
+            init.uniform_(module.column_embeddings.weight)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
 
 class TableTransformerEncoder(TableTransformerPreTrainedModel):

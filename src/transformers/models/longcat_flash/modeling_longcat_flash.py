@@ -27,6 +27,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -561,10 +562,10 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, LongcatFlashTopkRouter):
-            module.classifier.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.classifier.weight, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, LongcatFlashExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=self.config.initializer_range)
-            module.down_proj.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring

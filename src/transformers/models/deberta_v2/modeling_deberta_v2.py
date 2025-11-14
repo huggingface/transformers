@@ -21,6 +21,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -696,19 +697,9 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, (LegacyDebertaV2LMPredictionHead, DebertaV2LMPredictionHead)):
-            module.bias.zero_()
+        super()._init_weights(module)
+        if isinstance(module, (LegacyDebertaV2LMPredictionHead, DebertaV2LMPredictionHead)):
+            init.zeros_(module.bias)
 
 
 @auto_docstring
@@ -1282,7 +1273,7 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
         drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
         self.dropout = nn.Dropout(drop_out)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.deberta.get_input_embeddings()

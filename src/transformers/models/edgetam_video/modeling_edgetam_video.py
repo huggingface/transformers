@@ -34,6 +34,7 @@ from tqdm import tqdm
 
 from transformers.utils.generic import OutputRecorder
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -780,30 +781,19 @@ class EdgeTamVideoPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, EdgeTamVideoLayerNorm)):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, EdgeTamVideoModel):
+        super()._init_weights(module)
+        if isinstance(module, EdgeTamVideoModel):
             if module.no_memory_positional_encoding is not None:
-                module.no_memory_positional_encoding.zero_()
+                init.zeros_(module.no_memory_positional_encoding)
             if module.memory_temporal_positional_encoding is not None:
-                module.memory_temporal_positional_encoding.zero_()
+                init.zeros_(module.memory_temporal_positional_encoding)
             if module.no_object_pointer is not None:
-                module.no_object_pointer.zero_()
+                init.zeros_(module.no_object_pointer)
             if module.occlusion_spatial_embedding_parameter is not None:
-                module.occlusion_spatial_embedding_parameter.zero_()
+                init.zeros_(module.occlusion_spatial_embedding_parameter)
         if isinstance(module, EdgeTamVideoMemoryFuserCXBlock):
             if module.scale is not None:
-                module.scale.zero_()
+                init.zeros_(module.scale)
 
 
 class EdgeTamVideoInferenceCache:

@@ -22,6 +22,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -818,32 +819,33 @@ class MllamaPreTrainedModel(PreTrainedModel):
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
         elif isinstance(module, MllamaTextRMSNorm):
-            module.weight.fill_(1.0)
+            init.ones_(module.weight)
         elif isinstance(module, MllamaVisionModel):
-            nn.init.normal_(module.class_embedding, std=std)
+            init.normal_(module.class_embedding, std=std)
         elif isinstance(module, MllamaPrecomputedPositionEmbedding):
-            nn.init.normal_(module.embedding, std=std)
-            nn.init.zeros_(module.gate)
+            init.normal_(module.embedding, std=std)
+            init.zeros_(module.gate)
         elif isinstance(module, MllamaVisionEncoderLayer) and module.is_gated:
-            nn.init.normal_(module.gate_attn, std=std)
-            nn.init.normal_(module.gate_ffn, std=std)
+            init.normal_(module.gate_attn, std=std)
+            init.normal_(module.gate_ffn, std=std)
         elif isinstance(module, MllamaCrossAttentionDecoderLayer):
-            module.cross_attn_attn_gate.zero_()
-            module.cross_attn_mlp_gate.zero_()
+            init.zeros_(module.cross_attn_attn_gate)
+            init.zeros_(module.cross_attn_mlp_gate)
         elif isinstance(module, MllamaPrecomputedAspectRatioEmbedding):
             if module.is_gated:
-                module.gate.zero_()
+                init.zeros_(module.gate)
 
     # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
     def _update_causal_mask(

@@ -21,6 +21,7 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, StaticCache
 from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
 from ...modeling_utils import PreTrainedModel
@@ -403,10 +404,10 @@ class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DiffLlamaAttention):
-            module.lambda_q1.normal_(0, self.config.lambda_std_dev)
-            module.lambda_k1.normal_(0, self.config.lambda_std_dev)
-            module.lambda_q2.normal_(0, self.config.lambda_std_dev)
-            module.lambda_k2.normal_(0, self.config.lambda_std_dev)
+            init.normal_(module.lambda_q1, 0, self.config.lambda_std_dev)
+            init.normal_(module.lambda_k1, 0, self.config.lambda_std_dev)
+            init.normal_(module.lambda_q2, 0, self.config.lambda_std_dev)
+            init.normal_(module.lambda_k2, 0, self.config.lambda_std_dev)
 
 
 class DiffLlamaModel(LlamaModel):

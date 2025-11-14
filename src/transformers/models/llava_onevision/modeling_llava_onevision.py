@@ -27,6 +27,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -122,12 +123,12 @@ class LlavaOnevisionPreTrainedModel(PreTrainedModel):
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, LlavaOnevisionModel):
             embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            module.image_newline.normal_(mean=0.0, std=embed_std)
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
 
 class LlavaOnevisionMultiModalProjector(nn.Module):

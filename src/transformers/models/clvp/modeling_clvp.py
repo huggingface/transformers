@@ -25,6 +25,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN, get_activation
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig, GenerationMixin
@@ -786,37 +787,37 @@ class ClvpPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=factor * 0.02)
+            init.normal_(module.weight, mean=0.0, std=factor * 0.02)
         elif isinstance(module, (nn.Linear, Conv1D, nn.Conv1d)):
-            module.weight.normal_(mean=0.0, std=factor * 0.02)
+            init.normal_(module.weight, mean=0.0, std=factor * 0.02)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, ClvpRMSNorm):
-            module.weight.fill_(1.0)
+            init.ones_(module.weight)
         elif isinstance(module, ClvpEncoderMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
+            init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
+            init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, ClvpEncoder):
             config = self.config.get_text_config()
             factor = config.initializer_factor
-            module.projection.weight.normal_(mean=0.0, std=factor * (config.hidden_size**-0.5))
+            init.normal_(module.projection.weight, mean=0.0, std=factor * (config.hidden_size**-0.5))
         elif isinstance(module, ClvpConditioningEncoder):
-            module.mel_conv.weight.normal_(mean=0.0, std=factor)
-            module.mel_conv.bias.zero_()
+            init.normal_(module.mel_conv.weight, mean=0.0, std=factor)
+            init.zeros_(module.mel_conv.bias)
         elif isinstance(module, ClvpForCausalLM):
             for name, p in module.named_parameters():
                 if name == "c_proj.weight":
-                    p.normal_(
-                        mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers))
+                    init.normal_(
+                        p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers)
                     )
         elif isinstance(module, ClvpModelForConditionalGeneration):
-            module.logit_scale.fill_(self.config.logit_scale_init_value)
+            init.constant_(module.logit_scale, self.config.logit_scale_init_value)
 
         if isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 class ClvpEncoder(ClvpPreTrainedModel):

@@ -132,15 +132,6 @@ class DeepseekVLPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_param_buffer_assignment = False
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        # Required only for Linear layer in DeepseekVLAligner
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.text_config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-
 
 @auto_docstring
 class DeepseekVLModel(DeepseekVLPreTrainedModel):

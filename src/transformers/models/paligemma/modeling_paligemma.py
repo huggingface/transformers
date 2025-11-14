@@ -219,23 +219,11 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
-
     _can_compile_fullgraph = False
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        # important: this ported version of PaliGemmaisn't meant for training from scratch - only
-        # inference and fine-tuning
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
 
 
 @auto_docstring(
