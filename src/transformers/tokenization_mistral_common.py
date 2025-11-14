@@ -29,7 +29,6 @@ from transformers.tokenization_utils_base import (
     BatchEncoding,
     EncodedInput,
     PreTokenizedInput,
-    PreTrainedTokenizerBase,
     TextInput,
     TruncationStrategy,
 )
@@ -277,6 +276,24 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         self._cache_get_vocab: Optional[dict[str, int]] = None
 
+    @staticmethod
+    def clean_up_tokenization(text: str) -> str:
+        """
+        Clean up a list of simple English tokenization artifacts like spaces before punctuation.
+        """
+        return (
+            text.replace(" .", ".")
+            .replace(" ?", "?")
+            .replace(" !", "!")
+            .replace(" ,", ",")
+            .replace(" ' ", "'")
+            .replace(" n't", "n't")
+            .replace(" 'm", "'m")
+            .replace(" 's", "'s")
+            .replace(" 've", "'ve")
+            .replace(" 're", "'re")
+        )
+
     @property
     def bos_token_id(self) -> int:
         """
@@ -469,7 +486,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         decoded_string = self.tokenizer.decode(token_ids, special_token_policy=special_token_policy)
         if clean_up_tokenization_spaces:
-            decoded_string = PreTrainedTokenizerBase.clean_up_tokenization(decoded_string)
+            decoded_string = self.clean_up_tokenization(decoded_string)
 
         return decoded_string
 
