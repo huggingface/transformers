@@ -289,19 +289,19 @@ model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", de
 只要您的模型支持使用 🤗 Accelerate 进行加载并包含 `torch.nn.Linear` 层，您可以在调用 [`~PreTrainedModel.from_pretrained`] 方法时使用 `load_in_8bit` 或 `load_in_4bit` 参数来量化模型。这也应该适用于任何模态。
 
 ```python
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
-model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_8bit=True)
-model_4bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_4bit=True)
+model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", quantization_config=BitsAndBytesConfig(load_in_8bit=True))
+model_4bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 ```
 
 默认情况下，所有其他模块（例如 `torch.nn.LayerNorm`）将被转换为 `torch.float16` 类型。但如果您想更改它们的 `dtype`，可以重载 `dtype` 参数：
 
 ```python
 >>> import torch
->>> from transformers import AutoModelForCausalLM
+>>> from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
->>> model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_8bit=True, dtype=torch.float32)
+>>> model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", quantization_config=BitsAndBytesConfig(load_in_8bit=True), dtype=torch.float32)
 >>> model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 torch.float32
 ```
@@ -344,7 +344,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model_id = "bigscience/bloom-1b7"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", load_in_4bit=True)
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 ```
 
 <Tip warning={true}>

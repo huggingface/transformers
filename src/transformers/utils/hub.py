@@ -23,7 +23,7 @@ import tempfile
 import warnings
 from concurrent import futures
 from pathlib import Path
-from typing import Optional, Union
+from typing import TypedDict
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -74,6 +74,18 @@ CHAT_TEMPLATE_DIR = "additional_chat_templates"
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
+
+class DownloadKwargs(TypedDict, total=False):
+    cache_dir: str | os.PathLike | None
+    force_download: bool
+    proxies: dict[str, str] | None
+    local_files_only: bool
+    token: str | bool | None
+    revision: str | None
+    subfolder: str
+    commit_hash: str | None
+
 
 _is_offline_mode = huggingface_hub.constants.HF_HUB_OFFLINE
 
@@ -132,9 +144,9 @@ HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/tele
 def _get_cache_file_to_return(
     path_or_repo_id: str,
     full_filename: str,
-    cache_dir: Union[str, Path, None] = None,
-    revision: Optional[str] = None,
-    repo_type: Optional[str] = None,
+    cache_dir: str | Path | None = None,
+    revision: str | None = None,
+    repo_type: str | None = None,
 ):
     # We try to see if we have a cached version (not up to date):
     resolved_file = try_to_load_from_cache(
@@ -149,9 +161,9 @@ def list_repo_templates(
     repo_id: str,
     *,
     local_files_only: bool,
-    revision: Optional[str] = None,
-    cache_dir: Optional[str] = None,
-    token: Union[bool, str, None] = None,
+    revision: str | None = None,
+    cache_dir: str | None = None,
+    token: str | bool | None = None,
 ) -> list[str]:
     """List template files from a repo.
 
@@ -221,7 +233,7 @@ def define_sagemaker_information():
     return sagemaker_object
 
 
-def http_user_agent(user_agent: Union[dict, str, None] = None) -> str:
+def http_user_agent(user_agent: dict | str | None = None) -> str:
     """
     Formats a user-agent string with basic info about a request.
     """
@@ -242,7 +254,7 @@ def http_user_agent(user_agent: Union[dict, str, None] = None) -> str:
     return ua
 
 
-def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]) -> Optional[str]:
+def extract_commit_hash(resolved_file: str | None, commit_hash: str | None) -> str | None:
     """
     Extracts the commit hash from a resolved filename toward a cache file.
     """
@@ -257,10 +269,10 @@ def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]
 
 
 def cached_file(
-    path_or_repo_id: Union[str, os.PathLike],
+    path_or_repo_id: str | os.PathLike,
     filename: str,
     **kwargs,
-) -> Optional[str]:
+) -> str | None:
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
 
@@ -317,23 +329,23 @@ def cached_file(
 
 
 def cached_files(
-    path_or_repo_id: Union[str, os.PathLike],
+    path_or_repo_id: str | os.PathLike,
     filenames: list[str],
-    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    cache_dir: str | os.PathLike | None = None,
     force_download: bool = False,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     subfolder: str = "",
-    repo_type: Optional[str] = None,
-    user_agent: Optional[Union[str, dict[str, str]]] = None,
+    repo_type: str | None = None,
+    user_agent: str | dict[str, str] | None = None,
     _raise_exceptions_for_gated_repo: bool = True,
     _raise_exceptions_for_missing_entries: bool = True,
     _raise_exceptions_for_connection_errors: bool = True,
-    _commit_hash: Optional[str] = None,
+    _commit_hash: str | None = None,
     **deprecated_kwargs,
-) -> Optional[str]:
+) -> str | None:
     """
     Tries to locate several files in a local folder and repo, downloads and cache them if necessary.
 
@@ -395,16 +407,6 @@ def cached_files(
     model_weights_file = cached_file("google-bert/bert-base-uncased", "pytorch_model.bin")
     ```
     """
-    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
@@ -512,6 +514,8 @@ def cached_files(
                 "Check cache directory permissions. Common causes: 1) another user is downloading the same model (please wait); "
                 "2) a previous download was canceled and the lock file needs manual removal."
             ) from e
+        elif isinstance(e, ValueError):
+            raise OSError(f"{e}") from e
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
@@ -607,15 +611,15 @@ def download_url(url, proxies=None):
 
 
 def has_file(
-    path_or_repo: Union[str, os.PathLike],
+    path_or_repo: str | os.PathLike,
     filename: str,
-    revision: Optional[str] = None,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
+    revision: str | None = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
     *,
     local_files_only: bool = False,
-    cache_dir: Union[str, Path, None] = None,
-    repo_type: Optional[str] = None,
+    cache_dir: str | Path | None = None,
+    repo_type: str | None = None,
     **deprecated_kwargs,
 ):
     """
@@ -630,16 +634,6 @@ def has_file(
 
     </Tip>
     """
-    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     # If path to local directory, check if the file exists
     if os.path.isdir(path_or_repo):
         return os.path.isfile(os.path.join(path_or_repo, filename))
@@ -709,10 +703,10 @@ class PushToHubMixin:
     def _create_repo(
         self,
         repo_id: str,
-        private: Optional[bool] = None,
-        token: Optional[Union[bool, str]] = None,
-        repo_url: Optional[str] = None,
-        organization: Optional[str] = None,
+        private: bool | None = None,
+        token: bool | str | None = None,
+        repo_url: str | None = None,
+        organization: str | None = None,
     ) -> str:
         """
         Create the repo if needed, cleans up repo_id with deprecated kwargs `repo_url` and `organization`, retrieves
@@ -741,7 +735,7 @@ class PushToHubMixin:
         url = create_repo(repo_id=repo_id, token=token, private=private, exist_ok=True)
         return url.repo_id
 
-    def _get_files_timestamps(self, working_dir: Union[str, os.PathLike]):
+    def _get_files_timestamps(self, working_dir: str | os.PathLike):
         """
         Returns the list of files with their last modification timestamp.
         """
@@ -749,14 +743,14 @@ class PushToHubMixin:
 
     def _upload_modified_files(
         self,
-        working_dir: Union[str, os.PathLike],
+        working_dir: str | os.PathLike,
         repo_id: str,
         files_timestamps: dict[str, float],
-        commit_message: Optional[str] = None,
-        token: Optional[Union[bool, str]] = None,
+        commit_message: str | None = None,
+        token: bool | str | None = None,
         create_pr: bool = False,
-        revision: Optional[str] = None,
-        commit_description: Optional[str] = None,
+        revision: str | None = None,
+        commit_description: str | None = None,
     ):
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
@@ -829,16 +823,16 @@ class PushToHubMixin:
     def push_to_hub(
         self,
         repo_id: str,
-        use_temp_dir: Optional[bool] = None,
-        commit_message: Optional[str] = None,
-        private: Optional[bool] = None,
-        token: Optional[Union[bool, str]] = None,
-        max_shard_size: Optional[Union[int, str]] = "5GB",
+        use_temp_dir: bool | None = None,
+        commit_message: str | None = None,
+        private: bool | None = None,
+        token: bool | str | None = None,
+        max_shard_size: int | str | None = "5GB",
         create_pr: bool = False,
         safe_serialization: bool = True,
-        revision: Optional[str] = None,
-        commit_description: Optional[str] = None,
-        tags: Optional[list[str]] = None,
+        revision: str | None = None,
+        commit_description: str | None = None,
+        tags: list[str] | None = None,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -889,22 +883,7 @@ class PushToHubMixin:
         {object}.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
-        use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
         ignore_metadata_errors = deprecated_kwargs.pop("ignore_metadata_errors", False)
-        save_jinja_files = deprecated_kwargs.pop(
-            "save_jinja_files", None
-        )  # TODO: This is only used for testing and should be removed once save_jinja_files becomes the default
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
         repo_path_or_name = deprecated_kwargs.pop("repo_path_or_name", None)
         if repo_path_or_name is not None:
             # Should use `repo_id` instead of `repo_path_or_name`. When using `repo_path_or_name`, we try to infer
@@ -950,15 +929,11 @@ class PushToHubMixin:
             files_timestamps = self._get_files_timestamps(work_dir)
 
             # Save all files.
-            if save_jinja_files:
-                self.save_pretrained(
-                    work_dir,
-                    max_shard_size=max_shard_size,
-                    safe_serialization=safe_serialization,
-                    save_jinja_files=True,
-                )
-            else:
-                self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
+            self.save_pretrained(
+                work_dir,
+                max_shard_size=max_shard_size,
+                safe_serialization=safe_serialization,
+            )
 
             # Update model card if needed:
             model_card.save(os.path.join(work_dir, "README.md"))
@@ -975,7 +950,7 @@ class PushToHubMixin:
             )
 
 
-def convert_file_size_to_int(size: Union[int, str]):
+def convert_file_size_to_int(size: int | str):
     """
     Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
 
@@ -1032,17 +1007,6 @@ def get_checkpoint_shard_files(
     For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
     index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
     """
-
-    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     if not os.path.isfile(index_filename):
         raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
 
@@ -1080,8 +1044,8 @@ def get_checkpoint_shard_files(
 
 def create_and_tag_model_card(
     repo_id: str,
-    tags: Optional[list[str]] = None,
-    token: Optional[str] = None,
+    tags: list[str] | None = None,
+    token: str | None = None,
     ignore_metadata_errors: bool = False,
 ):
     """
@@ -1123,7 +1087,7 @@ class PushInProgress:
     Internal class to keep track of a push in progress (which might contain multiple `Future` jobs).
     """
 
-    def __init__(self, jobs: Optional[futures.Future] = None) -> None:
+    def __init__(self, jobs: futures.Future | None = None) -> None:
         self.jobs = [] if jobs is None else jobs
 
     def is_done(self):

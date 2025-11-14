@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from .arcee import *
     from .aria import *
     from .audio_spectrogram_transformer import *
+    from .audioflamingo3 import *
     from .auto import *
     from .autoformer import *
     from .aya_vision import *
@@ -76,6 +77,7 @@ if TYPE_CHECKING:
     from .csm import *
     from .ctrl import *
     from .cvt import *
+    from .cwm import *
     from .d_fine import *
     from .dab_detr import *
     from .dac import *
@@ -351,6 +353,7 @@ if TYPE_CHECKING:
     from .univnet import *
     from .upernet import *
     from .vaultgemma import *
+    from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
     from .vilt import *

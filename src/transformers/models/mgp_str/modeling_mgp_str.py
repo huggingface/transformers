@@ -176,7 +176,7 @@ class MgpstrAttention(nn.Module):
             .reshape(batch_size, num, 3, self.num_heads, channel // self.num_heads)
             .permute(2, 0, 3, 1, 4)
         )
-        query, key, value = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
+        query, key, value = qkv[0], qkv[1], qkv[2]
 
         attention_probs = (query @ key.transpose(-2, -1)) * self.scale
         attention_probs = attention_probs.softmax(dim=-1)
@@ -284,6 +284,7 @@ class MgpstrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mgp_str"
     _no_split_modules = []
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         std = self.config.initializer_range
@@ -291,12 +292,12 @@ class MgpstrPreTrainedModel(PreTrainedModel):
             nn.init.trunc_normal_(module.pos_embed, mean=0.0, std=std)
             nn.init.trunc_normal_(module.cls_token, mean=0.0, std=std)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.trunc_normal_(module.weight.data, mean=0.0, std=std)
+            nn.init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 @auto_docstring

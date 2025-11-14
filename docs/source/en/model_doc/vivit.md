@@ -52,11 +52,13 @@ For the best speedups, we recommend loading the model in half-precision (e.g. `t
 On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` and `google/vivit-b-16x2-kinetics400` model, we saw the following speedups during inference.
 
 ### Training
+
 |   num_training_steps |   batch_size |   is cuda |   Speedup (%) |   Eager peak mem (MB) |   sdpa peak mem (MB) |   Mem saving (%) |
 |---------------------:|-------------:|----------:|--------------:|----------------------:|---------------------:|-----------------:|
 |                  100 |            1 |      True |         7.122 |               2575.28 |              5932.54 |           130.364 |
 
 ### Inference
+
 |   num_batches |   batch_size |   is cuda |   is half |   Speedup (%) |   Mem eager (MB) |   Mem BT (MB) |   Mem saved (%) |
 |---------------|--------------|-----------|-----------|---------------|------------------|---------------|-----------------|
 |            20 |             1 |   True    |   False   |      15.422   |     715.807      |    317.079    |      125.75     |

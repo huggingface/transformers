@@ -12,8 +12,6 @@ SHELL ["sh", "-lc"]
 ARG PYTORCH='2.8.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
-# Disable kernel mapping for quantization tests
-ENV DISABLE_KERNEL_MAPPING=1
 
 RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
@@ -26,7 +24,7 @@ RUN [ ${#PYTORCH} -gt 0 ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; 
 RUN echo torch=$VERSION
 # `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
 # Currently, let's just use their latest releases (when `torch` is installed with a release version)
-RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/$CUDA
+RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
@@ -52,7 +50,7 @@ RUN python3 -m pip install --no-cache-dir hqq
 RUN python3 -m pip install --no-cache-dir gguf
 
 # Add autoawq for quantization testing
-RUN python3 -m pip install --no-cache-dir autoawq[kernels]
+RUN python3 -m pip install --no-cache-dir --no-build-isolation autoawq[kernels]
 
 # Add quanto for quantization testing
 RUN python3 -m pip install --no-cache-dir optimum-quanto
@@ -83,7 +81,7 @@ RUN python3 -m pip uninstall -y flash-attn
 RUN cd transformers && python3 setup.py develop
 
 # Add fp-quant for quantization testing
-RUN python3 -m pip install --no-cache-dir "fp-quant>=0.2.0"
+RUN python3 -m pip install --no-cache-dir "fp-quant>=0.3.2"
 
 # Low usage or incompatible lib, will enable later on
 

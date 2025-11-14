@@ -167,9 +167,7 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SmolVLMModel,) if is_torch_available() else ()
-    fx_compatible = False
-    test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = True
 
     def setUp(self):
@@ -331,10 +329,8 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     all_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": SmolVLMForConditionalGeneration} if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = SmolVLMVisionText2TextModelTester(self)

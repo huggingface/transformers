@@ -53,6 +53,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("aria", "AriaModel"),
         ("aria_text", "AriaTextModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
+        ("audioflamingo3", "AudioFlamingo3ForConditionalGeneration"),
+        ("audioflamingo3_encoder", "AudioFlamingo3Encoder"),
         ("autoformer", "AutoformerModel"),
         ("aya_vision", "AyaVisionModel"),
         ("bamba", "BambaModel"),
@@ -99,6 +101,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("csm", "CsmForConditionalGeneration"),
         ("ctrl", "CTRLModel"),
         ("cvt", "CvtModel"),
+        ("cwm", "CwmModel"),
         ("d_fine", "DFineModel"),
         ("dab-detr", "DabDetrModel"),
         ("dac", "DacModel"),
@@ -306,7 +309,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("pegasus", "PegasusModel"),
         ("pegasus_x", "PegasusXModel"),
         ("perceiver", "PerceiverModel"),
-        ("perception_encoder", "PerceptionEncoder"),
         ("perception_lm", "PerceptionLMModel"),
         ("persimmon", "PersimmonModel"),
         ("phi", "PhiModel"),
@@ -401,6 +403,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("univnet", "UnivNetModel"),
         ("van", "VanModel"),
         ("vaultgemma", "VaultGemmaModel"),
+        ("video_llama_3", "VideoLlama3Model"),
+        ("video_llama_3_vision", "VideoLlama3VisionModel"),
         ("video_llava", "VideoLlavaModel"),
         ("videomae", "VideoMAEModel"),
         ("vilt", "ViltModel"),
@@ -443,6 +447,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
         ("albert", "AlbertForPreTraining"),
+        ("audioflamingo3", "AudioFlamingo3ForConditionalGeneration"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForPreTraining"),
         ("big_bird", "BigBirdForPreTraining"),
@@ -648,6 +653,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("cohere2", "Cohere2ForCausalLM"),
         ("cpmant", "CpmAntForCausalLM"),
         ("ctrl", "CTRLLMHeadModel"),
+        ("cwm", "CwmForCausalLM"),
         ("data2vec-text", "Data2VecTextForCausalLM"),
         ("dbrx", "DbrxForCausalLM"),
         ("deepseek_v2", "DeepseekV2ForCausalLM"),
@@ -1057,6 +1063,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("shieldgemma2", "Gemma3ForConditionalGeneration"),
         ("smolvlm", "SmolVLMForConditionalGeneration"),
         ("udop", "UdopForConditionalGeneration"),
+        ("video_llama_3", "VideoLlama3ForConditionalGeneration"),
         ("vipllava", "VipLlavaForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
     ]
@@ -1155,6 +1162,7 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("audioflamingo3", "AudioFlamingo3ForConditionalGeneration"),
         ("bart", "BartForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("blenderbot", "BlenderbotForConditionalGeneration"),
@@ -1695,6 +1703,8 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("dinat", "DinatBackbone"),
         ("dinov2", "Dinov2Backbone"),
         ("dinov2_with_registers", "Dinov2WithRegistersBackbone"),
+        ("dinov3_convnext", "DINOv3ConvNextBackbone"),
+        ("dinov3_vit", "DINOv3ViTBackbone"),
         ("focalnet", "FocalNetBackbone"),
         ("hgnet_v2", "HGNetV2Backbone"),
         ("hiera", "HieraBackbone"),

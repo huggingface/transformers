@@ -14,7 +14,10 @@
 # limitations under the License.
 """Bamba model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
@@ -102,7 +105,10 @@ class BambaConfig(PreTrainedConfig):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
         z_loss_coefficient (`float`, *optional*, defaults to 0.0):
             Coefficient for auxiliary z-loss used to control logit growth during training
-
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
     """
 
     model_type = "bamba"
@@ -110,34 +116,35 @@ class BambaConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128000,
-        tie_word_embeddings=False,
-        hidden_size=4096,
-        intermediate_size=14336,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        num_logits_to_keep=1,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        max_position_embeddings=262144,
-        attention_dropout=0.0,
-        attn_layer_indices=None,
-        mamba_n_heads=128,
-        mamba_d_head="auto",
-        mamba_n_groups=1,
-        mamba_d_state=256,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=256,
-        mamba_conv_bias=True,
-        mamba_proj_bias=False,
-        z_loss_coefficient=0.0,
+        vocab_size: Optional[int] = 128000,
+        tie_word_embeddings: Optional[bool] = False,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 14336,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 8,
+        hidden_act: Optional[str] = "silu",
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[float] = 1e-5,
+        use_cache: Optional[bool] = True,
+        num_logits_to_keep: Optional[int] = 1,
+        pad_token_id: Optional[int] = 0,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        max_position_embeddings: Optional[int] = 262144,
+        attention_dropout: Optional[float] = 0.0,
+        attn_layer_indices: Optional[list[int]] = None,
+        mamba_n_heads: Optional[int] = 128,
+        mamba_d_head: Optional[str] = "auto",
+        mamba_n_groups: Optional[int] = 1,
+        mamba_d_state: Optional[int] = 256,
+        mamba_d_conv: Optional[int] = 4,
+        mamba_expand: Optional[int] = 2,
+        mamba_chunk_size: Optional[int] = 256,
+        mamba_conv_bias: Optional[bool] = True,
+        mamba_proj_bias: Optional[bool] = False,
+        z_loss_coefficient: Optional[float] = 0.0,
+        rope_parameters: Optional[RopeParameters] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -164,9 +171,15 @@ class BambaConfig(PreTrainedConfig):
         self.num_logits_to_keep = num_logits_to_keep
 
         self.attn_layer_indices = attn_layer_indices
-        self.rope_theta = 10000.0
-        self.rope_scaling = None
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         self.partial_rotary_factor = 0.5
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         mamba_intermediate = mamba_expand * hidden_size
 

@@ -591,42 +591,50 @@ class SegGptPreTrainedModel(PreTrainedModel):
     config: SegGptConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SegGptEmbeddings", "SegGptLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(module.weight.data.to(torch.float32), mean=0.0, std=std).to(
-                module.weight.dtype
+            module.weight.copy_(
+                nn.init.trunc_normal_(module.weight.to(torch.float32), mean=0.0, std=std).to(module.weight.dtype)
             )
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, (nn.LayerNorm, SegGptLayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, SegGptAttention):
-            module.rel_pos_h.data = nn.init.trunc_normal_(
-                module.rel_pos_h.data.to(torch.float32),
-                mean=0.0,
-                std=std,
-            ).to(module.rel_pos_h.dtype)
+            module.rel_pos_h.copy_(
+                nn.init.trunc_normal_(
+                    module.rel_pos_h.to(torch.float32),
+                    mean=0.0,
+                    std=std,
+                ).to(module.rel_pos_h.dtype)
+            )
 
-            module.rel_pos_w.data = nn.init.trunc_normal_(
-                module.rel_pos_w.data.to(torch.float32),
-                mean=0.0,
-                std=std,
-            ).to(module.rel_pos_w.dtype)
+            module.rel_pos_w.copy_(
+                nn.init.trunc_normal_(
+                    module.rel_pos_w.to(torch.float32),
+                    mean=0.0,
+                    std=std,
+                ).to(module.rel_pos_w.dtype)
+            )
 
         elif isinstance(module, SegGptEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=std,
-            ).to(module.position_embeddings.dtype)
+            module.position_embeddings.copy_(
+                nn.init.trunc_normal_(
+                    module.position_embeddings.to(torch.float32),
+                    mean=0.0,
+                    std=std,
+                ).to(module.position_embeddings.dtype)
+            )
 
             torch.nn.init.normal_(module.mask_token, std=std)
             torch.nn.init.normal_(module.segment_token_input, std=std)
@@ -649,14 +657,6 @@ class SegGptModel(SegGptPreTrainedModel):
 
     def get_input_embeddings(self) -> SegGptPatchEmbeddings:
         return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(

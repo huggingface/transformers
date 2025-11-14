@@ -15,8 +15,9 @@
 """PyTorch PatchTSMixer model."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -681,8 +682,10 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
     config: PatchTSMixerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
+    input_modalities = "time"
     supports_gradient_checkpointing = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize weights"""
         if isinstance(module, PatchTSMixerPositionalEncoding):
@@ -690,15 +693,15 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
             if self.config.positional_encoding_type == "random":
                 nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, PatchTSMixerBatchNorm):
-            module.batchnorm.bias.data.zero_()
-            module.batchnorm.weight.data.fill_(1.0)
+            module.batchnorm.bias.zero_()
+            module.batchnorm.weight.fill_(1.0)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
 
 
 class PatchTSMixerPretrainHead(nn.Module):

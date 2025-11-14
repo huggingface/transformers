@@ -25,7 +25,6 @@ from ....activations import ACT2FN
 from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ....modeling_utils import PreTrainedModel
-from ....pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ....utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -307,25 +306,6 @@ class ViTHybridAttention(nn.Module):
         super().__init__()
         self.attention = ViTHybridSelfAttention(config)
         self.output = ViTHybridSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -477,31 +457,38 @@ class ViTHybridPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["ViTHybridEmbeddings", "ViTHybridLayer"]
     _supports_sdpa = True
 
+    @torch.no_grad()
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-            ).to(module.weight.dtype)
+            module.weight.copy_(
+                nn.init.trunc_normal_(module.weight.to(torch.float32), mean=0.0, std=self.config.initializer_range).to(
+                    module.weight.dtype
+                )
+            )
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, ViTHybridEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
-            module.mask_token.data.zero_()
+            module.position_embeddings.copy_(
+                nn.init.trunc_normal_(
+                    module.position_embeddings.to(torch.float32),
+                    mean=0.0,
+                    std=self.config.initializer_range,
+                ).to(module.position_embeddings.dtype)
+            )
+            module.cls_token.copy_(
+                nn.init.trunc_normal_(
+                    module.cls_token.to(torch.float32),
+                    mean=0.0,
+                    std=self.config.initializer_range,
+                ).to(module.cls_token.dtype)
+            )
+            module.mask_token.zero_()
 
 
 VIT_START_DOCSTRING = r"""

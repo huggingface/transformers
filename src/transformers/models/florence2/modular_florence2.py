@@ -14,8 +14,9 @@
 # limitations under the License.
 import math
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch.nn as nn
@@ -159,7 +160,7 @@ class Florence2Config(PreTrainedConfig):
     Florence-2 model according to the specified arguments, defining the model architecture.
 
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Florence-2
-    [microsoft/Florence-2-base](https://huggingface.co/microsoft/Florence-2-base) architecture.
+    [florence-community/Florence-2-base](https://huggingface.co/florence-community/Florence-2-base) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -254,10 +255,6 @@ class Florence2Processor(ProcessorMixin):
             Task-specific parsing rules for [`Florence2PostProcessor`], e.g. regex patterns,
             thresholds, or banned tokens.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = ("BartTokenizer", "BartTokenizerFast")
 
     def __init__(
         self,
@@ -1369,6 +1366,7 @@ class Florence2VisionBlock(nn.Module):
 class Florence2VisionPreTrainedModel(PreTrainedModel):
     config_class = Florence2VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -1498,6 +1496,7 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
 @auto_docstring
 class Florence2PreTrainedModel(LlavaPreTrainedModel):
     config_class = Florence2Config
+    base_model_prefix = "model"
 
     _supports_attention_backend = False
 
@@ -1509,10 +1508,6 @@ class Florence2PreTrainedModel(LlavaPreTrainedModel):
 )
 class Florence2Model(LlavaModel):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = [
-        "language_model.encoder.embed_tokens.weight",
-        "language_model.decoder.embed_tokens.weight",
-    ]
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
@@ -1625,11 +1620,9 @@ class Florence2Model(LlavaModel):
 )
 class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = [
-        "model.language_model.encoder.embed_tokens.weight",
-        "model.language_model.decoder.embed_tokens.weight",
-        "lm_head.weight",
-    ]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.language_model.shared.weight",
+    }
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -1672,8 +1665,8 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         >>> import requests
         >>> from transformers import AutoProcessor, Florence2ForConditionalGeneration
 
-        >>> model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-large")
-        >>> processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large")
+        >>> model = Florence2ForConditionalGeneration.from_pretrained("florence-community/Florence-2-large")
+        >>> processor = AutoProcessor.from_pretrained("florence-community/Florence-2-large")
 
         >>> prompt = "<CAPTION>"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg"

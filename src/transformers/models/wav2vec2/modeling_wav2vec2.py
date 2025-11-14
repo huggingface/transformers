@@ -16,8 +16,9 @@
 
 import math
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -28,10 +29,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_attn_mask_utils import (
-    _prepare_4d_attention_mask,
-    _prepare_4d_attention_mask_for_sdpa,
-)
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -52,7 +50,6 @@ from ...utils import (
     cached_file,
     check_torch_load_is_safe,
     is_peft_available,
-    is_torch_flex_attn_available,
     logging,
 )
 from .configuration_wav2vec2 import Wav2Vec2Config
@@ -60,9 +57,6 @@ from .configuration_wav2vec2 import Wav2Vec2Config
 
 WAV2VEC2_ADAPTER_PT_FILE = "adapter.{}.bin"
 WAV2VEC2_ADAPTER_SAFE_FILE = "adapter.{}.safetensors"
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -429,17 +423,6 @@ class Wav2Vec2FeatureEncoder(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2FeatureExtractor(Wav2Vec2FeatureEncoder):
-    def __init__(self, config):
-        super().__init__(config)
-        warnings.warn(
-            f"The class `{self.__class__.__name__}` has been depreciated "
-            "and will be removed in Transformers v5. "
-            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
-            FutureWarning,
-        )
-
-
 class Wav2Vec2FeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -703,9 +686,10 @@ class Wav2Vec2Encoder(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
 
-        attention_mask = self._update_full_mask(
-            attention_mask,
-            hidden_states,
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
         )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
@@ -747,27 +731,6 @@ class Wav2Vec2Encoder(nn.Module):
             attentions=all_self_attentions,
         )
 
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
-
 
 class Wav2Vec2EncoderStableLayerNorm(nn.Module):
     def __init__(self, config):
@@ -797,9 +760,10 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
 
-        attention_mask = self._update_full_mask(
-            attention_mask,
-            hidden_states,
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
         )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
@@ -842,27 +806,6 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
 
 
 class Wav2Vec2GumbelVectorQuantizer(nn.Module):
@@ -1020,11 +963,13 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
     config: Wav2Vec2Config
     base_model_prefix = "wav2vec2"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         # Wav2Vec2ForPreTraining last 2 linear layers need standard Linear init.
@@ -1035,8 +980,8 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             module.project_q._is_hf_initialized = True
         # gumbel softmax requires special init
         elif isinstance(module, Wav2Vec2GumbelVectorQuantizer):
-            module.weight_proj.weight.data.normal_(mean=0.0, std=1)
-            module.weight_proj.bias.data.zero_()
+            module.weight_proj.weight.normal_(mean=0.0, std=1)
+            module.weight_proj.bias.zero_()
             nn.init.uniform_(module.codevectors)
         elif isinstance(module, Wav2Vec2PositionalConvEmbedding):
             nn.init.normal_(
@@ -1050,13 +995,13 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
 
@@ -1208,21 +1153,8 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
         token = kwargs.pop("token", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         use_safetensors = kwargs.pop("use_safetensors", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
         model_path_or_id = self.config._name_or_path
         state_dict = None
 
@@ -1346,18 +1278,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1496,18 +1416,6 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         """
         self.quantizer.temperature = temperature
 
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1520,7 +1428,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         target_features: torch.FloatTensor,
         negative_features: torch.FloatTensor,
         predicted_features: torch.FloatTensor,
-        temperature: int = 0.1,
+        temperature: float = 0.1,
     ):
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between
@@ -1777,7 +1685,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def tie_weights(self):
+    def tie_weights(self, missing_keys=None):
         """
         This method overwrites [`~PreTrainedModel.tie_weights`] so that adapter weights can be correctly loaded when
         passing `target_lang=...` to `from_pretrained(...)`.
@@ -1797,18 +1705,6 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             logger.info("By default `target_lang` is set to 'eng'.")
         elif target_lang is not None:
             self.load_adapter(target_lang, force_load=True)
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1921,18 +1817,6 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -2035,18 +1919,6 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         self.num_labels = config.num_labels
 
         self.init_weights()
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -2203,18 +2075,6 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         self.objective = AMSoftmaxLoss(config.xvector_output_dim, config.num_labels)
 
         self.init_weights()
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """

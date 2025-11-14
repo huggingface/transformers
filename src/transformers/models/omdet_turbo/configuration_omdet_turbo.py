@@ -17,7 +17,7 @@
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -145,6 +145,7 @@ class OmDetTurboConfig(PreTrainedConfig):
     ```"""
 
     model_type = "omdet-turbo"
+    sub_configs = {"backbone_config": AutoConfig, "text_config": AutoConfig}
     attribute_map = {
         "encoder_hidden_dim": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -288,17 +289,6 @@ class OmDetTurboConfig(PreTrainedConfig):
         self.is_encoder_decoder = is_encoder_decoder
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-
-    @property
-    def sub_configs(self):
-        sub_configs = {}
-        backbone_config = getattr(self, "backbone_config", None)
-        text_config = getattr(self, "text_config", None)
-        if isinstance(backbone_config, PreTrainedConfig):
-            sub_configs["backbone_config"] = type(backbone_config)
-        if isinstance(text_config, PreTrainedConfig):
-            sub_configs["text_config"] = type(text_config)
-        return sub_configs
 
 
 __all__ = ["OmDetTurboConfig"]

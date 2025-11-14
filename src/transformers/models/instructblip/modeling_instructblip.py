@@ -15,8 +15,9 @@
 """PyTorch InstructBLIP model."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 from torch import nn
@@ -33,7 +34,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..auto import AutoModel, AutoModelForCausalLM, AutoModelForSeq2SeqLM
@@ -307,6 +308,7 @@ class InstructBlipEncoderLayer(GradientCheckpointingLayer):
 class InstructBlipPreTrainedModel(PreTrainedModel):
     config: InstructBlipConfig
     base_model_prefix = "blip"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
@@ -322,24 +324,25 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
         "InstructBlipQFormerSelfOutput",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_range
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=factor)
+            module.weight.normal_(mean=0.0, std=factor)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor)
+            module.weight.normal_(mean=0.0, std=factor)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, InstructBlipVisionEmbeddings):
             nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
         elif isinstance(module, (InstructBlipForConditionalGeneration, InstructBlipModel)):
-            module.query_tokens.data.zero_()
+            module.query_tokens.zero_()
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->InstructBlip
@@ -378,6 +381,7 @@ class InstructBlipEncoder(nn.Module):
 # Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->InstructBlip, BLIP->INSTRUCTBLIP
 class InstructBlipVisionModel(InstructBlipPreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
     config: InstructBlipVisionConfig
     _can_record_outputs = {
         "hidden_states": InstructBlipEncoderLayer,
@@ -546,25 +550,6 @@ class InstructBlipQFormerAttention(nn.Module):
         super().__init__()
         self.attention = InstructBlipQFormerMultiHeadAttention(config, is_cross_attention)
         self.output = InstructBlipQFormerSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -825,14 +810,6 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     def get_extended_attention_mask(
         self,
         attention_mask: torch.Tensor,
@@ -984,11 +961,6 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
 
     def _preprocess_accelerate(self):
         r"""
@@ -1183,12 +1155,6 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
     def get_decoder(self):
         return self.language_model.get_decoder()
-
-    # Copied from transformers.models.instructblip.modeling_instructblip.InstructBlipModel._tie_weights
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
 
     # Copied from transformers.models.instructblip.modeling_instructblip.InstructBlipModel._preprocess_accelerate
     def _preprocess_accelerate(self):

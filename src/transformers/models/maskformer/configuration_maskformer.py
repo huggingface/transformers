@@ -19,7 +19,7 @@ from typing import Optional
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..detr import DetrConfig
 from ..swin import SwinConfig
 
@@ -103,6 +103,7 @@ class MaskFormerConfig(PreTrainedConfig):
     """
 
     model_type = "maskformer"
+    sub_configs = {"backbone_config": AutoConfig, "decoder_config": AutoConfig}
     attribute_map = {"hidden_size": "mask_feature_size"}
     backbones_supported = ["resnet", "swin"]
     decoders_supported = ["detr"]
@@ -199,37 +200,6 @@ class MaskFormerConfig(PreTrainedConfig):
         self.use_timm_backbone = use_timm_backbone
         self.backbone_kwargs = backbone_kwargs
         super().__init__(**kwargs)
-
-    @property
-    def sub_configs(self):
-        sub_configs = {}
-        if self.backbone_config is not None and self.backbone_config != {}:
-            sub_configs["backbone_config"] = type(self.backbone_config)
-        if self.decoder_config is not None and self.decoder_config != {}:
-            sub_configs["decoder_config"] = type(self.decoder_config)
-        return sub_configs
-
-    @classmethod
-    def from_backbone_and_decoder_configs(
-        cls, backbone_config: PreTrainedConfig, decoder_config: PreTrainedConfig, **kwargs
-    ):
-        """Instantiate a [`MaskFormerConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
-        configuration.
-
-            Args:
-                backbone_config ([`PreTrainedConfig`]):
-                    The backbone configuration.
-                decoder_config ([`PreTrainedConfig`]):
-                    The transformer decoder configuration to use.
-
-            Returns:
-                [`MaskFormerConfig`]: An instance of a configuration object
-        """
-        return cls(
-            backbone_config=backbone_config,
-            decoder_config=decoder_config,
-            **kwargs,
-        )
 
 
 __all__ = ["MaskFormerConfig"]

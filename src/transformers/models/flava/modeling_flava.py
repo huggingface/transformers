@@ -27,7 +27,6 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, filter_out_non_signature_kwargs, logging, torch_int
 from .configuration_flava import (
     FlavaConfig,
@@ -511,25 +510,6 @@ class FlavaAttention(nn.Module):
         super().__init__()
         self.attention = FlavaSelfAttention(config)
         self.output = FlavaSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -682,33 +662,35 @@ class FlavaPooler(nn.Module):
 class FlavaPreTrainedModel(PreTrainedModel):
     config: FlavaConfig
     base_model_prefix = "flava"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, FlavaMaskedPredictionHead):
-            module.bias.data.zero_()
+            module.bias.zero_()
         elif isinstance(module, FlavaImageEmbeddings):
-            module.cls_token.data.zero_()
-            module.position_embeddings.data.zero_()
+            module.cls_token.zero_()
+            module.position_embeddings.zero_()
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                module.mask_token.zero_()
         elif isinstance(module, FlavaMultimodalModel):
             if module.use_cls_token:
-                module.cls_token.data.zero_()
+                module.cls_token.zero_()
         elif isinstance(module, FlavaModel):
-            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
+            module.logit_scale.fill_(self.config.logit_scale_init_value)
 
 
 @auto_docstring
@@ -717,6 +699,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
     # This override allows us to load FlavaImageModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.image_model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: FlavaImageConfig, add_pooling_layer: bool = True):
         r"""
@@ -740,14 +723,6 @@ class FlavaImageModel(FlavaPreTrainedModel):
 
     def set_input_embeddings(self, value: nn.Module):
         self.embeddings.patch_embeddings = value
-
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(
@@ -804,6 +779,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
     config: FlavaTextConfig
     # This override allows us to load FlavaTextModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.text_model"
+    input_modalities = "text"
 
     def __init__(self, config: FlavaTextConfig, add_pooling_layer: bool = True):
         r"""
@@ -826,14 +802,6 @@ class FlavaTextModel(FlavaPreTrainedModel):
 
     def set_input_embeddings(self, value: nn.Module):
         self.embeddings.word_embeddings = value
-
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(
@@ -928,14 +896,6 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         self.pooler = FlavaPooler(config) if add_pooling_layer else None
 
         self.post_init()
-
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(
@@ -1350,6 +1310,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
     base_model_prefix = ""
     config: FlavaImageCodebookConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = False
 
     def __init__(
@@ -1485,16 +1446,10 @@ class FlavaMaskedPredictionHead(nn.Module):
         super().__init__()
         self.config = config
         self.transform = FlavaPredictionHeadTransform(config)
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
         if weight is not None:
             self.decoder.weight = weight
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
 
     def forward(self, x):
         x = self.transform(x)
@@ -1562,12 +1517,12 @@ class FlavaGlobalContrastiveHead(nn.Module):
 )
 class FlavaForPreTraining(FlavaPreTrainedModel):
     # Those are linked to xxx.bias
-    _tied_weights_keys = [
-        "mmm_text_head.decoder.bias",
-        "mmm_image_head.decoder.bias",
-        "mlm_head.decoder.bias",
-        "mim_head.decoder.bias",
-    ]
+    _tied_weights_keys = {
+        "mmm_text_head.bias": "mmm_text_head.decoder.bias",
+        "mim_head.bias": "mim_head.decoder.bias",
+        "mlm_head.bias": "mlm_head.decoder.bias",
+        "mmm_image_head.bias": "mmm_image_head.decoder.bias",
+    }
 
     def __init__(self, config: FlavaConfig, image_codebook: Optional[nn.Module] = None):
         r"""

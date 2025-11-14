@@ -16,7 +16,6 @@
 
 import collections.abc
 import math
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -35,7 +34,7 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import compile_compatible_method_lru_cache, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, logging, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_beit import BeitConfig
@@ -163,14 +162,7 @@ class BeitEmbeddings(nn.Module):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
     ) -> torch.Tensor:
-        if self.position_embeddings is not None and interpolate_pos_encoding is not None:
-            warnings.warn(
-                "`interpolate_pos_encoding` argument has no effect for BEiTEmbeddings, embeddings are always "
-                "interpolated to the input image size. The argument will be removed in transformers v4.51.0."
-            )
-
         _, _, height, width = pixel_values.shape
         embeddings, (patch_height, patch_width) = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
@@ -325,19 +317,9 @@ class BeitSdpaSelfAttention(BeitSelfAttention):
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         if output_attentions:
             logger.warning_once(
-                "`BeitSdpaSelfAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not "
-                "support `output_attentions=True`. Falling back to the manual attention implementation, "
-                "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
-                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
+                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
             )
-            return super().forward(
-                hidden_states=hidden_states,
-                output_attentions=output_attentions,
-                relative_position_bias=relative_position_bias,
-                interpolate_pos_encoding=interpolate_pos_encoding,
-                resolution=resolution,
-            )
-
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
             self.query(hidden_states)
@@ -415,25 +397,6 @@ class BeitAttention(nn.Module):
         super().__init__()
         self.attention = BEIT_SELF_ATTENTION_CLASSES[config._attn_implementation](config, window_size=window_size)
         self.output = BeitSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -704,37 +667,39 @@ class BeitEncoder(nn.Module):
 class BeitPreTrainedModel(PreTrainedModel):
     config: BeitConfig
     base_model_prefix = "beit"
+    input_modalities = "image"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BeitLayer"]
     _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
     _supports_sdpa = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, BeitEmbeddings):
-            module.cls_token.data.zero_()
+            module.cls_token.zero_()
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                module.mask_token.zero_()
             if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
+                module.position_embeddings.zero_()
         elif isinstance(module, BeitRelativePositionBias):
-            module.relative_position_bias_table.data.zero_()
+            module.relative_position_bias_table.zero_()
         elif isinstance(module, BeitLayer):
             if module.lambda_1 is not None:
-                module.lambda_1.data.fill_(self.config.layer_scale_init_value)
-                module.lambda_2.data.fill_(self.config.layer_scale_init_value)
+                module.lambda_1.fill_(self.config.layer_scale_init_value)
+                module.lambda_2.fill_(self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -760,14 +725,6 @@ class BeitModel(BeitPreTrainedModel):
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(

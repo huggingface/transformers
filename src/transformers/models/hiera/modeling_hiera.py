@@ -773,8 +773,10 @@ class HieraPreTrainedModel(PreTrainedModel):
     config: HieraConfig
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
         std = self.config.initializer_range
@@ -835,14 +837,6 @@ class HieraModel(HieraPreTrainedModel):
 
     def get_input_embeddings(self) -> HieraPatchEmbeddings:
         return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(
@@ -1048,7 +1042,6 @@ class HieraMultiScaleHead(nn.Module):
         if isinstance(head, nn.Identity):
             return hidden_states
 
-        # Doing explicit to avoid problems with torch.fx
         batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size = hidden_states.shape
         # From: [batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size]
         # To: head([batch_size * num_mask_units, hidden_size, mask_unit_height, mask_unit_width])

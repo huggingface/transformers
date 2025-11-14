@@ -14,8 +14,9 @@
 # limitations under the License.
 """PyTorch Idefics2 model."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -30,7 +31,6 @@ from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
@@ -407,6 +407,7 @@ class Idefics2Encoder(nn.Module):
 class Idefics2PreTrainedModel(PreTrainedModel):
     config: Idefics2Config
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -416,28 +417,29 @@ class Idefics2PreTrainedModel(PreTrainedModel):
 
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         elif isinstance(module, Idefics2RMSNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.MultiheadAttention):
             module._reset_parameters()  # native torch init
         elif isinstance(module, Idefics2MultiheadAttentionPoolingHead):
-            module.probe.data.normal_()
+            module.probe.normal_()
         elif isinstance(module, Idefics2PerceiverResampler):
-            module.latents.data.fill_(1.0)
+            module.latents.fill_(1.0)
 
 
 @auto_docstring(
@@ -447,6 +449,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
 )
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
     config: Idefics2VisionConfig
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -572,7 +575,6 @@ class Idefics2PerceiverAttention(nn.Module):
 
         self.is_causal = False
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         latents: torch.Tensor,
@@ -653,7 +655,6 @@ class Idefics2PerceiverLayer(nn.Module):
             hidden_act=config.hidden_act,
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         latents: torch.Tensor,
@@ -705,6 +706,7 @@ class Idefics2PerceiverLayer(nn.Module):
 )
 class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
     config: Idefics2PerceiverConfig
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attention_2 = True
     _supports_flex_attn = True
@@ -1009,7 +1011,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
     """
 )
 class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1091,7 +1093,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         >>> from PIL import Image
         >>> from io import BytesIO
 
-        >>> from transformers import AutoProcessor, AutoModelForVision2Seq
+        >>> from transformers import AutoProcessor, AutoModelForImageTextToText
         >>> from transformers.image_utils import load_image
 
         >>> # Note that passing the image urls (instead of the actual pil images) to the processor is also possible
@@ -1100,7 +1102,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b-base")
-        >>> model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/idefics2-8b-base", device_map="auto")
+        >>> model = AutoModelForImageTextToText.from_pretrained("HuggingFaceM4/idefics2-8b-base", device_map="auto")
 
         >>> BAD_WORDS_IDS = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
         >>> EOS_WORDS_IDS = [processor.tokenizer.eos_token_id]

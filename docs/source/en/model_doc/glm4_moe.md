@@ -19,6 +19,26 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
+Both **GLM-4.6** and **GLM-4.5** language model use this class. The implementation in transformers does not include an MTP layer.
+
+### GLM-4.6
+
+Compared with GLM-4.5, **GLM-4.6**  brings several key improvements:
+
+* **Longer context window:** The context window has been expanded from 128K to 200K tokens, enabling the model to handle more complex agentic tasks.
+* **Superior coding performance:** The model achieves higher scores on code benchmarks and demonstrates better real-world performance in applications such as Claude Code、Cline、Roo Code and Kilo Code, including improvements in generating visually polished front-end pages.
+* **Advanced reasoning:** GLM-4.6 shows a clear improvement in reasoning performance and supports tool use during inference, leading to stronger overall capability.
+* **More capable agents:** GLM-4.6 exhibits stronger performance in tool using and search-based agents, and integrates more effectively within agent frameworks.
+* **Refined writing:** Better aligns with human preferences in style and readability, and performs more naturally in role-playing scenarios.
+
+We evaluated GLM-4.6 across eight public benchmarks covering agents, reasoning, and coding. Results show clear gains over GLM-4.5, with GLM-4.6 also holding competitive advantages over leading domestic and international models such as **DeepSeek-V3.1-Terminus** and **Claude Sonnet 4**.
+
+![bench](https://raw.githubusercontent.com/zai-org/GLM-4.5/refs/heads/main/resources/bench_glm46.png)
+
+For more eval results, show cases, and technical details, please visit our [technical blog](https://z.ai/blog/glm-4.6).
+
+### GLM-4.5
+
 The [**GLM-4.5**](https://huggingface.co/papers/2508.06471) series models are foundation models designed for intelligent agents, MoE variants are documented here as Glm4Moe.
 
 GLM-4.5 has **355** billion total parameters with **32** billion active parameters, while GLM-4.5-Air adopts a more compact design with **106** billion total parameters and **12** billion active parameters. GLM-4.5 models unify reasoning, coding, and intelligent agent capabilities to meet the complex demands of intelligent agent applications.

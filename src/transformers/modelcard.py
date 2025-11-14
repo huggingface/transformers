@@ -649,7 +649,6 @@ def parse_log_history(log_history):
             _ = metrics.pop("eval_runtime", None)
             _ = metrics.pop("eval_samples_per_second", None)
             _ = metrics.pop("eval_steps_per_second", None)
-            _ = metrics.pop("eval_jit_compilation_time", None)
             values = {"Training Loss": training_loss, "Epoch": epoch, "Step": step}
             for k, v in metrics.items():
                 if k == "eval_loss":
@@ -753,8 +752,6 @@ def extract_hyperparameters_from_trainer(trainer):
             hyperparameters["optimizer"] = f"Use {optimizer_name} and the args are:\n{optimizer_args}"
 
     hyperparameters["lr_scheduler_type"] = trainer.args.lr_scheduler_type.value
-    if trainer.args.warmup_ratio != 0.0:
-        hyperparameters["lr_scheduler_warmup_ratio"] = trainer.args.warmup_ratio
     if trainer.args.warmup_steps != 0.0:
         hyperparameters["lr_scheduler_warmup_steps"] = trainer.args.warmup_steps
     if trainer.args.max_steps != -1:

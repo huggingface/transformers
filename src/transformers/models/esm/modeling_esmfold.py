@@ -14,10 +14,10 @@
 # limitations under the License.
 import math
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -915,6 +915,7 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
     """
 
     # Subclass `EsMPreTrainedModel` to deal with special init
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, EsmFoldLinear):

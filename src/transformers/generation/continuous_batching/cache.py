@@ -173,7 +173,7 @@ class PagedAttentionCache:
         page_size = self.head_dim * self.num_key_value_heads
 
         if "flash" in self.config._attn_implementation:
-            num_attention_masks = 0
+            num_attention_masks = 1  # only used to compute the default meme args
         else:
             # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`
             num_attention_masks = 2 if "sliding_attention" in group_types else 1
@@ -189,7 +189,9 @@ class PagedAttentionCache:
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=getattr(generation_config, "num_blocks", None),
             max_batch_tokens=getattr(generation_config, "max_batch_tokens", None),
-            max_memory_percent=getattr(generation_config, "max_memory", 0.9),
+            max_memory_percent=getattr(
+                generation_config, "max_memory", 0.8
+            ),  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
             cache_dtype=self.dtype,
         )
 
@@ -204,8 +206,8 @@ class PagedAttentionCache:
         # Initialize the cache
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
-        # We add one extra token to the cache to handle padding and generally discard unwanted tokens
-        self.cache_shape = (num_blocks * self.block_size + 1, self.num_key_value_heads, self.head_dim)
+        # We add two extra tokens to the cache to handle padding and generally discard unwanted tokens
+        self.cache_shape = (num_blocks * self.block_size + 2, self.num_key_value_heads, self.head_dim)
         for _ in range(group_size):
             new_layer_key_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
             new_layer_value_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
@@ -290,7 +292,6 @@ class PagedAttentionCache:
         layer_idx: int,
         read_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_kv + past_length]
         write_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_q]
-        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
         """Update the cache with new key-value states for a specific layer. This method writes new KV states to the
         appropriate cache locations. The behavior differs based on the layer's attention type:
@@ -324,11 +325,11 @@ class PagedAttentionCache:
         # the only case where you may write over cache you need to use
         else:
             # Add the cache to the key and value states
-            mask = layer_read_index == -1  # TODO: can this can be efficiently precomputed?
+            mask = (layer_read_index == -1).unsqueeze(-1).unsqueeze(-1)  # TODO: should this be precomputed?
             key_states_with_cache = k_cache[layer_read_index, :, :]
-            key_states_with_cache[mask] = key_states
+            key_states_with_cache.masked_scatter_(mask, key_states)
             value_states_with_cache = v_cache[layer_read_index, :, :]
-            value_states_with_cache[mask] = value_states
+            value_states_with_cache.masked_scatter_(mask, value_states)
             # Write new KV values to the cache
             k_cache[layer_write_index, :, :] = key_states
             v_cache[layer_write_index, :, :] = value_states
@@ -415,7 +416,7 @@ class PagedAttentionMemoryHandler:
         self,
         num_blocks: Optional[int] = None,
         max_batch_tokens: Optional[int] = None,
-        max_memory_percent: float = 0.9,
+        max_memory_percent: float = 0.8,  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
         cache_dtype: torch.dtype = torch.float16,
     ) -> tuple[int, int]:
         """Determine optimal number of blocks and maximum number of tokens per batch based on available memory and
@@ -455,7 +456,7 @@ class PagedAttentionMemoryHandler:
 
     def compute_num_blocks_and_max_batch_tokens(
         self,
-        max_memory_percent: float = 0.9,
+        max_memory_percent: float,
         cache_dtype: torch.dtype = torch.float16,
         m: float = 0.01,
     ) -> tuple[int, int]:
@@ -504,7 +505,7 @@ class PagedAttentionMemoryHandler:
     def compute_max_batch_tokens(
         self,
         num_blocks: int,
-        max_memory_percent: float = 0.9,
+        max_memory_percent: float,
         cache_dtype: torch.dtype = torch.float16,
     ) -> int:
         """Calculate maximum batch tokens M given a fixed number of cache blocks. The formula for M is given by:
@@ -532,7 +533,7 @@ class PagedAttentionMemoryHandler:
     def compute_num_blocks(
         self,
         max_batch_tokens: int,
-        max_memory_percent: float = 0.9,
+        max_memory_percent: float,
         cache_dtype: torch.dtype = torch.float16,
     ) -> int:
         """Calculate number of cache blocks N given a fixed maximum token per token M. The formula for N is given by:

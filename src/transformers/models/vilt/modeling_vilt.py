@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
+from ...pytorch_utils import meshgrid
 from ...utils import auto_docstring, logging
 from .configuration_vilt import ViltConfig
 
@@ -390,25 +390,6 @@ class ViltAttention(nn.Module):
         super().__init__()
         self.attention = ViltSelfAttention(config)
         self.output = ViltSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         self_outputs = self.attention(hidden_states, attention_mask, output_attentions)
@@ -531,22 +512,24 @@ class ViltEncoder(nn.Module):
 class ViltPreTrainedModel(PreTrainedModel):
     config: ViltConfig
     base_model_prefix = "vilt"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViltEmbeddings", "ViltSelfAttention"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 @auto_docstring
@@ -573,14 +556,6 @@ class ViltModel(ViltPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embeddings.text_embeddings.word_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(
@@ -714,7 +689,9 @@ class ViltPooler(nn.Module):
     """
 )
 class ViltForMaskedLM(ViltPreTrainedModel):
-    _tied_weights_keys = ["mlm_score.decoder.weight", "mlm_score.decoder.bias"]
+    _tied_weights_keys = {
+        "mlm_score.decoder.weight": "vilt.embeddings.text_embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -863,20 +840,11 @@ class ViltPredictionHeadTransform(nn.Module):
 
 
 class ViltMLMHead(nn.Module):
-    def __init__(self, config, weight=None):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.transform = ViltPredictionHeadTransform(config)
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        if weight is not None:
-            self.decoder.weight = weight
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
 
     def forward(self, x):
         x = self.transform(x)

@@ -11,7 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -23,16 +24,15 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_causal_conv1d_available
 from ..bamba.modeling_bamba import apply_mask_to_padding_states
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -56,7 +56,7 @@ class Lfm2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Lfm2RotaryEmbedding(LlamaRotaryEmbedding):
+class Lfm2RotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
@@ -208,9 +208,6 @@ class Lfm2HybridConvCache:
     def __len__(self) -> int:
         return len(self.key_cache)
 
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
     def reset(self):
         for layer_idx in range(len(self.conv_cache)):
             # In-place ops prevent breaking the static address
@@ -229,7 +226,6 @@ class Lfm2Attention(LlamaAttention):
         del self.o_proj
         del self.attention_dropout
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -237,6 +233,7 @@ class Lfm2Attention(LlamaAttention):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
@@ -295,7 +292,6 @@ class Lfm2ShortConv(nn.Module):
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def cuda_kernels_forward(
         self,
         x: torch.Tensor,
@@ -330,7 +326,6 @@ class Lfm2ShortConv(nn.Module):
         y = self.out_proj(y.transpose(-1, -2).contiguous())
         return y
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def slow_forward(
         self,
         x: torch.Tensor,
@@ -369,7 +364,6 @@ class Lfm2ShortConv(nn.Module):
         y = self.out_proj(y)
         return y
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -395,11 +389,10 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
         self.operator_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         self.ffn_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Lfm2HybridConvCache] = None,
@@ -437,10 +430,8 @@ class Lfm2PreTrainedModel(LlamaPreTrainedModel):
 class Lfm2Model(LlamaModel):
     def __init__(self, config: Lfm2Config):
         super().__init__(config)
-        self.pos_emb = Lfm2RotaryEmbedding(config)
         self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         del self.norm
-        del self.rotary_emb
 
     def forward(
         self,
@@ -482,19 +473,22 @@ class Lfm2Model(LlamaModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
+        # Skip masking for decoding stage. We check shape here to be compile-friendly
+        linear_attention = attention_mask if inputs_embeds.shape[1] != 1 else None
 
         hidden_states = inputs_embeds
-        position_embeddings = self.pos_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            layer_mask = causal_mask if decoder_layer.is_attention_layer else linear_attention
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=layer_mask,
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

@@ -76,7 +76,6 @@ Currently, following scales of pretrained Chinese-CLIP models are available on ð
 ## ChineseCLIPConfig
 
 [[autodoc]] ChineseCLIPConfig
-    - from_text_vision_configs
 
 ## ChineseCLIPTextConfig
 

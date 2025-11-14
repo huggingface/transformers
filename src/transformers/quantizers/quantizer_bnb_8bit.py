@@ -11,10 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
 from typing import TYPE_CHECKING, Optional, Union
-
-from packaging import version
 
 from .base import HfQuantizer
 
@@ -24,6 +21,7 @@ if TYPE_CHECKING:
 
 from ..utils import (
     ACCELERATE_MIN_VERSION,
+    BITSANDBYTES_MIN_VERSION,
     is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
@@ -67,30 +65,15 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
             raise ImportError(
-                f"Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+                f"Using `bitsandbytes` 8-bit quantization requires accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
             )
-        if not is_bitsandbytes_available(check_library_only=True):
+        if not is_bitsandbytes_available():
             raise ImportError(
-                "Using `bitsandbytes` 8-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
+                f"Using `bitsandbytes` 8-bit quantization requires bitsandbytes: `pip install -U bitsandbytes>={BITSANDBYTES_MIN_VERSION}`"
             )
-        if not is_torch_available():
-            raise ImportError(
-                "The bitsandbytes library requires PyTorch but it was not found in your environment. "
-                "You can install it with `pip install torch`."
-            )
-        # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
-        # so those versions of the library are practically only available when CUDA is too.
-        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
-            if not torch.cuda.is_available():
-                raise ImportError(
-                    "The installed version of bitsandbytes (<0.43.1) requires CUDA, but CUDA is not available. "
-                    "You may need to install PyTorch with CUDA support or upgrade bitsandbytes to >=0.43.1."
-                )
 
         from ..integrations import validate_bnb_backend_availability
-        from ..utils import is_bitsandbytes_multi_backend_available
 
-        bnb_multibackend_is_enabled = is_bitsandbytes_multi_backend_available()
         validate_bnb_backend_availability(raise_exception=True)
 
         device_map = kwargs.get("device_map")
@@ -102,7 +85,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             device_map_without_lm_head = {
                 key: device_map[key] for key in device_map if key not in self.modules_to_not_convert
             }
-            if set(device_map.values()) == {"cpu"} and bnb_multibackend_is_enabled:
+            if set(device_map.values()) == {"cpu"}:
                 pass
             elif "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                 raise ValueError(
@@ -113,12 +96,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                     "https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu "
                     "for more details. "
                 )
-
-        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.37.2"):
-            raise ValueError(
-                "You have a version of `bitsandbytes` that is not compatible with 8bit inference and training"
-                " make sure you have the latest version of `bitsandbytes` installed"
-            )
 
     def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
         # need more space for buffers that are created during quantization
@@ -248,23 +225,11 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         model.config.quantization_config = self.quantization_config
 
     def is_serializable(self, safe_serialization=None):
-        _bnb_supports_8bit_serialization = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse(
-            "0.37.2"
-        )
-
-        if not _bnb_supports_8bit_serialization:
-            logger.warning(
-                "You are calling `save_pretrained` to a 8-bit converted model, but your `bitsandbytes` version doesn't support it. "
-                "If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed. You will most likely face errors or"
-                " unexpected behaviours."
-            )
-            return False
-
         return True
 
     @property
     def is_trainable(self) -> bool:
-        return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.37.0")
+        return True
 
     def _dequantize(self, model):
         from ..integrations import dequantize_and_replace

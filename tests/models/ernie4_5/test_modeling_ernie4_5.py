@@ -45,15 +45,6 @@ class Ernie4_5ModelTester(CausalLMModelTester):
 
 @require_torch
 class Ernie4_5ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Ernie4_5Model,
-            "text-generation": Ernie4_5ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = Ernie4_5ModelTester
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
@@ -79,6 +70,7 @@ class Ernie4_5IntegrationTest(unittest.TestCase):
         """
         expected_texts = Expectations(
             {
+                ("xpu", 3): "User: Hey, are you conscious? Can you talk to me?\nAssistant: Hey! I'm here to help you with whatever you need. Are you feeling a bit overwhelmed or stressed? I'm here to listen and provide support.",
                 ("cuda", None): "User: Hey, are you conscious? Can you talk to me?\nAssistant: Hey! I'm here to help you with whatever you need. Are you feeling a bit overwhelmed or stressed? I'm here to listen and provide support.",
             }
         )  # fmt: skip

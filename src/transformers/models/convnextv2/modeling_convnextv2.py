@@ -257,20 +257,22 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
     config: ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["ConvNextV2Layer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, (nn.LayerNorm, ConvNextV2LayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, ConvNextV2GRN):
-            module.weight.data.zero_()
-            module.bias.data.zero_()
+            module.weight.zero_()
+            module.bias.zero_()
 
 
 @auto_docstring

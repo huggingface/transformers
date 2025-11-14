@@ -427,10 +427,6 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
 
     @unittest.skip(reason="Fails because of the hack of adding <unk> in _tokenize")
-    def test_pickle_subword_regularization_tokenizer(self):
-        pass
-
-    @unittest.skip(reason="Fails because of the hack of adding <unk> in _tokenize")
     def test_subword_regularization_tokenizer(self):
         pass
 

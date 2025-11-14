@@ -624,9 +624,11 @@ class BitEncoder(nn.Module):
 class BitPreTrainedModel(PreTrainedModel):
     config: BitConfig
     base_model_prefix = "bit"
+    input_modalities = "image"
     main_input_name = "pixel_values"
     _no_split_modules = ["BitEmbeddings"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")

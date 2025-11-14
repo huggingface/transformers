@@ -16,11 +16,11 @@
 
 import unittest
 
-import pytest
-
 from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -35,6 +35,7 @@ if is_torch_available():
     import torch
 
     from transformers import Lfm2MoeConfig, Lfm2MoeForCausalLM, Lfm2MoeModel
+    from transformers.models.lfm2_moe.modeling_lfm2_moe import Lfm2MoeHybridConvCache
 
 
 class Lfm2MoeModelTester(CausalLMModelTester):
@@ -63,12 +64,38 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False
     model_tester_class = Lfm2MoeModelTester
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2MoeForCausalLM if is_torch_available() else None
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, Lfm2MoeHybridConvCache)
+
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        attention_shape = (batch_size, num_heads, seq_length, head_dim)
+        conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
+
+        for i in range(config.num_hidden_layers):
+            if config.layer_types[i] == "full_attention":
+                self.assertEqual(past_key_values.key_cache[i].shape, attention_shape)
+                self.assertEqual(past_key_values.value_cache[i].shape, attention_shape)
+            else:
+                self.assertEqual(past_key_values.conv_cache[i].shape, conv_shape)
+
+    def _check_caches_are_equal(self, cache1: Lfm2MoeHybridConvCache, cache2: Lfm2MoeHybridConvCache):
+        if not isinstance(cache1, Lfm2MoeHybridConvCache) or not isinstance(cache2, Lfm2MoeHybridConvCache):
+            raise ValueError("The wrong cache is being used!")
+
+        if not len(cache1) == len(cache2):
+            raise ValueError("Both caches do not have the same number of layers.")
+
+        num_layers = len(cache1)
+        for idx in range(num_layers):
+            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
+            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
+            torch.testing.assert_close(cache1.conv_cache[idx], cache2.conv_cache[idx])
 
     def test_attention_outputs(self):
         """Lfm2Moe alternates between attention and short-conv layers."""
@@ -112,41 +139,6 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.layer_types))
             self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
 
-    @pytest.mark.generate
-    def test_past_key_values_format(self):
-        """Lfm2Moe has a special cache format as it alternates between attention and conv layers"""
-        for model_class in self.all_generative_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-
-            model = model_class(config).to(torch_device).eval()
-            if "use_cache" not in inputs:
-                inputs["use_cache"] = True
-            outputs = model(**inputs)
-
-            past_kv = outputs["past_key_values"]
-
-            num_query_attention_heads = config.num_attention_heads
-            embed_dim = config.hidden_size
-            per_head_embed_dim = embed_dim // num_query_attention_heads
-            num_key_value_heads = getattr(config, "num_key_value_heads", num_query_attention_heads)
-
-            batch_size, seq_length = inputs["input_ids"].shape[:2]
-            default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
-            default_conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
-
-            num_cache_decoder_layers = len(past_kv)
-            self.assertEqual(num_cache_decoder_layers, config.num_hidden_layers)
-
-            for i in range(config.num_hidden_layers):
-                if config.layer_types[i] == "full_attention":
-                    self_attention_layer_keys = past_kv.key_cache[i]
-                    self_attention_layer_values = past_kv.value_cache[i]
-                    self.assertEqual(self_attention_layer_keys.shape, default_self_attention_shape)
-                    self.assertEqual(self_attention_layer_values.shape, default_self_attention_shape)
-                else:
-                    conv_layer = past_kv.conv_cache[i]
-                    self.assertEqual(conv_layer.shape, default_conv_shape)
-
 
 @require_torch_accelerator
 @require_read_token
@@ -180,36 +172,30 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
+        # fmt: off
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor(
-            [
-                [
-                    -1.3855,
-                    -0.5123,
-                    -1.3143,
-                    -1.2144,
-                    -1.0791,
-                    -1.2117,
-                    -1.4704,
-                    -0.7648,
-                    -0.6175,
-                    -1.2402,
-                    -1.1459,
-                    -1.0083,
-                    -1.0247,
-                    -0.8830,
-                    -1.5643,
-                    -1.7266,
-                    -1.6254,
-                ]
-            ]
+        EXPECTED_MEANS = Expectations(
+            {
+                ("cuda", None): torch.tensor([[-1.3855, -0.5123, -1.3143, -1.2144, -1.0791, -1.2117, -1.4704, -0.7648, -0.6175, -1.2402, -1.1459, -1.0083, -1.0247, -0.8830, -1.5643, -1.7266, -1.6254,]]),
+                ("xpu", None): torch.tensor([[-1.3863, -0.4653, -1.3246, -1.3199, -1.0940, -1.2254, -1.4716, -0.8852, -0.5920, -1.2182, -1.1782, -1.0268, -1.0114, -0.8816, -1.5774, -1.7408, -1.6147,]]),
+            }
         )
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+        # fmt: on
+        EXPECTED_MEAN = EXPECTED_MEANS.get_expectation()
+        out_mean = out.mean(-1)
+        torch.testing.assert_close(out_mean, EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+        # fmt: off
         # Expected portion of the logits
-        EXPECTED_SLICE = torch.tensor(
-            [-1.2656, 2.4844, 5.5000, -1.3359, -1.3203, -1.3438, 1.9375, 5.8438, -0.6523, -1.2891]
+        EXPECTED_SLICES = Expectations(
+            {
+                ("cuda", None): torch.tensor([-1.2656, 2.4844, 5.5000, -1.3359, -1.3203, -1.3438, 1.9375, 5.8438, -0.6523, -1.2891]),
+                ("xpu", None): torch.tensor([-1.2656, 2.4531, 5.4375, -1.3438, -1.3203, -1.3516, 1.9297, 5.7812, -0.6719, -1.3203]),
+            }
         )
-        torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
+        # fmt: on
+        EXPECTED_SLICE = EXPECTED_SLICES.get_expectation()
+        out_slice = out[0, 0, :10]
+        torch.testing.assert_close(out_slice, EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_model_1a8b_generation(self):
@@ -227,13 +213,25 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_1a8b_batched_chat_generation(self):
         prompts = ["Who are you?", "Complete the text: Lorem ipsum dolor ", "The Meji Restoration in Japan ended"]
-        EXPECTED_TEXT_COMPLETIONS = [
-            "Who are you??  \nI am an artificial intelligence assistant designed to provide information, answer questions",
-            "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor",
-            "The Meji Restoration in Japan ended (1868) marked the:  \nA) Establishment of a constitutional",
-        ]
+        # fmt: off
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("cuda", None): ["Who are you?, a language model designed to assist with information and tasks?  \nI am",
+                                 "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor",
+                                 "The Meji Restoration in Japan ended or the Meiji Restoration (1868–1912) marked a pivotal",
+                                ],
+                ("xpu", None): ['Who are you? (AI) designed to assist?  \nI am an AI assistant developed to',
+                                'Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor',
+                                'The Meji Restoration in Japan ended**  \n* **Key Event:** The overthrow of the Tokugawa'
+                               ],
+            }
+        )
+        # fmt: on
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+
         set_seed(1789)
         tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-8B-A1B", use_fast=False)
         model = self.get_model()
@@ -243,4 +241,4 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             generated_ids = model.generate(**batched_input_ids, max_new_tokens=15, do_sample=False)
         text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETIONS, text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

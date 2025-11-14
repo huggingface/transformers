@@ -21,9 +21,9 @@
 
 import math
 from collections import OrderedDict
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -773,35 +773,37 @@ class EdgeTamVideoPreTrainedModel(PreTrainedModel):
     config_class = EdgeTamVideoConfig
     base_model_prefix = "edgetam_video"
     main_input_name = "pixel_values"
+    input_modalities = "video"
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, (nn.LayerNorm, EdgeTamVideoLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         elif isinstance(module, EdgeTamVideoModel):
             if module.no_memory_positional_encoding is not None:
-                module.no_memory_positional_encoding.data.zero_()
+                module.no_memory_positional_encoding.zero_()
             if module.memory_temporal_positional_encoding is not None:
-                module.memory_temporal_positional_encoding.data.zero_()
+                module.memory_temporal_positional_encoding.zero_()
             if module.no_object_pointer is not None:
-                module.no_object_pointer.data.zero_()
+                module.no_object_pointer.zero_()
             if module.occlusion_spatial_embedding_parameter is not None:
-                module.occlusion_spatial_embedding_parameter.data.zero_()
+                module.occlusion_spatial_embedding_parameter.zero_()
         if isinstance(module, EdgeTamVideoMemoryFuserCXBlock):
             if module.scale is not None:
-                module.scale.data.zero_()
+                module.scale.zero_()
 
 
 class EdgeTamVideoInferenceCache:
@@ -1643,7 +1645,7 @@ class EdgeTamVideoPromptEncoder(nn.Module):
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
-        boxes += 0.5  # Shift to center of pixel
+        boxes = boxes + 0.5  # Shift to center of pixel
         coords = boxes.view(*boxes.shape[:2], 2, 2)
         # add padding point for consistency with the original implementation
         coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
@@ -1975,11 +1977,14 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 
 @auto_docstring
 class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    input_modalities = ["video", "text"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(EdgeTamVideoTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = []
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
+    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
+    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__(config)
@@ -2031,11 +2036,6 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         self.spatial_perceiver = EdgeTamVideoPerceiverResampler(config)
 
         self.post_init()
-
-    def _tie_weights(self):
-        self.prompt_encoder.shared_embedding.positional_embedding.data = (
-            self.shared_image_embedding.positional_embedding.data
-        )
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()

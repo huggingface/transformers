@@ -109,9 +109,6 @@ class SwitchTransformersModelTester:
         self.expert_capacity = expert_capacity
         self.router_jitter_noise = router_jitter_noise
 
-    def get_large_model_config(self):
-        return SwitchTransformersConfig.from_pretrained("google/switch-base-8")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
@@ -244,8 +241,6 @@ class SwitchTransformersModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_with_lm_head(
         self,
@@ -478,10 +473,6 @@ class SwitchTransformersModelTester:
                 decoder_attention_mask=decoder_attention_mask,
             )
 
-            # check that models has less parameters
-            self.parent.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             # check that outputs are equal
@@ -498,10 +489,6 @@ class SwitchTransformersModelTester:
                 tied_model.to(torch_device)
                 tied_model.eval()
 
-                # check that models has less parameters
-                self.parent.assertLess(
-                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-                )
                 random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
                 tied_model_result = tied_model(
@@ -571,11 +558,9 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     is_encoder_decoder = True
-    test_torchscript = False
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
     # `SwitchTransformers` is a MOE in which not all experts will get gradients because they are not all used in a single forward pass
@@ -766,9 +751,6 @@ class SwitchTransformersEncoderOnlyModelTester:
         self.scope = None
         self.is_training = is_training
 
-    def get_large_model_config(self):
-        return SwitchTransformersConfig.from_pretrained("google/switch-base-8")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
 
@@ -825,11 +807,10 @@ class SwitchTransformersEncoderOnlyModelTester:
 
 class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SwitchTransformersEncoderModel,) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
     test_model_parallel = False
     test_head_masking = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = SwitchTransformersEncoderOnlyModelTester(self)

@@ -105,7 +105,8 @@ class GraniteMoeDecoderLayer(MixtralDecoderLayer):
         self.block_sparse_moe = GraniteMoeMoE(config)
         self.input_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
+        del self.mlp
+        self.block_sparse_moe = GraniteMoeMoE(config)
         self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!
 
     def forward(
@@ -114,7 +115,7 @@ class GraniteMoeDecoderLayer(MixtralDecoderLayer):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -147,10 +148,11 @@ class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
 
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, GraniteMoeParallelExperts):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -240,7 +242,7 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = None,

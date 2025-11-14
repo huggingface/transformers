@@ -125,13 +125,6 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
         image_token_id: int = 100015,
         **kwargs,
     ):
-        super().__init__(
-            text_config=text_config,
-            vision_config=vision_config,
-            image_token_id=image_token_id,
-            **kwargs,
-        )
-
         if high_res_vision_config is None:
             high_res_vision_config = {}
             logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
@@ -141,6 +134,13 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
             high_res_vision_config = CONFIG_MAPPING[high_res_vision_config["model_type"]](**high_res_vision_config)
 
         self.high_res_vision_config = high_res_vision_config
+
+        super().__init__(
+            text_config=text_config,
+            vision_config=vision_config,
+            image_token_id=image_token_id,
+            **kwargs,
+        )
 
 
 class DeepseekVLHybridBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
@@ -216,21 +216,22 @@ class DeepseekVLHybridAligner(nn.Module):
 
 
 class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.text_config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.text_config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, DeepseekVLHybridLayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         elif isinstance(module, DeepseekVLHybridModel):
-            module.high_res_vision_alpha.data.zero_()
+            module.high_res_vision_alpha.zero_()
 
 
 class DeepseekVLHybridModel(DeepseekVLModel):
@@ -429,7 +430,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         return model_inputs
 
 
-class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs):
+class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_size (`int`, *optional*, defaults to 14):
         The minimum allowed size for the resized image. Ensures that neither the height nor width
@@ -450,9 +451,9 @@ class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs):
 
     min_size: int
     high_res_size: dict
-    high_res_resample: "PILImageResampling"
-    high_res_image_mean: list[float]
-    high_res_image_std: list[float]
+    high_res_resample: Union["PILImageResampling", int]
+    high_res_image_mean: Union[float, list[float], tuple[float, ...]]
+    high_res_image_std: Union[float, list[float], tuple[float, ...]]
 
 
 class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):

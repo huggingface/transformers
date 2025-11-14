@@ -270,7 +270,6 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available() and is_sacremoses_available()
         else {}
     )
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = BioGptModelTester(self)

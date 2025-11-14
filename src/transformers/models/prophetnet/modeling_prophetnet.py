@@ -31,7 +31,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_prophetnet import ProphetNetConfig
 
 
@@ -333,15 +332,16 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "prophetnet"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            module.weight.normal_(mean=0.0, std=self.config.init_std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -433,7 +433,6 @@ class ProphetNetAttention(nn.Module):
 
         self.out_proj = nn.Linear(hidden_size, hidden_size)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -463,17 +462,17 @@ class ProphetNetAttention(nn.Module):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_values.cross_attention_cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_values.self_attention_cache
+                    curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_values
+                curr_past_key_values = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_states = self.key_proj(current_states)
             value_states = self.value_proj(current_states)
@@ -483,7 +482,7 @@ class ProphetNetAttention(nn.Module):
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
+                key_states, value_states = curr_past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -591,7 +590,6 @@ class ProphetNetNgramSelfAttention(nn.Module):
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -642,10 +640,10 @@ class ProphetNetNgramSelfAttention(nn.Module):
         # We need to obtain the self attention only for this module, if `EncoderDecoderCache`
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
-                curr_past_key_value = past_key_values.self_attention_cache
+                curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_values
-            main_key_states, main_value_states = curr_past_key_value.update(
+                curr_past_key_values = past_key_values
+            main_key_states, main_value_states = curr_past_key_values.update(
                 main_key_states, main_value_states, self.layer_idx, {"cache_position": cache_position}
             )
 
@@ -921,7 +919,6 @@ class ProphetNetDecoderLayer(GradientCheckpointingLayer):
         self.feed_forward = ProphetNetFeedForward(config, config.decoder_ffn_dim)
         self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -979,19 +976,10 @@ class ProphetNetDecoderLayer(GradientCheckpointingLayer):
     """
 )
 class ProphetNetEncoder(ProphetNetPreTrainedModel):
-    def __init__(self, config: ProphetNetConfig, word_embeddings: Optional[nn.Embedding] = None):
-        r"""
-        word_embeddings (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
-            The word embedding parameters. This can be used to initialize [`ProphetNetEncoder`] with pre-defined word
-            embeddings instead of randomly initialized word embeddings.
-        """
+    def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
 
-        self.word_embeddings = (
-            word_embeddings
-            if word_embeddings is not None
-            else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        )
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = ProphetNetPositionalEmbeddings(config)
         self.embeddings_layer_norm = LayerNorm(config.hidden_size)
 
@@ -1094,12 +1082,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
     """
 )
 class ProphetNetDecoder(ProphetNetPreTrainedModel):
-    def __init__(self, config: ProphetNetConfig, word_embeddings: Optional[nn.Embedding] = None):
-        r"""
-        word_embeddings (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
-            The word embedding parameters. This can be used to initialize [`ProphetNetEncoder`] with pre-defined word
-            embeddings instead of randomly initialized word embeddings.
-        """
+    def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
 
         self.ngram = config.ngram
@@ -1108,11 +1091,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         self.dropout = config.dropout
         self.max_target_positions = config.max_position_embeddings
 
-        self.word_embeddings = (
-            word_embeddings
-            if word_embeddings is not None
-            else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        )
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = ProphetNetPositionalEmbeddings(config)
 
         self.ngram_embeddings = nn.Embedding(self.ngram, config.hidden_size, None)
@@ -1186,16 +1165,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = (
                 EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-                if encoder_hidden_states is not None
+                if encoder_hidden_states is not None or self.config.is_encoder_decoder
                 else DynamicCache(config=self.config)
             )
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
@@ -1411,7 +1383,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
 @auto_docstring
 class ProphetNetModel(ProphetNetPreTrainedModel):
-    _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight"]
+    _tied_weights_keys = {
+        "encoder.word_embeddings.weight": "word_embeddings.weight",
+        "decoder.word_embeddings.weight": "word_embeddings.weight",
+    }
 
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
@@ -1419,13 +1394,11 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
-        self.encoder = ProphetNetEncoder(encoder_config, self.word_embeddings)
+        self.encoder = ProphetNetEncoder(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
-        self.decoder = ProphetNetDecoder(decoder_config, self.word_embeddings)
+        self.decoder = ProphetNetDecoder(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1437,11 +1410,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         self.word_embeddings = value
         self.encoder.word_embeddings = self.word_embeddings
         self.decoder.word_embeddings = self.word_embeddings
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.word_embeddings, self.word_embeddings)
-            self._tie_or_clone_weights(self.decoder.word_embeddings, self.word_embeddings)
 
     def get_encoder(self):
         return self.encoder
@@ -1551,7 +1519,9 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     """
 )
 class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "prophetnet.word_embeddings.weight",
+    }
 
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
@@ -1563,10 +1533,6 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.prophetnet.word_embeddings, self.lm_head)
 
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
@@ -1729,11 +1695,10 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
     """
 )
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = [
-        "prophetnet.word_embeddings.weight",
-        "prophetnet.decoder.word_embeddings.weight",
-        "lm_head.weight",
-    ]
+    _tied_weights_keys = {
+        "lm_head.weight": "prophetnet.word_embeddings.weight",
+        "prophetnet.decoder.word_embeddings.weight": "prophetnet.word_embeddings.weight",
+    }
 
     def __init__(self, config: ProphetNetConfig):
         # set config for CLM
@@ -1756,10 +1721,6 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.prophetnet.decoder.word_embeddings = value
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.prophetnet.decoder.word_embeddings, self.lm_head)
 
     def set_decoder(self, decoder):
         self.prophetnet.decoder = decoder
@@ -1939,17 +1900,18 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
     classes.
     """
 
+    _tied_weights_keys = {
+        "decoder.word_embeddings.weight": "word_embeddings.weight",
+    }
+
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
 
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.decoder = ProphetNetDecoder(config, word_embeddings=self.word_embeddings)
+        self.decoder = ProphetNetDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _tie_weights(self):
-        self._tie_or_clone_weights(self.word_embeddings, self.decoder.get_input_embeddings())
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)

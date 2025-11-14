@@ -20,8 +20,9 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -550,31 +551,33 @@ class Sam2PreTrainedModel(PreTrainedModel):
     config_class = Sam2Config
     base_model_prefix = "sam2"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, (nn.LayerNorm, Sam2LayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         if isinstance(module, Sam2HieraDetModel):
             if module.pos_embed is not None:
-                module.pos_embed.data.zero_()
+                module.pos_embed.zero_()
             if module.pos_embed_window is not None:
-                module.pos_embed_window.data.zero_()
+                module.pos_embed_window.zero_()
         if isinstance(module, Sam2Model):
             if module.no_memory_embedding is not None:
-                module.no_memory_embedding.data.zero_()
+                module.no_memory_embedding.zero_()
 
 
 class Sam2HieraDetModel(Sam2PreTrainedModel):
@@ -790,7 +793,7 @@ class Sam2PromptEncoder(nn.Module):
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
-        boxes += 0.5  # Shift to center of pixel
+        boxes = boxes + 0.5  # Shift to center of pixel
         coords = boxes.view(*boxes.shape[:2], 2, 2)
         # add padding point for consistency with the original implementation
         coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
@@ -1275,9 +1278,7 @@ class Sam2MaskDecoder(nn.Module):
     """
 )
 class Sam2Model(Sam2PreTrainedModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    input_modalities = ["image", "text"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam2TwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = [
         r"^memory_.*",
@@ -1305,11 +1306,6 @@ class Sam2Model(Sam2PreTrainedModel):
         self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
 
         self.post_init()
-
-    def _tie_weights(self):
-        self.prompt_encoder.shared_embedding.positional_embedding.data = (
-            self.shared_image_embedding.positional_embedding.data
-        )
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()

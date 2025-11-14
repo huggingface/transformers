@@ -15,8 +15,9 @@
 
 
 import collections.abc
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -354,6 +355,7 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     config: InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
+    input_modalities = ["image", "video"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["InternVLVisionLayer"]
     _supports_sdpa = True
@@ -366,18 +368,19 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
         "attentions": InternVLVisionAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, InternVLVisionEmbeddings):
-            module.cls_token.data.zero_()
+            module.cls_token.zero_()
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                module.mask_token.zero_()
             if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
+                module.position_embeddings.zero_()
         elif isinstance(module, InternVLVisionLayer):
-            module.lambda_1.data.fill_(self.config.layer_scale_init_value)
-            module.lambda_2.data.fill_(self.config.layer_scale_init_value)
+            module.lambda_1.fill_(self.config.layer_scale_init_value)
+            module.lambda_2.fill_(self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -424,7 +427,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 
 
 class InternVLPreTrainedModel(LlavaPreTrainedModel):
-    pass
+    input_modalities = ["image", "text", "video"]
 
 
 INTERNVL_INPUTS_DOCSTRING = None

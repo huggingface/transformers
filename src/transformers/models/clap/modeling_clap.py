@@ -16,8 +16,9 @@
 
 import collections
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -31,7 +32,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward, meshgrid
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs, logging, torch_int
 from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
@@ -454,25 +455,6 @@ class ClapAudioAttention(nn.Module):
         super().__init__()
         self.self = ClapAudioSelfAttention(config, dim, num_heads, window_size)
         self.output = ClapAudioSelfOutput(config, dim)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -1168,25 +1150,6 @@ class ClapTextAttention(nn.Module):
         super().__init__()
         self.self = ClapTextSelfAttention(config)
         self.output = ClapTextSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -1342,35 +1305,38 @@ class ClapTextPooler(nn.Module):
 class ClapPreTrainedModel(PreTrainedModel):
     config: ClapConfig
     base_model_prefix = "clap"
+    input_modalities = ["audio", "text"]
     supports_gradient_checkpointing = False
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
 
         if isinstance(module, ClapTextEmbeddings):
-            module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.token_type_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            module.position_embeddings.weight.normal_(mean=0.0, std=factor * 0.02)
+            module.token_type_embeddings.weight.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, ClapModel):
-            module.logit_scale_a.data.fill_(math.log(self.config.logit_scale_init_value))
-            module.logit_scale_t.data.fill_(math.log(self.config.logit_scale_init_value))
+            module.logit_scale_a.fill_(math.log(self.config.logit_scale_init_value))
+            module.logit_scale_t.fill_(math.log(self.config.logit_scale_init_value))
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            module.weight.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, (nn.Conv2d, nn.Linear)):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.weight, std=in_proj_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, ClapAudioSelfAttention):
-            module.relative_position_bias_table.data.zero_()
+            module.relative_position_bias_table.zero_()
 
 
 class ClapAudioModel(ClapPreTrainedModel):
     config: ClapAudioConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: ClapAudioConfig):
         super().__init__(config)
@@ -1407,7 +1373,7 @@ class ClapAudioModel(ClapPreTrainedModel):
         >>> model = ClapAudioModel.from_pretrained("laion/clap-htsat-fused")
         >>> processor = AutoProcessor.from_pretrained("laion/clap-htsat-fused")
 
-        >>> inputs = processor(audios=audio_sample, return_tensors="pt")
+        >>> inputs = processor(audio=audio_sample, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
@@ -1443,6 +1409,7 @@ class ClapAudioModel(ClapPreTrainedModel):
 )
 class ClapTextModel(ClapPreTrainedModel):
     config: ClapTextConfig
+    input_modalities = "text"
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
@@ -1681,7 +1648,7 @@ class ClapModel(ClapPreTrainedModel):
 
         >>> input_text = ["Sound of a dog", "Sound of vacuum cleaner"]
 
-        >>> inputs = processor(text=input_text, audios=audio_sample, return_tensors="pt", padding=True)
+        >>> inputs = processor(text=input_text, audio=audio_sample, return_tensors="pt", padding=True)
 
         >>> outputs = model(**inputs)
         >>> logits_per_audio = outputs.logits_per_audio  # this is the audio-text similarity score
@@ -1747,6 +1714,7 @@ class ClapModel(ClapPreTrainedModel):
 @auto_docstring
 class ClapTextModelWithProjection(ClapPreTrainedModel):
     config: ClapTextConfig
+    input_modalities = "text"
 
     def __init__(self, config: ClapTextConfig):
         super().__init__(config)
@@ -1813,6 +1781,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
 class ClapAudioModelWithProjection(ClapPreTrainedModel):
     config: ClapAudioConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: ClapAudioConfig):
         super().__init__(config)
@@ -1851,7 +1820,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> inputs = processor(audios=audio_sample, return_tensors="pt")
+        >>> inputs = processor(audio=audio_sample, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> audio_embeds = outputs.audio_embeds
         ```"""

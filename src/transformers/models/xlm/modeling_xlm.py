@@ -17,8 +17,9 @@ PyTorch XLM model.
 """
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -37,7 +38,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_xlm import XLMConfig
 
@@ -507,22 +508,6 @@ class MultiHeadAttention(nn.Module):
         self.k_lin = nn.Linear(dim, dim)
         self.v_lin = nn.Linear(dim, dim)
         self.out_lin = nn.Linear(dim, dim)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        attention_head_size = self.dim // self.n_heads
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(heads, self.n_heads, attention_head_size, self.pruned_heads)
-        # Prune linear layers
-        self.q_lin = prune_linear_layer(self.q_lin, index)
-        self.k_lin = prune_linear_layer(self.k_lin, index)
-        self.v_lin = prune_linear_layer(self.v_lin, index)
-        self.out_lin = prune_linear_layer(self.out_lin, index, dim=1)
-        # Update hyper params
-        self.n_heads = self.n_heads - len(heads)
-        self.dim = attention_head_size * self.n_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -548,17 +533,17 @@ class MultiHeadAttention(nn.Module):
                 is_updated = cache.is_updated.get(self.layer_id)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = cache.cross_attention_cache
+                    curr_past_key_values = cache.cross_attention_cache
                 else:
-                    curr_past_key_value = cache.self_attention_cache
+                    curr_past_key_values = cache.self_attention_cache
             else:
-                curr_past_key_value = cache
+                curr_past_key_values = cache
 
         current_states = kv if is_cross_attention else input
         if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            k = curr_past_key_value.key_cache[self.layer_id]
-            v = curr_past_key_value.value_cache[self.layer_id]
+            k = curr_past_key_values.key_cache[self.layer_id]
+            v = curr_past_key_values.value_cache[self.layer_id]
         else:
             k = self.k_lin(current_states)
             v = self.v_lin(current_states)
@@ -568,7 +553,7 @@ class MultiHeadAttention(nn.Module):
             if cache is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                k, v = curr_past_key_value.update(k, v, self.layer_id, {"cache_position": cache_position})
+                k, v = curr_past_key_values.update(k, v, self.layer_id, {"cache_position": cache_position})
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
                     cache.is_updated[self.layer_id] = True
@@ -629,21 +614,22 @@ class XLMPreTrainedModel(PreTrainedModel):
             langs_list = None
         return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Embedding):
             if self.config is not None and self.config.embed_init_std is not None:
                 nn.init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         if isinstance(module, nn.Linear):
             if self.config is not None and self.config.init_std is not None:
                 nn.init.normal_(module.weight, mean=0, std=self.config.init_std)
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0.0)
         if isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         if isinstance(module, XLMModel) and self.config.sinusoidal_embeddings:
             create_sinusoidal_embeddings(
                 self.config.max_position_embeddings, self.config.emb_dim, out=module.position_embeddings.weight
@@ -743,13 +729,6 @@ class XLMModel(XLMPreTrainedModel):
             self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config))
             self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
 
-        if hasattr(config, "pruned_heads"):
-            pruned_heads = config.pruned_heads.copy().items()
-            config.pruned_heads = {}
-            for layer, heads in pruned_heads:
-                if self.attentions[int(layer)].n_heads == config.n_heads:
-                    self.prune_heads({int(layer): list(map(int, heads))})
-
         # Initialize weights and apply final processing
         self.post_init()
         self.register_buffer(
@@ -761,14 +740,6 @@ class XLMModel(XLMPreTrainedModel):
 
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.attentions[layer].prune_heads(heads)
 
     @auto_docstring
     def forward(
@@ -819,9 +790,6 @@ class XLMModel(XLMPreTrainedModel):
 
         if cache is None:
             cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-
-        if isinstance(cache, tuple):
-            cache = EncoderDecoderCache.from_legacy_cache(cache)
 
         if lengths is None:
             if input_ids is not None:
@@ -954,7 +922,7 @@ class XLMPredLayer(nn.Module):
     """
 )
 class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["pred_layer.proj.weight"]
+    _tied_weights_keys = {"pred_layer.proj.weight": "transformer.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1012,6 +980,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
@@ -1053,8 +1022,13 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        output = transformer_outputs[0]
-        outputs = self.pred_layer(output, labels)  # (loss, logits) or (logits,) depending on if labels are provided.
+        hidden_states = transformer_outputs[0]
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        outputs = self.pred_layer(
+            hidden_states[:, slice_indices, :],
+            labels,
+        )  # (loss, logits) or (logits,) depending on if labels are provided.
 
         if not return_dict:
             return outputs + transformer_outputs[1:]

@@ -12,8 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -167,10 +168,6 @@ def eager_attention_forward(
     # This is actually dropping out entire tokens to attend to, which might
     # seem a bit unusual, but is taken from the original Transformer paper.
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    # Mask heads if we want to
-    if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -933,6 +930,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     config: VJEPA2Config
     base_model_prefix = "vjepa2"
     main_input_name = "pixel_values_videos"
+    input_modalities = "video"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "VJEPA2Layer",
@@ -943,6 +941,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
 
@@ -951,9 +950,9 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
         # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
         # `trunc_normal_cpu` not implemented in `half` issues
         def trunc_normal_f32_(weight, std):
-            data_float_32 = weight.data.to(torch.float32)
+            data_float_32 = weight.to(torch.float32)
             data_init = nn.init.trunc_normal_(data_float_32, mean=0.0, std=std)
-            weight.data = data_init.to(weight.dtype)
+            weight.copy_(data_init.to(weight.dtype))
 
         if isinstance(module, VJEPA2AttentivePooler):
             trunc_normal_f32_(module.query_tokens, std=init_std)
@@ -965,16 +964,16 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
             trunc_normal_f32_(module.cross_attention_layer.mlp.fc2.weight, std=std)
         elif isinstance(module, VJEPA2PredictorEmbeddings):
             if module.zero_init_mask_tokens:
-                module.mask_tokens.data.zero_()
+                module.mask_tokens.zero_()
             else:
                 trunc_normal_f32_(module.mask_tokens, std=init_std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
             trunc_normal_f32_(module.weight, std=init_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 @auto_docstring

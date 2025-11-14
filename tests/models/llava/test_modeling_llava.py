@@ -22,6 +22,7 @@ from parameterized import parameterized
 from transformers import (
     AutoProcessor,
     AutoTokenizer,
+    BitsAndBytesConfig,
     LlavaConfig,
     LlavaForConditionalGeneration,
     LlavaModel,
@@ -151,10 +152,11 @@ class LlavaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
-        attention_mask = input_ids.ne(1).to(torch_device)
 
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -183,7 +185,7 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     _is_composite = True
 
     def setUp(self):
@@ -291,7 +293,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let's make sure we test the preprocessing to replace what is used
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/bakLlava-v1-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
@@ -300,6 +304,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
         expected_decoded_texts = Expectations({
+            ("xpu", 3): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
             ("cuda", None): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
             ("rocm", (9, 5)): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. First, the",
         })  # fmt: skip
@@ -316,7 +321,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let's make sure we test the preprocessing to replace what is used
         model_id = "llava-hf/llava-1.5-7b-hf"
 
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-1.5-7b-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
@@ -328,17 +335,16 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
+                ("xpu", 3): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
                 ("cuda", 7): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
                 ("cuda", 8): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
                 ("rocm", (9, 5)): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should be cautious about the following:\n\n1. Safety: Ensure that the pier or dock is stable and secure before stepping onto it. Avoid walking on the edge of the pier or dock, as it could be unstable or unsafe.\n\n2. Weather conditions: Be aware of the weather forecast before visiting the area. Strong winds, heavy rain, or storms can make the pier or dock unsafe to use.\n\n3. Wildlife: Be mindful of the wildlife in the area, such as birds or aquatic animals. Avoid disturbing their natural habitat or causing harm to the local ecosystem.\n\n4. Water safety: If you plan to go swimming or engage in water activities, be aware of the water conditions, such as currents, tides, or potential hazards like submerged objects.\n\n5. Personal belongings: Keep an eye on your personal belongings, such as bags or backpacks, to prevent theft or loss.\n\n6. Leave no trace: When visiting the area, make sure to clean up after yourself and leave no trace of your presence to preserve the natural environment.',
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+        decoded_text = processor.decode(output[0], skip_special_tokens=True)
 
-        self.assertEqual(
-            processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
+        self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_bitsandbytes
@@ -346,7 +352,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let's make sure we test the preprocessing to replace what is used
         model_id = "llava-hf/llava-1.5-7b-hf"
 
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-1.5-7b-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompts = [
@@ -362,6 +370,13 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
+                ("xpu", 3): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
+                    "you",
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
+                    "is located on",
+                ],
                 ("cuda", None): [
                     "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
                     "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
@@ -387,7 +402,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let's make sure we test the preprocessing to replace what is used
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/bakLlava-v1-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
@@ -404,6 +421,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
+                ("xpu", 3): [
+                    'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
+                    'USER:  \nWhat is this?\nASSISTANT: Cats',
+                ],
                 ("cuda", 7): [
                     'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
                     'USER:  \nWhat is this?\nASSISTANT: Cats',
@@ -433,7 +454,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
         model = LlavaForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-1.5-7b-hf", load_in_4bit=True, attn_implementation="eager"
+            "llava-hf/llava-1.5-7b-hf",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            attn_implementation="eager",
         )
         processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
 
@@ -452,6 +475,13 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
+                ("xpu", 3): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a "
+                    "body of water",
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
+                    "sleeping on a bed.",
+                ],
                 ("cuda", None): [
                     "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
                     "with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a "
@@ -478,7 +508,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_vision
     @require_bitsandbytes
     def test_batched_generation(self):
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", device_map="auto")
 
         processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
@@ -501,6 +531,11 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_OUTPUTS = Expectations(
             {
+                ("xpu", 3): [
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one shows a dog standing on a grassy field, while",
+                    '\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small',
+                    '\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the'
+                ],
                 ("cuda", 7): [
                     "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one of them has a dog standing on a field, while",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small",
@@ -546,7 +581,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_no_images(self):
         model_id = "llava-hf/llava-1.5-7b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         # Prepare inputs with no images
@@ -573,8 +610,16 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Make sure that `generate` works
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXT = "user\n\nWhat are these?\nassistant The image shows two cats, one on the left and one on the right. They appear to be resting or sleeping on a pink blanket. The cat"
-        self.assertTrue(processor.batch_decode(output, skip_special_tokens=True)[0] == EXPECTED_DECODED_TEXT)
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("xpu", 3): "user\n\nWhat are these?\nassistant These are two cats, one with a green collar and the other with a black collar. They are lying on a pink blanket and appear to be sleeping",
+                ("cuda", None): "user\n\nWhat are these?\nassistant The image shows two cats, one on the left and one on the right. They appear to be resting or sleeping on a pink blanket. The cat",
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+
+        decoded_text = processor.batch_decode(output, skip_special_tokens=True)[0]
+        self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
     @slow
     def test_pixtral(self):
@@ -610,7 +655,9 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
     @require_bitsandbytes
     def test_pixtral_4bit(self):
         model_id = "mistral-community/pixtral-12b"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
@@ -637,7 +684,9 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
     @require_bitsandbytes
     def test_pixtral_batched(self):
         model_id = "mistral-community/pixtral-12b"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
         processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 

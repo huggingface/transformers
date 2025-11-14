@@ -64,7 +64,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class DPTImageProcessorKwargs(ImagesKwargs):
+class DPTImageProcessorKwargs(ImagesKwargs, total=False):
     """
     ensure_multiple_of (`int`, *optional*, defaults to 1):
         If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
@@ -78,10 +78,10 @@ class DPTImageProcessorKwargs(ImagesKwargs):
         ADE20k). The background label will be replaced by 255.
     """
 
-    ensure_multiple_of: Optional[int]
-    size_divisor: Optional[int]
-    keep_aspect_ratio: Optional[bool]
-    do_reduce_labels: Optional[bool]
+    ensure_multiple_of: int
+    size_divisor: int
+    keep_aspect_ratio: bool
+    do_reduce_labels: bool
 
 
 def get_resize_output_image_size(

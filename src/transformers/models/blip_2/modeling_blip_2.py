@@ -15,9 +15,9 @@
 """PyTorch BLIP-2 model."""
 
 import math
-import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 from torch import nn
@@ -36,7 +36,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     ModelOutput,
     TransformersKwargs,
@@ -391,6 +391,7 @@ class Blip2EncoderLayer(GradientCheckpointingLayer):
 class Blip2PreTrainedModel(PreTrainedModel):
     config: Blip2Config
     base_model_prefix = "blip"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
@@ -407,19 +408,20 @@ class Blip2PreTrainedModel(PreTrainedModel):
     ]
     _skip_keys_device_placement = "past_key_values"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_range
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=factor)
+            module.weight.normal_(mean=0.0, std=factor)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor)
+            module.weight.normal_(mean=0.0, std=factor)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, Blip2VisionEmbeddings):
             nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
@@ -433,7 +435,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
                 Blip2ForImageTextRetrieval,
             ),
         ):
-            module.query_tokens.data.zero_()
+            module.query_tokens.zero_()
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->Blip2
@@ -473,6 +475,7 @@ class Blip2Encoder(nn.Module):
 # Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->Blip2, BLIP->BLIP_2
 class Blip2VisionModel(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
     config: Blip2VisionConfig
     _can_record_outputs = {
         "hidden_states": Blip2EncoderLayer,
@@ -642,25 +645,6 @@ class Blip2QFormerAttention(nn.Module):
         super().__init__()
         self.attention = Blip2QFormerMultiHeadAttention(config, is_cross_attention)
         self.output = Blip2QFormerSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -917,14 +901,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     def get_extended_attention_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1073,10 +1049,6 @@ class Blip2Model(Blip2PreTrainedModel):
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
 
-        # Update _tied_weights_keys using the base model used.
-        if language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
-
         self.language_model = language_model
 
         # Initialize weights and apply final processing
@@ -1100,11 +1072,6 @@ class Blip2Model(Blip2PreTrainedModel):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
-
     @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(
@@ -1114,7 +1081,6 @@ class Blip2Model(Blip2PreTrainedModel):
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        legacy_output: bool = True,
     ) -> Union[torch.FloatTensor, CausalLMOutputWithPast]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1133,12 +1099,10 @@ class Blip2Model(Blip2PreTrainedModel):
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        legacy_output (`bool`, *optional*, defaults to `True`):
-            Whether to return a model output object or a tensor of features.
 
         Returns:
-            text_outputs (`CausalLMOutputWithPast` or `torch.FloatTensor`):
-                The language model outputs. If `legacy_output=False`, the output is a `torch.FloatTensor`.
+            text_outputs (``torch.FloatTensor`):
+                The language model's last hidden states.
 
         Examples:
         ```python
@@ -1152,13 +1116,6 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> with torch.inference_mode():
         ...     text_features = model.get_text_features(**inputs)
         ```"""
-
-        if legacy_output:
-            warnings.warn(
-                "Deprecation notice: In Transformers v4.59, the default return value of `get_text_features` will change. "
-                "Currently, this method returns a model output object, but starting in v4.59, it will return a tensor instead. "
-                "To opt in to the new behavior now, set `legacy_output=False`."
-            )
 
         if self.config.use_decoder_only_language_model:
             text_outputs: CausalLMOutputWithPast = self.language_model(
@@ -1177,7 +1134,7 @@ class Blip2Model(Blip2PreTrainedModel):
                 return_dict=True,
             )
 
-        return text_outputs if legacy_output else text_outputs.logits
+        return text_outputs.logits
 
     @filter_out_non_signature_kwargs()
     @auto_docstring
@@ -1185,15 +1142,11 @@ class Blip2Model(Blip2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-        legacy_output: bool = True,
     ) -> Union[torch.FloatTensor, CausalLMOutputWithPast]:
         r"""
-        legacy_output (`bool`, *optional*, defaults to `True`):
-            Whether to return a model output object or a tensor of features.
-
         Returns:
-            vision_outputs (`BaseModelOutputWithPooling` or `torch.FloatTensor`):
-                The vision model outputs. If `legacy_output=False`, the output is a `torch.FloatTensor`.
+            vision_outputs (`torch.FloatTensor`):
+                The vision model's last layer pooled logits.
 
         Examples:
         ```python
@@ -1211,20 +1164,13 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> with torch.inference_mode():
         ...     image_outputs = model.get_image_features(**inputs)
         ```"""
-        if legacy_output:
-            warnings.warn(
-                "Deprecation notice: In Transformers v4.59, the default return value of `get_text_features` will change. "
-                "Currently, this method returns a model output object, but starting in v4.59, it will return a tensor instead. "
-                "To opt in to the new behavior now, set `legacy_output=False`."
-            )
-
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
         )
 
-        return vision_outputs if legacy_output else vision_outputs.pooler_output
+        return vision_outputs.pooler_output
 
     @filter_out_non_signature_kwargs()
     @auto_docstring
@@ -1232,15 +1178,11 @@ class Blip2Model(Blip2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-        legacy_output: bool = True,
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
-        legacy_output (`bool`, *optional*, defaults to `True`):
-            Whether to return a model output object or a tensor of features.
-
         Returns:
-            qformer_outputs (`BaseModelOutputWithPooling` or `torch.FloatTensor`):
-                The Q-Former outputs. If `legacy_output=False`, the output is a `torch.FloatTensor`.
+            qformer_outputs (`torch.FloatTensor`):
+                The Q-Former model's last layer hidden states.
 
         Examples:
 
@@ -1259,14 +1201,6 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> with torch.inference_mode():
         ...     qformer_outputs = model.get_qformer_features(**inputs)
         ```"""
-
-        if legacy_output:
-            warnings.warn(
-                "Deprecation notice: In Transformers v4.59, the default return value of `get_qformer_features` will change. "
-                "Currently, this method returns a model output object, but starting in v4.59, it will return a tensor instead. "
-                "To opt in to the new behavior now, set `legacy_output=False`."
-            )
-
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -1286,7 +1220,7 @@ class Blip2Model(Blip2PreTrainedModel):
             return_dict=True,
         )
 
-        return query_outputs if legacy_output else query_outputs.last_hidden_state
+        return query_outputs.last_hidden_state
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """
@@ -1515,6 +1449,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 @auto_docstring
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn = False  # because self.qformer does not support FA2
 
@@ -1635,10 +1570,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
 
-        # Update _tied_weights_keys using the base model used.
-        if language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
-
         self.language_model = language_model
 
         # Initialize weights and apply final processing
@@ -1661,11 +1592,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.language_model.get_decoder()
-
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
 
     def _preprocess_accelerate(self):
         r"""
@@ -1986,6 +1912,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 )
 class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn = False  # because self.qformer does not support FA2
 

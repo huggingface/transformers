@@ -21,7 +21,8 @@
 # limitations under the License.
 
 import collections.abc
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -31,7 +32,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import can_return_tuple, check_model_inputs
@@ -176,23 +176,22 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
+    scaling: Optional[float] = None,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
     # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    # Normalize the attention scores to probabilities.
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-
-    # This is actually dropping out entire tokens to attend to, which might
-    # seem a bit unusual, but is taken from the original Transformer paper.
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    # Mask heads if we want to
     if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -272,25 +271,6 @@ class Dinov2WithRegistersAttention(nn.Module):
         super().__init__()
         self.attention = Dinov2WithRegistersSelfAttention(config)
         self.output = Dinov2WithRegistersSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: set[int]):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         self_attn_output, _ = self.attention(hidden_states)
@@ -440,6 +420,7 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
     config: Dinov2WithRegistersConfig
     base_model_prefix = "dinov2_with_registers"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dinov2WithRegistersLayer"]
     _supports_sdpa = True
@@ -450,36 +431,43 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
         "attentions": Dinov2WithRegistersSelfAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-            ).to(module.weight.dtype)
+            module.weight.copy_(
+                nn.init.trunc_normal_(module.weight.to(torch.float32), mean=0.0, std=self.config.initializer_range).to(
+                    module.weight.dtype
+                )
+            )
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, Dinov2WithRegistersEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
+            module.position_embeddings.copy_(
+                nn.init.trunc_normal_(
+                    module.position_embeddings.to(torch.float32),
+                    mean=0.0,
+                    std=self.config.initializer_range,
+                ).to(module.position_embeddings.dtype)
+            )
 
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
+            module.cls_token.copy_(
+                nn.init.trunc_normal_(
+                    module.cls_token.to(torch.float32),
+                    mean=0.0,
+                    std=self.config.initializer_range,
+                ).to(module.cls_token.dtype)
+            )
 
-            module.mask_token.data.zero_()
-            module.register_tokens.data.zero_()
+            module.mask_token.zero_()
+            module.register_tokens.zero_()
         elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821
-            module.lambda1.data.fill_(self.config.layerscale_value)
+            module.lambda1.fill_(self.config.layerscale_value)
 
 
 @auto_docstring
@@ -498,14 +486,6 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
 
     def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
         return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring

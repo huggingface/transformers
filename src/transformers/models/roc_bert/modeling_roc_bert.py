@@ -14,17 +14,17 @@
 # limitations under the License.
 """PyTorch RoCBert model."""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -38,14 +38,10 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
+from ...pytorch_utils import apply_chunking_to_forward
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_roc_bert import RoCBertConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -238,7 +234,7 @@ class RoCBertSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -250,14 +246,14 @@ class RoCBertSelfAttention(nn.Module):
         key_layer = self.key(hidden_states).view(*hidden_shape).transpose(1, 2)
         value_layer = self.value(hidden_states).view(*hidden_shape).transpose(1, 2)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # decoder-only bert can have a simple dynamic cache for example
-            current_past_key_value = past_key_value
-            if isinstance(past_key_value, EncoderDecoderCache):
-                current_past_key_value = past_key_value.self_attention_cache
+            current_past_key_values = past_key_values
+            if isinstance(past_key_values, EncoderDecoderCache):
+                current_past_key_values = past_key_values.self_attention_cache
 
             # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-            key_layer, value_layer = current_past_key_value.update(
+            key_layer, value_layer = current_past_key_values.update(
                 key_layer,
                 value_layer,
                 self.layer_idx,
@@ -312,7 +308,7 @@ class RoCBertCrossAttention(nn.Module):
         hidden_states: torch.Tensor,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         # determine input shapes
@@ -325,22 +321,22 @@ class RoCBertCrossAttention(nn.Module):
         # get query proj
         query_layer = self.query(hidden_states).view(*q_input_shape).transpose(1, 2)
 
-        is_updated = past_key_value.is_updated.get(self.layer_idx) if past_key_value is not None else False
-        if past_key_value is not None and is_updated:
+        is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
+        if past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = past_key_value.cross_attention_cache.layers[self.layer_idx].keys
-            value_layer = past_key_value.cross_attention_cache.layers[self.layer_idx].values
+            key_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
+            value_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].values
         else:
             key_layer = self.key(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
             value_layer = self.value(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
 
-            if past_key_value is not None:
+            if past_key_values is not None:
                 # save all states to the cache
-                key_layer, value_layer = past_key_value.cross_attention_cache.update(
+                key_layer, value_layer = past_key_values.cross_attention_cache.update(
                     key_layer, value_layer, self.layer_idx
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                past_key_value.is_updated[self.layer_idx] = True
+                past_key_values.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -383,25 +379,6 @@ class RoCBertAttention(nn.Module):
         attention_class = RoCBertCrossAttention if is_cross_attention else RoCBertSelfAttention
         self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
         self.output = RoCBertSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -409,7 +386,7 @@ class RoCBertAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -418,7 +395,7 @@ class RoCBertAttention(nn.Module):
             hidden_states,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             cache_position=cache_position,
             **kwargs,
         )
@@ -484,14 +461,14 @@ class RoCBertLayer(GradientCheckpointingLayer):
         attention_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             cache_position=cache_position,
             **kwargs,
         )
@@ -509,7 +486,7 @@ class RoCBertLayer(GradientCheckpointingLayer):
                 None,  # attention_mask
                 encoder_hidden_states,
                 encoder_attention_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 **kwargs,
             )
             attention_output = cross_attention_output
@@ -549,7 +526,7 @@ class RoCBertEncoder(nn.Module):
                 attention_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 cache_position=cache_position,
                 **kwargs,
             )
@@ -602,15 +579,8 @@ class RoCBertLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -644,21 +614,22 @@ class RoCBertPreTrainedModel(PreTrainedModel):
         "cross_attentions": RoCBertCrossAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, RoCBertLMPredictionHead):
-            module.bias.data.zero_()
+            module.bias.zero_()
 
 
 @auto_docstring(
@@ -712,15 +683,6 @@ class RoCBertModel(RoCBertPreTrainedModel):
     def set_shape_embeddings(self, value):
         self.embeddings.shape_embed = value
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel._prune_heads
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @check_model_inputs()
     @auto_docstring
     def forward(
@@ -734,7 +696,7 @@ class RoCBertModel(RoCBertPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -760,15 +722,8 @@ class RoCBertModel(RoCBertPreTrainedModel):
         else:
             use_cache = False
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            return_legacy_cache = True
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -796,7 +751,6 @@ class RoCBertModel(RoCBertPreTrainedModel):
         )
 
         attention_mask, encoder_attention_mask = self._create_attention_masks(
-            input_shape=input_shape,
             attention_mask=attention_mask,
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=embedding_output,
@@ -819,9 +773,6 @@ class RoCBertModel(RoCBertPreTrainedModel):
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        if return_legacy_cache:
-            encoder_outputs.past_key_values = encoder_outputs.past_key_values.to_legacy_cache()
-
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
@@ -831,7 +782,6 @@ class RoCBertModel(RoCBertPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertModel._create_attention_masks
     def _create_attention_masks(
         self,
-        input_shape,
         attention_mask,
         encoder_attention_mask,
         embedding_output,
@@ -839,100 +789,30 @@ class RoCBertModel(RoCBertPreTrainedModel):
         cache_position,
         past_key_values,
     ):
-        if attention_mask is not None and attention_mask.dim() == 2:
-            if self.config.is_decoder:
-                attention_mask = create_causal_mask(
-                    config=self.config,
-                    input_embeds=embedding_output,
-                    attention_mask=attention_mask,
-                    cache_position=cache_position,
-                    past_key_values=past_key_values,
-                )
-            else:
-                attention_mask = self._update_full_mask(
-                    attention_mask,
-                    embedding_output,
-                )
-        elif attention_mask is not None and attention_mask.dim() == 3:
-            if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
-                raise ValueError(
-                    "Passing attention mask with a 3D/4D shape does not work with type "
-                    f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
-                )
-            attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+        if self.config.is_decoder:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
 
         if encoder_attention_mask is not None:
-            if encoder_attention_mask.dim() == 2:
-                encoder_attention_mask = self._update_cross_attn_mask(
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    embedding_output.shape[:2],
-                    embedding_output,
-                )
-            else:
-                if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
-                    raise ValueError(
-                        "Passing attention mask with a 3D/4D shape does not work with type "
-                        f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
-                    )
-                encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         return attention_mask, encoder_attention_mask
-
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
-
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_cross_attn_mask
-    def _update_cross_attn_mask(
-        self,
-        encoder_hidden_states: Union[torch.Tensor, None],
-        encoder_attention_mask: Union[torch.Tensor, None],
-        input_shape: torch.Size,
-        inputs_embeds: torch.Tensor,
-    ):
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    encoder_attention_mask,
-                    inputs_embeds.dtype,
-                    tgt_len=input_shape[-1],
-                )
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(encoder_attention_mask, torch.Tensor):
-                    encoder_attention_mask = make_flex_block_causal_mask(
-                        encoder_attention_mask,
-                        query_length=input_shape[-1],
-                        is_causal=False,
-                    )
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask(
-                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                )
-
-        return encoder_attention_mask
 
 
 @auto_docstring(
@@ -941,7 +821,10 @@ class RoCBertModel(RoCBertPreTrainedModel):
     """
 )
 class RoCBertForPreTraining(RoCBertPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "roc_bert.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1134,7 +1017,10 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
 
 @auto_docstring
 class RoCBertForMaskedLM(RoCBertPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "roc_bert.embeddings.word_embeddings.weight",
+    }
 
     # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.__init__ with Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
@@ -1289,7 +1175,10 @@ class RoCBertForMaskedLM(RoCBertPreTrainedModel):
     """
 )
 class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "roc_bert.embeddings.word_embeddings.weight",
+    }
 
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.__init__ with BertLMHeadModel->RoCBertForCausalLM,Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
@@ -1330,6 +1219,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
@@ -1369,7 +1259,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
         >>> prediction_logits = outputs.logits
         ```
         """
-        outputs = self.roc_bert(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.roc_bert(
             input_ids,
             input_shape_ids=input_shape_ids,
             input_pronunciation_ids=input_pronunciation_ids,
@@ -1386,21 +1276,18 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.cls(hidden_states[:, slice_indices, :])
 
-        lm_loss = None
+        loss = None
         if labels is not None:
-            lm_loss = self.loss_function(
-                prediction_scores,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return CausalLMOutputWithCrossAttentions(
-            loss=lm_loss,
-            logits=prediction_scores,
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,

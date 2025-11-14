@@ -123,11 +123,6 @@ class PreTrainedConfig(PushToHubMixin):
         tie_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
             and decoder model to have the exact same parameter names.
-        prune_heads (`dict[int, list[int]]`, *optional*, defaults to `{}`):
-            Pruned heads of the model. The keys are the selected layer indices and the associated values, the list of
-            heads to prune in said layer.
-
-            For instance `{1: [0, 2], 2: [2, 3]}` will prune heads 0 and 2 on layer 1 and heads 2 and 3 on layer 2.
         chunk_size_feed_forward (`int`, *optional*, defaults to `0`):
             The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
@@ -172,8 +167,6 @@ class PreTrainedConfig(PushToHubMixin):
 
         > PyTorch specific parameters
 
-        torchscript (`bool`, *optional*, defaults to `False`):
-            Whether or not the model should be used with Torchscript.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
             model has a output word embedding layer.
@@ -211,10 +204,8 @@ class PreTrainedConfig(PushToHubMixin):
         output_hidden_states: bool = False,
         output_attentions: bool = False,
         return_dict: bool = True,
-        torchscript: bool = False,
         dtype: Optional[Union[str, "torch.dtype"]] = None,
         # Common arguments
-        pruned_heads: Optional[dict[int, list[int]]] = None,
         tie_word_embeddings: bool = True,
         chunk_size_feed_forward: int = 0,
         is_encoder_decoder: bool = False,
@@ -274,12 +265,10 @@ class PreTrainedConfig(PushToHubMixin):
         # Attributes common for all models
         self.return_dict = return_dict
         self.output_hidden_states = output_hidden_states
-        self.torchscript = torchscript
         self.dtype = dtype
         self._output_attentions = output_attentions  # has public property
 
         # Less common kwargs, only used by some models
-        self.pruned_heads = pruned_heads if pruned_heads is not None else {}
         self.tie_word_embeddings = tie_word_embeddings
         self.chunk_size_feed_forward = chunk_size_feed_forward
 
@@ -380,8 +369,7 @@ class PreTrainedConfig(PushToHubMixin):
         """
         `bool`: Whether or not return [`~utils.ModelOutput`] instead of tuples.
         """
-        # If torchscript is set, force `return_dict=False` to avoid jit errors
-        return self.return_dict and not self.torchscript
+        return self.return_dict
 
     @property
     def num_labels(self) -> int:
@@ -402,7 +390,7 @@ class PreTrainedConfig(PushToHubMixin):
         return self._attn_implementation_internal
 
     @_attn_implementation.setter
-    def _attn_implementation(self, value: Optional[Union[str, dict]]):
+    def _attn_implementation(self, value: str | dict | None):
         """We set it recursively on the sub-configs as well"""
         # Set if for current config
         current_attn = getattr(self, "_attn_implementation", None)
@@ -429,7 +417,15 @@ class PreTrainedConfig(PushToHubMixin):
         logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
         self.dtype = value
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    @property
+    def rope_scaling(self):
+        return self.rope_parameters
+
+    @rope_scaling.setter
+    def rope_scaling(self, value):
+        self.rope_parameters = value
+
+    def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
         [`~PreTrainedConfig.from_pretrained`] class method.
@@ -444,8 +440,6 @@ class PreTrainedConfig(PushToHubMixin):
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        self._set_token_in_kwargs(kwargs)
-
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -493,41 +487,14 @@ class PreTrainedConfig(PushToHubMixin):
                 token=kwargs.get("token"),
             )
 
-    @staticmethod
-    def _set_token_in_kwargs(kwargs, token=None):
-        """Temporary method to deal with `token` and `use_auth_token`.
-
-        This method is to avoid apply the same changes in all model config classes that overwrite `from_pretrained`.
-
-        Need to clean up `use_auth_token` in a follow PR.
-        """
-        # Some model config classes like CLIP define their own `from_pretrained` without the new argument `token` yet.
-        if token is None:
-            token = kwargs.pop("token", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
-        if token is not None:
-            kwargs["token"] = token
-
     @classmethod
     def from_pretrained(
         cls: type[SpecificPreTrainedConfigType],
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        pretrained_model_name_or_path: str | os.PathLike,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
     ) -> SpecificPreTrainedConfigType:
@@ -608,8 +575,6 @@ class PreTrainedConfig(PushToHubMixin):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        cls._set_token_in_kwargs(kwargs, token)
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if cls.base_config_key and cls.base_config_key in config_dict:
             config_dict = config_dict[cls.base_config_key]
@@ -632,7 +597,7 @@ class PreTrainedConfig(PushToHubMixin):
 
     @classmethod
     def get_config_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
@@ -646,8 +611,6 @@ class PreTrainedConfig(PushToHubMixin):
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
-        cls._set_token_in_kwargs(kwargs)
-
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
@@ -667,7 +630,7 @@ class PreTrainedConfig(PushToHubMixin):
 
     @classmethod
     def _get_config_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -796,9 +759,6 @@ class PreTrainedConfig(PushToHubMixin):
 
         config = cls(**config_dict)
 
-        if hasattr(config, "pruned_heads"):
-            config.pruned_heads = {int(key): value for key, value in config.pruned_heads.items()}
-
         # Update config with kwargs if needed
         if "num_labels" in kwargs and "id2label" in kwargs:
             num_labels = kwargs["num_labels"]
@@ -833,7 +793,7 @@ class PreTrainedConfig(PushToHubMixin):
 
     @classmethod
     def from_json_file(
-        cls: type[SpecificPreTrainedConfigType], json_file: Union[str, os.PathLike]
+        cls: type[SpecificPreTrainedConfigType], json_file: str | os.PathLike
     ) -> SpecificPreTrainedConfigType:
         """
         Instantiates a [`PreTrainedConfig`] from the path to a JSON file of parameters.
@@ -850,7 +810,7 @@ class PreTrainedConfig(PushToHubMixin):
         return cls(**config_dict)
 
     @classmethod
-    def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
+    def _dict_from_json_file(cls, json_file: str | os.PathLike):
         with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
         return json.loads(text)
@@ -890,7 +850,6 @@ class PreTrainedConfig(PushToHubMixin):
                 isinstance(getattr(self, key, None), PreTrainedConfig)
                 and key in class_config_dict
                 and isinstance(class_config_dict[key], dict)
-                or key in self.sub_configs
             ):
                 # For nested configs we need to clean the diff recursively
                 diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
@@ -917,7 +876,7 @@ class PreTrainedConfig(PushToHubMixin):
         if hasattr(self, "quantization_config"):
             serializable_config_dict["quantization_config"] = (
                 self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict)
+                if not isinstance(self.quantization_config, dict) and self.quantization_config is not None
                 else self.quantization_config
             )
         self.dict_dtype_to_str(serializable_config_dict)
@@ -951,7 +910,7 @@ class PreTrainedConfig(PushToHubMixin):
         if hasattr(self, "quantization_config"):
             output["quantization_config"] = (
                 self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict)
+                if not isinstance(self.quantization_config, dict) and self.quantization_config is not None
                 else self.quantization_config
             )
         self.dict_dtype_to_str(output)
@@ -976,7 +935,7 @@ class PreTrainedConfig(PushToHubMixin):
             config_dict = self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):
+    def to_json_file(self, json_file_path: str | os.PathLike, use_diff: bool = True):
         """
         Save this instance to a JSON file.
 
@@ -1142,11 +1101,11 @@ class PreTrainedConfig(PushToHubMixin):
         non_default_generation_parameters = {}
         decoder_attribute_name = None
 
-        # Composite models don't have a default config, use their decoder config as a fallback for default values
+        # Some composite models don't have a default config, use their decoder config as a fallback for default values
         # If no known pattern is matched, then `default_config = None` -> check against the global generation defaults
-        try:
+        if not self.has_no_defaults_at_init:
             default_config = self.__class__()
-        except ValueError:
+        else:
             decoder_config = self.get_text_config(decoder=True)
             if decoder_config is not self:
                 default_config = decoder_config.__class__()
@@ -1256,42 +1215,6 @@ class PreTrainedConfig(PushToHubMixin):
                     setattr(config_to_return, new_key, value)
 
         return config_to_return
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config, vision_config, **kwargs):
-        r"""
-        Instantiate a model config (or a derived class) from text model configuration and vision model
-        configuration.
-
-        Returns:
-            [`PreTrainedConfig`]: An instance of a configuration object
-        """
-
-        warnings.warn(
-            "The `from_text_vision_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
-            "the config class directly with `MyConfig(text_config=text_config, vision_config=vision_config, **kwargs)` instead.",
-            FutureWarning,
-        )
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
-    @classmethod
-    def from_text_audio_configs(cls, text_config, audio_config, **kwargs):
-        r"""
-        Instantiate a model config (or a derived class) from text model configuration and audio model
-        configuration.
-
-        Returns:
-            [`PreTrainedConfig`]: An instance of a configuration object
-        """
-
-        warnings.warn(
-            "The `from_text_audio_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
-            "the config class directly with `MyConfig(text_config=text_config, audio_config=audio_config, **kwargs)` instead.",
-            FutureWarning,
-        )
-
-        return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
 
 
 def get_configuration_file(configuration_files: list[str]) -> str:

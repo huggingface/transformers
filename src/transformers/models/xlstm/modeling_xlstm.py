@@ -22,6 +22,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_xlstm_available
 from .configuration_xlstm import xLSTMConfig
@@ -29,13 +30,17 @@ from .configuration_xlstm import xLSTMConfig
 
 if is_xlstm_available():
     from xlstm.xlstm_large.model import RMSNorm as xLSTMRMSNorm
-    from xlstm.xlstm_large.model import mLSTMBlock as xLSTMBlock
-    from xlstm.xlstm_large.model import mLSTMStateType, soft_cap
+    from xlstm.xlstm_large.model import mLSTMBlock, mLSTMStateType, soft_cap
 
     external_xlstm = True
+
+    class xLSTMBlock(GradientCheckpointingLayer, mLSTMBlock):
+        pass
+
 else:
+    from collections.abc import Callable
     from functools import partial
-    from typing import Callable, Literal
+    from typing import Literal
 
     from .configuration_xlstm import round_up_to_next_multiple_of
 
@@ -1163,7 +1168,7 @@ else:
             y = self.out_proj(h_out)
             return y, state
 
-    class xLSTMBlock(nn.Module):
+    class xLSTMBlock(GradientCheckpointingLayer):
         def __init__(self, config: xLSTMConfig):
             super().__init__()
             self.config = config
@@ -1240,6 +1245,7 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                 return name
         return ""
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):
             small_init_method(self.config.hidden_size)(self.embeddings.weight)
@@ -1456,17 +1462,11 @@ class xLSTMModel(xLSTMPreTrainedModel):
         else:
             all_hidden_states = () if output_hidden_states else None
             for layer_idx, xlstm_block in enumerate(self.blocks):
-                if self.gradient_checkpointing and self.training:
-                    hidden_states, rnn_state = self._gradient_checkpointing_func(
-                        xlstm_block.__call__,
-                        hidden_states,
-                        cache_params.rnn_state[layer_idx] if cache_params is not None else None,
-                    )
-                else:
-                    hidden_states, rnn_state = xlstm_block(
-                        hidden_states,
-                        state=cache_params.rnn_state[layer_idx] if cache_params is not None else None,
-                    )
+                hidden_states, rnn_state = xlstm_block(
+                    hidden_states,
+                    cache_params.rnn_state[layer_idx] if cache_params is not None else None,
+                )
+
                 if cache_params:
                     for state_idx in range(len(cache_params.rnn_state[layer_idx])):
                         local_rnn_state = rnn_state[state_idx]

@@ -74,9 +74,10 @@ import torch
 import numpy as np
 
 from torchcodec.decoders import VideoDecoder
-from transformers import AutoVideoProcessor, AutoModelForVideoClassification, infer_device
+from transformers import AutoVideoProcessor, AutoModelForVideoClassification
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 # Load model and video preprocessor
 hf_repo = "facebook/vjepa2-vitl-fpc16-256-ssv2"

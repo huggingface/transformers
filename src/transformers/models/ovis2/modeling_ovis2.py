@@ -20,8 +20,9 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -417,6 +418,7 @@ class Ovis2VisualEmbeddingTable(nn.Embedding):
 class Ovis2PreTrainedModel(PreTrainedModel):
     config: Ovis2Config
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ovis2VisionAttention"]
     _skip_keys_device_placement = "past_key_values"
@@ -669,7 +671,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
 @auto_docstring
 class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Ovis2Config):
         super().__init__(config)

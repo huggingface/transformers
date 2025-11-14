@@ -107,8 +107,6 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         backbone_channel_list = [384, 192, 96, 48] if backbone_channel_list is None else backbone_channel_list
         backbone_feature_sizes = (
             [[256, 256], [128, 128], [64, 64]] if backbone_feature_sizes is None else backbone_feature_sizes
@@ -118,8 +116,6 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         if isinstance(backbone_config, dict):
             backbone_config["model_type"] = backbone_config.get("model_type", "timm_wrapper")
             backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
-        elif isinstance(backbone_config, AutoConfig):
-            backbone_config = backbone_config
         elif backbone_config is None:
             backbone_config = AutoConfig.from_pretrained(
                 "timm/repvit_m1.dist_in1k",
@@ -141,6 +137,7 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        super().__init__(**kwargs)
 
 
 class EdgeTamPromptEncoderConfig(Sam2PromptEncoderConfig):
@@ -177,22 +174,23 @@ class EdgeTamFeedForward(Sam2FeedForward):
 
 @auto_docstring
 class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, (nn.LayerNorm, EdgeTamLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         if isinstance(module, EdgeTamModel):
             if module.no_memory_embedding is not None:
-                module.no_memory_embedding.data.zero_()
+                module.no_memory_embedding.zero_()
 
 
 @auto_docstring(
