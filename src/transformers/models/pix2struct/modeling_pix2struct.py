@@ -403,7 +403,8 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
             )
 
             init.normal_(module.weight, mean=0.0, std=factor * ((hidden_size) ** -0.5))
-            if module.padding_idx is not None:
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, Pix2StructTextModel):
             hidden_size = (
@@ -422,7 +423,8 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
                 init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
 
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right with T5->Pix2Struct

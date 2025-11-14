@@ -266,7 +266,8 @@ class UdopPreTrainedModel(PreTrainedModel):
             init.constant_(module.weight, factor * 1.0)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=factor)
-            if module.padding_idx is not None:
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.Conv2d):
             init.trunc_normal_(module.weight, mean=0.0, std=factor)

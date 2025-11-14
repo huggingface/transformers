@@ -622,7 +622,8 @@ class XLMPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Embedding):
             if self.config is not None and self.config.embed_init_std is not None:
                 init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
-            if module.padding_idx is not None:
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
         if isinstance(module, nn.Linear):
             if self.config is not None and self.config.init_std is not None:

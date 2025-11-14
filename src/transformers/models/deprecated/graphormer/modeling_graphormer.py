@@ -720,8 +720,9 @@ class GraphormerPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.bias)
         if isinstance(module, nn.Embedding):
             init.normal_(module.weight.data, mean=0.0, std=0.02)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight.data[module.padding_idx])
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         if isinstance(module, GraphormerMultiheadAttention):
             init.normal_(module.q_proj.weight.data, mean=0.0, std=0.02)
             init.normal_(module.k_proj.weight.data, mean=0.0, std=0.02)

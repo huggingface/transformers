@@ -232,7 +232,8 @@ class PretrainedFSMTModel(PreTrainedModel):
             init.copy_(module.weight, weight)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=std)
-            if module.padding_idx is not None:
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
 
     @property

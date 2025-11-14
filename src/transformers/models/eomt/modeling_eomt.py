@@ -1011,7 +1011,8 @@ class EomtPreTrainedModel(PreTrainedModel):
             init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=1)
-            if module.padding_idx is not None:
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, EomtLayerScale):
             if hasattr(module, "lambda1"):

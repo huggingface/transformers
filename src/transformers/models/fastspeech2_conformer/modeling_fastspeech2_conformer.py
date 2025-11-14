@@ -1009,7 +1009,8 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight)
-            if module.padding_idx is not None:
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, FastSpeech2ConformerAttention):
             init.xavier_uniform_(module.pos_bias_u)
