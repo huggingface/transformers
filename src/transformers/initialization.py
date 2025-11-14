@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import sys
+from collections import defaultdict
 from contextlib import contextmanager
 
 import torch
@@ -169,12 +171,21 @@ def guard_torch_init_functions():
     Usually, all models are using the init from `transformers` which are already guarded, but just to make extra sure
     and for remote code, we also use this context manager.
     """
+    originals = defaultdict(dict)
     try:
         # Replace all torch funcs by the ones in this file
         for name in TORCH_INIT_FUNCTIONS.keys():
-            setattr(torch.nn.init, name, globals()[name])
+            # Here, we need to check all modules imported, and hot patch all of them, as usually torch does
+            # something like `from torch.nn.init import xavier_uniform_` in their internals (e.g in torch.nn.modules,
+            # where MultiHeadAttention lives), so the function name is binded at import time and just doing
+            # `setattr(torch.nn.init, name, gloabls()[name])` is thus not enough
+            for module in sys.modules.values():
+                if module and hasattr(module, name):
+                    originals[module][name] = getattr(module, name)
+                    setattr(module, name, globals()[name])
         yield
     finally:
-        # Set back the original functions
-        for name, fn in TORCH_INIT_FUNCTIONS.items():
-            setattr(torch.nn.init, name, fn)
+        # Set back the original functions on all modules
+        for module, functions in originals.items():
+            for name, func in functions.items():
+                setattr(module, name, func)
