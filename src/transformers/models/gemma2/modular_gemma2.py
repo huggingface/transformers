@@ -285,7 +285,7 @@ def eager_attention_forward(
         query_states = query.view(query.shape[0], key.shape[1], -1, *query.shape[2:])
         # Equivalent to (but faster than):
         # attn_weights = query_states @ key.unsqueeze(2).transpose(-1, -2) * scaling
-        attn_weights = torch.einsum("bkgjd, bksd -> bkgjs", query_states, key) * scaling
+        attn_weights = torch.einsum("bkgjd, bksd -> bkgjs", query_states, key).flatten(1, 2) * scaling
     else:
         attn_weights = (query @ key.transpose(-1, -2)) * scaling
 
@@ -295,10 +295,7 @@ def eager_attention_forward(
         attn_weights = attn_weights * softcap
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        if multi_head_attention:
-            attn_weights = attn_weights + causal_mask.unsqueeze(2)
-        else:
-            attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + causal_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -306,8 +303,9 @@ def eager_attention_forward(
     if multi_head_attention:
         # Equivalent to (but faster than):
         # attn_output = (attn_weights @ value.unsqueeze(2)).flatten(1, 2).transpose(1, 2)
-        attn_output = torch.einsum("bkgjs, bksd -> bkgjd", attn_weights, value).flatten(1, 2)
-        attn_weights = attn_weights.flatten(1, 2)
+        attn_output = torch.einsum(
+            "bkgjs, bksd -> bkgjd", attn_weights.unflatten(1, (key.shape[1], -1)), value
+        ).flatten(1, 2)
     else:
         attn_output = attn_weights @ value
     return attn_output.transpose(1, 2).contiguous(), attn_weights
