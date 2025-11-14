@@ -169,6 +169,7 @@ if is_torch_available():
 
     class BaseModelWithTiedWeights(PreTrainedModel):
         config_class = PreTrainedConfig
+        _tied_weights_keys = {"linear_2.weight": "linear.weight"}
 
         def __init__(self, config):
             super().__init__(config)
@@ -239,6 +240,7 @@ if is_torch_available():
     class ModelWithHeadAndTiedWeights(PreTrainedModel):
         base_model_prefix = "base"
         config_class = PreTrainedConfig
+        _tied_weights_keys = {"decoder.weight": "base.linear.weight"}
 
         def _init_weights(self, module):
             pass
@@ -1420,6 +1422,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertIs(new_model.linear.weight, new_model.linear_2.weight)
 
             # With head
+            model = BaseModel(PreTrainedConfig())
             model.save_pretrained(tmp_dir)
             new_model, load_info = ModelWithHeadAndTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
             self.assertIs(new_model.base.linear.weight, new_model.decoder.weight)

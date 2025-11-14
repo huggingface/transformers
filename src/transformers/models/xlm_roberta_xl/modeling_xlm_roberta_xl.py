@@ -878,7 +878,7 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
         self.roberta = XLMRobertaXLModel(config, add_pooling_layer=False)
         self.lm_head = XLMRobertaXLLMHead(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
@@ -949,7 +949,7 @@ class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
         self.roberta = XLMRobertaXLModel(config, add_pooling_layer=False)
         self.classifier = XLMRobertaXLClassificationHead(config)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -1021,7 +1021,7 @@ class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -1112,7 +1112,7 @@ class XLMRobertaXLForTokenClassification(XLMRobertaXLPreTrainedModel):
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -1176,7 +1176,7 @@ class XLMRobertaXLForQuestionAnswering(XLMRobertaXLPreTrainedModel):
         self.roberta = XLMRobertaXLModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
