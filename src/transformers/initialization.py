@@ -12,16 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from contextlib import contextmanager
-from functools import wraps
 
 import torch
+
+
+# Record all the torch primitives in advance, so that we can use them without them being modified when we patch torch
+# in context managers
+TORCH_INIT_FUNCTIONS = {
+    "uniform_": torch.nn.init.uniform_,
+    "normal_": torch.nn.init.normal_,
+    "constant_": torch.nn.init.constant_,
+    "ones_": torch.nn.init.ones_,
+    "zeros_": torch.nn.init.zeros_,
+    "eye_": torch.nn.init.eye_,
+    "dirac_": torch.nn.init.dirac_,
+    "xavier_uniform_": torch.nn.init.xavier_uniform_,
+    "xavier_normal_": torch.nn.init.xavier_normal_,
+    "kaiming_uniform_": torch.nn.init.kaiming_uniform_,
+    "kaiming_normal_": torch.nn.init.kaiming_normal_,
+    "trunc_normal_": torch.nn.init.trunc_normal_,
+    "orthogonal_": torch.nn.init.orthogonal_,
+    "sparse_": torch.nn.init.sparse_,
+}
 
 
 def uniform_(
     tensor: torch.Tensor, a: float = 0.0, b: float = 1.0, generator: torch.Generator | None = None
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.uniform_(tensor, a=a, b=b, generator=generator)
+        return TORCH_INIT_FUNCTIONS["uniform_"](tensor, a=a, b=b, generator=generator)
     return tensor
 
 
@@ -29,49 +48,49 @@ def normal_(
     tensor: torch.Tensor, mean: float = 0.0, std: float = 1.0, generator: torch.Generator | None = None
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.normal_(tensor, mean=mean, std=std, generator=generator)
+        return TORCH_INIT_FUNCTIONS["normal_"](tensor, mean=mean, std=std, generator=generator)
     return tensor
 
 
 def constant_(tensor: torch.Tensor, val: float) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.constant_(tensor, val=val)
+        return TORCH_INIT_FUNCTIONS["constant_"](tensor, val=val)
     return tensor
 
 
 def ones_(tensor: torch.Tensor) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.ones_(tensor)
+        return TORCH_INIT_FUNCTIONS["ones_"](tensor)
     return tensor
 
 
 def zeros_(tensor: torch.Tensor) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.zeros_(tensor)
+        return TORCH_INIT_FUNCTIONS["zeros_"](tensor)
     return tensor
 
 
 def eye_(tensor: torch.Tensor) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.eye_(tensor)
+        return TORCH_INIT_FUNCTIONS["eye_"](tensor)
     return tensor
 
 
 def dirac_(tensor: torch.Tensor, groups: int = 1) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.dirac_(tensor, groups=groups)
+        return TORCH_INIT_FUNCTIONS["dirac_"](tensor, groups=groups)
     return tensor
 
 
 def xavier_uniform_(tensor: torch.Tensor, gain: float = 1.0, generator: torch.Generator | None = None) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.xavier_uniform_(tensor, gain=gain, generator=generator)
+        return TORCH_INIT_FUNCTIONS["xavier_uniform_"](tensor, gain=gain, generator=generator)
     return tensor
 
 
 def xavier_normal_(tensor: torch.Tensor, gain: float = 1.0, generator: torch.Generator | None = None) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.xavier_normal_(tensor, gain=gain, generator=generator)
+        return TORCH_INIT_FUNCTIONS["xavier_normal_"](tensor, gain=gain, generator=generator)
     return tensor
 
 
@@ -83,7 +102,9 @@ def kaiming_uniform_(
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.kaiming_uniform_(tensor, a=a, mode=mode, nonlinearity=nonlinearity, generator=generator)
+        return TORCH_INIT_FUNCTIONS["kaiming_uniform_"](
+            tensor, a=a, mode=mode, nonlinearity=nonlinearity, generator=generator
+        )
     return tensor
 
 
@@ -95,7 +116,9 @@ def kaiming_normal_(
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.kaiming_normal_(tensor, a=a, mode=mode, nonlinearity=nonlinearity, generator=generator)
+        return TORCH_INIT_FUNCTIONS["kaiming_normal_"](
+            tensor, a=a, mode=mode, nonlinearity=nonlinearity, generator=generator
+        )
     return tensor
 
 
@@ -108,7 +131,7 @@ def trunc_normal_(
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.trunc_normal_(tensor, mean=mean, std=std, a=a, b=b, generator=generator)
+        return TORCH_INIT_FUNCTIONS["trunc_normal_"](tensor, mean=mean, std=std, a=a, b=b, generator=generator)
     return tensor
 
 
@@ -118,7 +141,7 @@ def orthogonal_(
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.orthogonal_(tensor, gain=gain, generator=generator)
+        return TORCH_INIT_FUNCTIONS["orthogonal_"](tensor, gain=gain, generator=generator)
     return tensor
 
 
@@ -126,7 +149,7 @@ def sparse_(
     tensor: torch.Tensor, sparsity: float, std: float = 0.01, generator: torch.Generator | None = None
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
-        return torch.nn.init.sparse_(tensor, sparsity=sparsity, std=std, generator=generator)
+        return TORCH_INIT_FUNCTIONS["sparse_"](tensor, sparsity=sparsity, std=std, generator=generator)
     return tensor
 
 
@@ -137,74 +160,21 @@ def copy_(tensor: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
     return tensor
 
 
-TORCH_INIT_FUNCTIONS = (
-    "uniform_",
-    "normal_",
-    "constant_",
-    "ones_",
-    "zeros_",
-    "eye_",
-    "dirac_",
-    "xavier_uniform_",
-    "xavier_normal_",
-    "kaiming_uniform_",
-    "kaiming_normal_",
-    "trunc_normal_",
-    "orthogonal_",
-    "sparse_",
-)
-
-
 @contextmanager
-def no_init_weights():
-    """
-    Context manager to globally disable weight initialization to speed up loading large models.
-    """
-    global _init_weights
-    old_init_weights = _init_weights
-
-    _init_weights = False
-
-    def _skip_init(*args, **kwargs):
-        pass
-
-    # Save the original initialization functions
-    for name, init_func in TORCH_INIT_FUNCTIONS.items():
-        setattr(torch.nn.init, name, _skip_init)
-
-    try:
-        yield
-    finally:
-        _init_weights = old_init_weights
-        # Restore the original initialization functions
-        for name, init_func in TORCH_INIT_FUNCTIONS.items():
-            setattr(torch.nn.init, name, init_func)
-
-
-@contextmanager
-def guard_torch_init():
+def guard_torch_init_functions():
     """
     Guard the `torch.nn.init` primitive functions to behave exactly like the functions in this file, i.e. be
     protected against the `_is_hf_initialized` flag to avoid re-init if the param was already loaded.
+
+    Usually, all models are using the init from `transformers` which are already guarded, but just to make extra sure
+    and for remote code, we also use this context manager.
     """
-    originals = {}
-
-    def make_wrapper(fn):
-        @wraps(fn)
-        def wrapped(*args, **kwargs):
-            # Tensor can come positionally or as a kwarg
-            tensor = args[0] if args else kwargs.get("tensor")
-            if not getattr(tensor, "_is_hf_initialized", False):
-                return fn(*args, **kwargs)
-            return tensor
-
-        return wrapped
-
     try:
-        for name in TORCH_INIT_FUNCTIONS:
-            originals[name] = getattr(torch.nn.init, name)
-            setattr(torch.nn.init, name, make_wrapper(originals[name]))
+        # Replace all torch funcs by the ones in this file
+        for name in TORCH_INIT_FUNCTIONS.keys():
+            setattr(torch.nn.init, name, globals()[name])
         yield
     finally:
-        for name, fn in originals.items():
+        # Set back the original functions
+        for name, fn in TORCH_INIT_FUNCTIONS.items():
             setattr(torch.nn.init, name, fn)

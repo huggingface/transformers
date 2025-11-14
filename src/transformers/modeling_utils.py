@@ -902,33 +902,6 @@ def _get_dtype(
     return config, dtype, dtype_orig
 
 
-@contextmanager
-def guard_nn_init_functions(flag_name: str = "_is_hf_initialized"):
-    originals = {}
-
-    def make_wrapper(fn):
-        @wraps(fn)
-        def wrapped(*args, **kwargs):
-            # Tensor can come positionally or as a kwarg (e.g. via DeviceContext)
-            t = args[0] if args else kwargs.get("tensor", kwargs.get("input"))
-            if t is not None and getattr(t, flag_name, False):
-                # mimic init.* return convention (returns the tensor)
-                return t
-            return fn(*args, **kwargs)  # TODO we could set is init here.
-
-        return wrapped
-
-    try:
-        for name in TORCH_INIT_FUNCTIONS:
-            if hasattr(nn.init, name):
-                originals[name] = getattr(nn.init, name)
-                setattr(nn.init, name, make_wrapper(originals[name]))
-        yield
-    finally:
-        for name, fn in originals.items():
-            setattr(nn.init, name, fn)
-
-
 class PipelineParallel(Enum):
     inputs = 0
     outputs = 1
@@ -2337,7 +2310,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             param._is_hf_initialized = True
 
     @torch.no_grad()
-    @guard_nn_init_functions()
+    @init.guard_torch_init_functions()
     def initialize_weights(self):
         """
         This is equivalent to calling `self.apply(self._initialize_weights)`, but correctly handles composite models.
