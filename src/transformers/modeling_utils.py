@@ -4261,15 +4261,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for k in all_pointer:
                 k.__exit__(None, None, None)
 
-        # Marks tied weights as `_is_hf_initialized` to avoid initializing them
-        for tied_param in model.all_tied_weights_keys.keys():
-            # It's always a proper weight except for 2 or 3 old models where it's a regex or module set to None
-            # -> just skip it in those cases (they will just re-init before tying, so they loose the added optimization)
-            try:
-                param = model.get_parameter(tied_param)
-                param._is_hf_initialized = True
-            except AttributeError:
-                pass
+        # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
+        model.mark_tied_weights_as_initialized()
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
@@ -4590,6 +4583,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             unexpected_keys = {key for key in unexpected_keys if ignore_unexpected_regex.search(key) is None}
 
         return missing_keys, unexpected_keys
+
+    def mark_tied_weights_as_initialized(self):
+        """Adds the `_is_hf_initialized` flag on parameters that will be tied, in order to avoid initializing them
+        later as they will be tied (overwritten) anyway.
+        This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
+        running inits on them is very costly."""
+        for tied_param in self.all_tied_weights_keys.keys():
+            # It's always a proper weight except for 2 or 3 old models where it's a regex or module set to None
+            # -> just skip it in those cases (they will just re-init before tying, so they loose the added optimization)
+            try:
+                param = self.get_parameter(tied_param)
+                param._is_hf_initialized = True
+            except AttributeError:
+                pass
 
     def get_parameter_or_buffer(self, target: str):
         """
