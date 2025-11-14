@@ -225,8 +225,6 @@ class OwlViTConfig(PreTrainedConfig):
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The initial value of the *logit_scale* parameter. Default is used as per the original OWL-ViT
             implementation.
-        return_dict (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return a dictionary. If `False`, returns a tuple.
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """
@@ -240,7 +238,6 @@ class OwlViTConfig(PreTrainedConfig):
         vision_config=None,
         projection_dim=512,
         logit_scale_init_value=2.6592,
-        return_dict=True,
         **kwargs,
     ):
         if text_config is None:
@@ -260,7 +257,6 @@ class OwlViTConfig(PreTrainedConfig):
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
-        self.return_dict = return_dict
         self.initializer_factor = 1.0
         super().__init__(**kwargs)
 
