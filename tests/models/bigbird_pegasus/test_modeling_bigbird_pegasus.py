@@ -78,7 +78,7 @@ class BigBirdPegasusModelTester:
     def __init__(
         self,
         parent,
-        batch_size=3,
+        batch_size=2,
         seq_length=256,
         is_training=True,
         use_labels=False,
