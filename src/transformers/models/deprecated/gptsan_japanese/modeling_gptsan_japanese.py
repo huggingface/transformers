@@ -580,7 +580,7 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_model
             n_heads = self.config.num_heads
-            module.router.classifier.weight.normal_(mean=0.0, std=factor * 1)
+            init.normal_(module.router.classifier.weight, mean=0.0, std=factor * 1)
             for idx in range(self.config.num_experts):
                 init.normal_(module.experts[f"expert_{idx}"].wi.weight, mean=0.0, std=factor * (d_model**-0.5))
                 init.normal_(module.experts[f"expert_{idx}"].wo.weight, mean=0.0, std=factor * (d_model**-0.5))
