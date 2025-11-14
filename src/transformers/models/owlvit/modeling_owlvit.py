@@ -486,8 +486,8 @@ class OwlViTEncoderLayer(GradientCheckpointingLayer):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask = None,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -606,7 +606,7 @@ class OwlViTEncoder(nn.Module):
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
-                attention_mask = attention_mask,
+                attention_mask,
                 **kwargs,
             )
 
