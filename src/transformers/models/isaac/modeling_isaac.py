@@ -103,7 +103,7 @@ from perceptron.tensorstream.ops import (
 from perceptron.tensorstream.tensorstream import TensorStream, TextType, VisionType, group_streams
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation.utils import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
@@ -348,6 +348,8 @@ class IsaacVisionAttention(nn.Module):
         cu_seqlens = kwargs.pop("cu_seqlens", None)
         max_seqlen = kwargs.pop("max_seqlen", None)
         kwargs.pop("output_attentions", None)
+        kwargs.pop("output_hidden_states", None)
+        kwargs.pop("return_dict", None)
         if kwargs:
             unexpected = ", ".join(sorted(kwargs))
             raise TypeError(f"Unexpected kwargs for IsaacVisionAttention.forward: {unexpected}")
@@ -1236,6 +1238,19 @@ class IsaacModel(PreTrainedModel):
         elif inputs_embeds is None:
             raise ValueError("You have to specify either tensor_stream, input_ids or inputs_embeds")
 
+        # Ensure cache exists when requested
+        if use_cache and past_key_values is None:
+            cache_config = self.config.get_text_config() if hasattr(self.config, "get_text_config") else self.config
+            past_key_values = DynamicCache(config=cache_config)
+
+        if cache_position is None and (past_key_values is not None or use_cache):
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
+            )
+
         # Create default position_ids if not provided
         if position_ids is None:
             if tensor_stream is not None:
@@ -1266,7 +1281,7 @@ class IsaacModel(PreTrainedModel):
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=(cos, sin),
@@ -1494,8 +1509,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        Forward pass for conditional generation supporting both standard inputs and TensorStream.
-
         tensor_stream (`TensorStream`, *optional*):
             Packed multimodal stream (text, vision, audio tokens) that already encodes spatial metadata. When provided,
             the model derives embeddings, modality masks, and 3D rotary coordinates directly from the stream instead of
