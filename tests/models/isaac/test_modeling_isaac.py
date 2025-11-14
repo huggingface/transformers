@@ -578,10 +578,7 @@ def test_hf_generate_vs_training_generate_logits(isaac_reference_model, isaac_re
     messages = [
         {
             "role": "user",
-            "content": [
-                {"type": "text", "text": "Describe this image:"},
-                {"type": "image", "image": image},
-            ],
+            "content": f"Describe this image: {vision_token}",
         }
     ]
     prompt = isaac_reference_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
