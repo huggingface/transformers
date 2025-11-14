@@ -35,7 +35,6 @@ if is_torch_available():
 @require_torch
 @slow
 class XLMRobertaModelIntegrationTest(unittest.TestCase):
-
     def test_xlm_roberta_base(self):
         model = XLMRobertaModel.from_pretrained("FacebookAI/xlm-roberta-base", attn_implementation="eager")
         input_ids = torch.tensor([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
