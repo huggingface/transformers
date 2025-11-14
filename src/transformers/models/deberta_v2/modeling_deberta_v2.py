@@ -1273,7 +1273,7 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
         drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
         self.dropout = nn.Dropout(drop_out)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.deberta.get_input_embeddings()

@@ -2032,6 +2032,8 @@ class EsmForProteinFolding(EsmPreTrainedModel):
             nn.Linear(self.config.esmfold_config.lddt_head_hid_dim, 37 * self.lddt_bins),
         )
 
+        self.post_init()
+
     @staticmethod
     def _af2_to_esm_from_vocab_list(vocab_list: list[str]) -> torch.Tensor:
         # Remember that t is shifted from residue_constants by 1 (0 is padding).

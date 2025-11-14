@@ -1491,6 +1491,8 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
 
         self.config = config
 
+        self.post_init()
+
     @auto_docstring
     def forward(
         self,

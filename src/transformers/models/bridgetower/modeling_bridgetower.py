@@ -929,7 +929,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             fc_std = (2 * self.config.hidden_size) ** -0.5
             for block in module.transformer.resblocks:
                 init.normal_(block.attn.in_proj_weight, std=attn_std * std)
-                init.zeros(block.attn.in_proj_bias)
+                init.zeros_(block.attn.in_proj_bias)
                 init.normal_(block.attn.out_proj.weight, std=proj_std * std)
                 init.normal_(block.mlp.c_fc.weight, std=fc_std * std)
                 init.normal_(block.mlp.c_proj.weight, std=proj_std * std)

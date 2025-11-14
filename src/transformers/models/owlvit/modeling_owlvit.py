@@ -1199,6 +1199,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.num_patches_width = self.config.vision_config.image_size // self.config.vision_config.patch_size
         self.box_bias = self.compute_box_bias(self.num_patches_height, self.num_patches_width)
 
+        self.post_init()
+
     @staticmethod
     def normalize_grid_corner_coordinates(num_patches_height: int, num_patches_width: int) -> torch.Tensor:
         # Create grid coordinates using torch

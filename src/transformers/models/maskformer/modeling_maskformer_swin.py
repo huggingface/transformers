@@ -726,6 +726,8 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
 
+        self.post_init()
+
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 

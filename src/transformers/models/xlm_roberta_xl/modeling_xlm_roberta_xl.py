@@ -775,7 +775,7 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
         self.roberta = XLMRobertaXLModel(config, add_pooling_layer=False)
         self.lm_head = XLMRobertaXLLMHead(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder

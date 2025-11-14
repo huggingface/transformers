@@ -472,9 +472,7 @@ def _get_tied_weight_keys(module: nn.Module) -> list[str]:
     tied_weight_keys: list[str] = []
     for name, submodule in module.named_modules():
         tied = getattr(submodule, "_tied_weights_keys", {}) or {}
-        tied_weights_dict = list(tied.keys())
-        # tied_weights_dict.extend(tied.values())
-        tied_weight_keys.extend([f"{name}.{k}" if name else k for k in tied_weights_dict])
+        tied_weight_keys.extend([f"{name}.{k}" if name else k for k in tied.keys()])
     return tied_weight_keys
 
 
@@ -2302,7 +2300,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         Initialize the weights if they are not already initialized.
         """
+        if getattr(module, "_is_hf_initialized", False):
+            return
+
         self._init_weights(module)
+        module._is_hf_initialized = True
 
     @torch.no_grad()
     @init.guard_torch_init_functions()
@@ -4259,8 +4261,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for k in all_pointer:
                 k.__exit__(None, None, None)
 
-        # Adjust missing and unexpected keys - also marks tied weights as `_is_hf_initialized` to avoid initializing them
-        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys)
+        # Marks tied weights as `_is_hf_initialized` to avoid initializing them
+        for tied_param in model._tied_weights_keys.keys():
+            # It's always a proper weight except for 2 or 3 old models where it's a regex or module set to None
+            # -> just skip it in those cases (they will just re-init before tying, so they loose the added optimization)
+            try:
+                param = model.get_parameter(tied_param)
+                param._is_hf_initialized = True
+            except AttributeError:
+                pass
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
@@ -4272,6 +4281,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Tie the weights
         model.tie_weights(missing_keys)
+
+        # Adjust missing and unexpected keys
+        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys)
 
         # Post-processing for tensor parallelism
         if device_mesh is not None:
@@ -4576,16 +4588,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Clean-up unexpected keys
         if ignore_unexpected_regex is not None:
             unexpected_keys = {key for key in unexpected_keys if ignore_unexpected_regex.search(key) is None}
-
-        # Set the flag (very important to avoid initializing them!!)
-        for tied_param in self._tied_weights_keys.keys():
-            # It's always a proper weight except for 2 or 3 old models where it's a regex or module set to None
-            # -> just skip it in those cases (they will just re-init before tying, so they loose the added optimization)
-            try:
-                param = self.get_parameter(tied_param)
-                param._is_hf_initialized = True
-            except AttributeError:
-                pass
 
         return missing_keys, unexpected_keys
 

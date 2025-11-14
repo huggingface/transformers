@@ -540,7 +540,7 @@ class BrosModel(BrosPreTrainedModel):
 
         self.pooler = BrosPooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -684,7 +684,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -803,7 +803,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         # Subsequent token classification for Entity Extraction (NER)
         self.subsequent_token_classifier = BrosRelationExtractor(config)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -940,7 +940,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
 
         self.entity_linker = BrosRelationExtractor(config)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
