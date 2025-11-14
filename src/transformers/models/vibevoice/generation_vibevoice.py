@@ -19,7 +19,6 @@ from queue import Queue
 from typing import Optional, Union
 
 import torch
-import torch.nn as nn
 
 from ...generation import (
     BaseStreamer,
@@ -456,14 +455,19 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 if output_hidden_states:
                     decoder_hidden_states += (outputs.hidden_states,)
 
-            # token selection
-            if do_sample:
-                probs = nn.functional.softmax(next_token_scores, dim=-1)
-                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
-            else:
-                next_tokens = torch.argmax(next_token_scores, dim=-1)
-
             # *************** VibeVoice specific ***************
+            # token selection
+            # NOTE: For VibeVoice, we always use deterministic token selection (argmax)
+            # regardless of do_sample setting. The real sampling happens in the diffusion
+            # process for audio generation, not in token selection. Using multinomial
+            # sampling here can cause numerical issues with the constrained token set.
+            if do_sample:
+                logger.warning(
+                    "VibeVoice generation does not support sampling-based token selection. "
+                    "Tokens will be selected using argmax regardless of do_sample=True."
+                )
+            next_tokens = torch.argmax(next_token_scores, dim=-1)
+
             # Force finished samples to generate EOS tokens
             next_tokens[finished_tags] = self.config.eos_token_id
             # ============================================
@@ -580,6 +584,21 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 noise_scheduler.set_timesteps(num_inference_steps=n_diffusion_steps)
                 condition = torch.cat([positive_condition, negative_condition], dim=0).to(self.diffusion_head.device)
                 speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
+                
+                # # TODO (ebezzam) something like below to use `do_sample`? only problem is original would differ and would break integration tests
+                # if do_sample:
+                #     # Stochastic generation: use random noise
+                #     speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
+                # else:
+                #     # Deterministic generation: use reproducible noise based on conditioning content
+                #     # This ensures same input gives same output, but different inputs get different noise patterns
+                #     seed = int(torch.sum(condition).item() * 1000) % (2**31)  # Simple hash of conditioning
+                #     generator = torch.Generator(device=condition.device).manual_seed(seed)
+                #     speech = torch.randn(
+                #         condition.shape[0], self.config.acoustic_hidden_size, 
+                #         generator=generator, device=condition.device
+                #     )
+                
                 for timestep in noise_scheduler.timesteps:
                     half = speech[: len(speech) // 2]
                     combined = torch.cat([half, half], dim=0)
@@ -663,7 +682,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
         if return_dict_in_generate:
             return VibeVoiceGenerateOutput(
-                # TODO: remove and just keeps audio?
                 sequences=input_ids,
                 scores=scores,
                 logits=raw_logits,
@@ -674,6 +692,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 reach_max_step_sample=completion_steps >= max_step_per_sample,
             )
         else:
+            # NOTE (ebezzam): new tokens in input_ids are simply speech tokens (mainly `speech_diffusion_id`)
+            # so returning `input_ids` is insufficient for generated audio
             return final_audio_outputs
         # ============================================
 
