@@ -2477,7 +2477,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         Tie all the weights of the model.
         """
-        self.tie_weight_source_and_target(self, missing_keys)
+        self.tie_weight_source_and_target(missing_keys)
 
     def _get_no_split_modules(self, device_map: str):
         """
