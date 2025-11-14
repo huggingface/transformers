@@ -4579,8 +4579,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Set the flag (very important to avoid initializing them!!)
         for tied_param in self._tied_weights_keys.keys():
-            param = self.get_parameter(tied_param)
-            param._is_hf_initialized = True
+            # It's always a proper weight except for 2 or 3 old models where it's a regex or module set to None
+            # -> just skip it in those cases (they will just re-init before tying, so they loose the added optimization)
+            try:
+                param = self.get_parameter(tied_param)
+                param._is_hf_initialized = True
+            except AttributeError:
+                pass
 
         return missing_keys, unexpected_keys
 
