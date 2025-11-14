@@ -964,7 +964,7 @@ class BltForCausalLM(MllamaForCausalLM):
     config: BltConfig
     _can_compile_fullgraph = False
     base_model_prefix = "model"
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"model.local_encoder.embed_tokens.weight": "lm_head.weight"}
 
     def __init__(self, config: BltConfig):
         super().__init__(config)

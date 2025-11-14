@@ -15,7 +15,6 @@
 """PyTorch UniSpeech model."""
 
 import math
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -147,12 +146,13 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         # gumbel softmax requires special init
         if isinstance(module, UniSpeechGumbelVectorQuantizer):
-            module.weight_proj.weight.data.normal_(mean=0.0, std=1)
-            module.weight_proj.bias.data.zero_()
+            module.weight_proj.weight.normal_(mean=0.0, std=1)
+            module.weight_proj.bias.zero_()
             nn.init.uniform_(module.codevectors)
         elif isinstance(module, UniSpeechPositionalConvEmbedding):
             nn.init.normal_(
@@ -166,13 +166,13 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
 
@@ -231,9 +231,6 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for UniSpeech")
 
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for UniSpeech")
@@ -317,18 +314,6 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         Set the Gumbel softmax temperature to a given value. Only necessary for training
         """
         self.quantizer.temperature = temperature
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """

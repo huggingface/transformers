@@ -454,11 +454,12 @@ class EncodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     base_model_prefix = "encodec"
     main_input_name = "input_values"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.GroupNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
