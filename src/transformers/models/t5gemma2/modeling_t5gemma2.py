@@ -676,20 +676,21 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
     }
     input_modalities = ["image", "text"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, T5Gemma2MultiModalProjector):
-            module.mm_input_projection_weight.data.zero_()
+            module.mm_input_projection_weight.zero_()
         elif isinstance(module, T5Gemma2TextScaledWordEmbedding):
-            module.eoi_embedding.data.zero_()
+            module.eoi_embedding.zero_()
         elif isinstance(module, T5Gemma2ClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5
-            module.out_proj.weight.data.normal_(mean=0.0, std=self.config.initializer_range * scale)
+            module.out_proj.weight.normal_(mean=0.0, std=self.config.initializer_range * scale)
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
-                module.out_proj.bias.data.zero_()
+                module.out_proj.bias.zero_()
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.data.zero_()
+            module.weight.zero_()
 
     def prepare_decoder_input_ids_from_labels(self, input_ids):
         """
@@ -1071,14 +1072,10 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
 
 @auto_docstring
 class T5Gemma2Model(T5Gemma2PreTrainedModel):
-    _tied_weights_keys = [
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-    ]
-    _dynamic_tied_weights_keys = [
-        "encoder.embed_tokens.eoi_embedding",
-        "decoder.embed_tokens.eoi_embedding",
-    ]
+    _tied_weights_keys = {
+        "decoder.embed_tokens.weight": "encoder.embed_tokens.weight",
+        "decoder.embed_tokens.eoi_embedding": "encoder.embed_tokens.eoi_embedding",
+    }
 
     def __init__(self, config: T5Gemma2Config):
         super().__init__(config)
@@ -1176,15 +1173,11 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
 
 
 class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = [
-        "lm_head.out_proj.weight",
-        "model.encoder.embed_tokens.weight",
-        "model.decoder.embed_tokens.weight",
-    ]
-    _dynamic_tied_weights_keys = [
-        "model.encoder.embed_tokens.eoi_embedding",
-        "model.decoder.embed_tokens.eoi_embedding",
-    ]
+    _tied_weights_keys = {
+        "lm_head.out_proj.weight": "model.encoder.embed_tokens.weight",
+        "model.decoder.embed_tokens.weight": "model.encoder.embed_tokens.weight",
+        "model.decoder.embed_tokens.eoi_embedding": "model.encoder.embed_tokens.eoi_embedding",
+    }
     _tp_plan = {"lm_head.out_proj": "colwise_rep"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
@@ -1389,14 +1382,10 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
 
 @auto_docstring
 class T5Gemma2ForSequenceClassification(T5Gemma2PreTrainedModel):
-    _tied_weights_keys = [
-        "model.encoder.embed_tokens.weight",
-        "model.decoder.embed_tokens.weight",
-    ]
-    _dynamic_tied_weights_keys = [
-        "model.encoder.embed_tokens.eoi_embedding",
-        "model.decoder.embed_tokens.eoi_embedding",
-    ]
+    _tied_weights_keys = {
+        "model.decoder.embed_tokens.weight": "model.encoder.embed_tokens.weight",
+        "model.decoder.embed_tokens.eoi_embedding": "model.encoder.embed_tokens.eoi_embedding",
+    }
 
     def __init__(self, config: T5Gemma2Config):
         super().__init__(config)
@@ -1496,14 +1485,10 @@ class T5Gemma2ForSequenceClassification(T5Gemma2PreTrainedModel):
 
 @auto_docstring
 class T5Gemma2ForTokenClassification(T5Gemma2PreTrainedModel):
-    _tied_weights_keys = [
-        "model.encoder.embed_tokens.weight",
-        "model.decoder.embed_tokens.weight",
-    ]
-    _dynamic_tied_weights_keys = [
-        "model.encoder.embed_tokens.eoi_embedding",
-        "model.decoder.embed_tokens.eoi_embedding",
-    ]
+    _tied_weights_keys = {
+        "model.decoder.embed_tokens.weight": "model.encoder.embed_tokens.weight",
+        "model.decoder.embed_tokens.eoi_embedding": "model.encoder.embed_tokens.eoi_embedding",
+    }
 
     def __init__(self, config: T5Gemma2Config):
         super().__init__(config)
