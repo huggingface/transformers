@@ -30,7 +30,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.models.markuplm.tokenization_markuplm_fast import VOCAB_FILES_NAMES, MarkupLMTokenizer
+from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES, MarkupLMTokenizer
 from transformers.tokenization_utils_tokenizers import TokenizersExtractor
 from transformers.testing_utils import require_tokenizers, require_torch, slow
 
