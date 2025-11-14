@@ -52,6 +52,7 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
     out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
     out.detach_()
+    return out
 
 
 # Copied from transformers.models.xlm.modeling_xlm.get_masks
