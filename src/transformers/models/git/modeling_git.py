@@ -1054,6 +1054,13 @@ class GitModel(GitPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
+
+        if cache_position is None:
+            cache_position = torch.arange(
+                past_key_values_length, past_key_values_length + embedding_output.shape[1], device=embedding_output.device
+            )
+
+        # Always create `token_type_ids` so we can re-use Gemma3 style mask preparation fn
         token_type_ids = torch.zeros_like(embedding_output, dtype=torch.int)[..., 0]
 
         if pixel_values is not None:
@@ -1100,7 +1107,7 @@ class GitModel(GitPreTrainedModel):
                 [past_key_values_length], dtype=cache_position.dtype, device=cache_position.device
             )
             extended_attention_mask = torch.ones(
-                (attention_mask.shape[0], past_key_values_length - attention_mask.shape[1]),
+                (attention_mask.shape[0], past_key_values_length - attention_mask.shape[1] + 1),
                 dtype=attention_mask.dtype,
                 device=attention_mask.device,
             )
@@ -1404,7 +1411,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             "cache_position": cache_position,
         }
 
-        if is_first_iteration:
+        if is_first_iteration or not use_cache:
             model_inputs["pixel_values"] = pixel_values
 
         # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).

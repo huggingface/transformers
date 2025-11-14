@@ -1086,7 +1086,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # In subsquent iterations, they are already merged with text and cached
         # NOTE: first iteration doesn't have to be prefill, it can be the first
         # iteration with a question and cached system prompt (continue generate from cache)
-        if is_first_iteration:
+        if is_first_iteration or not use_cache:
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs

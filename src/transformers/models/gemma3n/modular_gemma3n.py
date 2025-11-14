@@ -2599,7 +2599,7 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
         # If we're in cached decoding stage, multimodal inputs should be None because input ids do not contain special
         # tokens anymore. Otherwise multimodal inputs should be passed to model.
         # NOTE: use_cache=False always needs pixel_values, input_features, and input_features_mask
-        if is_first_iteration:
+        if is_first_iteration or not use_cache:
             model_inputs["pixel_values"] = pixel_values
             model_inputs["input_features"] = input_features
             model_inputs["input_features_mask"] = input_features_mask

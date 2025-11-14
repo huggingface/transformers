@@ -1473,7 +1473,7 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
         # Qwen3VL position_ids are prepareed with rope_deltas in forward
         model_inputs["position_ids"] = None
 
-        if not is_first_iteration:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 

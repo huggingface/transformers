@@ -1388,7 +1388,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         # In subsquent iterations, they are already merged with text and cached
         # NOTE: first iteration doesn't have to be prefill, it can be the first
         # iteration with a question and cached system prompt (continue generate from cache)
-        if not is_first_iteration:
+        if not is_first_iteration and use_cache:
             image_embeds = None
             image_embeds_position_mask = None
 

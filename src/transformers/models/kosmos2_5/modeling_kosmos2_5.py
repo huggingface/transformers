@@ -1823,7 +1823,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             **model_kwargs,
         )
 
-        if is_first_iteration:
+        if is_first_iteration or not use_cache:
             # If we're in cached decoding stage, `flattened_patches` should be `None` because `input_ids` do not contain special image token anymore
             # Otherwise we need `flattened_patches` to be passed to model
             model_inputs["flattened_patches"] = flattened_patches

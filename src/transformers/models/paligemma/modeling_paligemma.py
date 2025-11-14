@@ -180,7 +180,7 @@ def create_causal_mask_mapping(
         else (past_key_values is None or not past_key_values.is_initialized or pixel_values is not None)
     )
 
-    if is_first_iteration:
+    if is_first_iteration or not use_cache:
         if token_type_ids is not None:
             # The logic bellow was originally written for Gemma3, where `token_type_ids` is reversed. Let's reverse
             # it to then use exactly the same logic.
@@ -615,7 +615,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         # In subsquent iterations, they are already merged with text and cached
         # NOTE: first iteration doesn't have to be prefill, it can be the first
         # iteration with a question and cached system prompt (continue generate from cache). NOTE: use_cache=False needs pixel_values always
-        if is_first_iteration:
+        if is_first_iteration or not use_cache:
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs

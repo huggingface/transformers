@@ -1654,7 +1654,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        if not is_first_iteration:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
 
         return model_inputs

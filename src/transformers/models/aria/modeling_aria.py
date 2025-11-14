@@ -1234,7 +1234,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        if is_first_iteration:
+        if is_first_iteration or not use_cache:
             # Pixel values are used only in the first iteration if available
             # In subsquent iterations, they are already merged with text and cached
             # NOTE: first iteration doesn't have to be prefill, it can be the first

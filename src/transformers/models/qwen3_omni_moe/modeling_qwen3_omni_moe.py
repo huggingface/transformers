@@ -2236,7 +2236,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
 
         model_inputs["position_ids"] = None
 
-        if not is_first_iteration:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
             model_inputs["input_features"] = None
@@ -3188,7 +3188,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
         )
         # Decode stage
         # TODO(raushan, gante): Refactor this part to a utility function
-        if not is_first_iteration:
+        if not is_first_iteration and use_cache:
             input_ids = input_ids[:, -1:]
             generation_step = kwargs.get("generation_step")
             trailing_text_hidden = kwargs.get("trailing_text_hidden")
