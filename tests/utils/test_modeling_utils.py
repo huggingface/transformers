@@ -134,6 +134,7 @@ if is_torch_available():
             super().__init__(config)
             self.linear = nn.Linear(5, 5)
             self.linear_2 = nn.Linear(5, 5)
+            self.post_init()
 
         def forward(self, x):
             return self.linear_2(self.linear(x))
@@ -147,6 +148,7 @@ if is_torch_available():
             super().__init__(config)
             self.linear = nn.Linear(50, 50)
             self.linear_2 = nn.Linear(50, 50)
+            self.post_init()
 
         def forward(self, x):
             return self.linear_2(self.linear(x))
@@ -160,6 +162,7 @@ if is_torch_available():
             super().__init__(config)
             self.linear = nn.Linear(50, 50)
             self.linear_2 = nn.Linear(50, 50)
+            self.post_init()
 
         def forward(self, x):
             return self.linear_2(self.linear(x))
@@ -171,6 +174,7 @@ if is_torch_available():
             super().__init__(config)
             self.linear = nn.Linear(5, 5)
             self.linear_2 = nn.Linear(5, 5)
+            self.post_init()
 
         def forward(self, x):
             return self.linear_2(self.linear(x))
@@ -193,6 +197,7 @@ if is_torch_available():
             # linear is a common name between Base and Head on purpose.
             self.linear = nn.Linear(5, 5)
             self.linear2 = nn.Linear(5, 5)
+            self.post_init()
 
         def forward(self, x):
             return self.linear2(self.linear(self.base(x)))
@@ -209,6 +214,7 @@ if is_torch_available():
             # direct params and submodules is helpful for testing offloading logic
             self.weight = nn.Parameter(torch.rand((5, 5)))
             self.base = BaseModel(config)
+            self.post_init()
 
         def forward(self, x):
             return self.base(x @ self.weight.T)
@@ -225,6 +231,7 @@ if is_torch_available():
             self.submodule = ModelWithDirectParam(config)
             # needed so model can have at least one module on accelerator
             self.linear = nn.Linear(5, 5)
+            self.post_init()
 
         def forward(self, x):
             return self.linear(self.submodule(x))
@@ -240,6 +247,7 @@ if is_torch_available():
             super().__init__(config)
             self.base = BaseModel(config)
             self.decoder = nn.Linear(5, 5)
+            self.post_init()
 
         def forward(self, x):
             return self.decoder(self.base(x))
