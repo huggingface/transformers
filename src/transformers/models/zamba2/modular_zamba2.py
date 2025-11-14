@@ -919,7 +919,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
 
             A = torch.arange(1, module.num_heads + 1)
             init.copy_(module.A_log, torch.log(A))
-            nn.module.ones_(module.D)
+            init.ones_(module.D)
 
 
 class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
