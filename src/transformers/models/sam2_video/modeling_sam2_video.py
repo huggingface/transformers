@@ -2090,7 +2090,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         high_res_masks = mask_inputs_float * out_scale + out_bias
         low_res_masks = F.interpolate(
             high_res_masks.float(),
-            size=(high_res_masks.size(-2) // 4, high_res_masks.size(-1) // 4),
+            size=self.prompt_encoder.mask_input_size,
             align_corners=False,
             mode="bilinear",
             antialias=True,  # use antialias for downsampling
@@ -2116,7 +2116,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             pred_masks=low_res_masks,
             high_res_masks=high_res_masks,
             object_pointer=object_pointer,
-            object_score_logits=object_score_logits,
+            object_score_logits=object_score_logits.unsqueeze(-1),
             image_embeddings=high_res_features + [backbone_features],
         )
 
