@@ -1299,6 +1299,8 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
 
         self.config = config
 
+        self.post_init()
+
     @classmethod
     def can_generate(cls) -> bool:
         # Bark has a unique model structure, where the external class (`BarkModel`) doesn't need to inherit from

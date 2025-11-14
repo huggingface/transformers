@@ -66,9 +66,9 @@ def create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
 
         with deepspeed.zero.GatheredParameters(out, modifier_rank=0):
             if torch.distributed.get_rank() == 0:
-                _create_sinusoidal_embeddings(n_pos=n_pos, dim=dim, out=out)
+                return _create_sinusoidal_embeddings(n_pos=n_pos, dim=dim, out=out)
     else:
-        _create_sinusoidal_embeddings(n_pos=n_pos, dim=dim, out=out)
+        return _create_sinusoidal_embeddings(n_pos=n_pos, dim=dim, out=out)
 
 
 def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
