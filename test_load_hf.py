@@ -21,7 +21,7 @@ model = DINOv3ViTForImageClassification.from_pretrained(output_dir)
 model.eval()
 tensor = torch.ones(1,3,224,224)
 with torch.no_grad():
-    bbone_output = model.dinov3(tensor).sequence_output
+    bbone_output = model.dinov3(tensor).last_hidden_state
     outputs = model(tensor).logits
 print(outputs.std())
 torch.save(outputs, "/tmp/dinov3_vit7b16_lc_output_hf.pth")

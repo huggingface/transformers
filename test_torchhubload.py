@@ -2,7 +2,6 @@ import torch
 # init a random tensor with fixed seed
 tensor = torch.ones(1,3,224,224)
 # DINOv3
-breakpoint()
 dinov3_vit7b16_lc = torch.hub.load("/workspaces/transformers/dinov3", 'dinov3_vit7b16_lc', source="local", weights="/tmp/lc.pth", backbone_weights="/tmp/backbone.pth")
 dinov3_vit7b16_lc.eval()
 with torch.inference_mode():
