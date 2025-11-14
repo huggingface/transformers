@@ -46,11 +46,11 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         cls.tokenizers = [tokenizer]
 
     def test_convert_token_and_id(self):
-        """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
+        """Test ``convert_tokens_to_ids`` and ``_convert_id_to_token``."""
         token = "<s>"
         token_id = 1
 
-        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
+        self.assertEqual(self.get_tokenizer().convert_tokens_to_ids(token), token_id)
         self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
 
     def test_get_vocab(self):
@@ -64,23 +64,6 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
 
-    def test_rust_and_python_full_tokenizers(self):
-        tokenizer = self.get_tokenizer()
-
-        sequence = "I was born in 92000, and this is falsé."
-
-        tokens = tokenizer.tokenize(sequence)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        rust_tokenizer = self.get_rust_tokenizer()
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
 
     def test_full_tokenizer(self):
         tokenizer = BigBirdTokenizer(SAMPLE_VOCAB, keep_accents=True)

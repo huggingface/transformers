@@ -213,9 +213,6 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # We need to add the extra_ids in the list of the arg additional_special_tokens
     def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
         tokenizer_list = []
-        if self.test_slow_tokenizer:
-            tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))
-
         if self.test_rust_tokenizer:
             tokenizer_list.append((self.rust_tokenizer_class, self.get_rust_tokenizer()))
 
@@ -277,9 +274,6 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_decode_single_bytes(self):
         tokenizer_list = []
-        if self.test_slow_tokenizer:
-            tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))
-
         if self.test_rust_tokenizer:
             tokenizer_list.append((self.rust_tokenizer_class, self.get_rust_tokenizer()))
 

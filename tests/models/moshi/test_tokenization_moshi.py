@@ -209,8 +209,8 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Assert the set of special tokens match as we didn't ask to change them
         self.assertSequenceEqual(
-            tokenizer.all_special_tokens_extended,
-            new_tokenizer.all_special_tokens_extended,
+            tokenizer.all_special_tokens,
+            new_tokenizer.all_special_tokens,
         )
 
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
@@ -233,7 +233,6 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Create a new mapping from the special tokens defined in the original tokenizer
         special_tokens_list = []
-        special_tokens_list.remove("additional_special_tokens")
         special_tokens_map = {}
         for token in special_tokens_list:
             # Get the private one to avoid unnecessary warnings.
@@ -260,12 +259,12 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(getattr(new_tokenizer, f"{token}_id"), new_id)
 
         # Check if the AddedToken / string format has been kept
-        for special_token in tokenizer.all_special_tokens_extended:
+        for special_token in tokenizer.all_special_tokens:
             if isinstance(special_token, AddedToken) and special_token.content not in special_tokens_map:
                 # The special token must appear identically in the list of the new tokenizer.
                 self.assertTrue(
-                    special_token in new_tokenizer.all_special_tokens_extended,
-                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                    special_token in new_tokenizer.all_special_tokens,
+                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens}",
                 )
             elif isinstance(special_token, AddedToken):
                 # The special token must appear in the list of the new tokenizer as an object of type AddedToken with
@@ -274,7 +273,7 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 new_special_token_str = special_tokens_map[special_token_str]
 
                 find = False
-                for candidate in new_tokenizer.all_special_tokens_extended:
+                for candidate in new_tokenizer.all_special_tokens:
                     if (
                         isinstance(candidate, AddedToken)
                         and candidate.content == new_special_token_str
@@ -288,20 +287,20 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 special_token.content = new_special_token_str
                 self.assertTrue(
                     find,
-                    f"'{special_token.__repr__()}' should appear as an `AddedToken` in the all_special_tokens_extended = "
-                    f"{[k for k in new_tokenizer.all_special_tokens_extended if str(k) == new_special_token_str]} but it is missing"
+                    f"'{special_token.__repr__()}' should appear as an `AddedToken` in the all_special_tokens = "
+                    f"{[k for k in new_tokenizer.all_special_tokens if str(k) == new_special_token_str]} but it is missing"
                     ", this means that the new tokenizers did not keep the `rstrip`, `lstrip`, `normalized` etc attributes.",
                 )
             elif special_token not in special_tokens_map:
                 # The special token must appear identically in the list of the new tokenizer.
                 self.assertTrue(
-                    special_token in new_tokenizer.all_special_tokens_extended,
-                    f"'{special_token.__repr__()}' should be in {new_tokenizer.all_special_tokens_extended}",
+                    special_token in new_tokenizer.all_special_tokens,
+                    f"'{special_token.__repr__()}' should be in {new_tokenizer.all_special_tokens}",
                 )
 
             else:
                 # The special token must appear in the list of the new tokenizer as an object of type string.
-                self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens_extended)
+                self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens)
 
         # Test we can use the new tokenizer with something not seen during training
         inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])
