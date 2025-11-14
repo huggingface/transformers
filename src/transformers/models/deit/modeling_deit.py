@@ -22,6 +22,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+import math
+
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -47,6 +49,7 @@ class DeiTEmbeddings(nn.Module):
 
     def __init__(self, config: DeiTConfig, use_mask_token: bool = False) -> None:
         super().__init__()
+        self.config = config
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.distillation_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
@@ -59,75 +62,73 @@ class DeiTEmbeddings(nn.Module):
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-        images. This method is also adapted to support torch.jit tracing and 2 class embeddings.
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on
+        higher resolution images.
 
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        Source:
+        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
-
-        num_patches = embeddings.shape[1] - 2
-        num_positions = self.position_embeddings.shape[1] - 2
-
-        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+        num_patches = embeddings.shape[1] - 2  # -2 for CLS and distillation tokens
+        num_positions = self.position_embeddings.shape[1] - 2  # -2 for CLS and distillation tokens
+        
+        if num_patches == num_positions and height == width:
             return self.position_embeddings
-
-        class_and_dist_pos_embed = self.position_embeddings[:, :2]
-        patch_pos_embed = self.position_embeddings[:, 2:]
-
+            
+        class_pos_embed = self.position_embeddings[:, :2]  # CLS and distillation tokens
+        patch_pos_embed = self.position_embeddings[:, 2:]  # Patch embeddings
+        
         dim = embeddings.shape[-1]
-
-        new_height = height // self.patch_size
-        new_width = width // self.patch_size
-
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        h0 = height // self.config.patch_size
+        w0 = width // self.config.patch_size
+        
+        # Add a small number to avoid floating point error in the interpolation
+        h0, w0 = h0 + 0.1, w0 + 0.1
+        
+        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-
+        
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            size=(new_height, new_width),
+            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
             mode="bicubic",
             align_corners=False,
         )
-
+        
+        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-
-        return torch.cat((class_and_dist_pos_embed, patch_pos_embed), dim=1)
+        
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def forward(
-        self,
-        pixel_values: torch.Tensor,
+        self, 
+        pixel_values: torch.Tensor, 
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: bool = False,
+        interpolate_pos_encoding: bool = False
     ) -> torch.Tensor:
-        _, _, height, width = pixel_values.shape
+        batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values)
 
-        batch_size, seq_length, _ = embeddings.size()
-
         if bool_masked_pos is not None:
+            seq_length = embeddings.shape[1]
             mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
-            # replace the masked visual tokens by mask_tokens
+            # Replace the masked visual tokens by mask_tokens
             mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
+        # Add the [CLS] and distillation tokens to the embedded patch tokens
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-
         distillation_tokens = self.distillation_token.expand(batch_size, -1, -1)
-
         embeddings = torch.cat((cls_tokens, distillation_tokens, embeddings), dim=1)
-        position_embedding = self.position_embeddings
 
+        # Add positional encoding to each token
         if interpolate_pos_encoding:
-            position_embedding = self.interpolate_pos_encoding(embeddings, height, width)
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embeddings
 
-        embeddings = embeddings + position_embedding
         embeddings = self.dropout(embeddings)
-        return embeddings
 
+        return embeddings
 
 class DeiTPatchEmbeddings(nn.Module):
     """
@@ -420,9 +421,12 @@ class DeiTModel(DeiTPreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,  # ADD THIS
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -444,7 +448,11 @@ class DeiTModel(DeiTPreTrainedModel):
         sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
+        embedding_output = self.embeddings(
+            pixel_values, 
+            bool_masked_pos=bool_masked_pos,
+            interpolate_pos_encoding=interpolate_pos_encoding  # ADD THIS
+        )
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
@@ -597,10 +605,13 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> ImageClassifierOutput:
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,  # ADD THIS
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -633,10 +644,13 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         Predicted class: Polaroid camera, Polaroid Land camera
         ```"""
 
-        outputs: BaseModelOutputWithPooling = self.deit(
+        outputs = self.deit(
             pixel_values,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            **kwargs,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,  # ADD THIS
+            return_dict=return_dict,
         )
 
         sequence_output = outputs.last_hidden_state

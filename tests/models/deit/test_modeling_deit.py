@@ -382,6 +382,32 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = DeiTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    def test_model_with_different_image_size(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config = config_and_inputs[0]
+        pixel_values = config_and_inputs[1]
+        
+        model = DeiTModel(config)
+        model.eval()
+        
+        # Test with original size
+        original_size = pixel_values.shape[-1]
+        outputs_orig = model(pixel_values)
+        
+        # Test with different size (must be larger)
+        new_size = original_size + 32  # Larger image
+        pixel_values_new = torch.randn(1, 3, new_size, new_size)
+        
+        # This should work with interpolate_pos_encoding=True
+        outputs_new = model(pixel_values_new, interpolate_pos_encoding=True)
+        
+        # Check that model runs without errors
+        self.assertIsNotNone(outputs_new)
+        
+        # Check that the sequence length is different (due to more patches)
+        expected_seq_len = ((new_size // config.patch_size) ** 2) + 2  # +2 for CLS and distillation tokens
+        self.assertEqual(outputs_new.last_hidden_state.shape[1], expected_seq_len)
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
