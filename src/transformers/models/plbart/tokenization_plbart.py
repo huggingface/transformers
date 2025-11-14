@@ -13,18 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
+from typing import Any, Optional
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
-from tokenizers.models import Unigram
+import sentencepiece as spm
 
-from ...tokenization_python import AddedToken, BatchEncoding
-from ...tokenization_utils_tokenizers import TokenizersBackend
+from ...tokenization_python import BatchEncoding
+from ...tokenization_utils_base import AddedToken
+from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
+SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
@@ -45,19 +47,19 @@ FAIRSEQ_LANGUAGE_CODES_MAP = {
 }
 
 
-class PLBartTokenizer(TokenizersBackend):
+@requires(backends=("sentencepiece",))
+class PLBartTokenizer(SentencePieceBackend):
     """
-    Construct a PLBart tokenizer (backed by HuggingFace's *tokenizers* library). Based on
-    [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
+    Construct an PLBART tokenizer.
 
-    This tokenizer inherits from [`TokenizersBackend`] which contains most of the main methods. Users should
-    refer to this superclass for more information regarding those methods.
+    Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
+    [SentencePiece](https://github.com/google/sentencepiece).
 
     The tokenization method is `<tokens> <eos> <language code>` for source language documents, and `<language code>
     <tokens> <eos>` for target language documents.
 
     Args:
-        vocab_file (`str`, *optional*):
+        vocab_file (`str`):
             Path to the vocabulary file.
         src_lang (`str`, *optional*):
             A string representing the source language.
@@ -84,8 +86,18 @@ class PLBartTokenizer(TokenizersBackend):
             downstream tasks.
         language_codes (`str`, *optional*, defaults to `"base"`):
             What language codes to use. Should be one of `"base"` or `"multi"`.
-        vocab (`list`, *optional*):
-            Vocabulary as list of (token, score) tuples from SentencePieceExtractor.
+        sp_model_kwargs (`dict`, *optional*):
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
+            - `enable_sampling`: Enable subword regularization.
+            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
+              - `nbest_size = {0,1}`: No sampling is performed.
+              - `nbest_size > 1`: samples from the nbest_size results.
+              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
 
     Examples:
 
@@ -100,13 +112,13 @@ class PLBartTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
 
     prefix_tokens: list[int] = []
     suffix_tokens: list[int] = []
 
     def __init__(
         self,
+        vocab_file,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -115,118 +127,101 @@ class PLBartTokenizer(TokenizersBackend):
         pad_token="<pad>",
         mask_token="<mask>",
         language_codes="base",
+        tokenizer_file=None,
         src_lang=None,
         tgt_lang=None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         additional_special_tokens=None,
-        vocab=None,
-        merges=None,  # Ignored for Unigram
-        vocab_file=None,
+        clean_up_tokenization_spaces=True,
         **kwargs,
     ):
+        # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        self.vocab_file = vocab_file
-        self.language_codes = language_codes
-
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
         src_lang = self._convert_lang_code_special_format(src_lang)
         tgt_lang = self._convert_lang_code_special_format(tgt_lang)
-
-        # Get language codes based on type ("base" or "multi")
+        self.language_codes = language_codes
         fairseq_language_codes = FAIRSEQ_LANGUAGE_CODES[self.language_codes]
 
+        # Original fairseq vocab and spm vocab must be "aligned":
+        # Vocab    |    0    |    1    |   2    |    3    |  4  |  5  |  6  |   7   |   8   |  9
+        # -------- | ------- | ------- | ------ | ------- | --- | --- | --- | ----- | ----- | ----
+        # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | ',' | '.' | '▁' | 's'   | '▁de' | '-'
+        # spm      | '<unk>' | '<s>'   | '</s>' | ','     | '.' | '▁' | 's' | '▁de' | '-'   | '▁a'
+
+        # Mimic fairseq token-to-id alignment for the first 4 token
+        self.vocab_file = vocab_file
+        self.lang_code_to_id = {}
+        self.id_to_lang_code = {}
+        self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
+        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        self.fairseq_offset = 1
         _additional_special_tokens = list(fairseq_language_codes)
+
         if additional_special_tokens is not None:
             _additional_special_tokens.extend(
                 [t for t in additional_special_tokens if t not in _additional_special_tokens]
             )
 
-        # PLBart uses fairseq vocab alignment like MBart: <s>=0, <pad>=1, </s>=2, <unk>=3, then SPM pieces[3:], lang codes, optionally <mask>
-        if vocab is not None:
-            #TODO: Ita handle diff vocab types
-            # Ensure vocab is list of (str, float) tuples
-            vocab = [(str(item[0]), float(item[1])) for item in vocab]
-            
-            # Reorder to fairseq: <s>, <pad>, </s>, <unk>, ... (rest of vocab from SPM[3:])
-            vocab_list = []
-            vocab_list.append((str(bos_token), 0.0))
-            vocab_list.append((str(pad_token), 0.0))
-            vocab_list.append((str(eos_token), 0.0))
-            vocab_list.append((str(unk_token), 0.0))
-            
-            # Add the rest of the SentencePiece vocab (skipping first 3: <unk>, <s>, </s>)
-            vocab_list.extend(vocab[3:])
-            
-            for lang_code in fairseq_language_codes:
-                vocab_list.append((str(lang_code), 0.0))
-            
-            if self.language_codes == "base":
-                vocab_list.append((str(mask_token), 0.0))
-            
-            self._vocab_scores = vocab_list
-        else:
-            self._vocab_scores = [
-                (str(bos_token), 0.0),
-                (str(pad_token), 0.0),
-                (str(eos_token), 0.0),
-                (str(unk_token), 0.0),
-                ("▁", -2.0),
-            ]
-            for lang_code in fairseq_language_codes:
-                self._vocab_scores.append((str(lang_code), 0.0))
-            if self.language_codes == "base":
-                self._vocab_scores.append((str(mask_token), 0.0))
-
-        self._tokenizer = Tokenizer(
-            Unigram(
-                self._vocab_scores,
-                unk_id=3,
-                byte_fallback=False,
-            )
-        )
-
-        self._tokenizer.normalizer = None
-
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence([
-            pre_tokenizers.WhitespaceSplit(),
-            pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
-        ])
-
-        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
-
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
+            vocab_file=vocab_file,
             bos_token=bos_token,
             eos_token=eos_token,
+            unk_token=unk_token,
             sep_token=sep_token,
             cls_token=cls_token,
-            unk_token=unk_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            language_codes=language_codes,
+            tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             additional_special_tokens=_additional_special_tokens,
+            sp_model_kwargs=self.sp_model_kwargs,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            language_codes=language_codes,
+            special_tokens_pattern="prefix_suffix",
+            token_type_ids_pattern="all_zeros",
             **kwargs,
         )
 
+        # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
+        self.sp_model_size = len(self.sp_model)
         self.lang_code_to_id = {
-            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in fairseq_language_codes
+            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(fairseq_language_codes)
         }
         self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
-        self.fairseq_offset = 1
+        self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
 
-        self.fairseq_tokens_to_ids = {
-            "<s>": 0,
-            "<pad>": 1,
-            "</s>": 2,
-            "<unk>": 3,
-        }
-        self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         if self.language_codes == "base":
-            self.fairseq_tokens_to_ids["<mask>"] = self.convert_tokens_to_ids(str(mask_token))
+            self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
+
+        self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        reserved_tokens = {"<s>", "<pad>", "</s>", "<unk>", "<mask>"}
+        reserved_tokens.update(FAIRSEQ_LANGUAGE_CODES[self.language_codes])
+
+        removed = False
+        for token in reserved_tokens:
+            idx = self._added_tokens_encoder.pop(token, None)
+            if idx is not None:
+                self._added_tokens_decoder.pop(idx, None)
+                removed = True
+        if removed:
+            self._update_trie()
+            self._update_total_vocab_size()
+
+        synced = False
+        for token, idx in self._added_tokens_encoder.items():
+            if idx in self._added_tokens_decoder:
+                continue
+            self._added_tokens_decoder[idx] = AddedToken(
+                token, special=True, normalized=False, lstrip=False, rstrip=False
+            )
+            synced = True
+        if synced:
+            self._update_trie()
+            self._update_total_vocab_size()
 
         if self.language_codes == "base":
             self._src_lang = src_lang
@@ -239,15 +234,16 @@ class PLBartTokenizer(TokenizersBackend):
 
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
-        
-        # Mark language codes as special tokens in the Rust backend
-        # Since they're in the base vocabulary, we need to explicitly mark them as special
-        # so that skip_special_tokens=True works correctly in the Rust decoder
-        lang_code_tokens = [
-            AddedToken(lang_code, special=True, normalized=False) 
-            for lang_code in fairseq_language_codes
-        ]
-        self._tokenizer.add_special_tokens(lang_code_tokens)
+
+
+    @property
+    def vocab_size(self):
+        lang_code_count = len(getattr(self, "lang_code_to_id", {}))
+        fairseq_offset = getattr(self, "fairseq_offset", 1)
+        base_vocab = len(self.sp_model) if hasattr(self, "sp_model") else 0
+        if getattr(self, "language_codes", "base") == "base":
+            return base_vocab + lang_code_count + fairseq_offset + 1  # +1 for mask token
+        return base_vocab + lang_code_count + fairseq_offset
 
     @property
     def src_lang(self) -> str:
@@ -258,7 +254,6 @@ class PLBartTokenizer(TokenizersBackend):
         new_src_lang = self._convert_lang_code_special_format(new_src_lang)
         self._src_lang = new_src_lang
         self.set_src_lang_special_tokens(self._src_lang)
-
 
     def _build_translation_inputs(
         self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
@@ -272,6 +267,21 @@ class PLBartTokenizer(TokenizersBackend):
         tgt_lang_id = self.convert_tokens_to_ids(self.tgt_lang)
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
+
+    def _convert_token_to_id(self, token):
+        """Converts a token (str) in an id using the vocab."""
+        if token in self.fairseq_tokens_to_ids:
+            return self.fairseq_tokens_to_ids[token]
+        spm_id = self.sp_model.PieceToId(token)
+
+        # Need to return unknown token if the SP model returned 0
+        return spm_id + self.fairseq_offset if spm_id else self.unk_token_id
+
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        if index in self.fairseq_ids_to_tokens:
+            return self.fairseq_ids_to_tokens[index]
+        return self.sp_model.IdToPiece(index - self.fairseq_offset)
 
     def prepare_seq2seq_batch(
         self,
@@ -301,15 +311,6 @@ class PLBartTokenizer(TokenizersBackend):
         else:
             self.suffix_tokens = [self.eos_token_id]
 
-        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
-        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
-
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
-            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
-            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
-        )
-
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
         lang = self._convert_lang_code_special_format(lang)
@@ -321,54 +322,7 @@ class PLBartTokenizer(TokenizersBackend):
         else:
             self.suffix_tokens = [self.eos_token_id]
 
-        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
-        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
-
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
-            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
-            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
-        )
-
     def _convert_lang_code_special_format(self, lang: str) -> str:
         """Convert Language Codes to format tokenizer uses if required"""
         lang = FAIRSEQ_LANGUAGE_CODES_MAP.get(lang, lang)
         return lang
-
-    def _decode(
-        self,
-        token_ids: Union[int, list[int]],
-        skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
-        **kwargs,
-    ) -> str:
-        """Decode token ids to string with cleanup support"""
-        # Call parent _decode method - Rust backend now handles language codes as special tokens
-        text = super()._decode(
-            token_ids=token_ids,
-            skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            **kwargs,
-        )
-        
-        # Apply cleanup if requested (TokenizersBackend doesn't apply it by default)
-        # Note: decode() with batched input sets clean_up_tokenization_spaces=False, so we apply cleanup when skip_special_tokens=True
-        should_cleanup = skip_special_tokens or (clean_up_tokenization_spaces if clean_up_tokenization_spaces is not None else self.clean_up_tokenization_spaces)
-        if should_cleanup:
-            text = (
-                text.replace(" .", ".")
-                .replace(" ?", "?")
-                .replace(" !", "!")
-                .replace(" ,", ",")
-                .replace(" ' ", "'")
-                .replace(" n't", "n't")
-                .replace(" 'm", "'m")
-                .replace(" 's", "'s")
-                .replace(" 've", "'ve")
-                .replace(" 're", "'re")
-            )
-        
-        return text
-
-
-__all__ = ["PLBartTokenizer"]
