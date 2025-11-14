@@ -546,6 +546,7 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
         "attentions": Phi4MultimodalVisionAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, Phi4MultimodalVisionEmbeddings):
@@ -572,16 +573,16 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
             nn.init.normal_(module.fc1.bias, std=1e-6)
             nn.init.normal_(module.fc2.bias, std=1e-6)
         elif isinstance(module, Phi4MultimodalVisionMultiheadAttentionPoolingHead):
-            nn.init.normal_(module.probe.data)
-            nn.init.normal_(module.attention.in_proj_weight.data)
-            nn.init.zeros_(module.attention.in_proj_bias.data)
+            nn.init.normal_(module.probe)
+            nn.init.normal_(module.attention.in_proj_weight)
+            nn.init.zeros_(module.attention.in_proj_bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             lecun_normal_(module.weight)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
 
 
 class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings):
@@ -1119,11 +1120,12 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
-            module.b1.data.zero_()
-            module.b2.data.zero_()
+            module.b1.zero_()
+            module.b2.zero_()
 
 
 class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
@@ -1441,11 +1443,12 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
 class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
     input_modalities = ["image", "audio", "text"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Phi4MultimodalImageEmbedding):
-            module.global_img_feature_extensor.data.zero_()
-            module.sub_img_feature_extensor.data.zero_()
+            module.global_img_feature_extensor.zero_()
+            module.sub_img_feature_extensor.zero_()
 
 
 class Phi4MultimodalModel(Phi3Model):
@@ -1563,7 +1566,7 @@ class Phi4MultimodalModel(Phi3Model):
 
 
 class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)
