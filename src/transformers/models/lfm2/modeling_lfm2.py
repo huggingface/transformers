@@ -329,7 +329,7 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
-    if multi_head_attention := key.shape[1] != query.shape[1]:
+    if grouped_query_attention := key.shape[1] != query.shape[1]:
         query_states = query.view(query.shape[0], key.shape[1], -1, *query.shape[2:])
         # Equivalent to (but faster than):
         # attn_weights = query_states @ key.unsqueeze(2).transpose(-1, -2) * scaling
@@ -343,7 +343,7 @@ def eager_attention_forward(
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    if multi_head_attention:
+    if grouped_query_attention:
         # Equivalent to (but faster than):
         # attn_output = (attn_weights @ value.unsqueeze(2)).flatten(1, 2).transpose(1, 2)
         attn_output = torch.einsum(
