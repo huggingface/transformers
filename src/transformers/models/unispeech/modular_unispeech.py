@@ -15,7 +15,6 @@
 """PyTorch UniSpeech model."""
 
 import math
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -233,9 +232,6 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for UniSpeech")
-
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for UniSpeech")
 
@@ -318,18 +314,6 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         Set the Gumbel softmax temperature to a given value. Only necessary for training
         """
         self.quantizer.temperature = temperature
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """

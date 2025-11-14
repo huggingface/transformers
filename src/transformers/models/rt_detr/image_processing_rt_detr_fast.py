@@ -25,7 +25,6 @@ from ...image_utils import (
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
     validate_annotations,
@@ -333,14 +332,6 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         pixel_mask[: original_size[0], : original_size[1]] = 1
 
         return image, pixel_mask, annotation
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[RTDetrImageProcessorKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
 
     def _preprocess(
         self,
