@@ -1087,8 +1087,8 @@ class ContinuousMixin:
         try:
             yield manager
         finally:
+            logger.debug("Continuous batching loop finished") # a dummy log needed for the logs of stop to show. Won't show
             manager.stop(block=block, timeout=timeout)
-            logger.debug("Continuous batching manager stopped")
 
     # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
     def init_continuous_batching(
