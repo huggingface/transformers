@@ -63,8 +63,6 @@ logger = logging.get_logger(__name__)
 
 
 class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs, total=False):
-    min_pixels: int
-    max_pixels: int
     patch_size: int
     temporal_patch_size: int
     merge_size: int
@@ -78,10 +76,6 @@ class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     "Constructs a fast Ernie 4.5 VL image processor that dynamically resizes videos based on the original videos.",
     BASE_VIDEO_PROCESSOR_DOCSTRING,
     """
-        min_pixels (`int`, *optional*, defaults to `299 * 28 * 28`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `1196 * 28 * 28`):
-            The max pixels of the image to resize the image.
         patch_size (`int`, *optional*, defaults to 14):
             The spacial patch size of the vision encoder.
         temporal_patch_size (`int`, *optional*, defaults to 2):
@@ -112,8 +106,6 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    min_pixels = 299 * 28 * 28
-    max_pixels = 1196 * 28 * 28
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
@@ -132,20 +124,11 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
             raise ValueError("`Ernie 4.5 VL` only supports a temporal patch size of 2")
 
         size = kwargs.pop("size", None)
-        min_pixels = kwargs.pop("min_pixels", None)
-        max_pixels = kwargs.pop("max_pixels", None)
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = self.size if size is None else size
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-            size.pop("min_pixels", None)
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
-            size.pop("max_pixels", None)
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        super().__init__(size=size, **kwargs)
 
     @classmethod
     def get_video_processor_dict(

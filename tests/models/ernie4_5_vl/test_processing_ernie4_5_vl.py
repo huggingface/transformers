@@ -47,8 +47,7 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = Ernie4_5_VLProcessor.from_pretrained(
             "/raid/anton/code/forks/transformers/AntonV/ErnieVL",
             patch_size=4,
-            max_pixels=56 * 56,
-            min_pixels=28 * 28,
+            size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56},
         )
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
@@ -352,7 +351,9 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
-        inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
+
+        size = {"shortest_edge": processor.image_processor.size["shortest_edge"], "longest_edge": 56 * 56 * 4}
+        inputs = processor(text=input_str, images=image_input, size=size, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 612)
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 100)

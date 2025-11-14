@@ -52,8 +52,7 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer", "video_processor"]
     image_processor_class = "AutoImageProcessor"
     video_processor_class = "Ernie4_5_VLVideoProcessor"
-
-    tokenizer_class = (None, "LlamaTokenizerFast")
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token

@@ -47,8 +47,7 @@ class Ernie4_5_VLImageProcessorTester:
         num_channels=3,
         min_resolution=56,
         max_resolution=1024,
-        min_pixels=56 * 56,
-        max_pixels=6177 * 28 * 28,
+        size=None,
         do_resize=True,
         do_normalize=True,
         do_convert_rgb=True,
@@ -62,8 +61,9 @@ class Ernie4_5_VLImageProcessorTester:
         self.num_channels = num_channels
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
+        if size is None:
+            size = {"shortest_edge": 56 * 56, "longest_edge": 6177 * 28 * 28}
+        self.size = size
         self.do_resize = do_resize
         self.do_normalize = do_normalize
         self.do_convert_rgb = do_convert_rgb
@@ -77,8 +77,7 @@ class Ernie4_5_VLImageProcessorTester:
             "do_resize": self.do_resize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-            "min_pixels": self.min_pixels,
-            "max_pixels": self.max_pixels,
+            "size": self.size,
             "patch_size": self.patch_size,
             "merge_size": self.merge_size,
         }
@@ -117,8 +116,7 @@ class Ernie4_5_VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "min_pixels"))
-            self.assertTrue(hasattr(image_processing, "max_pixels"))
+            self.assertTrue(hasattr(image_processing, "size"))
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
             self.assertTrue(hasattr(image_processing, "patch_size"))
             self.assertTrue(hasattr(image_processing, "merge_size"))
@@ -126,14 +124,15 @@ class Ernie4_5_VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.min_pixels, 56 * 56)
-            self.assertEqual(image_processor.max_pixels, 6177 * 28 * 28)
+            self.assertEqual(image_processor.size["shortest_edge"], 56 * 56)
+            self.assertEqual(image_processor.size["longest_edge"], 6177 * 28 * 28)
 
             image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, min_pixels=256 * 256, max_pixels=640 * 640
+                self.image_processor_dict,
+                size={"shortest_edge": 256 * 256, "longest_edge": 640 * 640},
             )
-            self.assertEqual(image_processor.min_pixels, 256 * 256)
-            self.assertEqual(image_processor.max_pixels, 640 * 640)
+            self.assertEqual(image_processor.size["shortest_edge"], 256 * 256)
+            self.assertEqual(image_processor.size["longest_edge"], 640 * 640)
 
     def test_select_best_resolution(self):
         # Test with a final resize resolution
@@ -260,7 +259,7 @@ class Ernie4_5_VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             with tempfile.TemporaryDirectory() as tmpdirname:
                 image_processing.save_pretrained(tmpdirname)
                 image_processor_loaded = image_processing_class.from_pretrained(
-                    tmpdirname, max_pixels=56 * 56, min_pixels=28 * 28
+                    tmpdirname, size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
                 )
 
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
@@ -273,8 +272,10 @@ class Ernie4_5_VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         for image_processing_class in self.image_processor_list:
             image_processor_dict = self.image_processor_dict.copy()
             for a_pixels, b_pixels in pixel_choices:
-                image_processor_dict["min_pixels"] = min(a_pixels, b_pixels)
-                image_processor_dict["max_pixels"] = max(a_pixels, b_pixels)
+                image_processor_dict["size"] = {
+                    "shortest_edge": min(a_pixels, b_pixels),
+                    "longest_edge": max(a_pixels, b_pixels),
+                }
                 image_processor = image_processing_class(**image_processor_dict)
                 image_inputs = self.image_processor_tester.prepare_image_inputs()
                 # Just checking that it doesn't raise an error
