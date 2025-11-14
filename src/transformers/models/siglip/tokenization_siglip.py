@@ -23,9 +23,8 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import sentencepiece as spm
 
-from ...convert_slow_tokenizer import import_protobuf
-from ...tokenization_python import PreTrainedTokenizer
 from ...tokenization_utils_base import AddedToken
+from ...tokenization_utils_sentencepiece import SentencePieceBackend
 
 
 if TYPE_CHECKING:
@@ -43,7 +42,7 @@ SPIECE_UNDERLINE = "▁"
 
 
 @requires(backends=("sentencepiece",))
-class SiglipTokenizer(PreTrainedTokenizer):
+class SiglipTokenizer(SentencePieceBackend):
     """
     Construct a Siglip tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
@@ -118,14 +117,10 @@ class SiglipTokenizer(PreTrainedTokenizer):
         )
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
         self.do_lower_case = do_lower_case
-        self.vocab_file = vocab_file
-
-        self.sp_model = self.get_spm_processor()
-        self.vocab_file = vocab_file
 
         super().__init__(
+            vocab_file=vocab_file,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
@@ -135,19 +130,6 @@ class SiglipTokenizer(PreTrainedTokenizer):
             do_lower_case=do_lower_case,
             **kwargs,
         )
-
-    def get_spm_processor(self):
-        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        with open(self.vocab_file, "rb") as f:
-            sp_model = f.read()
-            model_pb2 = import_protobuf()
-            model = model_pb2.ModelProto.FromString(sp_model)
-            normalizer_spec = model_pb2.NormalizerSpec()
-            normalizer_spec.add_dummy_prefix = False
-            model.normalizer_spec.MergeFrom(normalizer_spec)
-            sp_model = model.SerializeToString()
-            tokenizer.LoadFromSerializedProto(sp_model)
-        return tokenizer
 
     @property
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.vocab_size
@@ -282,6 +264,9 @@ class SiglipTokenizer(PreTrainedTokenizer):
                 If provided, then this exact string is kept. For example providing '{}' will keep any occurrences of '{}'
                 (but will still remove '{' and '}' that appear separately).
         """
+        if self.do_lower_case:
+            text = text.lower()
+
         if keep_punctuation_exact_string:
             text = keep_punctuation_exact_string.join(
                 self.remove_punctuation(part) for part in text.split(keep_punctuation_exact_string)

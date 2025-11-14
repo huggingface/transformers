@@ -24,6 +24,7 @@ from typing import Any, Optional, Union, overload
 
 import sentencepiece as spm
 
+from .convert_slow_tokenizer import import_protobuf
 from .tokenization_python import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -70,6 +71,14 @@ class SentencePieceBackend(PreTrainedTokenizer):
         # This is needed because parent __init__ may call methods that depend on sp_model
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         tokenizer.Load(self.vocab_file)
+
+        if not self.legacy:
+            model_pb2 = import_protobuf()
+            proto = model_pb2.ModelProto.FromString(tokenizer.serialized_model_proto())
+            if proto.normalizer_spec.add_dummy_prefix:
+                proto.normalizer_spec.add_dummy_prefix = False
+                tokenizer.LoadFromSerializedProto(proto.SerializeToString())
+
         self.sp_model = tokenizer
 
         # Initialize total_vocab_size before parent __init__ (which may call _add_tokens -> len(self))
@@ -82,53 +91,12 @@ class SentencePieceBackend(PreTrainedTokenizer):
         # This handles tokens_trie, _added_tokens_decoder, _added_tokens_encoder,
         # token_type_ids_pattern, special_tokens_pattern, and adds special tokens
         super().__init__(**kwargs)
+        self._update_trie()
 
     @property
     def vocab_size(self) -> int:
         """Returns vocab size"""
         return self.sp_model.get_piece_size()
-
-    @property
-    def added_tokens_encoder(self) -> dict[str, int]:
-        """
-        Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
-        optimisation in `self._added_tokens_encoder` for the slow tokenizers.
-
-        Only returns tokens that are NOT in the base SentencePiece vocabulary.
-        """
-        # Use the filtered added_tokens_decoder property to ensure consistency
-        return {k.content: v for v, k in sorted(self.added_tokens_decoder.items(), key=lambda item: item[0])}
-
-    @property
-    def added_tokens_decoder(self) -> dict[int, AddedToken]:
-        """
-        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
-
-        Only returns tokens that are NOT in the base SentencePiece vocabulary (i.e., index >= vocab_size).
-
-        Returns:
-            `dict[int, AddedToken]`: The added tokens.
-        """
-        # Filter out tokens with indices in the base vocab range
-        # Base vocab tokens have indices 0 to vocab_size-1
-        return {
-            token_id: added_token
-            for token_id, added_token in sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])
-            if token_id >= self.vocab_size
-        }
-
-    @added_tokens_decoder.setter
-    def added_tokens_decoder(self, value: dict[int, Union[AddedToken, str]]) -> dict[int, AddedToken]:
-        # Always raise an error if string because users should define the behavior
-        for index, token in value.items():
-            if not isinstance(token, (str, AddedToken)) or not isinstance(index, int):
-                raise TypeError(
-                    f"The provided `added_tokens_decoder` has an element of type {index.__class__, token.__class__}, should be a dict of {int, Union[AddedToken, str]}"
-                )
-
-            self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
-            self._added_tokens_encoder[str(token)] = index
-        self._update_total_vocab_size()
 
     def get_vocab(self):
         """Returns vocab as a dict"""
