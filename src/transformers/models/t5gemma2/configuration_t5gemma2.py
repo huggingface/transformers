@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
@@ -31,19 +30,19 @@ from ..siglip import SiglipVisionConfig
 logger = logging.get_logger(__name__)
 
 
-class T5Gemma2ModuleConfig(PreTrainedConfig):
+class T5Gemma2TextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`T5Gemma2ModuleModel`]. It is used to instantiate an T5Gemma2Module
+    This is the configuration class to store the configuration of a [`T5Gemma2TextModel`]. It is used to instantiate an T5Gemma2Text
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the T5Gemma2Module-7B.
-    e.g. [google/t5_gemma2_module-7b](https://huggingface.co/google/t5_gemma2_module-7b)
+    defaults will yield a similar configuration to that of the T5Gemma2Text-7B.
+    e.g. [google/t5gemma2_text-7b](https://huggingface.co/google/t5gemma2_text-7b)
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 262208):
-            Vocabulary size of the T5Gemma2Module model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`T5Gemma2ModuleModel`]
+            Vocabulary size of the T5Gemma2Text model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`T5Gemma2TextModel`]
         hidden_size (`int`, *optional*, defaults to 2304):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 9216):
@@ -89,7 +88,7 @@ class T5Gemma2ModuleConfig(PreTrainedConfig):
         query_pre_attn_scalar (`float`, *optional*, defaults to 256):
             Scaling factor used on the attention scores
         sliding_window (`int`, *optional*, defaults to 4096):
-            In T5Gemma2Module, every other layer uses sliding window attention. This is the size of the sliding window.
+            In T5Gemma2Text, every other layer uses sliding window attention. This is the size of the sliding window.
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
         final_logit_softcapping (`float`, *optional*):
@@ -105,17 +104,17 @@ class T5Gemma2ModuleConfig(PreTrainedConfig):
             behavior for vision tokens.
 
     ```python
-    >>> from transformers import T5Gemma2ModuleModel, T5Gemma2ModuleConfig
-    >>> # Initializing a T5Gemma2Module t5_gemma2_module-7b style configuration
-    >>> configuration = T5Gemma2ModuleConfig()
-    >>> # Initializing a model from the t5_gemma2_module-7b style configuration
-    >>> model = T5Gemma2ModuleModel(configuration)
+    >>> from transformers import T5Gemma2TextModel, T5Gemma2TextConfig
+    >>> # Initializing a T5Gemma2Text t5gemma2_text-7b style configuration
+    >>> configuration = T5Gemma2TextConfig()
+    >>> # Initializing a model from the t5gemma2_text-7b style configuration
+    >>> model = T5Gemma2TextModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
     """
 
-    model_type = "t5gemma2_module"
+    model_type = "t5gemma2_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -221,69 +220,103 @@ class T5Gemma2ModuleConfig(PreTrainedConfig):
         rope_config_validation(self)
 
 
-class T5Gemma2VisionConfig(PreTrainedConfig):
+class T5Gemma2EncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to cover vision-related processing in T5Gemma 2.
+    This is the configuration class to store the configuration of a [`T5Gemma2EncoderForConditionalGeneration`]. It is used to instantiate an
+    T5Gemma2EncoderForConditionalGeneration according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the PaliGemma-2B.
 
-        It is used to instantiate an T5Gemma2Vision model, defining the vision preprocessing logic, including siglip features and
-    multi-modal projection.
+    e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        siglip_config (`Union[SiglipVisionConfig, dict]`, optional, *optional*):
-            Configuration for the vision encoder.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for attention.
+        text_config (`Union[T5Gemma2EncoderTextConfig, dict]`, *optional*):
+            The config object of the text backbone.
+        vision_config (`Union[AutoConfig, dict]`,  *optional*):
+            Custom vision config or dict.
         mm_tokens_per_image (`int`, *optional*, defaults to 256):
             The number of tokens per image embedding.
         boi_token_index (`int`, *optional*, defaults to 255999):
             The begin-of-image token index to wrap the image prompt.
         eoi_token_index (`int`, *optional*, defaults to 256000):
             The end-of-image token index to wrap the image prompt.
-        image_token_index (`int`, *optional*, defaults to 256001):
-            The image token index to encode the image prompt. Defaults to 256001, which is right after the eoi_token_index.
-            Note this is different from Gemma 3.
-        hidden_size (`int`, *optional*, defaults to 768):
-            The hidden size of the model.
-    """
+        image_token_index (`int`, *optional*, defaults to 262144):
+            The image token index to encode the image prompt.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
-    model_type = "t5gemma2_vision"
 
+    Example:
+
+    ```python
+    >>> from transformers import T5Gemma2EncoderForConditionalGeneration, T5Gemma2EncoderConfig, SiglipVisionConfig, T5Gemma2EncoderTextConfig
+
+    >>> # Initializing a Siglip-like vision config
+    >>> vision_config = SiglipVisionConfig()
+
+    >>> # Initializing a T5Gemma2Encoder Text config
+    >>> text_config = T5Gemma2EncoderTextConfig()
+
+    >>> # Initializing a T5Gemma2Encoder gemma-3-4b style configuration
+    >>> configuration = T5Gemma2EncoderConfig(vision_config, text_config)
+
+    >>> # Initializing a model from the gemma-3-4b style configuration
+    >>> model = T5Gemma2EncoderTextConfig(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "t5gemma2_encoder"
     attribute_map = {
         "image_token_id": "image_token_index",
         "boi_token_id": "boi_token_index",
         "eoi_token_id": "eoi_token_index",
     }
 
+    sub_configs = {
+        "text_config": T5Gemma2TextConfig,
+        "vision_config": SiglipVisionConfig,
+    }
+
     def __init__(
         self,
-        siglip_config: Optional[Union[SiglipVisionConfig, dict[str, Any]]] = None,
-        attention_dropout: float = 0.0,
+        text_config: Optional[Union[T5Gemma2TextConfig, dict[str, Any]]] = None,
+        vision_config: Optional[Union[SiglipVisionConfig, dict[str, Any]]] = None,
         mm_tokens_per_image: int = 256,
         boi_token_index: int = 255_999,
         eoi_token_index: int = 256_000,
-        image_token_index: int = 256_001,
-        hidden_size: int = 768,
+        image_token_index: int = 262_144,
+        initializer_range: float = 0.02,
         **kwargs,
     ):
-        if isinstance(siglip_config, dict):
-            siglip_config = SiglipVisionConfig(**siglip_config)
-        elif siglip_config is None:
-            siglip_config = SiglipVisionConfig()
-            logger.info("siglip_config is None, using default SiglipVisionConfig vision config.")
-        else:
-            if not isinstance(siglip_config, SiglipVisionConfig):
-                raise ValueError(f"{type(siglip_config)} is not supported.")
+        if text_config is None:
+            text_config = T5Gemma2TextConfig()
+            logger.info("text_config is None, using default T5Gemma2EncoderTextConfig text config.")
+        elif isinstance(text_config, dict):
+            text_config = T5Gemma2TextConfig(**text_config)
 
-        siglip_config.attention_dropout = attention_dropout
-        self.siglip_config = siglip_config
+        if isinstance(vision_config, dict):
+            vision_config = SiglipVisionConfig(**vision_config)
+        elif vision_config is None:
+            vision_config = SiglipVisionConfig()
+            logger.info("vision_config is None, using default SiglipVisionConfig vision config.")
 
+        self.text_config = text_config
+        self.vision_config = vision_config
         self.mm_tokens_per_image = mm_tokens_per_image
         self.boi_token_index = boi_token_index
         self.eoi_token_index = eoi_token_index
         self.image_token_index = image_token_index
-        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
+
+
+class T5Gemma2DecoderConfig(T5Gemma2TextConfig):
+    model_type = "t5gemma2_decoder"
 
 
 class T5Gemma2Config(PreTrainedConfig):
@@ -296,12 +329,10 @@ class T5Gemma2Config(PreTrainedConfig):
     documentation from [PreTrainedConfig] for more information.
 
     Args:
-        encoder (`Union[T5Gemma2ModuleConfig, dict]`, optional, *optional*):
+        encoder (`Union[T5Gemma2EncoderConfig, dict]`, optional, *optional*):
             Configuration for the encoder.
-        decoder (`Union[T5Gemma2ModuleConfig, dict]`, optional, *optional*):
+        decoder (`Union[T5Gemma2DecoderConfig, dict]`, optional, *optional*):
             Configuration for the decoder.
-        vision_config (`Union[T5Gemma2VisionConfig, dict]`, optional, *optional*):
-            Configuration for the vision encoder.
         is_encoder_decoder (bool, optional, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
         dropout_rate (`float`, *optional*, defaults to 0.0):
@@ -312,8 +343,9 @@ class T5Gemma2Config(PreTrainedConfig):
             The dropout ratio for classifier (following T5).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        vocab_size (`int`, *optional*, defaults to 262144):
-            Vocabulary size of the T5Gemma2 model (the same as Gemma 3).
+        image_token_index (`int`, *optional*, defaults to 256001):
+            The image token index to encode the image prompt. Defaults to 256001, which is right after the eoi_token_index.
+            Note this is different from Gemma 3.
     ```python
     >>> from transformers import T5Gemma2Config, T5Gemma2Model
     >>> t5gemma2_config = T5Gemma2Config.from_pretrained("google/t5gemma-270m-270m")
@@ -352,68 +384,66 @@ class T5Gemma2Config(PreTrainedConfig):
         "decoder.norm": (["hidden_states"], ["hidden_states"]),
     }
 
+    sub_configs = {
+        "encoder": T5Gemma2EncoderConfig,
+        "decoder": T5Gemma2DecoderConfig,
+    }
+
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "eoi_token_id": "eoi_token_index",
+    }
+
     def __init__(
         self,
-        encoder: Optional[Union[T5Gemma2ModuleConfig, dict[str, Any]]] = None,
-        decoder: Optional[Union[T5Gemma2ModuleConfig, dict[str, Any]]] = None,
-        vision_config: Optional[Union[T5Gemma2VisionConfig, dict[str, Any]]] = None,
+        encoder: Optional[Union[T5Gemma2EncoderConfig, dict[str, Any]]] = None,
+        decoder: Optional[Union[T5Gemma2DecoderConfig, dict[str, Any]]] = None,
         is_encoder_decoder: bool = True,
         dropout_rate: float = 0.0,
         attention_dropout: float = 0.0,
         classifier_dropout_rate: float = 0.0,
         initializer_range: float = 0.02,
-        vocab_size: int = 262_144,
+        image_token_index: int = 256_001,
         **kwargs,
     ):
         if isinstance(encoder, dict):
-            encoder = T5Gemma2ModuleConfig(**encoder)
+            encoder = T5Gemma2EncoderConfig(**encoder)
         elif encoder is None:
-            encoder = T5Gemma2ModuleConfig()
-            logger.info("encoder is None, using default T5Gemma2ModuleConfig encoder config.")
+            encoder = T5Gemma2EncoderConfig()
+            logger.info("encoder is None, using default T5Gemma2EncoderConfig encoder config.")
         else:
-            if not isinstance(encoder, T5Gemma2ModuleConfig):
+            if not isinstance(encoder, T5Gemma2EncoderConfig):
                 raise ValueError(f"{type(encoder)} is not supported.")
 
         if isinstance(decoder, dict):
-            decoder = T5Gemma2ModuleConfig(**decoder)
+            decoder = T5Gemma2DecoderConfig(**decoder)
         elif decoder is None:
-            decoder = copy.deepcopy(encoder)
-            logger.info("decoder is None, using the same config as encoder.")
+            decoder = T5Gemma2DecoderConfig()
+            logger.info("decoder is None, using default T5Gemma2DecoderConfig decoder config.")
         else:
-            if not isinstance(decoder, T5Gemma2ModuleConfig):
+            if not isinstance(decoder, T5Gemma2DecoderConfig):
                 raise ValueError(f"{type(decoder)} is not supported.")
 
-        if isinstance(vision_config, dict):
-            vision_config = T5Gemma2VisionConfig(**vision_config)
-        elif vision_config is None:
-            vision_config = T5Gemma2VisionConfig()
-            logger.info("vision_config is None, using default T5Gemma2VisionConfig vision config.")
-        else:
-            if not isinstance(vision_config, T5Gemma2VisionConfig):
-                raise ValueError(f"{type(vision_config)} is not supported.")
-
-        if encoder.hidden_size != decoder.hidden_size:
+        if encoder.text_config.hidden_size != decoder.hidden_size:
             raise ValueError(
                 "Imbalanced encoder-decoder is not supported in T5Gemma2: "
-                f"encoder ({encoder.hidden_size}) vs decoder ({decoder.hidden_size})."
+                f"encoder ({encoder.text_config.hidden_size}) vs decoder ({decoder.hidden_size})."
             )
 
         if not is_encoder_decoder:
             raise ValueError("T5Gemma2Model only support encoder-decoder modeling.")
 
-        if encoder.vocab_size != decoder.vocab_size:
+        if encoder.text_config.vocab_size != decoder.vocab_size:
             raise ValueError(
                 "Imbalanced encoder-decoder vocabulary size is not supported in T5Gemma2: "
-                f"encoder ({encoder.vocab_size}) vs decoder ({decoder.vocab_size})."
+                f"encoder ({encoder.text_config.vocab_size}) vs decoder ({decoder.vocab_size})."
             )
 
-        encoder = T5Gemma2ModuleConfig(**encoder.to_dict())
-        decoder = T5Gemma2ModuleConfig(**decoder.to_dict())
-        vision_config = T5Gemma2VisionConfig(**vision_config.to_dict())
-
         # Encoder.
-        encoder.dropout_rate = dropout_rate
-        encoder.attention_dropout = attention_dropout
+        encoder.text_config.dropout_rate = dropout_rate
+        encoder.text_config.attention_dropout = attention_dropout
+        encoder.vision_config.attention_dropout = attention_dropout
+        encoder.image_token_index = image_token_index
         self.encoder = encoder
 
         # Decoder.
@@ -421,12 +451,7 @@ class T5Gemma2Config(PreTrainedConfig):
         decoder.attention_dropout = attention_dropout
         self.decoder = decoder
 
-        # Vision encoder.
-        vision_config.hidden_size = encoder.hidden_size
-        vision_config.siglip_config.attention_dropout = attention_dropout
-        self.vision_config = vision_config
-
-        for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id"]:
+        for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id", "vocab_size"]:
             if special_token_key not in kwargs:
                 kwargs[special_token_key] = getattr(decoder, special_token_key)
 
@@ -437,15 +462,14 @@ class T5Gemma2Config(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.classifier_dropout_rate = classifier_dropout_rate
         self.initializer_range = initializer_range
-
-        # Used in pipeline generation.
-        self.vocab_size = vocab_size
+        self.eoi_token_index = encoder.eoi_token_index
+        self.image_token_index = image_token_index
 
     def __setattr__(self, key, value):
         shared_attr_with_submodules = [
             "output_hidden_states",
             "output_attentions",
-            "_attn_implementation",
+            "_attn_implementation_internal",
             "dropout_rate",
             "attention_dropout",
             "vocab_size",
@@ -453,12 +477,11 @@ class T5Gemma2Config(PreTrainedConfig):
         ]
 
         if key in shared_attr_with_submodules:
-            setattr(self.encoder, key, value)
+            setattr(self.encoder.text_config, key, value)
+            setattr(self.encoder.vision_config, key, value)
             setattr(self.decoder, key, value)
-            if key in ["_attn_implementation", "attention_dropout", "dtype"]:
-                setattr(self.vision_config, key, value)
-                setattr(self.vision_config.siglip_config, key, value)
+            setattr(self.encoder, key, value)
         super().__setattr__(key, value)
 
 
-__all__ = ["T5Gemma2Config", "T5Gemma2ModuleConfig", "T5Gemma2VisionConfig"]
+__all__ = ["T5Gemma2Config", "T5Gemma2TextConfig", "T5Gemma2EncoderConfig", "T5Gemma2DecoderConfig"]

@@ -19,7 +19,13 @@ import unittest
 
 import pytest
 
-from transformers import T5Gemma2Config, T5Gemma2ModuleConfig, T5Gemma2VisionConfig, is_torch_available
+from transformers import (
+    T5Gemma2Config,
+    T5Gemma2DecoderConfig,
+    T5Gemma2EncoderConfig,
+    T5Gemma2TextConfig,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -45,7 +51,9 @@ if is_torch_available():
 
 class T5Gemma2ModelTester:
     config_class = T5Gemma2Config
-    module_config_class = T5Gemma2ModuleConfig
+    text_config_class = T5Gemma2TextConfig
+    encoder_config_class = T5Gemma2EncoderConfig
+    decoder_config_class = T5Gemma2DecoderConfig
 
     if is_torch_available():
         model_class = T5Gemma2Model
@@ -162,28 +170,37 @@ class T5Gemma2ModelTester:
         assert self.num_attention_heads == self.encoder_num_attention_heads
 
     def get_encoder_config(self):
-        return self.module_config_class(
-            vocab_size=self.vocab_size,
+        return self.encoder_config_class(
+            text_config=self.text_config_class(
+                vocab_size=self.vocab_size,
+                hidden_size=self.encoder_hidden_size,
+                num_hidden_layers=self.encoder_num_hidden_layers,
+                num_attention_heads=self.encoder_num_attention_heads,
+                num_key_value_heads=self.encoder_num_key_value_heads,
+                intermediate_size=self.encoder_intermediate_size,
+                hidden_act=self.hidden_act,
+                hidden_dropout_prob=self.hidden_dropout_prob,
+                attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+                max_position_embeddings=self.max_position_embeddings,
+                type_vocab_size=self.type_vocab_size,
+                is_decoder=False,
+                initializer_range=self.initializer_range,
+                head_dim=self.head_dim,
+                bos_token_id=self.bos_token_id,
+                eos_token_id=self.eos_token_id,
+                pad_token_id=self.pad_token_id,
+            ),
+            # vision.
+            vision_config=self.siglip_config,
+            image_token_index=self.image_token_index,
+            boi_token_index=self.boi_token_index,
+            eoi_token_index=self.eoi_token_index,
+            mm_tokens_per_image=self.mm_tokens_per_image,
             hidden_size=self.encoder_hidden_size,
-            num_hidden_layers=self.encoder_num_hidden_layers,
-            num_attention_heads=self.encoder_num_attention_heads,
-            num_key_value_heads=self.encoder_num_key_value_heads,
-            intermediate_size=self.encoder_intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            head_dim=self.head_dim,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
         )
 
     def get_decoder_config(self):
-        return self.module_config_class(
+        return self.decoder_config_class(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -204,22 +221,13 @@ class T5Gemma2ModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-    def get_vision_config(self):
-        return T5Gemma2VisionConfig(
-            siglip_config=self.siglip_config,
-            image_token_index=self.image_token_index,
-            boi_token_index=self.boi_token_index,
-            eoi_token_index=self.eoi_token_index,
-            mm_tokens_per_image=self.mm_tokens_per_image,
-            hidden_size=self.encoder_hidden_size,
-        )
-
     def get_config(self, is_encoder_decoder=True):
         return self.config_class(
             encoder=self.get_encoder_config(),
             decoder=self.get_decoder_config(),
-            vision_config=self.get_vision_config(),
             is_encoder_decoder=is_encoder_decoder,
+            # vision.
+            image_token_index=self.image_token_index,
             # Used for generation test.
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
@@ -252,8 +260,8 @@ class T5Gemma2ModelTester:
 
         # set the 3 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
-        input_ids[input_ids == config.vision_config.image_token_index] = self.pad_token_id
-        input_ids[:, :1] = config.vision_config.image_token_index
+        input_ids[input_ids == config.encoder.image_token_index] = self.pad_token_id
+        input_ids[:, :1] = config.encoder.image_token_index
 
         attention_mask = None
         decoder_attention_mask = None
@@ -341,7 +349,7 @@ class T5Gemma2ModelTester:
         model = self.model_class(config=config).to(torch_device).eval()
 
         # _shift_right should be called on labels
-        shifted_labels = model._shift_right(lm_labels)
+        shifted_labels = model.prepare_decoder_input_ids_from_labels(lm_labels)
 
         # first token should be decoder_start_token_id
         self.parent.assertTrue(torch.all(shifted_labels[:, 0] == config.decoder.bos_token_id))
@@ -634,11 +642,6 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = T5Gemma2ForConditionalGeneration if is_torch_available() else None
-    # `T5Gemma2` will give warning or raise error if it is not `eager` during training.
-    _torch_compile_train_attn_implementation = "eager"
-
-    # won't fix
-    test_torchscript = False
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
