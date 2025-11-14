@@ -528,8 +528,6 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
 
         outputs = (hidden_states,)
 
-       
-
         return outputs
 
 
