@@ -26,6 +26,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import (
@@ -415,6 +416,21 @@ class MusicgenPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        std = self.config.initializer_factor
+        if isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.padding_idx is not None:
+                init.zeros_(module.weight[module.padding_idx])
 
 
 class MusicgenDecoder(MusicgenPreTrainedModel):
