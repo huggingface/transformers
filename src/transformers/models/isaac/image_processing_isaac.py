@@ -4,429 +4,95 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import math
-from collections.abc import Sequence
-
-import numpy as np
-import torch
-import torch.nn.functional as F
-
-from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor
-from ...image_transforms import convert_to_rgb
-from ...image_utils import (
-    ImageInput,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
-from ...processing_utils import ImagesKwargs
-from ...tokenization_utils import TensorType
-from ...utils import filter_out_non_signature_kwargs
-
-
-class IsaacImageProcessorKwargs(ImagesKwargs):
-    patch_size: int | None
-    max_num_patches: int | None
-    min_num_patches: int | None
-    pixel_shuffle_scale: int | None
-    do_rescale: bool | None
-    rescale_factor: float | None
-    do_normalize: bool | None
-    image_mean: float | Sequence[float] | None
-    image_std: float | Sequence[float] | None
-    do_convert_rgb: bool | None
-
-
-# Vision preprocessing constants
-VISION_MEAN = (0.5, 0.5, 0.5)
-VISION_STD = (0.5, 0.5, 0.5)
-VISION_SCALE = 1 / 255
-
-
-def _normalize_rgb_values(
-    values: float | Sequence[float] | tuple[float, ...],
-    *,
-    name: str,
-) -> tuple[float, float, float]:
-    """Coerce RGB normalization parameters into a 3-tuple of floats."""
-    if isinstance(values, (list, tuple)):
-        if len(values) == 3:
-            return tuple(float(v) for v in values)
-        if len(values) == 1:
-            value = float(values[0])
-            return (value, value, value)
-        raise ValueError(f"`{name}` must have length 1 or 3 when provided as a sequence. Got length {len(values)}.")
-
-    value = float(values)
-    return (value, value, value)
-
-
-def _make_writeable(arr: np.ndarray) -> np.ndarray:
-    if arr.flags.writeable:
-        return arr
-    try:
-        arr.setflags(write=True)
-        return arr
-    except ValueError:
-        return arr.copy()
-
-
-# ============================================================================
-# Configuration
-# ============================================================================
-
-MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
-
-
-def get_scaled_image_size(
-    scale: float,
-    original_size: int,
-    patch_size: int,
-    pixel_shuffle_scale: int,
-) -> int:
-    scaled_size = scale * original_size
-    divisor = patch_size * pixel_shuffle_scale
-    scaled_size = math.ceil(scaled_size / divisor) * divisor
-    scaled_size = max(divisor, scaled_size)
-    return int(scaled_size)
-
-
-def get_image_size_for_max_num_patches(
-    image_height: int,
-    image_width: int,
-    patch_size: int,
-    max_num_patches: int,
-    min_num_patches: int | None = None,
-    eps: float = 1e-5,
-    pixel_shuffle_scale: int = 1,
-) -> tuple[int, int]:
-    r"""Compute a target resolution whose patch grid satisfies patching parametrization.
-
-    Args:
-        image_height (`int`):
-            Height in pixels of the source image prior to any resizing.
-        image_width (`int`):
-            Width in pixels of the source image prior to any resizing.
-        patch_size (`int`):
-            Size of the square patch used by the vision encoder.
-        max_num_patches (`int`):
-            Upper bound on `(height / patch_size) * (width / patch_size)` after resizing.
-        min_num_patches (`int`, *optional*):
-            Lower bound on the number of patches. When provided the image will be scaled up if necessary.
-        eps (`float`, *optional*, defaults to 1e-5):
-            Convergence tolerance for the internal binary search to determing the target dimensions.
-        pixel_shuffle_scale (`int`, *optional*, defaults to 1):
-            Additional stride multiplier applied when pixel shuffle later reduces spatial resolution.
-
-    Returns:
-        `tuple[int, int]`: Height and width (in pixels) that are multiples of `patch_size * pixel_shuffle_scale`
-        and respect both the maximum and optional minimum patch-count constraints.
-    """
-
-    # Ensure divisibility
-    divisor = patch_size * pixel_shuffle_scale
-    adjusted_height = math.ceil(image_height / divisor) * divisor
-    adjusted_height = max(divisor, adjusted_height)
-    adjusted_width = math.ceil(image_width / divisor) * divisor
-    adjusted_width = max(divisor, adjusted_width)
-
-    num_patches = (adjusted_height / patch_size) * (adjusted_width / patch_size)
-
-    if min_num_patches is not None and num_patches < min_num_patches:
-        # Scale up
-        scale_min, scale_max = 1.0, 100.0
-        while (scale_max - scale_min) >= eps:
-            scale = (scale_min + scale_max) / 2
-            target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
-            target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
-            num_patches = (target_height / patch_size) * (target_width / patch_size)
-            if num_patches >= min_num_patches:
-                scale_max = scale
-            else:
-                scale_min = scale
-        scale = scale_max
-        target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
-        target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
-        return target_height, target_width
-    elif num_patches <= max_num_patches:
-        return adjusted_height, adjusted_width
-    else:
-        # Scale down
-        scale_min, scale_max = eps / 10, 1.0
-        while (scale_max - scale_min) >= eps:
-            scale = (scale_min + scale_max) / 2
-            target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
-            target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
-            num_patches = (target_height / patch_size) * (target_width / patch_size)
-            if num_patches <= max_num_patches:
-                scale_min = scale
-            else:
-                scale_max = scale
-        scale = scale_min
-        target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
-        target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
-        return target_height, target_width
-
-
-def patchify_vision(image: torch.Tensor, patch_size: int) -> torch.Tensor:
-    r"""Convert normalized images into flattened ViT-style patches.
-
-    Args:
-        image (`torch.Tensor`):
-            Tensor of shape `(num_images, height, width, channels)`.
-        patch_size (`int`):
-            Edge length of the square patches
-
-    Returns:
-        `torch.Tensor`:
-            Patch tensor where each position stores the flattened pixels belonging to that patch.
-
-    Raises:
-        ValueError: If `height` or `width` is not divisible by `patch_size`.
-    """
-    num_images, height, width, channels = image.shape
-    if height % patch_size or width % patch_size:
-        raise ValueError(f"Dimensions of images {image.shape} are not divisible by patch_size={patch_size}.")
-    patches = image.reshape(num_images, height // patch_size, patch_size, width // patch_size, patch_size, channels)
-    patches = patches.permute(0, 1, 3, 2, 4, 5)
-    patches = patches.reshape(
-        num_images, height // patch_size, width // patch_size, channels * patch_size * patch_size
-    )
-    return patches
-
-
-def _prepare_image_tensor(
-    image: torch.Tensor, scale: float, mean: tuple[float, ...], std: tuple[float, ...]
-) -> torch.Tensor:
-    """Mirror the prepare_image_tensor utility used in the training pipelines."""
-    if not torch.is_floating_point(image):
-        image = image.float()
-
-    rescaled = image * scale
-    mean_tensor = torch.tensor(mean, dtype=torch.float32, device=rescaled.device).view(1, 1, 1, -1)
-    std_tensor = torch.tensor(std, dtype=torch.float32, device=rescaled.device).view(1, 1, 1, -1)
-    normalized = (rescaled - mean_tensor) / std_tensor
-    return normalized
-
-
-def _compute_residual_p_frames(frames: torch.Tensor, is_p_frame: list[bool]) -> torch.Tensor:
-    """Compute residuals for P-frames to stay in sync with the training pipeline."""
-    if not any(is_p_frame):
-        return frames
-
-    frame_indices = torch.arange(len(is_p_frame), device=frames.device)
-    i_frame_mask = torch.tensor([not flag for flag in is_p_frame], device=frames.device)
-    last_i_indices = torch.cummax((i_frame_mask * (1 + frame_indices)), dim=0).values.long() - 1
-    p_indices = frame_indices[torch.tensor(is_p_frame, device=frames.device)]
-    frames[p_indices] = frames[p_indices] - frames[last_i_indices[p_indices]]
-    return frames
-
-
-class IsaacImageProcessor(BaseImageProcessor):
-    """Image processor that prepares RGB frames for the Isaac vision encoder."""
-
-    model_input_names = ["patches", "token_grids"]
-
-    def __init__(
-        self,
-        patch_size: int = 16,
-        max_num_patches: int = 256,
-        min_num_patches: int | None = None,
-        pixel_shuffle_scale: int = 1,
-        do_rescale: bool = True,
-        rescale_factor: float | None = None,
-        do_normalize: bool = True,
-        image_mean: float | Sequence[float] | None = None,
-        image_std: float | Sequence[float] | None = None,
-        do_convert_rgb: bool = True,
-        resize_mode: str = "bilinear",
-        align_corners: bool = False,
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-
-        if pixel_shuffle_scale < 1:
-            raise ValueError("`pixel_shuffle_scale` must be >= 1")
-
-        rescale_value = VISION_SCALE if rescale_factor is None else float(rescale_factor)
-        mean_value = VISION_MEAN if image_mean is None else image_mean
-        std_value = VISION_STD if image_std is None else image_std
-
-        self.patch_size = patch_size
-        self.max_num_patches = max_num_patches
-        self.min_num_patches = min_num_patches
-        self.pixel_shuffle_scale = pixel_shuffle_scale
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_value
-        self.do_normalize = do_normalize
-        self.image_mean = _normalize_rgb_values(mean_value, name="image_mean")
-        self.image_std = _normalize_rgb_values(std_value, name="image_std")
-        self.do_convert_rgb = do_convert_rgb
-        self.resize_mode = resize_mode
-        self.align_corners = align_corners
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        images: ImageInput,
-        patch_size: int | None = None,
-        max_num_patches: int | None = None,
-        min_num_patches: int | None = None,
-        pixel_shuffle_scale: int | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | Sequence[float] | None = None,
-        image_std: float | Sequence[float] | None = None,
-        do_convert_rgb: bool | None = None,
-        return_tensors: str | TensorType | None = None,
-    ) -> BatchFeature:
-        patch_size = patch_size if patch_size is not None else self.patch_size
-        max_num_patches = max_num_patches if max_num_patches is not None else self.max_num_patches
-        min_num_patches = min_num_patches if min_num_patches is not None else self.min_num_patches
-        pixel_shuffle_scale = pixel_shuffle_scale if pixel_shuffle_scale is not None else self.pixel_shuffle_scale
-        do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
-        do_normalize = self.do_normalize if do_normalize is None else do_normalize
-        image_mean = self.image_mean if image_mean is None else _normalize_rgb_values(image_mean, name="image_mean")
-        image_std = self.image_std if image_std is None else _normalize_rgb_values(image_std, name="image_std")
-        do_convert_rgb = self.do_convert_rgb if do_convert_rgb is None else do_convert_rgb
-
-        images = self.fetch_images(images)
-        images = make_flat_list_of_images(images)
-
-        if not images:
-            raise ValueError("Received an empty list of images for preprocessing.")
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Expected PIL images, numpy arrays, or tensors convertible to numpy arrays."
-            )
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-        )
-
-        patches_list = []
-        token_grids = []
-        virtual_dims = []
-        real_dims = []
-
-        for image in images:
-            np_image = to_numpy_array(image)
-
-            if np_image.ndim == 2:
-                np_image = np.repeat(np_image[..., None], 3, axis=-1)
-
-            height, width = np_image.shape[:2]
-            if height * width > MAX_PIXELS:
-                raise ValueError(f"Image (w={width}, h={height}) > MAX=`{MAX_PIXELS}`")
-
-            torch_image = torch.from_numpy(_make_writeable(np_image))
-            patches, vidims, rdims = self._process_single_image(
-                torch_image,
-                patch_size=patch_size,
-                max_num_patches=max_num_patches,
-                min_num_patches=min_num_patches,
-                pixel_shuffle_scale=pixel_shuffle_scale,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-            )
-
-            patches_list.append(patches)
-            token_grids.append(torch.tensor([patches.size(1), patches.size(2)], dtype=torch.long))
-            virtual_dims.append(vidims)
-            real_dims.append(rdims)
-
-        patches_tensor = torch.cat(patches_list, dim=0)
-        token_grid_tensor = torch.stack(token_grids, dim=0)
-        virtual_dims_tensor = torch.tensor(virtual_dims, dtype=torch.long)
-        real_dims_tensor = torch.tensor(real_dims, dtype=torch.long)
-
-        data = {
-            "patches": patches_tensor,
-            "token_grids": token_grid_tensor,
-            "virtual_pixel_size": virtual_dims_tensor,
-            "real_pixel_size": real_dims_tensor,
-        }
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
-    def _process_single_image(
-        self,
-        image: torch.Tensor,
-        *,
-        patch_size: int,
-        max_num_patches: int,
-        min_num_patches: int | None,
-        pixel_shuffle_scale: int,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: tuple[float, ...],
-        image_std: tuple[float, ...],
-    ) -> tuple[torch.Tensor, list[int], list[int]]:
-        image_uint8 = image.unsqueeze(0)  # (1, H, W, C)
-        image_chw = image_uint8.permute(0, 3, 1, 2)  # (1, C, H, W)
-
-        _, _, orig_height, orig_width = image_chw.shape
-        target_height, target_width = get_image_size_for_max_num_patches(
-            orig_height,
-            orig_width,
-            patch_size,
-            max_num_patches,
-            min_num_patches=min_num_patches,
-            pixel_shuffle_scale=pixel_shuffle_scale,
-        )
-
-        if self.resize_mode in {"linear", "bilinear", "bicubic", "trilinear"}:
-            resized = F.interpolate(
-                image_chw,
-                size=(target_height, target_width),
-                mode=self.resize_mode,
-                align_corners=self.align_corners,
-            )
-        else:
-            resized = F.interpolate(
-                image_chw,
-                size=(target_height, target_width),
-                mode=self.resize_mode,
-            )
-
-        resized = resized.permute(0, 2, 3, 1)  # (1, H, W, C)
-
-        scale = rescale_factor if do_rescale else 1.0
-        mean = image_mean if do_normalize else (0.0, 0.0, 0.0)
-        std = image_std if do_normalize else (1.0, 1.0, 1.0)
-        resized = _prepare_image_tensor(resized, scale=scale, mean=mean, std=std)
-
-        resized = _compute_residual_p_frames(resized, is_p_frame=[False])
-
-        patches = patchify_vision(resized, patch_size=patch_size)
-        _, h_patches, w_patches, _ = patches.shape
-
-        real_dims = [1, h_patches, w_patches]
-        if pixel_shuffle_scale > 1:
-            if (h_patches % pixel_shuffle_scale) or (w_patches % pixel_shuffle_scale):
-                raise ValueError(
-                    "Spatial dimensions must be divisible by pixel_shuffle_scale when pixel shuffle is enabled."
-                )
-            virtual_dims = [1, h_patches // pixel_shuffle_scale, w_patches // pixel_shuffle_scale]
-        else:
-            virtual_dims = real_dims.copy()
-
-        return patches, virtual_dims, real_dims
-
-
-__all__ = ["IsaacImageProcessor"]
+# Copyright (c) 2024 Perceptron, Inc.  All rights reserved.
+# Perceptron, Inc. Non-Production License (2024-01-01)
+
+
+### 1. Scope and acceptance
+
+# **1.1. Scope of the Agreement.**
+# This Agreement applies to any use, modification, or Distribution of any Perceptron Model by You, regardless of the source You obtained a copy of such Perceptron Model.
+#
+# **1.2. Acceptance.** By accessing, using, modifying, Distributing a Perceptron Model, or by creating, using or distributing a Derivative of the Perceptron Model, You agree to be bound by this Agreement.
+#
+# **1.3. Acceptance on behalf of a third-party.** If You accept this Agreement on behalf of Your employer or another person or entity, You warrant and represent that You have the authority to act and accept this Agreement on their behalf. In such a case, the word “You” in this Agreement will refer to Your employer or such other person or entity.
+#
+# ## 2. License
+# **2.1. Grant of rights.** Subject to Section 3 below, Perceptron, Inc. hereby grants You a non-exclusive, royalty-free, worldwide, non-sublicensable, non-transferable, limited license to use, copy, modify, and Distribute under the conditions provided in Section 2.2 below, the Perceptron Model and any Derivatives made by or for Perceptron, Inc. and to create Derivatives of the Perceptron Model.
+#
+# **2.2. Distribution of Perceptron Model and Derivatives made by or for Perceptron, Inc..** Subject to Section 3 below, You may Distribute copies of the Perceptron Model and/or Derivatives made by or for Perceptron, Inc., under the following conditions:
+# - You must make available a copy of this Agreement to third-party recipients of the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. you Distribute, it being specified that any rights to use the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. shall be directly granted by Perceptron, Inc. to said third-party recipients pursuant to the Perceptron, Inc. Non-Production License agreement executed between these parties;
+# - You must retain in all copies of the Perceptron Models the following attribution notice within a “Notice” text file distributed as part of such copies: “Licensed by Perceptron, Inc. under the Perceptron, Inc. Non-Production License”.
+#
+# **2.3. Distribution of Derivatives made by or for You.** Subject to Section 3 below, You may Distribute any Derivatives made by or for You under additional or different terms and conditions, provided that:
+# - In any event, the use and modification of Perceptron Model and/or Derivatives made by or for Perceptron, Inc. shall remain governed by the terms and conditions of this Agreement;
+# - You include in any such Derivatives made by or for You prominent notices stating that You modified the concerned Perceptron Model; and
+# - Any terms and conditions You impose on any third-party recipients relating to Derivatives made by or for You shall neither limit such third-party recipients’ use of the Perceptron Model or any Derivatives made by or for Perceptron, Inc. in accordance with the Perceptron, Inc. Non-Production License nor conflict with any of its terms and conditions.
+#
+# ## 3. Limitations
+# **3.1. Misrepresentation.** You must not misrepresent or imply, through any means, that the Derivatives made by or for You and/or any modified version of the Perceptron Model You Distribute under your name and responsibility is an official product of Perceptron, Inc. or has been endorsed, approved or validated by Perceptron, Inc., unless You are authorized by Us to do so in writing.
+#
+# **3.2. Usage Limitation**
+# - You shall only use the Perceptron Models and Derivatives (whether or not created by Perceptron, Inc.) for testing, research, Personal, or evaluation purposes in Non-Production Environments;
+# - Subject to the foregoing, You shall not supply the Perceptron Models or Derivatives in the course of a commercial activity, whether in return for payment or free of charge, in any medium or form, including but not limited to through a hosted or managed service (e.g. SaaS, cloud instances, etc.), or behind a software layer.
+#
+# **3.3. Usage not permitted under this Agreement.** If You want to use a Perceptron Model or a Derivative for any purpose that is not expressly authorized under this Agreement, You must request a license from Perceptron, Inc., which Perceptron, Inc. may grant to You in Perceptron, Inc.’s sole discretion. Please contact Perceptron, Inc. at the following e-mail address if You want to discuss such a license: sales@perceptron.inc
+#
+# ## 4. Intellectual Property
+# **4.1. Trademarks.** No trademark licenses are granted under this Agreement, and in connection with the Perceptron Models, You may not use any name or mark owned by or associated with Perceptron, Inc. or any of its affiliates, except (i) as required for reasonable and customary use in describing and Distributing the Perceptron Models and Derivatives made by or for Perceptron, Inc. and (ii) for attribution purposes as required by this Agreement.
+#
+# **4.2. Outputs.** We claim no ownership rights in and to the Outputs. You are solely responsible for the Outputs You generate and their subsequent uses in accordance with this Agreement.
+#
+# **4.3. Derivatives.** By entering into this Agreement, You accept that any Derivatives that You may create or that may be created for You shall be subject to the restrictions set out in Section 3 of this Agreement.
+#
+# # 5. Liability
+# **5.1. Limitation of liability.** In no event, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall Perceptron, Inc. be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this Agreement or out of the use or inability to use the Perceptron Models and Derivatives (including but not limited to damages for loss of data, loss of goodwill, loss of expected profit or savings, work stoppage, computer failure or malfunction, or any damage caused by malware or security breaches), even if  Perceptron, Inc. has been advised of the possibility of such damages.
+#
+# **5.2. Indemnification.** You agree to indemnify and hold harmless Perceptron, Inc. from and against any claims, damages, or losses arising out of or related to Your use or Distribution of the Perceptron Models and Derivatives.
+#
+# ## 6. Warranty
+# **6.1. Disclaimer.** Unless required by applicable law or agreed to in writing, Perceptron, Inc. provides the Perceptron Models and Derivatives on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. Perceptron, Inc. does not represent nor warrant that the Perceptron Models and Derivatives will be error-free, meet Your or any third party’s requirements, be secure or will allow You or any third party to achieve any kind of result or generate any kind of content. You are solely responsible for determining the appropriateness of using or Distributing the Perceptron Models and Derivatives and assume any risks associated with Your exercise of rights under this Agreement.
+#
+# # 7. Termination
+# **7.1. Term.** This Agreement is effective as of the date of your acceptance of this Agreement or access to the concerned Perceptron Models or Derivatives and will continue until terminated in accordance with the following terms.
+#
+# **7.2. Termination.** Perceptron, Inc. may terminate this Agreement at any time if You are in breach of this Agreement. Upon termination of this Agreement, You must cease to use all Perceptron Models and Derivatives and shall permanently delete any copy thereof. Sections 5, 6, 7 and 8 shall survive the termination of this Agreement.
+#
+# **7.3. Litigation.** If You initiate any legal action or proceedings against Us or any other entity (including a cross-claim or counterclaim in a lawsuit), alleging that the Model or a Derivative, or any part thereof, infringe upon intellectual property or other rights owned or licensable by You, then any licenses granted to You under this Agreement will immediately terminate as of the date such legal action or claim is filed or initiated.
+#
+# # 8. General provisions
+# 8.1. Governing Law. This Agreement will be governed by and construed in accordance with the laws of the State of Washington, without regard to its conflict of law principles.
+#
+# 8.2. Jurisdiction. The state and federal courts located in King County, Washington shall have exclusive jurisdiction over any dispute arising out of or relating to this Agreement, and You and We consent to personal jurisdiction and venue in such courts.
+#
+# **8.3. Severability.** If any provision of this Agreement is held to be invalid, illegal or unenforceable, the remaining provisions shall be unaffected thereby and remain valid as if such provision had not been set forth herein.
+#
+# # 9. Definitions
+# **“Agreement”**: means this Perceptron, Inc. Non-Production License agreement governing the access, use, and Distribution of the Perceptron Models and Derivatives.
+#
+# **“Derivative”**: means any (i) modified version of the Perceptron Model (including but not limited to any customized or fine-tuned version thereof), (ii) work based on the Perceptron Model, or (iii) any other derivative work thereof. For the avoidance of doubt, Outputs are not considered as Derivatives under this Agreement.
+#
+# **“Distribution”**, **“Distributing”**, **“Distribute”** or **“Distributed”**: means providing or making available, by any means, a copy of the Perceptron Models and/or the Derivatives as the case may be, subject to Section 3 of this Agreement.
+#
+# **“Perceptron, Inc.”**, **“We”** or **“Us”**: means Perceptron, Inc., a Delaware corporation with its principal place of business at 10900 NE 8th St Suite 613, Bellevue, WA 98004.
+#
+# **“Perceptron Model”**: means the foundational large language model(s), and its elements which include algorithms, software, instructed checkpoints, parameters, source code (inference code, evaluation code and, if applicable, fine-tuning code) and any other elements associated thereto made available by Perceptron, Inc. under this Agreement, including, if any, the technical documentation, manuals and instructions for the use and operation thereof.
+#
+# **“Non-Production Environment”**: means any setting, use case, or application of the Perceptron Models or Derivatives that expressly excludes live, real-world conditions, commercial operations, revenue-generating activities, or direct interactions with or impacts on end users (such as, for instance, Your employees or customers). Non-Production Environment may include, but is not limited to, any setting, use case, or application for research, development, testing, quality assurance, training, internal evaluation (other than any internal usage by employees in the context of the company’s business activities), and demonstration purposes.
+#
+# **“Outputs”**: means any content generated by the operation of the Perceptron Models or the Derivatives from a prompt (i.e., text instructions) provided by users. For the avoidance of doubt, Outputs do not include any components of a Perceptron Models, such as any fine-tuned versions of the Perceptron Models, the weights, or parameters.
+#
+# **“Personal”**: means any use of a Perceptron Model or a Derivative that is (i) solely for personal, non-profit and non-commercial purposes and (ii) not directly or indirectly connected to any commercial activities, business operations, or employment responsibilities. For illustration purposes, Personal use of a Model or a Derivative does not include any usage by individuals employed in companies in the context of their daily tasks, any activity that is intended to generate revenue, or that is performed on behalf of a commercial entity.
+#
+# **“You”**: means the individual or entity entering into this Agreement with Perceptron, Inc..
+
+from typing import Optional
+
+from ...image_processing_utils_fast import ImagesKwargs
+
+
+class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
+    patch_size: Optional[int]
+    max_num_patches: Optional[int]
+    min_num_patches: Optional[int]
+    pixel_shuffle_scale: Optional[int]

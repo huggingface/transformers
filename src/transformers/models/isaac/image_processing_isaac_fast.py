@@ -4,7 +4,9 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Perceptron, Inc. Non-Production License
+# Copyright (c) 2024 Perceptron, Inc.  All rights reserved.
+# Perceptron, Inc. Non-Production License (2024-01-01)
+
 
 ### 1. Scope and acceptance
 
@@ -91,21 +93,17 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn.functional as F
 
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    BatchFeature,
-    SizeDict,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, group_images_by_shape, reorder_images
 from ...image_utils import ChannelDimension, PILImageResampling
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...tokenization_utils import TensorType
+from ...utils import auto_docstring
 
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from .processing_isaac import IsaacImageProcessorKwargs
+from .image_processing_isaac import IsaacImageProcessorKwargs
 
 
 def get_scaled_image_size(
@@ -126,7 +124,7 @@ def get_image_size_for_max_num_patches(
     image_width: int,
     patch_size: int,
     max_num_patches: int,
-    min_num_patches: int | None = None,
+    min_num_patches: Optional[int] = None,
     eps: float = 1e-5,
     pixel_shuffle_scale: int = 1,
 ) -> tuple[int, int]:
@@ -249,16 +247,16 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
     do_resize = True
-    size: SizeDict | None = None
-    default_to_square: bool | None = None
+    size: Optional[SizeDict] = None
+    default_to_square: Optional[bool] = None
     do_center_crop = False
-    crop_size: SizeDict | None = None
-    patch_size: int | None = 16
-    max_num_patches: int | None = 256
-    min_num_patches: int | None = None
-    pixel_shuffle_scale: int | None = 1
+    crop_size: Optional[SizeDict] = None
+    patch_size: Optional[int] = 16
+    max_num_patches: Optional[int] = 256
+    min_num_patches: Optional[int] = None
+    pixel_shuffle_scale: Optional[int] = 1
     do_pad = False
-    pad_size: SizeDict | None = None
+    pad_size: Optional[SizeDict] = None
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = True
@@ -270,7 +268,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     input_data_format = None
     device = None
     disable_grouping = False
-    size_divisor: int | None = None
+    size_divisor: Optional[int] = None
 
     def __init__(
         self,
@@ -345,10 +343,10 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         do_pad: Optional[bool] = None,
         pad_size: Optional[SizeDict] = None,
         *,
-        patch_size: int | None = None,
-        max_num_patches: int | None = None,
-        min_num_patches: int | None = None,
-        pixel_shuffle_scale: int | None = None,
+        patch_size: Optional[int] = None,
+        max_num_patches: Optional[int] = None,
+        min_num_patches: Optional[int] = None,
+        pixel_shuffle_scale: Optional[int] = None,
         **kwargs,
     ) -> BatchFeature:
         if do_center_crop:

@@ -4,7 +4,9 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Perceptron, Inc. Non-Production License
+# Copyright (c) 2024 Perceptron, Inc.  All rights reserved.
+# Perceptron, Inc. Non-Production License (2024-01-01)
+
 
 ### 1. Scope and acceptance
 
@@ -86,25 +88,19 @@
 
 import math
 import re
+from typing import Optional, Union
 
 import PIL.Image
 import torch
-from genesis.public.tensorstream.tensor_stream import Event, Stream, TensorStream, TextType, VisionType, create_stream
-from genesis.public.tensorstream.tensor_stream_utils import slice as ts_slice
-from genesis.public.tensorstream.tensor_stream_utils import tensor_stream_token_view
+from perceptron.tensorstream.ops import slice as ts_slice
+from perceptron.tensorstream.ops import tensor_stream_token_view
+from perceptron.tensorstream.tensorstream import Event, Stream, TensorStream, TextType, VisionType, create_stream
 
-from ...image_processing_utils_fast import BatchFeature, DefaultFastImageProcessorKwargs
+from ...feature_extraction_utils import BatchFeature
+from ...models.auto.tokenization_auto import AutoTokenizer
 from ...processing_utils import ProcessorMixin
-from ...utils import TensorType
-from ..auto import AutoTokenizer
+from ...tokenization_utils import TensorType
 from .configuration_isaac import IsaacConfig
-
-
-class IsaacImageProcessorKwargs(DefaultFastImageProcessorKwargs, total=False):
-    patch_size: int | None
-    max_num_patches: int | None
-    min_num_patches: int | None
-    pixel_shuffle_scale: int | None
 
 
 # ============================================================================
@@ -157,18 +153,18 @@ def create_text_event(tokenizer: AutoTokenizer, text: str, time: float = 0.0) ->
 
 class IsaacProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "IsaacImageProcessorFast"
+    image_processor_class = ("IsaacImageProcessorFast",)
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(
         self,
-        image_processor: "IsaacImageProcessorFast | None" = None,
-        tokenizer: Qwen2Tokenizer | None = None,
+        image_processor,
+        tokenizer,
         *,
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
-        rescale_factor: float | None = None,
-        config: IsaacConfig | dict | None = None,
+        rescale_factor: Optional[float] = None,
+        config: Optional[Union[IsaacConfig, dict]] = None,
     ) -> None:
         if tokenizer is None:
             raise ValueError("`tokenizer` must be provided to initialize IsaacProcessor.")
@@ -201,7 +197,7 @@ class IsaacProcessor(ProcessorMixin):
     def build_event_stream_simple(
         self,
         text: str,
-        images: list[PIL.Image.Image] | None = None,
+        images: Optional[list[PIL.Image.Image]] = None,
     ) -> Stream:
         events = []
         # Process text and images
@@ -246,9 +242,9 @@ class IsaacProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: str | list[str],
-        images: PIL.Image.Image | list[PIL.Image.Image] | None = None,
-        return_tensors: str | TensorType | None = TensorType.PYTORCH,
+        text: Union[str, list[str]],
+        images: Optional[Union[PIL.Image.Image, list[PIL.Image.Image]]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
         **kwargs,
     ) -> BatchFeature:
         """
