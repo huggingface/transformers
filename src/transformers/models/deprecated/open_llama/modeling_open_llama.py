@@ -449,7 +449,7 @@ class OpenLlamaPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             if self.config.use_stable_embedding:
-                torch.init.xavier_normal_(module.weight)
+                init.xavier_normal_(module.weight)
             else:
                 init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
