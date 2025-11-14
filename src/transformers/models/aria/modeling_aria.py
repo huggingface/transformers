@@ -892,6 +892,10 @@ class AriaModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class AriaModel(AriaPreTrainedModel):
+    _checkpoint_conversion_mapping = {
+        r"^language_model.model": "language_model",
+    }
+
     def __init__(self, config: AriaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)

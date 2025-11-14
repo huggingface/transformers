@@ -1872,7 +1872,6 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
 
 class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     config: Gemma3nConfig
-    base_model_prefix = "model"
     input_modalities = ["image", "text", "audio"]
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
 
@@ -2116,7 +2115,6 @@ class Gemma3nTextModel(Gemma3TextModel):
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3ForCausalLM):
     _checkpoint_conversion_mapping = {"model.language_model": "model"}
-    base_model_prefix = "model"
 
 
 class Gemma3nMultimodalEmbedder(nn.Module):
@@ -2421,7 +2419,6 @@ class Gemma3nModel(PaliGemmaModel):
 )
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
-    base_model_prefix = "model"
 
     @property
     def audio_tower(self):

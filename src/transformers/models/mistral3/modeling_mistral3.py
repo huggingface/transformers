@@ -195,6 +195,10 @@ class Mistral3PreTrainedModel(PreTrainedModel):
     """
 )
 class Mistral3Model(Mistral3PreTrainedModel):
+    _checkpoint_conversion_mapping = {
+        r"^language_model.model": "language_model",
+    }
+
     def __init__(self, config: Mistral3Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)

@@ -615,6 +615,7 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
 @auto_docstring
 class Florence2PreTrainedModel(PreTrainedModel):
     config: Florence2Config
+    base_model_prefix = "model"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -627,7 +628,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
 
     _supports_attention_backend = False
     config_class = Florence2Config
-    base_model_prefix = "model"
 
 
 @auto_docstring(

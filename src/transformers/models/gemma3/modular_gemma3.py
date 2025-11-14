@@ -716,7 +716,6 @@ class Gemma3TextModel(Gemma2Model):
 
 class Gemma3ForCausalLM(Gemma2ForCausalLM):
     config: Gemma3TextConfig
-    base_model_prefix = "model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
