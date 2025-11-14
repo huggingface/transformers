@@ -1490,12 +1490,14 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
 
+        empty_past_kv = past_key_values is None
+
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
         #              (we can't check exception 3 while compiling)
-        if not is_first_iteration:
+        if not empty_past_kv:
             if (
                 inputs_embeds is not None  # Exception 1
                 or cache_position[-1] >= input_ids.shape[1]  # Exception 3
@@ -1512,7 +1514,7 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if not is_first_iteration:
+            if not empty_past_kv:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step

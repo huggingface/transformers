@@ -1592,7 +1592,9 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         # Overwritten -- has a unique cache type, `Zamba2HybridDynamicCache`
 
         # Omit tokens covered by past_key_values
-        if not is_first_iteration:
+        empty_past_kv = past_key_values is None
+
+        if not empty_past_kv:
             # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
             # Exception 1: when passing input_embeds, input_ids may be missing entries
             # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
@@ -1614,7 +1616,7 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if not is_first_iteration:
+            if not empty_past_kv:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step

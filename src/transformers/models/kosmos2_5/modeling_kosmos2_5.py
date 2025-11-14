@@ -1599,6 +1599,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         use_cache=None,
         cache_position=None,
         position_ids=None,
+        is_first_iteration=False,
         **model_kwargs,
     ):
         input_shape = input_ids.shape

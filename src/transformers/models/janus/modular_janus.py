@@ -1082,8 +1082,10 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model
+        # Pixel values are used only in the first iteration if available
+        # In subsquent iterations, they are already merged with text and cached
+        # NOTE: first iteration doesn't have to be prefill, it can be the first
+        # iteration with a question and cached system prompt (continue generate from cache)
         if is_first_iteration:
             model_inputs["pixel_values"] = pixel_values
 
