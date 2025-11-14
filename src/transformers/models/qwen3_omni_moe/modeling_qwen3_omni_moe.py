@@ -2211,7 +2211,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         feature_attention_mask=None,
         use_audio_in_video=False,
         video_second_per_grid=None,
-        is_prefill=False,
+        is_first_iteration=False,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
@@ -2230,13 +2230,13 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             feature_attention_mask=feature_attention_mask,
             use_audio_in_video=use_audio_in_video,
             video_second_per_grid=video_second_per_grid,
-            is_prefill=is_prefill,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
         model_inputs["position_ids"] = None
 
-        if not is_prefill:
+        if not is_first_iteration:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
             model_inputs["input_features"] = None
@@ -3173,16 +3173,16 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
         attention_mask=None,
         inputs_embeds=None,
         cache_position=None,
-        is_prefill=False,
+        is_first_iteration=False,
         **kwargs,
     ):
         hidden_states = kwargs.pop("hidden_states", None)
         inputs = super().prepare_inputs_for_generation(
-            input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, is_prefill=is_prefill, **kwargs
+            input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, is_first_iteration=is_first_iteration, **kwargs
         )
         # Decode stage
         # TODO(raushan, gante): Refactor this part to a utility function
-        if not is_prefill:
+        if not is_first_iteration:
             input_ids = input_ids[:, -1:]
             generation_step = kwargs.get("generation_step")
             trailing_text_hidden = kwargs.get("trailing_text_hidden")

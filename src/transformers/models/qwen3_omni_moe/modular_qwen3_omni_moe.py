@@ -1929,16 +1929,16 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         attention_mask=None,
         inputs_embeds=None,
         cache_position=None,
-        is_prefill=False,
+        is_first_iteration=False,
         **kwargs,
     ):
         hidden_states = kwargs.pop("hidden_states", None)
         inputs = super().prepare_inputs_for_generation(
-            input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, is_prefill=is_prefill, **kwargs
+            input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, is_first_iteration=is_first_iteration, **kwargs
         )
         # Decode stage
         # TODO(raushan, gante): Refactor this part to a utility function
-        if not is_prefill:
+        if not is_first_iteration:
             input_ids = input_ids[:, -1:]
             generation_step = kwargs.get("generation_step")
             trailing_text_hidden = kwargs.get("trailing_text_hidden")

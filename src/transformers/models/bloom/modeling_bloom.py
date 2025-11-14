@@ -743,7 +743,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         cache_position=None,
         use_cache=True,
-        is_prefill=False,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten because of the fixed-shape attention mask creation
@@ -767,7 +767,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
                 input_ids = input_ids[:, cache_position]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and is_prefill:
+        if inputs_embeds is not None and is_first_iteration:
             model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
         else:
             # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the

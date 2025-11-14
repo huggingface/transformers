@@ -1449,7 +1449,7 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
         pixel_values_videos=None,
         image_grid_thw=None,
         video_grid_thw=None,
-        is_prefill=False,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1466,14 +1466,14 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             use_cache=use_cache,
-            is_prefill=is_prefill,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
         # Qwen3VL position_ids are prepareed with rope_deltas in forward
         model_inputs["position_ids"] = None
 
-        if not is_prefill:
+        if not is_first_iteration:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 

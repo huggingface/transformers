@@ -585,7 +585,7 @@ class GenerationMixin(ContinuousMixin):
         attention_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        is_prefill: Optional[bool] = False,
+        is_first_iteration: Optional[bool] = False,
         **kwargs,
     ):
         """
@@ -621,7 +621,7 @@ class GenerationMixin(ContinuousMixin):
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step for every prompt.
         if not self.config.is_encoder_decoder:
-            if inputs_embeds is not None and is_prefill:
+            if inputs_embeds is not None and is_first_iteration:
                 model_inputs[input_ids_key] = None
                 model_inputs["inputs_embeds"] = inputs_embeds
             else:
@@ -701,7 +701,7 @@ class GenerationMixin(ContinuousMixin):
                     past_key_values=past_key_values,
                     position_ids=position_ids,
                     token_type_ids=token_type_ids,
-                    is_prefill=is_prefill,
+                    is_first_iteration=is_first_iteration,
                 )
             else:
                 attention_mask = causal_mask_creation_function(
@@ -3690,7 +3690,7 @@ class GenerationMixin(ContinuousMixin):
                 )
 
             model_inputs = self.prepare_inputs_for_generation(
-                candidate_input_ids, is_prefill=is_first_iteration, **candidate_kwargs
+                candidate_input_ids, is_first_iteration=is_first_iteration, **candidate_kwargs
             )
             if "logits_to_keep" in model_inputs:
                 model_inputs["logits_to_keep"] = candidate_length + 1
@@ -3854,8 +3854,7 @@ class GenerationMixin(ContinuousMixin):
     def _prefill(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, model_kwargs):
         if generation_config.prefill_chunk_size is None:
             model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
-            is_prefill = model_kwargs["cache_position"][0] == 0 or not model_kwargs.get("use_cache", True)
-            model_inputs = self.prepare_inputs_for_generation(input_ids, is_prefill=is_prefill, **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, is_first_iteration=True, **model_kwargs)
             return self(**model_inputs, return_dict=True)
         else:  # Chunked prefill
             # Even if we are not compiling the forward, flex is always compiled when used. With chunked prefill, we may

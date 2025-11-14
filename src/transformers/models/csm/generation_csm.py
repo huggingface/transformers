@@ -209,7 +209,7 @@ class CsmGenerationMixin(GenerationMixin):
             else self.__call__
         )
 
-        is_prefill = True
+        is_first_iteration = True
         while self._has_unfinished_sequences(
             this_peer_finished,
             synced_gpus,
@@ -224,9 +224,9 @@ class CsmGenerationMixin(GenerationMixin):
             model_inputs.update({"output_hidden_states": True})
             # ============================================
 
-            if is_prefill:
+            if is_first_iteration:
                 outputs = self(**model_inputs, return_dict=True)
-                is_prefill = False
+                is_first_iteration = False
             else:
                 outputs = model_forward(**model_inputs, return_dict=True)
 

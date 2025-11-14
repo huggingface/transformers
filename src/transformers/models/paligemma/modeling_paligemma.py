@@ -150,7 +150,7 @@ def create_causal_mask_mapping(
     token_type_ids: Optional[torch.Tensor] = None,
     pixel_values: Optional[torch.FloatTensor] = None,
     is_training: Optional[bool] = False,
-    is_prefill: Optional[bool] = None,
+    is_first_iteration: Optional[bool] = None,
     **kwargs,
 ) -> dict:
     """
@@ -171,16 +171,16 @@ def create_causal_mask_mapping(
         "position_ids": position_ids,
     }
     # Infer if prefill or decoding stage, if the flag isn't passed. This happens only when the mask is constructed
-    # from `forward` call. If users run a `forward` call, we have no option to infer `is_prefill` because users may be
+    # from `forward` call. If users run a `forward` call, we have no option to infer `is_first_iteration` because users may be
     # running generation with custom loop. Thus we need to infer it in a `non-perfect` way
     # NOTE: Determining prefill in that case requires checking data values, which is not compile-compatible.
-    is_prefill = (
-        is_prefill
-        if is_prefill
+    is_first_iteration = (
+        is_first_iteration
+        if is_first_iteration
         else (past_key_values is None or not past_key_values.is_initialized or pixel_values is not None)
     )
 
-    if is_prefill:
+    if is_first_iteration:
         if token_type_ids is not None:
             # The logic bellow was originally written for Gemma3, where `token_type_ids` is reversed. Let's reverse
             # it to then use exactly the same logic.
@@ -196,7 +196,7 @@ def create_causal_mask_mapping(
     # Logic originally copied from Gemma3. It holds up for Paligemma as well because Paligemma assumes up to one image
     # per prompt AND we reverse `token_type_ids` above. Gemma3 uses a bidirectional mask for images, tagged through
     # `token_type_ids` 1s.
-    if token_type_ids is not None and is_prefill:
+    if token_type_ids is not None and is_first_iteration:
         # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
         # undo the causal masking)
 
@@ -589,7 +589,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         use_cache=True,
         logits_to_keep=None,
         labels=None,
-        is_prefill=False,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- custom `position_ids` and `pixel_values` handling
@@ -603,7 +603,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,
             token_type_ids=token_type_ids,
-            is_prefill=is_prefill,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
@@ -613,7 +613,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
         # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
-        if is_prefill:
+        if is_first_iteration:
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs
@@ -627,7 +627,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         past_key_values: Optional[Cache],
         position_ids: Optional[torch.Tensor],
         token_type_ids: Optional[torch.Tensor] = None,
-        is_prefill: Optional[bool] = False,
+        is_first_iteration: Optional[bool] = False,
         **kwargs,
     ) -> dict:
         # Uses the overwritten `create_masks_for_generate` with `token_type_ids` masking
@@ -639,7 +639,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             past_key_values,
             position_ids,
             token_type_ids,
-            is_prefill,
+            is_first_iteration,
             **{k: v for k, v in kwargs.items() if k != "pixel_values"},
         )
 

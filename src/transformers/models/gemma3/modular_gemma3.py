@@ -768,7 +768,7 @@ def create_causal_mask_mapping(
     token_type_ids: Optional[torch.Tensor] = None,
     pixel_values: Optional[torch.FloatTensor] = None,
     is_training: bool = False,
-    is_prefill: Optional[bool] = None,
+    is_first_iteration: Optional[bool] = None,
     **kwargs,
 ) -> dict:
     """
@@ -791,12 +791,12 @@ def create_causal_mask_mapping(
     # NOTE: this `may_have_image_input` logic is not flawless, it fails when we're using a cache eagerly initialized
     # (e.g. compiled prefill) AND `pixel_values` are not provided (i.e. the image data is provided through other
     # means). Determining prefill in that case requires checking data values, which is not compile-compatible.
-    is_prefill = (
-        is_prefill
-        if is_prefill is not None
+    is_first_iteration = (
+        is_first_iteration
+        if is_first_iteration is not None
         else (past_key_values is None or not past_key_values.is_initialized or pixel_values is not None)
     )
-    if token_type_ids is not None and is_prefill:
+    if token_type_ids is not None and is_first_iteration:
         # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
         # undo the causal masking)
 
@@ -1071,7 +1071,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         use_cache=True,
         logits_to_keep=None,
         labels=None,
-        is_prefill=False,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- custom `position_ids` and `pixel_values` handling
@@ -1085,13 +1085,13 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,
             token_type_ids=token_type_ids,
-            is_prefill=is_prefill,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
         # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
-        if is_prefill:
+        if is_first_iteration:
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs

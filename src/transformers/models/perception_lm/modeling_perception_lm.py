@@ -463,7 +463,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
-        is_prefill=False,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -475,11 +475,11 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            is_prefill=is_prefill,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if is_prefill:
+        if is_first_iteration:
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values"] = pixel_values

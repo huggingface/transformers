@@ -320,7 +320,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 input_ids.shape[1], input_ids.device, self.assistant_kwargs
             )
             generation_args = self.assistant_model.prepare_inputs_for_generation(
-                input_ids, is_prefill=True, **generation_args
+                input_ids, is_first_iteration=True, **generation_args
             )
             generation_args[self.input_ids_key] = input_ids
             for model_input_name in ["position_ids", "token_type_ids", "decoder_position_ids"]:

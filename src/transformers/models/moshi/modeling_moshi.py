@@ -2200,7 +2200,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         user_delay_pattern_mask=None,
         moshi_delay_pattern_mask=None,
         kwargs_depth_decoder=None,
-        is_prefill=False,
+        is_first_iteration=False,
         blank_user_audio_codes: Optional[torch.FloatTensor] = None,
         **kwargs,
     ):
@@ -2222,7 +2222,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 input_ids = input_ids[:, cache_position]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and is_prefill:
+        if inputs_embeds is not None and is_first_iteration:
             model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
         else:
             model_inputs = {"input_ids": input_ids, "inputs_embeds": None}

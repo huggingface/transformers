@@ -1334,7 +1334,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, is_prefill=False, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, is_first_iteration=False, **kwargs
     ):
         # Overwritten -- `git` has special cache handling and doesn't support generating from `inputs_embeds` atm
 

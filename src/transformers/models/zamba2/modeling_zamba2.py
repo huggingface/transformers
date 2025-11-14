@@ -1586,13 +1586,13 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        is_prefill=False,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- has a unique cache type, `Zamba2HybridDynamicCache`
 
         # Omit tokens covered by past_key_values
-        if not is_prefill:
+        if not is_first_iteration:
             # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
             # Exception 1: when passing input_embeds, input_ids may be missing entries
             # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
@@ -1614,11 +1614,11 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if not is_prefill:
+            if not is_first_iteration:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and is_prefill:
+        if inputs_embeds is not None and is_first_iteration:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
