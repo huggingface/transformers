@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Inference server backends
 
-Transformers' models are compatible with different inference servers like vLLM and SGLang. Instead of implementing a model for each inference server, you only need one model, which can be plugged into any inference server. It simplifies maintenance and makes it easy for users to use different inference servers for different use cases.
+Transformers' models are compatible with different inference servers like vLLM and SGLang. Instead of implementing model architecture from scratch for each inference server, you only need a model definition in `transformers`, which can be plugged into any inference server. It simplifies maintenance and makes it easy for users to use different inference servers for different use cases.
 
 With Transformers as a backend, you can also serve any model - including custom and Hub-hosted models - without waiting for native support.
 
@@ -157,7 +157,7 @@ class MyConfig(PreTrainedConfig):
 
 ### Multimodal models
 
-For multimodal models, you need to include a few more changes on top of the general recommendations. These rules ensure that your model integrates properly with multimodal data.
+For multimodal models, you need to include a few more changes on top of the general recommendations outlined in ["contribuiting a model"](./contributing#Vision-Language-Model-Contribution-Checklist). These rules ensure that your model integrates properly with multimodal data.
 
 1. A multimodal model requires a base `MyMultiModalModel` class to handle multimodal fusion without a language modeling head and a separate generative class that adds a head.
 

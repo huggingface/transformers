@@ -127,6 +127,7 @@ All new models should use the modular architecture pattern. Create a `modular_<m
 - Use the CLI, [`transformers add-new-model-like`](https://github.com/huggingface/transformers/blob/main/src/transformers/cli/add_new_model_like.py) to generate a modular skeleton and get started
 - All code should be in the modular file if possible. Modeling must be in it, it's better if configuration is in it as well. 
 - Reuse existing patterns from similar models as much as possible
+- Optionally you can make the model compatible with 3rd party inference engines and enable zero-effort support with vLLM/SGLang. See specific requirements for model implementation in ["Transformers modeling backend"](./transformers_as_backend#Multimodal-models)
 
 To verify your modular file is correct, run:
 
