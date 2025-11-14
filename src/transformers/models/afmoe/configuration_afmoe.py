@@ -88,10 +88,8 @@ class AfmoeConfig(PreTrainedConfig):
             Number of experts to route each token to. This is the top-k value for the token-choice routing.
         num_shared_experts (`int`, *optional*, defaults to 2):
             Number of shared experts that are always activated for all tokens.
-        score_func (`str`, *optional*, defaults to `"sigmoid"`):
-            The scoring function for routing decisions. Can be either "sigmoid" or "softmax".
         route_norm (`bool`, *optional*, defaults to `True`):
-            Whether to normalize routing weights when using sigmoid scoring.
+            Whether to normalize routing weights.
         route_scale (`float`, *optional*, defaults to 1.0):
             Scaling factor applied to routing weights.
         global_attn_every_n_layers (`int`, *optional*, defaults to 4):
@@ -99,8 +97,6 @@ class AfmoeConfig(PreTrainedConfig):
             window attention.
         sliding_window (`int`, *optional*, defaults to 1024):
             Sliding window size for local attention layers.
-        mup_enabled (`bool`, *optional*, defaults to `False`):
-            Whether to enable muP (Maximal Update Parametrization) scaling for training stability.
         layer_types (`list[str]`, *optional*):
             A list that explicitly maps each layer index with its attention type. Each element should be either
             "sliding_attention" or "full_attention". If not provided, it will be automatically generated based on
@@ -155,12 +151,10 @@ class AfmoeConfig(PreTrainedConfig):
         num_experts: Optional[int] = 64,
         num_experts_per_tok: Optional[int] = 6,
         num_shared_experts: Optional[int] = 2,
-        score_func: Optional[str] = "sigmoid",
         route_norm: Optional[bool] = True,
         route_scale: Optional[float] = 1.0,
         global_attn_every_n_layers: Optional[int] = 4,
         sliding_window: Optional[int] = 1024,
-        mup_enabled: Optional[bool] = False,
         layer_types: Optional[list] = None,
         attention_dropout: Optional[float] = 0.0,
         **kwargs,
@@ -185,9 +179,9 @@ class AfmoeConfig(PreTrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.num_shared_experts = num_shared_experts
-        self.score_func = score_func
         self.route_norm = route_norm
         self.route_scale = route_scale
+        self.attention_bias = False
 
         # Attention specific
         self.attention_dropout = attention_dropout
@@ -200,9 +194,6 @@ class AfmoeConfig(PreTrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
-
-        # muP specific
-        self.mup_enabled = mup_enabled
 
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads

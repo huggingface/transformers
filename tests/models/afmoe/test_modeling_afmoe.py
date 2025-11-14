@@ -56,7 +56,6 @@ class AfmoeModelTester(CausalLMModelTester):
         num_experts=8,
         num_experts_per_tok=2,
         num_shared_experts=2,
-        score_func="sigmoid",
         route_norm=True,
         route_scale=1.0,
         global_attn_every_n_layers=2,
@@ -91,7 +90,6 @@ class AfmoeModelTester(CausalLMModelTester):
         self.num_experts = num_experts
         self.num_experts_per_tok = num_experts_per_tok
         self.num_shared_experts = num_shared_experts
-        self.score_func = score_func
         self.route_norm = route_norm
         self.route_scale = route_scale
         self.global_attn_every_n_layers = global_attn_every_n_layers

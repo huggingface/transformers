@@ -19,7 +19,6 @@ from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
@@ -30,12 +29,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ..llama.modeling_llama import (
-    LlamaMLP,
-    LlamaPreTrainedModel,
-    LlamaRMSNorm,
-    LlamaRotaryEmbedding,
-)
+from ..llama.modeling_llama import LlamaAttention, LlamaMLP, LlamaPreTrainedModel, LlamaRMSNorm, LlamaRotaryEmbedding
 from .configuration_afmoe import AfmoeConfig
 
 
@@ -126,8 +120,7 @@ class AfmoeTokenChoiceRouter(nn.Module):
     """
     Token-choice top-K router for MoE routing.
 
-    This router assigns each token to the top-K experts based on learned routing scores.
-    It supports both sigmoid and softmax scoring functions.
+    This router assigns each token to the top-K experts based on sigmoid scores, matching the released checkpoints.
     """
 
     def __init__(self, config):
@@ -135,36 +128,89 @@ class AfmoeTokenChoiceRouter(nn.Module):
         self.config = config
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_experts
-        self.score_func = config.score_func
         self.route_norm = config.route_norm
         self.route_scale = config.route_scale
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
 
-    def forward(self, hidden_states, expert_bias: torch.Tensor | None):
+    def forward(self, hidden_states: torch.Tensor, expert_bias: torch.Tensor | None = None):
+        # Keep expert_bias argument for checkpoint/backwards compatibility (it is always zero in released models).
+        del expert_bias
         _, _, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
-        scores = self.gate(hidden_states)
+        scores = torch.sigmoid(self.gate(hidden_states).to(torch.float32))
+        top_scores, selected_experts = torch.topk(scores, k=self.top_k, dim=1)
 
-        # Apply scoring function in float32 for stability
-        if self.score_func == "sigmoid":
-            scores = torch.sigmoid(scores.to(torch.float32))
-        else:
-            scores = F.softmax(scores.to(torch.float32), dim=-1)
-
-        if expert_bias is not None:
-            _, selected_experts = torch.topk(scores + expert_bias, k=self.top_k, dim=1)
-            top_scores = scores.gather(dim=1, index=selected_experts)
-        else:
-            top_scores, selected_experts = torch.topk(scores, k=self.top_k, dim=1)
-
-        # Normalize weights if using sigmoid
-        if self.score_func == "sigmoid" and self.route_norm:
+        if self.route_norm:
             denominator = top_scores.sum(dim=-1, keepdim=True) + 1e-20
             top_scores = top_scores / denominator
 
         top_scores = top_scores * self.route_scale
         return top_scores, selected_experts
+
+
+class AfmoeExperts(nn.ModuleList):
+    """
+    Container holding the routed experts.
+
+    This mirrors the Experts pattern used across other MoE models to ease checkpoint conversion.
+    """
+
+    _checkpoint_conversion_mapping = {"experts": "experts"}
+
+    def __init__(self, config: AfmoeConfig):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
+        for _ in range(self.num_experts):
+            self.append(AfmoeMLP(config, intermediate_size=config.moe_intermediate_size))
+
+    def forward(
+        self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states: (batch, seq, hidden)
+            selected_experts: (batch, seq, top_k)
+            routing_weights: (batch, seq, top_k)
+        """
+        batch_size, seq_len, hidden_dim = hidden_states.shape
+        if seq_len == 0:
+            return hidden_states.new_zeros(batch_size, 0, hidden_dim)
+        hidden_states_flat = hidden_states.view(-1, hidden_dim)
+        top_k = selected_experts.shape[-1]
+
+        # Map every token routing decision to a unique position so we can process expert by expert.
+        token_indices = torch.arange(
+            hidden_states_flat.shape[0], device=hidden_states.device, dtype=torch.long
+        ).repeat_interleave(top_k)
+        expert_indices = selected_experts.reshape(-1)
+        routing_weights = routing_weights.reshape(-1)
+
+        sorting = torch.argsort(expert_indices, stable=True)
+        token_indices = token_indices[sorting]
+        expert_indices = expert_indices[sorting]
+        routing_weights = routing_weights[sorting]
+
+        dispatched_tokens = hidden_states_flat.index_select(0, token_indices)
+        expert_outputs = torch.zeros_like(dispatched_tokens)
+
+        unique_experts, counts = torch.unique_consecutive(expert_indices, return_counts=True)
+        start = 0
+        for expert_id, count in zip(unique_experts.tolist(), counts.tolist()):
+            if count == 0:
+                continue
+            end = start + count
+            expert_input = dispatched_tokens[start:end]
+            expert_output = self[expert_id](expert_input)
+            expert_outputs[start:end] = expert_output
+            start = end
+
+        weighted_outputs = (expert_outputs.to(torch.float32) * routing_weights.unsqueeze(-1)).to(hidden_states.dtype)
+        aggregated = torch.zeros_like(hidden_states_flat)
+        scatter_indices = token_indices.unsqueeze(-1).expand_as(weighted_outputs)
+        aggregated.scatter_add_(0, scatter_indices, weighted_outputs)
+        return aggregated.view(batch_size, seq_len, hidden_dim)
 
 
 class AfmoeMoE(nn.Module):
@@ -183,9 +229,7 @@ class AfmoeMoE(nn.Module):
         self.shared_experts = None
         if config.num_shared_experts > 0:
             self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
-        self.experts = nn.ModuleList(
-            [AfmoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(config.num_experts)]
-        )
+        self.experts = AfmoeExperts(config)
         self.expert_bias = nn.Parameter(torch.zeros(config.num_experts, dtype=torch.float32), requires_grad=False)
 
     def forward(self, hidden_states):
@@ -194,70 +238,38 @@ class AfmoeMoE(nn.Module):
 
         # Get routing decisions
         top_scores, selected_experts = self.router(hidden_states, self.expert_bias)
+        top_scores = top_scores.view(batch_size, seq_len, self.config.num_experts_per_tok)
+        selected_experts = selected_experts.view(batch_size, seq_len, self.config.num_experts_per_tok)
 
         # Process through shared experts
         if self.shared_experts is not None:
-            shared_output = self.shared_experts(hidden_states_flat)
+            shared_output = self.shared_experts(hidden_states_flat).view(batch_size, seq_len, hidden_dim)
         else:
-            shared_output = torch.zeros_like(hidden_states_flat)
+            shared_output = hidden_states.new_zeros(batch_size, seq_len, hidden_dim)
 
-        # Reorder tokens by expert for efficient processing
-        token_indices_sorted = torch.argsort(selected_experts.view(-1), stable=True)
-        top_scores_sorted = top_scores.view(-1)[token_indices_sorted]
-        token_to_expert = selected_experts.view(-1)[token_indices_sorted]
-        token_indices_sorted = token_indices_sorted // self.config.num_experts_per_tok
-
-        # Gather input tokens
-        token_indices_expanded = token_indices_sorted.unsqueeze(-1).expand(-1, hidden_dim)
-        routed_input = torch.gather(hidden_states_flat, dim=0, index=token_indices_expanded)
-
-        routed_output = torch.zeros_like(routed_input)
-        for expert_id in range(self.config.num_experts):
-            mask = token_to_expert == expert_id
-            if mask.any():
-                expert_input = routed_input[mask]
-                expert_out = self.experts[expert_id](expert_input)
-                routed_output[mask] = expert_out
-
-        routed_output = (routed_output.to(torch.float32) * top_scores_sorted.unsqueeze(-1)).to(hidden_states.dtype)
-
-        # Scatter back to original positions
-        output = shared_output.scatter_add(dim=0, index=token_indices_expanded, src=routed_output)
-
-        return output.view(batch_size, seq_len, hidden_dim)
+        routed_output = self.experts(hidden_states, selected_experts, top_scores)
+        return shared_output + routed_output
 
 
-class AfmoeAttention(nn.Module):
+class AfmoeAttention(LlamaAttention):
     """
     Multi-headed attention module with optional sliding window and gating.
 
     This attention mechanism supports both full attention and sliding window attention,
-    and includes Q/K normalization and gating of the output.
+    and includes Q/K normalization and gating of the output. It inherits from [`LlamaAttention`] to minimize the amount
+    of custom logic we need to maintain.
     """
 
     def __init__(self, config: AfmoeConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
+        super().__init__(config, layer_idx)
+        # Parent LlamaAttention already sets: layer_idx, num_heads, num_key_value_heads, num_key_value_groups, head_dim
+        # We only add AFMoE-specific attributes
         self.is_local_attention = config.layer_types[layer_idx] == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_local_attention else None
 
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
-
         self.q_norm = AfmoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = AfmoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-
-        self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
 
     def forward(
         self,
@@ -276,11 +288,8 @@ class AfmoeAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape)
         gate_states = self.gate_proj(hidden_states)
 
-        query_states = self.q_norm(query_states)
-        key_states = self.k_norm(key_states)
-
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
+        query_states = self.q_norm(query_states).transpose(1, 2)
+        key_states = self.k_norm(key_states).transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
         if self.is_local_attention:
@@ -308,7 +317,7 @@ class AfmoeAttention(nn.Module):
         )
 
         output = output.view(*input_shape, -1).contiguous()
-        output = output * F.sigmoid(gate_states)
+        output = output * torch.sigmoid(gate_states)
         return self.o_proj(output)
 
 
@@ -408,15 +417,15 @@ class AfmoePreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, AfmoeRMSNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
 
 
 @auto_docstring
@@ -494,11 +503,7 @@ class AfmoeModel(AfmoePreTrainedModel):
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
-        hidden_states = inputs_embeds
-
-        # Apply muP input scaling if enabled
-        if self.config.mup_enabled:
-            hidden_states = hidden_states * (self.config.hidden_size**0.5)
+        hidden_states = inputs_embeds * (self.config.hidden_size**0.5)
 
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -536,7 +541,7 @@ class AfmoeForCausalLM(AfmoePreTrainedModel, GenerationMixin):
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
     """
 
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
