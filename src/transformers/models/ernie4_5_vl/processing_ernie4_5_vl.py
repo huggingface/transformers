@@ -51,56 +51,24 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
     image_processor_class = "AutoImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
+    video_processor_class = "Ernie4_5_VLVideoProcessor"
 
     tokenizer_class = (None, "LlamaTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
-        self.image_token = "<|IMAGE_PLACEHOLDER|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
-        self.image_end_token = (
-            "<|IMAGE_END|>" if not hasattr(tokenizer, "image_end_token") else tokenizer.image_end_token
-        )
-        self.image_start_token = (
-            "<|IMAGE_START|>" if not hasattr(tokenizer, "image_start_token") else tokenizer.image_start_token
-        )
-        self.video_token = "<|VIDEO_PLACEHOLDER|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
-        self.video_end_token = (
-            "<|VIDEO_END|>" if not hasattr(tokenizer, "video_end_token") else tokenizer.video_end_token
-        )
-        self.video_start_token = (
-            "<|VIDEO_START|>" if not hasattr(tokenizer, "video_start_token") else tokenizer.video_start_token
-        )
+        self.image_token = tokenizer.image_token
+        self.image_end_token = tokenizer.image_end_token
+        self.image_start_token = tokenizer.image_start_token
+        self.video_token = tokenizer.video_token
+        self.video_end_token = tokenizer.video_end_token
+        self.video_start_token = tokenizer.video_start_token
 
-        self.image_token_id = (
-            tokenizer.image_token_id
-            if getattr(tokenizer, "image_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.image_token)
-        )
-        self.image_end_token_id = (
-            tokenizer.image_end_token_id
-            if getattr(tokenizer, "image_end_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.image_end_token)
-        )
-        self.image_start_token_id = (
-            tokenizer.image_start_token_id
-            if getattr(tokenizer, "image_start_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.image_start_token)
-        )
-        self.video_token_id = (
-            tokenizer.video_token_id
-            if getattr(tokenizer, "video_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.video_token)
-        )
-        self.video_end_token_id = (
-            tokenizer.video_end_token_id
-            if getattr(tokenizer, "video_end_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.video_end_token)
-        )
-        self.video_start_token_id = (
-            tokenizer.video_start_token_id
-            if getattr(tokenizer, "video_start_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.video_start_token)
-        )
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+        self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
+        self.video_end_token_id = tokenizer.convert_tokens_to_ids(self.video_end_token)
+        self.video_start_token_id = tokenizer.convert_tokens_to_ids(self.video_start_token)
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 

@@ -12,15 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import io
+import json
+import os
 from functools import partial
-from typing import Optional, Union
+from pathlib import Path
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
-from huggingface_hub import hf_hub_download
 from huggingface_hub.dataclasses import validate_typed_dict
-from PIL import Image, ImageDraw, ImageFont
+from PIL import ImageDraw, ImageFont
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 
 from ...image_processing_utils import BatchFeature
@@ -35,10 +36,17 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
+    IMAGE_PROCESSOR_NAME,
+    PROCESSOR_NAME,
+    VIDEO_PROCESSOR_NAME,
     TensorType,
     add_start_docstrings,
+    download_url,
+    is_offline_mode,
+    is_remote_url,
     logging,
 )
+from ...utils.hub import cached_file
 from ...utils.import_utils import is_tracing, requires
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import (
@@ -52,55 +60,6 @@ from .image_processing_ernie4_5_vl import smart_resize
 
 
 logger = logging.get_logger(__name__)
-DEFAULT_FONT_PATH = "AntonV/ernie4_5_fonts"
-
-
-@requires(backends=("vision",))
-def render_text_on_image(
-    image: Image.Image,
-    text: str,
-    font_bytes: Optional[bytes] = None,
-    font_path: Optional[str] = None,
-    size_factor: float = 0.1,
-) -> Image.Image:
-    """
-    Draws a black text with a white border on the corner of the image.
-
-    Args:
-        image (`PIL.Image.Image`):
-            Image to draw on.
-        text (`str`):
-            Text to render.
-        font_bytes (`bytes`, *optional*):
-            Bytes of the font to use. If `None`, the default font will be used.
-        font_path (`str`, *optional*):
-            Path to the font to use. If `None`, the default font will be used.
-        size_factor (`float`, defaults to 0.1):
-            The portion of the font to take over the image itself.
-    """
-    if font_bytes is not None and font_path is None:
-        font = io.BytesIO(font_bytes)
-    elif font_path is not None:
-        font = font_path
-    else:
-        font = hf_hub_download(DEFAULT_FONT_PATH, "Roboto-Regular.ttf")
-
-    font_size = int(min(*image.size) * size_factor)
-    outline_size = int(font_size * size_factor)
-    font = ImageFont.truetype(font, font_size)
-
-    # Draw a black text with a white border
-    draw = ImageDraw.Draw(image)
-    draw.text(
-        (0, 0),
-        text,
-        font=font,
-        fill=(0, 0, 0),
-        stroke_width=outline_size,
-        stroke_fill=(255, 255, 255),
-    )
-
-    return image
 
 
 class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs, total=False):
@@ -112,6 +71,7 @@ class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     min_frames: int
     max_frames: int
     draw_on_frames: bool
+    font: str
 
 
 @add_start_docstrings(
@@ -136,6 +96,10 @@ class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs, total=False):
             Whether to draw timestamps on each frame or not.
             This does not work with `torch.compile` but resembles
             the performance of the original model.
+        font (`str`, *optional*, defaults to "Roboto-Regular.ttf"):
+            The associated font name for drawing on frames.
+            Defaults to "Roboto-Regular.ttf" and is expected to be
+            saved along the processor as separate file.
     """,
 )
 @requires(backends=("torchvision",))
@@ -158,6 +122,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
     max_frames = 180
     do_sample_frames = True
     draw_on_frames = True
+    font = "Roboto-Regular.ttf"
     valid_kwargs = Ernie4_5_VLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
@@ -181,6 +146,117 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
         super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+
+    @classmethod
+    def get_video_processor_dict(
+        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        proxies = kwargs.pop("proxies", None)
+        token = kwargs.pop("token", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
+        subfolder = kwargs.pop("subfolder", "")
+
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+
+        user_agent = {"file_type": "video processor", "from_auto_class": from_auto_class}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
+
+        pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+        is_local = os.path.isdir(pretrained_model_name_or_path)
+        if os.path.isfile(pretrained_model_name_or_path):
+            resolved_video_processor_file = pretrained_model_name_or_path
+            is_local = True
+        elif is_remote_url(pretrained_model_name_or_path):
+            video_processor_file = pretrained_model_name_or_path
+            resolved_video_processor_file = download_url(pretrained_model_name_or_path)
+        else:
+            video_processor_file = VIDEO_PROCESSOR_NAME
+            try:
+                # Try to load with a new config name first and if not successful try with the old file name
+                # NOTE: we will gradually change to saving all processor configs as nested dict in PROCESSOR_NAME
+                resolved_video_processor_files = [
+                    resolved_file
+                    for filename in [VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME, PROCESSOR_NAME]
+                    if (
+                        resolved_file := cached_file(
+                            pretrained_model_name_or_path,
+                            filename=filename,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            proxies=proxies,
+                            local_files_only=local_files_only,
+                            token=token,
+                            user_agent=user_agent,
+                            revision=revision,
+                            subfolder=subfolder,
+                            _raise_exceptions_for_missing_entries=False,
+                        )
+                    )
+                    is not None
+                ]
+                resolved_video_processor_file = resolved_video_processor_files[0]
+            except OSError:
+                # Raise any OS error raise by `cached_file`. It will have a helpful error message adapted to
+                # the original exception.
+                raise
+            except Exception:
+                # For any other exception, we throw a generic error.
+                raise OSError(
+                    f"Can't load video processor for '{pretrained_model_name_or_path}'. If you were trying to load"
+                    " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                    f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
+                    f" directory containing a {VIDEO_PROCESSOR_NAME} file"
+                )
+
+        try:
+            # Load video_processor dict
+            with open(resolved_video_processor_file, "r", encoding="utf-8") as reader:
+                text = reader.read()
+            video_processor_dict = json.loads(text)
+            video_processor_dict = video_processor_dict.get("video_processor", video_processor_dict)
+
+            # MAIN DIFFERENCE to the original loading function
+            # Specifc logic to this ernie model where we expect an associated font name to be saved within dict
+            # and the specific font file to exist along side the json in a separate file.
+            #
+            # Note that this is only relevant when we use `draw_on_frames` as this is required to have a font.
+            draws_on_frames = video_processor_dict.get("draw_on_frames")
+            if (font_name := video_processor_dict.get("font")) is None and draws_on_frames:
+                raise AttributeError(
+                    "Expected a `font` to be saved when using `draw_on_frames` in Ernie 4.5 VL; found nothing."
+                )
+            if font_name is not None and draws_on_frames:
+                base_directory = Path(resolved_video_processor_file).parent
+                video_processor_dict["font"] = str(Path(base_directory, font_name))
+                try:
+                    ImageFont.truetype(video_processor_dict["font"])
+                except OSError:
+                    raise OSError(
+                        f"Could not find an associated font file at {video_processor_dict['font']}. "
+                        "Make sure to save a font file along for Ernie 4.5 VL."
+                    )
+
+        except json.JSONDecodeError:
+            raise OSError(
+                f"It looks like the config file at '{resolved_video_processor_file}' is not a valid JSON file."
+            )
+
+        if is_local:
+            logger.info(f"loading configuration file {resolved_video_processor_file}")
+        else:
+            logger.info(
+                f"loading configuration file {video_processor_file} from cache at {resolved_video_processor_file}"
+            )
+        return video_processor_dict, kwargs
 
     def _further_process_kwargs(
         self,
@@ -237,16 +313,33 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
 
     def _convert_timestamp(self, time_stamp_in_seconds):
         """Convert to `time: hr:min:sec` format"""
-        hours = 0
         hours = time_stamp_in_seconds // 3600
         time_stamp_in_seconds = time_stamp_in_seconds % 3600
         mins = time_stamp_in_seconds // 60
         time_stamp_in_seconds = time_stamp_in_seconds % 60
         return f"time: {int(hours):02d}:{int(mins):02d}:{time_stamp_in_seconds:05.02f}"
 
-    def _render_image_with_timestamp(self, image: torch.Tensor, timestamp: str):
+    def _render_image_with_timestamp(self, image: torch.Tensor, timestamp: str, size_factor: float = 0.1):
         """Draws a black timestamp with a white border on the corner of the frame"""
-        image = render_text_on_image(to_pil_image(image), timestamp)
+        if self.font is None:
+            raise AttributeError("To draw on frames with Ernie 4.5 VL, you need an associated font; found nothing")
+
+        image = to_pil_image(image)
+
+        font_size = int(min(*image.size) * size_factor)
+        outline_size = int(font_size * size_factor)
+        font = ImageFont.truetype(self.font, font_size)
+
+        # Draw a black text with a white border
+        draw = ImageDraw.Draw(image)
+        draw.text(
+            (0, 0),
+            timestamp,
+            font=font,
+            fill=(0, 0, 0),
+            stroke_width=outline_size,
+            stroke_fill=(255, 255, 255),
+        )
         return pil_to_tensor(image)
 
     def _prepare_input_videos(

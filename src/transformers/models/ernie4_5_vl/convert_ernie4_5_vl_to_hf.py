@@ -18,8 +18,10 @@ import argparse
 import json
 import os
 import re
+from pathlib import Path
+from shutil import copyfile
 
-from huggingface_hub import snapshot_download
+from huggingface_hub import hf_hub_download, snapshot_download
 from safetensors.torch import load_file, save_file
 from tqdm import tqdm
 
@@ -168,6 +170,8 @@ DEFAULT_TEXT_ADD_TOKENS = [
     "<mask:6>",
     "<mask:7>",
 ]
+FONT_REPO = "AntonV/ernie4_5_fonts"
+FONT_NAME = "Roboto-Regular.ttf"
 
 
 def load_json(save_dir, filename):
@@ -407,7 +411,18 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
     write_json(tokenizer_config, TMP_TOKENIZER_DIR, TOKENIZER_CONFIG_FILE)
 
     # reload and save to get correct formatting
-    tokenizer = AutoTokenizer.from_pretrained(TMP_TOKENIZER_DIR, from_slow=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        TMP_TOKENIZER_DIR,
+        extra_special_tokens={
+            "image_token": "<|IMAGE_PLACEHOLDER|>",
+            "image_end_token": "<|IMAGE_END|>",
+            "image_start_token": "<|IMAGE_START|>",
+            "video_token": "<|VIDEO_PLACEHOLDER|>",
+            "video_end_token": "<|VIDEO_END|>",
+            "video_start_token": "<|VIDEO_START|>",
+        },
+        from_slow=True
+    )
     tokenizer.save_pretrained(save_dir)
 
 
@@ -416,6 +431,9 @@ def convert_processor(model_path, save_dir):
 
     convert_tokenizer(model_path, save_dir)
     tokenizer = AutoTokenizer.from_pretrained(save_dir)
+
+    # font used within the video processor
+    copyfile(hf_hub_download(FONT_REPO, FONT_NAME), Path(save_dir, FONT_NAME))
 
     processor = Ernie4_5_VLProcessor(
         # Intentionally use the slow image processor as the fast processor
@@ -451,10 +469,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # convert_weights(args.checkpoint_path, args.pytorch_dump_folder_path)
+    convert_weights(args.checkpoint_path, args.pytorch_dump_folder_path)
     convert_config(args.checkpoint_path, args.pytorch_dump_folder_path)
 
-    # if args.convert_preprocessor:
-    #    convert_processor(args.checkpoint_path, args.pytorch_dump_folder_path)
+    if args.convert_preprocessor:
+       convert_processor(args.checkpoint_path, args.pytorch_dump_folder_path)
 
     print(f"Saved converted checkpoint to {args.pytorch_dump_folder_path}")
