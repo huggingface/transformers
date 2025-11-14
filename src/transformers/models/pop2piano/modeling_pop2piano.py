@@ -554,7 +554,7 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
             module.embedding.weight.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, Pop2PianoForConditionalGeneration):
             module.shared.weight.normal_(mean=0.0, std=factor * 1.0)
-            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+            if hasattr(module, "lm_head"):
                 module.lm_head.weight.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, Pop2PianoDenseActDense):
             module.wi.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
@@ -948,7 +948,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
         "decoder.embed_tokens.weight": "shared.weight",
-        "lm_head.weight": "shared.weight",
     }
 
     def __init__(self, config: Pop2PianoConfig):
@@ -963,13 +962,11 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
 
         self.encoder = Pop2PianoStack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = Pop2PianoStack(decoder_config)
 
