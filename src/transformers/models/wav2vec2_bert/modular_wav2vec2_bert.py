@@ -690,9 +690,6 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for Wav2Vec2Bert")
-
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
 
@@ -838,9 +835,6 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
 class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
     def __init__(self, config):
         super().__init__(config)
-
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for Wav2Vec2Bert")
 
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
