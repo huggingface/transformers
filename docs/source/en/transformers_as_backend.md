@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Transformers as modeling backend
 
-Transformers' models are compatible with different inference servers like vLLM and SGLang. Instead of implementing model architecture from scratch for each inference server, you only need a model definition in `transformers`, which can be plugged into any inference server. It simplifies maintenance and makes it easy for users to use different inference servers for different use cases.
+Transformers' models are compatible with different inference servers like vLLM and SGLang. Instead of implementing a new model architecture from scratch for each inference server, you only need a model definition in `transformers`, which can be plugged into any inference server. It simplifies maintenance and makes it easy for users to use different inference servers for different use cases.
 
 With Transformers as a backend, you can also serve any model - including custom and Hub-hosted models - without waiting for native support.
 
