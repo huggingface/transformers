@@ -1227,7 +1227,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
-        text_embeds = outputs[-4]
+        text_embeds = outputs.text_embeds 
 
         return (text_embeds, image_embeds, outputs)
 
