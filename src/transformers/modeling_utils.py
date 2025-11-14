@@ -2368,7 +2368,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Let the magic happen with this simple call
         self.smart_apply(self._initialize_weights)
 
-    def tie_weight_source_and_target(self, missing_keys: Optional[set[str]] = None):
+    def tie_weights(self, missing_keys: Optional[set[str]] = None):
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
         and the encoder and decoder. This relies on the `_tied_weights_keys` dict.
@@ -2472,12 +2472,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
-
-    def tie_weights(self, missing_keys: Optional[set[str]] = None):
-        """
-        Tie all the weights of the model.
-        """
-        self.tie_weight_source_and_target(missing_keys)
 
     def _get_no_split_modules(self, device_map: str):
         """
