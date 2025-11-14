@@ -27,6 +27,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
@@ -641,33 +642,33 @@ class HubertPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
             if is_deepspeed_zero3_enabled():
                 import deepspeed
 
                 if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
                     with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
-                        nn.init.kaiming_normal_(module.weight)
+                        init.kaiming_normal_(module.weight)
                 else:
                     with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
-                        nn.init.kaiming_normal_(module.weight)
+                        init.kaiming_normal_(module.weight)
             else:
-                nn.init.kaiming_normal_(module.weight)
+                init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, HubertModel):
             if hasattr(module, "masked_spec_embed"):
-                module.masked_spec_embed.uniform_()
+                init.uniform_(module.masked_spec_embed)
         elif isinstance(module, HubertForSequenceClassification):
             if hasattr(module, "layer_weights"):
-                module.layer_weights.fill_(1.0 / (self.config.num_hidden_layers + 1))
+                init.constant_(module.layer_weights, 1.0 / (self.config.num_hidden_layers + 1))
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """

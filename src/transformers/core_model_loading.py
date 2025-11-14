@@ -26,7 +26,6 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
-from types import MethodType
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
@@ -313,120 +312,6 @@ class ConversionEntry:
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
 
-# Factory function to create LoadedParameter subclasses dynamically
-def get_loaded_parameter_class(base_cls):
-    """
-    base_cls: an nn.Parameter subclass (or nn.Parameter) or a Tensor
-    Returns a new class that combines the base_cls with LoadedParameterMixin
-
-    """
-
-    class LoadedParam(base_cls):
-        _inplace_methods = [
-            "add_",
-            "mul_",
-            "clamp_",
-            "zero_",
-            "fill_",
-            "normal_",
-            "uniform_",
-            "copy_",
-            "erfinv_",
-            "log_",
-            "__getitem__",
-            "neg_",
-            "exp_",
-            "sub_",
-        ]
-
-        def __new__(cls, from_existing, **kwargs):
-            if isinstance(from_existing, torch.nn.Parameter):
-                inst = super().__new__(cls, from_existing.data, from_existing.requires_grad, **from_existing.__dict__)
-            else:
-                inst = super().__new__(cls, from_existing)
-            # we store the original object to get it back later on
-            inst._original = from_existing
-            # Explicitly override all in-place methods per instance
-            for method_name in inst._inplace_methods:
-                setattr(inst, method_name, MethodType(inst._skip, inst))
-
-            return inst
-
-        def _skip(self, *args, **kwargs):
-            """Helper to skip in-place operations."""
-            return self
-
-        def __repr__(self):
-            return f"LoadedParameter(data={self.data})"
-
-        @property
-        def data(self):
-            return super().data
-
-        @data.setter
-        def data(self, new):
-            pass
-
-    def __lt__(self, other):
-        return torch.Tensor.__lt__(self, other)
-
-    def __le__(self, other):
-        return torch.Tensor.__le__(self, other)
-
-    def __gt__(self, other):
-        return torch.Tensor.__gt__(self, other)
-
-    def __ge__(self, other):
-        return torch.Tensor.__ge__(self, other)
-
-    def __eq__(self, other):
-        return torch.Tensor.__eq__(self, other)
-
-    def __ne__(self, other):
-        return torch.Tensor.__ne__(self, other)
-
-    def __iadd__(self, *args, **kwargs):
-        return self
-
-    def __isub__(self, *args, **kwargs):
-        return self
-
-    def __imul__(self, *args, **kwargs):
-        return self
-
-    def __imatmul__(self, *args, **kwargs):
-        return self
-
-    def __itruediv__(self, *args, **kwargs):
-        return self
-
-    def __ifloordiv__(self, *args, **kwargs):
-        return self
-
-    def __imod__(self, *args, **kwargs):
-        return self
-
-    def __ipow__(self, *args, **kwargs):
-        return self
-
-    def __iand__(self, *args, **kwargs):
-        return self
-
-    def __ior__(self, *args, **kwargs):
-        return self
-
-    def __ixor__(self, *args, **kwargs):
-        return self
-
-    def __ilshift__(self, *args, **kwargs):
-        return self
-
-    def __irshift__(self, *args, **kwargs):
-        return self
-
-    return LoadedParam
-
-
 def _materialize_copy(tensor, dtype=None):
     tensor = tensor[...]
     if dtype is not None:
@@ -527,7 +412,6 @@ def set_param_for_module(
                     param_value = param_value.to_local()
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
-        param_value = get_loaded_parameter_class(param_value.__class__)(from_existing=param_value)
 
         # Remove from missing keys (it's either mismatched, or all good)
         missing_keys.discard(layer_name)

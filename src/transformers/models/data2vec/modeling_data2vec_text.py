@@ -494,25 +494,6 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
         "cross_attentions": Data2VecTextCrossAttention,
     }
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.zero_()
-            if hasattr(module, "weight") and module.weight is not None:
-                module.weight.fill_(1.0)
-
 
 class Data2VecTextEncoder(nn.Module):
     def __init__(self, config):

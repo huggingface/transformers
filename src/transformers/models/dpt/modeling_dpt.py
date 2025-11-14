@@ -28,6 +28,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
@@ -735,16 +736,10 @@ class DPTPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+        super()._init_weights(module)
         if isinstance(module, (DPTViTEmbeddings, DPTViTHybridEmbeddings)):
-            module.cls_token.zero_()
-            module.position_embeddings.zero_()
+            init.zeros_(module.cls_token)
+            init.zeros_(module.position_embeddings)
 
 
 @auto_docstring

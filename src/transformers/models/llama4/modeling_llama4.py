@@ -24,6 +24,7 @@ import torch.nn.functional as F
 
 from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -474,30 +475,18 @@ class Llama4PreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, Llama4TextRMSNorm):
-            module.weight.fill_(1.0)
-        elif isinstance(module, Llama4TextExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
-            module.down_proj.normal_(mean=0.0, std=std)
+        if isinstance(module, Llama4TextExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, Llama4VisionModel):
-            module.class_embedding.normal_(std=module.scale)
-            module.positional_embedding_vlm.normal_(std=module.scale)
+            init.normal_(module.class_embedding, std=module.scale)
+            init.normal_(module.positional_embedding_vlm, std=module.scale)
 
 
 @auto_docstring

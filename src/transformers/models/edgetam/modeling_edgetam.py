@@ -32,6 +32,7 @@ from torch import Tensor
 
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -310,21 +311,10 @@ class EdgeTamPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, EdgeTamLayerNorm)):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+        super()._init_weights(module)
         if isinstance(module, EdgeTamModel):
             if module.no_memory_embedding is not None:
-                module.no_memory_embedding.zero_()
+                init.zeros_(module.no_memory_embedding)
 
 
 # copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding

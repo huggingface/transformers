@@ -19,6 +19,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
@@ -240,7 +241,7 @@ class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Ernie4_5_MoeStatics):
-            module.e_score_correction_bias.zero_()
+            init.zeros_(module.e_score_correction_bias)
 
 
 @auto_docstring

@@ -29,6 +29,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -628,7 +629,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             cutoff_factor = 3
 
         def init_weight(module: nn.Module, std: float):
-            nn.init.trunc_normal_(
+            init.trunc_normal_(
                 module.weight,
                 mean=0.0,
                 std=std,
@@ -638,7 +639,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
 
             if isinstance(module, nn.Linear):
                 if module.bias is not None:
-                    nn.init.zeros_(module.bias)
+                    init.zeros_(module.bias)
 
         stds = {
             "in": self.config.initializer_range,
@@ -670,9 +671,9 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         ):
             init_weight(module.classifier, stds["final_out"])
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
+            init.ones_(module.weight)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
 
     def _check_and_adjust_attn_implementation(
         self, attn_implementation: Optional[str], is_init_check: bool = False

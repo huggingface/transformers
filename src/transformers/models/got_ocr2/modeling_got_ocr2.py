@@ -30,6 +30,7 @@ import torch.nn.functional as F
 
 from transformers.utils.generic import check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -291,11 +292,11 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.zero_()
-                module.rel_pos_w.zero_()
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
-                module.pos_embed.zero_()
+                init.zeros_(module.pos_embed)
 
 
 @dataclass

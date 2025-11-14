@@ -27,6 +27,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -401,7 +402,7 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
             cutoff_factor = 3
 
         def init_weight(module: nn.Module, std: float):
-            nn.init.trunc_normal_(
+            init.trunc_normal_(
                 module.weight,
                 mean=0.0,
                 std=std,
@@ -411,7 +412,7 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
 
             if isinstance(module, nn.Linear):
                 if module.bias is not None:
-                    nn.init.zeros_(module.bias)
+                    init.zeros_(module.bias)
 
         stds = {
             "in": self.config.initializer_range,
@@ -437,9 +438,9 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
         elif isinstance(module, ModernBertDecoderForCausalLM):
             init_weight(module.decoder, stds["out"])
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
+            init.ones_(module.weight)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
 
 
 @auto_docstring

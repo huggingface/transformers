@@ -19,6 +19,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -26,7 +27,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -358,29 +359,18 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Parameter):
-            module.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, GptOssRMSNorm):
-            module.weight.fill_(1.0)
-        elif isinstance(module, GptOssExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
-            module.gate_up_proj_bias.zero_()
-            module.down_proj.normal_(mean=0.0, std=std)
-            module.down_proj_bias.zero_()
+        if isinstance(module, GptOssExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.zeros_(module.gate_up_proj_bias)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+            init.zeros_(module.down_proj_bias)
         elif isinstance(module, GptOssAttention):
-            module.sinks.normal_(mean=0.0, std=std)
+            init.normal_(module.sinks, mean=0.0, std=std)
         elif isinstance(module, GptOssTopKRouter):
-            module.weight.normal_(mean=0.0, std=std)
-            module.bias.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.bias, mean=0.0, std=std)
 
 
 class GptOssModel(MixtralModel):

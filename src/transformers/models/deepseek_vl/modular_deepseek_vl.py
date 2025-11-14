@@ -134,15 +134,6 @@ class DeepseekVLAligner(nn.Module):
 class DeepseekVLPreTrainedModel(JanusPreTrainedModel):
     _no_split_modules = ["LlamaDecoderLayer"]
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        # Required only for Linear layer in DeepseekVLAligner
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.text_config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-
 
 @auto_docstring
 class DeepseekVLModel(JanusModel):

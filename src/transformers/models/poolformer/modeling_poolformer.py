@@ -20,6 +20,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
@@ -248,17 +249,11 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.GroupNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, PoolFormerLayer):
+        super()._init_weights(module)
+        if isinstance(module, PoolFormerLayer):
             if hasattr(module, "layer_scale_1"):
-                module.layer_scale_1.fill_(self.config.layer_scale_init_value)
-                module.layer_scale_2.fill_(self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_1, self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring

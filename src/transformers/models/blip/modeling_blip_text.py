@@ -504,17 +504,6 @@ class BlipTextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "bert"
     _no_split_modules = []
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.zero_()
-
 
 # Adapted from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L571
 class BlipTextModel(BlipTextPreTrainedModel):

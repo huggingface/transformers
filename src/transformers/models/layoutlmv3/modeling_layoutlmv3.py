@@ -23,6 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -206,21 +207,11 @@ class LayoutLMv3PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, LayoutLMv3Model):
+        super()._init_weights(module)
+        if isinstance(module, LayoutLMv3Model):
             if self.config.visual_embed:
-                module.cls_token.zero_()
-                module.pos_embed.zero_()
+                init.zeros_(module.cls_token)
+                init.zeros_(module.pos_embed)
 
 
 class LayoutLMv3SelfAttention(nn.Module):
@@ -600,7 +591,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
 
         self.encoder = LayoutLMv3Encoder(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -890,7 +881,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         else:
             self.classifier = LayoutLMv3ClassificationHead(config, pool_feature=False)
 
-        self.init_weights()
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -989,7 +980,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         self.layoutlmv3 = LayoutLMv3Model(config)
         self.qa_outputs = LayoutLMv3ClassificationHead(config, pool_feature=False)
 
-        self.init_weights()
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -1108,7 +1099,7 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         self.layoutlmv3 = LayoutLMv3Model(config)
         self.classifier = LayoutLMv3ClassificationHead(config, pool_feature=False)
 
-        self.init_weights()
+        self.post_init()
 
     @auto_docstring
     def forward(

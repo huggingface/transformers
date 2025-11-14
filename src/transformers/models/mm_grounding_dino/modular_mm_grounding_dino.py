@@ -17,6 +17,7 @@ import math
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
@@ -323,7 +324,7 @@ class MMGroundingDinoPreTrainedModel(GroundingDinoPreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MMGroundingDinoContrastiveEmbedding):
-            nn.init.constant_(module.bias, -math.log((1 - 0.01) / 0.01))
+            init.constant_(module.bias, -math.log((1 - 0.01) / 0.01))
 
 
 class MMGroundingDinoConvEncoder(GroundingDinoConvEncoder):

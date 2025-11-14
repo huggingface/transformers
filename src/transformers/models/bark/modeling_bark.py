@@ -329,25 +329,6 @@ class BarkPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _supports_flash_attn = True
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear,)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            if getattr(module, "bias", None) is not None:
-                module.bias.zero_()
-            module.weight.fill_(1.0)
-
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
     @property
     def device(self) -> torch.device:
         """
@@ -1317,6 +1298,8 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
         self.codec_model = AutoModel.from_config(config.codec_config)
 
         self.config = config
+
+        self.post_init()
 
     @classmethod
     def can_generate(cls) -> bool:

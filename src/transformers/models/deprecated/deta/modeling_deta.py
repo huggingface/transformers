@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from .... import initialization as init
 from ....activations import ACT2FN
 from ....file_utils import (
     ModelOutput,
@@ -573,7 +574,7 @@ class DetaMultiscaleDeformableAttention(nn.Module):
         self._reset_parameters()
 
     def _reset_parameters(self):
-        nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
+        init.constant_(self.sampling_offsets.weight.data, 0.0)
         default_dtype = torch.get_default_dtype()
         thetas = torch.arange(self.n_heads, dtype=torch.int64).to(default_dtype) * (2.0 * math.pi / self.n_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
@@ -586,12 +587,12 @@ class DetaMultiscaleDeformableAttention(nn.Module):
             grid_init[:, :, i, :] *= i + 1
         with torch.no_grad():
             self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-        nn.init.constant_(self.attention_weights.weight.data, 0.0)
-        nn.init.constant_(self.attention_weights.bias.data, 0.0)
-        nn.init.xavier_uniform_(self.value_proj.weight.data)
-        nn.init.constant_(self.value_proj.bias.data, 0.0)
-        nn.init.xavier_uniform_(self.output_proj.weight.data)
-        nn.init.constant_(self.output_proj.bias.data, 0.0)
+        init.constant_(self.attention_weights.weight.data, 0.0)
+        init.constant_(self.attention_weights.bias.data, 0.0)
+        init.xavier_uniform_(self.value_proj.weight.data)
+        init.constant_(self.value_proj.bias.data, 0.0)
+        init.xavier_uniform_(self.output_proj.weight.data)
+        init.constant_(self.output_proj.bias.data, 0.0)
 
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
         return tensor if position_embeddings is None else tensor + position_embeddings
@@ -993,23 +994,24 @@ class DetaPreTrainedModel(PreTrainedModel):
         std = self.config.init_std
 
         if isinstance(module, DetaLearnedPositionEmbedding):
-            nn.init.uniform_(module.row_embeddings.weight)
-            nn.init.uniform_(module.column_embeddings.weight)
+            init.uniform_(module.row_embeddings.weight)
+            init.uniform_(module.column_embeddings.weight)
         elif isinstance(module, DetaMultiscaleDeformableAttention):
             module._reset_parameters()
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         if hasattr(module, "reference_points") and not self.config.two_stage:
-            nn.init.xavier_uniform_(module.reference_points.weight, gain=1.0)
-            nn.init.constant_(module.reference_points.bias, 0.0)
+            init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            init.constant_(module.reference_points.bias, 0.0)
         if hasattr(module, "level_embed"):
-            nn.init.normal_(module.level_embed)
+            init.normal_(module.level_embed)
 
 
 DETA_START_DOCSTRING = r"""
@@ -1812,15 +1814,15 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
         self.class_embed.bias.data.fill_(bias_value)
-        nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
-        nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
+        init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
+        init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
 
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = (config.decoder_layers + 1) if config.two_stage else config.decoder_layers
         if config.with_box_refine:
             self.class_embed = _get_clones(self.class_embed, num_pred)
             self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-            nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
+            init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
             # hack implementation for iterative bounding box refinement
             self.model.decoder.bbox_embed = self.bbox_embed
             self._tied_weights_keys.update(
@@ -1829,7 +1831,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
                 }
             )
         else:
-            nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
+            init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
             self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
             self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
             self.model.decoder.bbox_embed = None
@@ -1842,7 +1844,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
                 }
             )
             for box_embed in self.bbox_embed:
-                nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
+                init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
 
         # Initialize weights and apply final processing
         self.post_init()

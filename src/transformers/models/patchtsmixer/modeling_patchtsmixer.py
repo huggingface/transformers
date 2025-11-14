@@ -25,6 +25,7 @@ import torch.nn as nn
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput
 
+from ... import initialization as init
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -691,17 +692,17 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
         if isinstance(module, PatchTSMixerPositionalEncoding):
             # initialize positional encoding
             if self.config.positional_encoding_type == "random":
-                nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
+                init.normal_(module.position_enc, mean=0.0, std=0.1)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, PatchTSMixerBatchNorm):
-            module.batchnorm.bias.zero_()
-            module.batchnorm.weight.fill_(1.0)
+            init.zeros_(module.batchnorm.bias)
+            init.ones_(module.batchnorm.weight)
         elif isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.init_std)
+            init.normal_(module.weight, mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
 
 
 class PatchTSMixerPretrainHead(nn.Module):

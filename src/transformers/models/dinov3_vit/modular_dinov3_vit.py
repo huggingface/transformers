@@ -32,6 +32,7 @@ from transformers.models.dinov2.modeling_dinov2 import (
 from transformers.models.llama.modeling_llama import LlamaMLP
 from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotate_half
 
+from ... import initialization as init
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -344,42 +345,22 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
     }
 
     @torch.no_grad()
-    def _init_weights(self, module):
+    def _init_weights(self, module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.copy_(
-                nn.init.trunc_normal_(
-                    module.weight.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                ).to(module.weight.dtype)
-            )
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, DINOv3ViTEmbeddings):
-            module.cls_token.copy_(
-                nn.init.trunc_normal_(
-                    module.cls_token.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                ).to(module.cls_token.dtype)
-            )
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.config.num_register_tokens > 0:
-                module.register_tokens.copy_(
-                    nn.init.trunc_normal_(
-                        module.register_tokens.to(torch.float32),
-                        mean=0.0,
-                        std=self.config.initializer_range,
-                    ).to(module.register_tokens.dtype)
-                )
-            module.mask_token.zero_()
+                init.trunc_normal_(module.register_tokens, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.mask_token)
         elif isinstance(module, DINOv3ViTLayerScale):
-            module.lambda1.fill_(self.config.layerscale_value)
+            init.constant_(module.lambda1, self.config.layerscale_value)
 
 
 @auto_docstring

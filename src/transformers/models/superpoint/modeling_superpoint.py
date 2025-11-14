@@ -328,17 +328,6 @@ class SuperPointPreTrainedModel(PreTrainedModel):
     input_modalities = "image"
     supports_gradient_checkpointing = False
 
-    @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-
     def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
         """
         Assuming pixel_values has shape (batch_size, 3, height, width), and that all channels values are the same,

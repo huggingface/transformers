@@ -33,9 +33,21 @@ def iter_modeling_files():
         yield from MODELING_ROOT.rglob(pattern)
 
 
-def function_has_forbidden_data_usage(fn: ast.FunctionDef) -> int | None:
+def full_name(node):
     """
-    Returns the first offending line number if `.data` is used, otherwise `None`.
+    Return full dotted name from an Attribute or Name node.
+    """
+    if isinstance(node, ast.Name):
+        return node.id
+    elif isinstance(node, ast.Attribute):
+        return full_name(node.value) + "." + node.attr
+    else:
+        raise ValueError("Not a Name or Attribute node")
+
+
+def function_has_forbidden_usage(fn: ast.FunctionDef) -> int | None:
+    """
+    Returns the first offending line number if we detect an in-place operation on a module's weight, otherwise `None`.
     """
 
     args = fn.args.args
@@ -43,8 +55,14 @@ def function_has_forbidden_data_usage(fn: ast.FunctionDef) -> int | None:
         return None
 
     for node in ast.walk(fn):
-        if isinstance(node, ast.Attribute) and node.attr == "data":
-            return node.lineno
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            is_inplace_ops = node.func.attr.endswith("_")
+            # We allow in-place ops on tensors that are not part of the module itself (see e.g. modeling_qwen3_next.py L997)
+            is_on_module_weight = isinstance(node.func.value, (ast.Name, ast.Attribute)) and "module." in full_name(
+                node.func.value
+            )
+            if is_inplace_ops and is_on_module_weight:
+                return node.lineno
 
     return None
 
@@ -62,16 +80,17 @@ def main() -> int:
 
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == "_init_weights":
-                offending_line = function_has_forbidden_data_usage(node)
+                offending_line = function_has_forbidden_usage(node)
                 if offending_line is not None:
                     violations.append(
-                        f"{file_path}:{offending_line}: `_init_weights(self, module)` uses `.data`. "
-                        "Use tensor ops directly to remain compatible with HFParameter."
+                        f"{file_path}:{offending_line}: `_init_weights(self, module)` uses an in-place operation on a "
+                        "module's weight. Please use the `init` functions primitives instead, usually imported as "
+                        "`from ... import initialization as init`."
                     )
                     break
 
     if violations:
-        print("Found forbidden `.data` usage inside `_init_weights(self, module)`:\n", file=sys.stderr)
+        print("Found forbidden usage inside `_init_weights(self, module)`:\n", file=sys.stderr)
         print("\n".join(violations), file=sys.stderr)
         return 1
 

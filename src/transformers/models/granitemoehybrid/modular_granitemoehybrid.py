@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
@@ -180,11 +181,11 @@ class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeHybridMambaLayer):
-            module.dt_bias.fill_(1.0)
-            module.A_log.copy_(torch.log(torch.arange(1, module.num_heads + 1)))
-            module.D.fill_(1.0)
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
         elif isinstance(module, GraniteMoeHybridRMSNormGated):
-            module.weight.fill_(1.0)
+            init.ones_(module.weight)
 
 
 class GraniteMoeHybridModel(GraniteMoeSharedModel):

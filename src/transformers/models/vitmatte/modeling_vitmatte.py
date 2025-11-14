@@ -20,6 +20,7 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
 from ...utils.backbone_utils import load_backbone
@@ -61,9 +62,9 @@ class VitMattePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         if isinstance(module, (nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
 
 
 class VitMatteBasicConv3x3(nn.Module):

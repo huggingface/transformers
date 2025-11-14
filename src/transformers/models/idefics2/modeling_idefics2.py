@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -419,27 +420,11 @@ class Idefics2PreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, Idefics2RMSNorm):
-            module.weight.fill_(1.0)
-        elif isinstance(module, nn.MultiheadAttention):
-            module._reset_parameters()  # native torch init
-        elif isinstance(module, Idefics2MultiheadAttentionPoolingHead):
-            module.probe.normal_()
+        super()._init_weights(module)
+        if isinstance(module, Idefics2MultiheadAttentionPoolingHead):
+            init.normal_(module.probe)
         elif isinstance(module, Idefics2PerceiverResampler):
-            module.latents.fill_(1.0)
+            init.ones_(module.latents)
 
 
 @auto_docstring(

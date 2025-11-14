@@ -558,7 +558,8 @@ class ModuleMapper(CSTVisitor, ABC):
         """This keeps track of objects imported from neighbor modeling files (e.g. in `modeling_xxx.py, we have
         `from .configuration_xxx import Config`, then `Config` should be recorded as it is not a dependency that needs
         to be added (because it will be part of the imports)"""
-        import_module = self.python_module.code_for_node(node.module)
+        # `node.module` is None for fully relative imports, e.g. `from ... import initialization as init`
+        import_module = self.python_module.code_for_node(node.module) if node.module is not None else ""
         import_statement = "." * len(node.relative) + import_module
         if re.search(rf"^\.({self.match_patterns}).*", import_statement):
             for imported_object in node.names:
@@ -1227,7 +1228,8 @@ class ModularFileMapper(ModuleMapper):
         """When visiting imports from modeling files (i.e. `transformers.models.xxx`) we get the code, parse it,
         and save it in `self.model_specific_modules` to later visit. The imported objects are saved in `self.model_specific_imported_objects`.
         """
-        import_module = self.python_module.code_for_node(node.module)
+        # `node.module` is None for fully relative imports, e.g. `from ... import initialization as init`
+        import_module = self.python_module.code_for_node(node.module) if node.module is not None else ""
         import_statement = "." * len(node.relative) + import_module
         if any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR):
             return
@@ -1283,7 +1285,10 @@ class ModularFileMapper(ModuleMapper):
             if m.matches(node, m.SimpleStatementLine(body=[m.Import()])):
                 self.imports.append(node)
             elif m.matches(node, m.SimpleStatementLine(body=[m.ImportFrom()])):
-                import_module = self.python_module.code_for_node(node.body[0].module)
+                # `node.body[0].module` is None for fully relative imports, e.g. `from ... import initialization as init`
+                import_module = (
+                    self.python_module.code_for_node(node.body[0].module) if node.body[0].module is not None else ""
+                )
                 import_statement = "." * len(node.body[0].relative) + import_module
                 if any(
                     external_file["name"] in import_statement for external_file in self.excluded_external_files

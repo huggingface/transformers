@@ -290,18 +290,6 @@ class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
         "attentions": HunYuanDenseV1Attention,
     }
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-
 
 class HunYuanDenseV1RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`

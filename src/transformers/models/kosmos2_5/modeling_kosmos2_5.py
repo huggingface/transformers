@@ -22,6 +22,7 @@ from typing import Any, Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -1238,19 +1239,20 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
         elif isinstance(self, (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)):
             std = self.config.text_config.init_std
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, (nn.LayerNorm, Kosmos2_5LayerNorm)):
-            module.weight.fill_(1.0)
+            init.ones_(module.weight)
             if getattr(module, "bias", None) is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, Kosmos2_5ImageToTextProjection):
-            module.latent_query.normal_(mean=0.0, std=1.0)
+            init.normal_(module.latent_query, mean=0.0, std=1.0)
 
 
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):

@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from .... import initialization as init
 from ....activations import ACT2FN
 from ....modeling_outputs import (
     BaseModelOutputWithNoAttention,
@@ -363,18 +364,18 @@ class VanPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
+            init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if isinstance(module, nn.Linear) and module.bias is not None:
-                nn.init.constant_(module.bias, 0)
+                init.constant_(module.bias, 0)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.constant_(module.bias, 0)
-            nn.init.constant_(module.weight, 1.0)
+            init.constant_(module.bias, 0)
+            init.constant_(module.weight, 1.0)
         elif isinstance(module, nn.Conv2d):
             fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
             fan_out //= module.groups
-            module.weight.normal_(0, math.sqrt(2.0 / fan_out))
+            init.normal_(module.weight, 0, math.sqrt(2.0 / fan_out))
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
 
 
 VAN_START_DOCSTRING = r"""
