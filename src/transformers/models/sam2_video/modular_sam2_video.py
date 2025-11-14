@@ -987,31 +987,32 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, (nn.LayerNorm, Sam2VideoLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
         elif isinstance(module, Sam2VideoModel):
             if module.no_memory_positional_encoding is not None:
-                module.no_memory_positional_encoding.data.zero_()
+                module.no_memory_positional_encoding.zero_()
             if module.memory_temporal_positional_encoding is not None:
-                module.memory_temporal_positional_encoding.data.zero_()
+                module.memory_temporal_positional_encoding.zero_()
             if module.no_object_pointer is not None:
-                module.no_object_pointer.data.zero_()
+                module.no_object_pointer.zero_()
             if module.occlusion_spatial_embedding_parameter is not None:
-                module.occlusion_spatial_embedding_parameter.data.zero_()
+                module.occlusion_spatial_embedding_parameter.zero_()
         if isinstance(module, Sam2VideoMemoryFuserCXBlock):
             if module.scale is not None:
-                module.scale.data.zero_()
+                module.scale.zero_()
 
 
 class Sam2VideoVisionRotaryEmbedding(nn.Module):
@@ -1445,7 +1446,9 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 @auto_docstring
 class Sam2VideoModel(Sam2Model):
     input_modalities = ["video", "text"]
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _keys_to_ignore_on_load_unexpected = []

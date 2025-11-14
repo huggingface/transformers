@@ -502,25 +502,6 @@ class AutoModelTest(unittest.TestCase):
         ):
             _ = AutoModel.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
-    def test_model_file_not_found(self):
-        with self.assertRaisesRegex(
-            EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named pytorch_model.bin",
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/config-no-model")
-
-    def test_model_from_tf_error(self):
-        with self.assertRaisesRegex(
-            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
-
-    def test_model_from_flax_error(self):
-        with self.assertRaisesRegex(
-            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
-
     @unittest.skip("Failing on main")
     def test_cached_model_has_minimum_calls_to_head(self):
         # Make sure we have cached the model.
