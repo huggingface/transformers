@@ -270,4 +270,5 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
+
 del CohereModelTest, CohereModelTester  # So the parent tests don't run in this file too

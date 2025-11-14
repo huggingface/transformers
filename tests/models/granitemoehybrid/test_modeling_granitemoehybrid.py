@@ -179,4 +179,5 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
 
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
+
 del BambaModelTest, BambaModelTester  # So the parent tests don't run in this file too
