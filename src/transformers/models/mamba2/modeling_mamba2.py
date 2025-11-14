@@ -737,7 +737,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
 
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            init.copy_(module.dt_proj.bias, inv_dt)
+            init.copy_(module.dt_bias, inv_dt)
 
             init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
             if module.conv1d.bias is not None:

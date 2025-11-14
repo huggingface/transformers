@@ -98,7 +98,7 @@ class TrajectoryTransformerPreTrainedModel(PreTrainedModel):
             for i in range(module.n_models):
                 init.kaiming_uniform_(module.weight[i], a=math.sqrt(5) / self.config.kaiming_initializer_range)
                 if module.bias is not None:
-                    fan_in, _ = init._calculate_fan_in_and_fan_out(module.weight[i])
+                    fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight[i])
                     bound = (1 / math.sqrt(fan_in)) * self.config.initializer_range
                     init.uniform_(module.bias[i], -bound, bound)
 
@@ -161,7 +161,7 @@ class EinLinear(nn.Module):
         for i in range(self.n_models):
             init.kaiming_uniform_(self.weight[i], a=math.sqrt(5))
             if self.bias is not None:
-                fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight[i])
+                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(self.weight[i])
                 bound = 1 / math.sqrt(fan_in)
                 init.uniform_(self.bias[i], -bound, bound)
 

@@ -944,13 +944,13 @@ class Emu3VQVAE(PreTrainedModel):
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                fan_in, _ = init._calculate_fan_in_and_fan_out(module.weight)
+                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in)
                 init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, nn.Linear):
             init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
-                fan_in, _ = init._calculate_fan_in_and_fan_out(module.weight)
+                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, (nn.BatchNorm2d, nn.BatchNorm3d, nn.GroupNorm)):
