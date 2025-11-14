@@ -2302,12 +2302,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         Initialize the weights if they are not already initialized.
         """
-        if all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False)):
-            return
-
         self._init_weights(module)
-        for param in module.parameters(recurse=False):
-            param._is_hf_initialized = True
 
     @torch.no_grad()
     @init.guard_torch_init_functions()
