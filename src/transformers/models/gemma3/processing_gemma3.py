@@ -23,6 +23,7 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import to_py_obj
+from ...utils.auto_docstring import auto_docstring
 
 
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -41,6 +42,7 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Gemma3Processor(ProcessorMixin):
     def __init__(
         self,
@@ -64,6 +66,7 @@ class Gemma3Processor(ProcessorMixin):
             **kwargs,
         )
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,

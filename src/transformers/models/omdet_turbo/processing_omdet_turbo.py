@@ -29,6 +29,7 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
 )
+from ...utils.auto_docstring import auto_docstring
 from ...utils.import_utils import requires
 
 
@@ -199,51 +200,18 @@ def _post_process_boxes_for_image(
 
 
 @requires(backends=("vision", "torchvision"))
+@auto_docstring
 class OmDetTurboProcessor(ProcessorMixin):
-    r"""
-    Constructs a OmDet-Turbo processor which wraps a Deformable DETR image processor and an AutoTokenizer into a
-    single processor.
-
-    [`OmDetTurboProcessor`] offers all the functionalities of [`DetrImageProcessor`] and
-    [`AutoTokenizer`]. See the docstring of [`~OmDetTurboProcessor.__call__`] and [`~OmDetTurboProcessor.decode`]
-    for more information.
-
-    Args:
-        image_processor (`DetrImageProcessor`):
-            An instance of [`DetrImageProcessor`]. The image processor is a required input.
-        tokenizer (`AutoTokenizer`):
-            An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[list[str], list[list[str]]]] = None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
     ) -> BatchFeature:
-        """
-        This method uses [*DetrImageProcessor.__call__] method to prepare image(s) for the model, and
-        [CLIPTokenizerFast.__call__] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-
-        Args:
-            images (`ImageInput`):
-               Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
-            text (`Union[str, list[str], list[list[str]]]`):
-                The classes used to limit the scope of the open vocabulary detection. Expects a list of strings or a list
-                of list of strings. Batched classes can be of different lengths.
-                Examples: ["cat", "dog", "bird"], [["cat", "dog", "bird"], ["hat", "person"], ["car"]]
-        Kwargs:
-            task (`Union[str, list[str], TextInput, PreTokenizedInput]`):
-                The grounded text used to guide open vocabulary detection. Expects a single string or a list of strings.
-                Examples: "Detect a cat, a dog, and a bird.",[ "Detect everything.", "Detect trees and flowers."]
-                When not provided, the default task is "Detect [class1], [class2], [class3]" etc.
-            ...
-        """
         if images is None or text is None:
             raise ValueError("You have to specify both `images` and `text`")
 

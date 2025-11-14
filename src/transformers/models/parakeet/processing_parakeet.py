@@ -18,6 +18,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
+from ...utils.auto_docstring import auto_docstring
 
 
 logger = logging.get_logger(__name__)
@@ -38,10 +39,12 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class ParakeetProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         audio: AudioInput,

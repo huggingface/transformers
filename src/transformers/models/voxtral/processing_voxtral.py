@@ -17,6 +17,7 @@ import io
 from typing import Optional, Union
 
 from ...utils import is_mistral_common_available, is_soundfile_available, is_torch_available, logging
+from ...utils.auto_docstring import auto_docstring
 
 
 if is_torch_available():
@@ -61,19 +62,8 @@ class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class VoxtralProcessor(ProcessorMixin):
-    r"""
-    Constructs a Voxtral processor which wraps [`WhisperFeatureExtractor`] and
-    [`MistralCommonTokenizer`] into a single processor that inherits both the audio feature extraction and
-    tokenizer functionalities.
-
-    Args:
-        feature_extractor ([`WhisperFeatureExtractor`]):
-            The feature extractor is a required input.
-        tokenizer ([`MistralCommonTokenizer`]):
-            The tokenizer is a required input.
-    """
-
     def __init__(
         self,
         feature_extractor,
@@ -226,28 +216,13 @@ class VoxtralProcessor(ProcessorMixin):
 
         return encoded_instruct_inputs
 
+    @auto_docstring
     def __call__(
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
         **kwargs: Unpack[VoxtralProcessorKwargs],
     ):
-        r"""
-        Method to prepare text to be fed as input to the model. This method forwards the `text`
-        arguments to MistralCommonTokenizer's [`~MistralCommonTokenizer.__call__`] to encode
-        the text. Please refer to the docstring of the above methods for more information.
-        This methods does not support audio. To prepare the audio, please use:
-        1. `apply_chat_template` [`~VoxtralProcessor.apply_chat_template`] method.
-        2. `apply_transcription_request` [`~VoxtralProcessor.apply_transcription_request`] method.
-
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                    - `'np'`: Return NumPy `np.ndarray` objects.
+        """
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

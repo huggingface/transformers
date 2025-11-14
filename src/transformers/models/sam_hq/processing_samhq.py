@@ -23,8 +23,9 @@ import numpy as np
 
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import BatchEncoding
 from ...utils import is_torch_available
+from ...utils.auto_docstring import auto_docstring
 
 
 if is_torch_available():
@@ -52,19 +53,8 @@ class SamHQProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class SamHQProcessor(ProcessorMixin):
-    r"""
-    Constructs a SAM HQ processor which wraps a SAM  image processor and an 2D points & Bounding boxes processor into a
-    single processor.
-
-    [`SamHQProcessor`] offers all the functionalities of [`SamImageProcessor`]. See the docstring of
-    [`~SamImageProcessor.__call__`] for more information.
-
-    Args:
-        image_processor (`SamImageProcessor`):
-            An instance of [`SamImageProcessor`]. The image processor is a required input.
-    """
-
     def __init__(self, image_processor):
         super().__init__(image_processor)
         # Ensure image_processor is properly initialized
@@ -74,16 +64,12 @@ class SamHQProcessor(ProcessorMixin):
             raise ValueError("image_processor.size is not set")
         self.target_size = self.image_processor.size["longest_edge"]
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         **kwargs: Unpack[SamHQProcessorKwargs],
     ) -> BatchEncoding:
-        """
-        This method uses [`SamImageProcessor.__call__`] method to prepare image(s) for the model. It also prepares 2D
-        points and bounding boxes for the model if they are provided.
-        """
         output_kwargs = self._merge_kwargs(
             SamHQProcessorKwargs,
             tokenizer_init_kwargs={},

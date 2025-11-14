@@ -31,6 +31,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TensorType, is_torch_available
+from ...utils.auto_docstring import auto_docstring
 
 
 if TYPE_CHECKING:
@@ -53,23 +54,13 @@ class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Owlv2Processor(ProcessorMixin):
-    r"""
-    Constructs an Owlv2 processor which wraps [`Owlv2ImageProcessor`]/[`Owlv2ImageProcessorFast`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into
-    a single processor that inherits both the image processor and tokenizer functionalities. See the
-    [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`Owlv2ImageProcessor`, `Owlv2ImageProcessorFast`]):
-            The image processor is a required input.
-        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
-            The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)
 
     # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.__call__ with OwlViT->Owlv2
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
@@ -77,29 +68,10 @@ class Owlv2Processor(ProcessorMixin):
         **kwargs: Unpack[Owlv2ProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
-        `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`,
-            `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The query image to be prepared, one query image is expected per target image to be queried. Each image
-                can be a PIL image, NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image
-                should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
+        query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
+            The query image to be prepared, one query image is expected per target image to be queried. Each image
+            can be a PIL image, NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image
+            should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

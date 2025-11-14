@@ -23,28 +23,17 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import BatchEncoding, PaddingStrategy, TruncationStrategy
 from ...utils import TensorType
+from ...utils.auto_docstring import auto_docstring
 from ...utils.import_utils import requires
 
 
 @requires(backends=("essentia", "librosa", "pretty_midi", "scipy", "torch"))
+@auto_docstring
 class Pop2PianoProcessor(ProcessorMixin):
-    r"""
-    Constructs an Pop2Piano processor which wraps a Pop2Piano Feature Extractor and Pop2Piano Tokenizer into a single
-    processor.
-
-    [`Pop2PianoProcessor`] offers all the functionalities of [`Pop2PianoFeatureExtractor`] and [`Pop2PianoTokenizer`].
-    See the docstring of [`~Pop2PianoProcessor.__call__`] and [`~Pop2PianoProcessor.decode`] for more information.
-
-    Args:
-        feature_extractor (`Pop2PianoFeatureExtractor`):
-            An instance of [`Pop2PianoFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`Pop2PianoTokenizer`):
-            An instance of ['Pop2PianoTokenizer`]. The tokenizer is a required input.
-    """
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         audio: Union[np.ndarray, list[float], list[np.ndarray]] = None,
@@ -59,13 +48,6 @@ class Pop2PianoProcessor(ProcessorMixin):
         verbose: bool = True,
         **kwargs,
     ) -> Union[BatchFeature, BatchEncoding]:
-        """
-        This method uses [`Pop2PianoFeatureExtractor.__call__`] method to prepare log-mel-spectrograms for the model,
-        and [`Pop2PianoTokenizer.__call__`] to prepare token_ids from notes.
-
-        Please refer to the docstring of the above two methods for more information.
-        """
-
         # Since Feature Extractor needs both audio and sampling_rate and tokenizer needs both token_ids and
         # feature_extractor_output, we must check for both.
         if (audio is None and sampling_rate is None) and (notes is None):

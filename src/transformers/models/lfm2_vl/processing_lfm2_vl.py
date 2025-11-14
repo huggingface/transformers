@@ -25,6 +25,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import logging
+from ...utils.auto_docstring import auto_docstring
 
 
 logger = logging.get_logger(__name__)
@@ -49,21 +50,8 @@ class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Lfm2VlProcessor(ProcessorMixin):
-    r"""
-    Constructs a Lfm2Vl processor which wraps a Lfm2Tokenizer tokenizer and Lfm2VlImageProcessor into a single processor.
-
-    [`Lfm2VlProcessor`] offers all the functionalities of [`Lfm2ImageProcessor`] and [`Lfm2Tokenizer`].
-
-    Args:
-        image_processor (`Lfm2VlImageProcessor`):
-             An instance of [`Lfm2VlImageProcessor`]. The image processor is a required input.
-        tokenizer (`PreTrainedTokenizerBase`):
-            An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
-        chat_template (`str`, *optional*):
-            A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
-    """
-
     def __init__(
         self,
         image_processor,
@@ -78,25 +66,13 @@ class Lfm2VlProcessor(ProcessorMixin):
         self.image_thumbnail_token = tokenizer.image_thumbnail
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[Union[ImageInput, list[ImageInput], list[list[ImageInput]]]] = None,
         text: Optional[Union[TextInput, list[TextInput]]] = None,
         **kwargs: Unpack[Lfm2VlProcessorKwargs],
     ) -> BatchEncoding:
-        """
-        Processes the input prompts and returns a BatchFeature.
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`, *optional*):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. If is of type `list[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
-            text (`TextInput`, *optional*):
-                The sequence or batch of sequences to be encoded.
-                Wherever an image token, `<image>` is encountered it is expanded to a proper sequence of image tokens.
-            return_tensors (`Optional[str, TensorType]`, *optional*):
-                If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
-                information.
-        """
         if text is None and images is None:
             raise ValueError("You must provide one of `text` or `images`.")
 
