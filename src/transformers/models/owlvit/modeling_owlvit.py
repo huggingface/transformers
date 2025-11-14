@@ -486,8 +486,8 @@ class OwlViTEncoderLayer(GradientCheckpointingLayer):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
+        hidden_states,
+        attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -1227,7 +1227,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
-        text_embeds = outputs.text_embeds 
+        text_embeds = outputs.text_embeds
 
         return (text_embeds, image_embeds, outputs)
 

@@ -498,8 +498,8 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
+        hidden_states,
+        attention_mask=None,
         **kwargs,
     ) -> tuple[torch.FloatTensor]:
         """
