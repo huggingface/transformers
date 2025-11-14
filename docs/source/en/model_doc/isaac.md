@@ -31,7 +31,7 @@ architecture is designed for efficient long-context multimodal interactions, and
 text. The vision encoder has variable-resolution capability and with optional pixel shuffle to merge
 neighboring patches before they reach the decoder, which keeps the KV-cache and compute requirements manageable on long
 conversations. Text and vision tokens are unified via the [`TensorStream`](https://github.com/perceptron-ai-inc/perceptron/tree/main/src/perceptron/tensorstream) abstraction so
-that modal boundaries, spatial coordinates, and rescaling parameters are preserved throughout the model stack.
+that modal boundaries, spatial coordinates, and rescaling parameters are preserved throughout the model stack. For more information, refer to the [technical report](https://github.com/perceptron-ai-inc/perceptron/blob/main/papers/isaac_01.pdf).
 
 Key implementation notes:
 
