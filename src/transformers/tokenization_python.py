@@ -862,7 +862,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         - `"cls_sep"`: [CLS] seq0 [SEP] or [CLS] seq0 [SEP] seq1 [SEP]
         - `"eos"`: seq0 [EOS] or seq0 [EOS] seq1 [EOS]
         - `"bos"`: [BOS] seq0 or [BOS] seq0 [BOS] seq1
+        - `"bos_eos"`: [BOS] seq0 [EOS] or [BOS] seq0 [EOS] seq1 [EOS]
         - `"cls_double_sep"`: [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
+        - `"prefix_suffix"`: `<prefix_tokens> seq0 [seq1] <suffix_tokens>` (custom prefix/suffix stored on the tokenizer)
 
         Args:
             token_ids_0 (`list[int]`):
@@ -909,6 +911,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 + [self.sep_token_id]
             )
 
+        elif self.special_tokens_pattern == "prefix_suffix":
+            prefix_tokens = getattr(self, "prefix_tokens", [])
+            suffix_tokens = getattr(self, "suffix_tokens", [])
+            if token_ids_1 is None:
+                return prefix_tokens + token_ids_0 + suffix_tokens
+            return prefix_tokens + token_ids_0 + token_ids_1 + suffix_tokens
+
         else:  # "none" or any other value
             # No special tokens
             if token_ids_1 is None:
@@ -927,7 +936,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         - `"cls_sep"`: [CLS] seq0 [SEP] or [CLS] seq0 [SEP] seq1 [SEP]
         - `"eos"`: seq0 [EOS] or seq0 [EOS] seq1 [EOS]
         - `"bos"`: [BOS] seq0 or [BOS] seq0 [BOS] seq1
+        - `"bos_eos"`: [BOS] seq0 [EOS] or [BOS] seq0 [EOS] seq1 [EOS]
         - `"cls_double_sep"`: [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
+        - `"prefix_suffix"`: `<prefix_tokens> seq0 [seq1] <suffix_tokens>`
 
         Args:
             token_ids_0 (`list[int]`):
@@ -980,6 +991,15 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if token_ids_1 is None:
                 return [1] + ([0] * len(token_ids_0)) + [1]
             return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
+
+        elif self.special_tokens_pattern == "prefix_suffix":
+            prefix_len = len(getattr(self, "prefix_tokens", []))
+            suffix_len = len(getattr(self, "suffix_tokens", []))
+            mask = [1] * prefix_len + ([0] * len(token_ids_0))
+            if token_ids_1 is not None:
+                mask += [0] * len(token_ids_1)
+            mask += [1] * suffix_len
+            return mask
 
         else:
             return [0] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
@@ -1299,6 +1319,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             seq1_len = len(token_ids_1) if token_ids_1 is not None else 0
 
         # Build token type IDs based on pattern
+        if self.special_tokens_pattern == "prefix_suffix":
+            total_len = len(getattr(self, "prefix_tokens", [])) + len(token_ids_0)
+            if token_ids_1 is not None:
+                total_len += len(token_ids_1)
+            total_len += len(getattr(self, "suffix_tokens", []))
+            return [0] * total_len
+
         if self.token_type_ids_pattern == "bert_style" and token_ids_1 is not None:
             # BERT-style: first sequence gets 0s, second sequence gets 1s
             return [0] * seq0_len + [1] * seq1_len

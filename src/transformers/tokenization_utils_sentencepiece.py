@@ -159,32 +159,26 @@ class SentencePieceBackend(PreTrainedTokenizer):
             if not token.special and token.normalized and getattr(self, "do_lower_case", False):
                 token.content = token.content.lower()
 
-            # Check if in base vocab via SentencePiece directly
-            # We need to check if the token is actually in the vocab, not just if it maps to something
-            # piece_to_id returns unk_id for unknown tokens, so we need to verify
+            # Check if token already exists in the SentencePiece base vocab
             tok_id = self.sp_model.piece_to_id(token.content)
-            # Check if the token actually exists in the vocab by verifying round-trip
             in_base_vocab = (
                 tok_id < self.sp_model.get_piece_size() and self.sp_model.IdToPiece(tok_id) == token.content
             )
 
             if in_base_vocab:
-                # Token is already in base vocab, don't add it to added_tokens_decoder
-                # Just skip it - it will be handled by the base vocab lookups
-                continue
+                token_index = tok_id
             else:
-                # Token is not in base vocab, add it as a new token
                 token_index = next_index
                 next_index += 1
                 num_added += 1
 
-                if token.special and str(token) not in self.all_special_tokens:
-                    self._extra_special_tokens.append(token)
-                # the setter automatically updates the reverse map
-                self._added_tokens_decoder[token_index] = token
-                self._added_tokens_encoder[token.content] = token_index
-                if self.verbose:
-                    logger.info(f"Adding {token} to the vocabulary")
+            if token.special and str(token) not in self.all_special_tokens:
+                self._extra_special_tokens.append(token)
+            # the setter automatically updates the reverse map
+            self._added_tokens_decoder[token_index] = token
+            self._added_tokens_encoder[token.content] = token_index
+            if self.verbose:
+                logger.info(f"Adding {token} to the vocabulary")
 
         self._update_trie()
         self._update_total_vocab_size()
