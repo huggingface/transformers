@@ -2626,7 +2626,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         for name in possible_module_names:
             if hasattr(self, name):
-                print(name)
                 setattr(self, name, encoder)
                 return
 
