@@ -438,21 +438,22 @@ class PegasusPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, PegasusSinusoidalPositionalEmbedding):
             module._init_weight()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            module.weight.fill_(1.0)
+            module.bias.zero_()
 
 
 class PegasusEncoder(PegasusPreTrainedModel):
@@ -465,7 +466,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: PegasusConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: PegasusConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -476,10 +477,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         self.embed_positions = PegasusSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -643,7 +641,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: PegasusConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: PegasusConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -651,10 +649,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = PegasusSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -898,7 +893,10 @@ class PegasusDecoder(PegasusPreTrainedModel):
 
 @auto_docstring
 class PegasusModel(PegasusPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "decoder.embed_tokens.weight": "shared.weight",
+        "encoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: PegasusConfig):
         super().__init__(config)
@@ -906,8 +904,8 @@ class PegasusModel(PegasusPreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = PegasusEncoder(config, self.shared)
-        self.decoder = PegasusDecoder(config, self.shared)
+        self.encoder = PegasusEncoder(config)
+        self.decoder = PegasusDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1058,7 +1056,9 @@ class PegasusModel(PegasusPreTrainedModel):
 class PegasusForConditionalGeneration(PegasusPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: PegasusConfig):
         super().__init__(config)
@@ -1242,7 +1242,9 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
 
 
 class PegasusForCausalLM(PegasusPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.decoder.embed_tokens.weight",
+    }
 
     def __init__(self, config):
         config = copy.deepcopy(config)

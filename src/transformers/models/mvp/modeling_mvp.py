@@ -469,16 +469,17 @@ class MvpPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
     @property
     def dummy_inputs(self):
@@ -515,10 +516,7 @@ class MvpEncoder(MvpPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         self.embed_positions = MvpLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -665,9 +663,7 @@ class MvpDecoder(MvpPreTrainedModel):
         use_prompt (bool): whether to use prompt
     """
 
-    def __init__(
-        self, config: MvpConfig, embed_tokens: Optional[nn.Embedding] = None, use_prompt: Optional[bool] = False
-    ):
+    def __init__(self, config: MvpConfig, use_prompt: Optional[bool] = False):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -675,11 +671,7 @@ class MvpDecoder(MvpPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
-
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
         self.embed_positions = MvpLearnedPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
@@ -887,7 +879,10 @@ class MvpDecoder(MvpPreTrainedModel):
 @auto_docstring
 class MvpModel(MvpPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["final_logits_bias"]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: MvpConfig):
         super().__init__(config)
@@ -896,8 +891,8 @@ class MvpModel(MvpPreTrainedModel):
         self.use_prompt = config.use_prompt
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = MvpEncoder(config, self.shared, config.use_prompt)
-        self.decoder = MvpDecoder(config, self.shared, config.use_prompt)
+        self.encoder = MvpEncoder(config, config.use_prompt)
+        self.decoder = MvpDecoder(config, config.use_prompt)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1035,7 +1030,9 @@ class MvpModel(MvpPreTrainedModel):
     """
 )
 class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: MvpConfig):
         super().__init__(config)
@@ -1205,8 +1202,6 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
     """
 )
 class MvpForSequenceClassification(MvpPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
-
     def __init__(self, config: MvpConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = MvpModel(config)
@@ -1366,8 +1361,6 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
 
 @auto_docstring
 class MvpForQuestionAnswering(MvpPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1537,7 +1530,7 @@ class MvpDecoderWrapper(MvpPreTrainedModel):
 
 
 class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config):
         config.is_decoder = True

@@ -607,13 +607,14 @@ class JambaPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(nn.Linear, layer_name="router"),
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, JambaMambaMixer):
             A = torch.arange(1, module.ssm_state_size + 1)[None, :]
             A = A.expand(module.intermediate_size, -1).contiguous()
-            module.A_log.data.copy_(torch.log(A))
-            module.D.data.fill_(1.0)
+            module.A_log.copy_(torch.log(A))
+            module.D.fill_(1.0)
 
 
 @auto_docstring
