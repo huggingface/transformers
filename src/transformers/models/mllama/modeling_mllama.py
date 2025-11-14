@@ -534,10 +534,8 @@ class MllamaTextSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_embeddings: torch.Tensor,
-        use_cache: bool = False,
         past_key_values=None,
         cache_position=None,
-        position_ids=None,
         **kwargs,
     ):
         bsz, q_len, _ = hidden_states.size()
