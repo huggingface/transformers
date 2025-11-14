@@ -161,6 +161,14 @@ class CLIPVisionConfig(PreTrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        use_register_tokens (`bool`, *optional*, defaults to False):
+            Whether to use register tokens in the vision transformer.
+        num_register_tokens (`int`, *optional*, defaults to 4):
+            Number of register tokens to use, if enabled.
+        use_fusion_mlp (`bool`, *optional*, defaults to False):
+            Whether to use the fusion MLP gates between CLS and register tokens.
+        gate_start_layer (`int`, *optional*, defaults to 14):
+            Vision transformer layer index at which to start applying the intermediate fusion MLPs.
 
     Example:
 
@@ -195,6 +203,10 @@ class CLIPVisionConfig(PreTrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
+        use_register_tokens: bool = False,
+        num_register_tokens: int = 4,
+        use_fusion_mlp: bool = False,
+        gate_start_layer: int = 14,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -212,7 +224,10 @@ class CLIPVisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-
+        self.use_register_tokens = use_register_tokens
+        self.num_register_tokens = num_register_tokens
+        self.use_fusion_mlp = use_fusion_mlp
+        self.gate_start_layer = gate_start_layer
 
 class CLIPConfig(PreTrainedConfig):
     r"""
