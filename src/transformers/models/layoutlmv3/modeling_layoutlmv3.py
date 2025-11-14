@@ -591,7 +591,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
 
         self.encoder = LayoutLMv3Encoder(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -881,7 +881,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         else:
             self.classifier = LayoutLMv3ClassificationHead(config, pool_feature=False)
 
-        self.init_weights()
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -980,7 +980,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         self.layoutlmv3 = LayoutLMv3Model(config)
         self.qa_outputs = LayoutLMv3ClassificationHead(config, pool_feature=False)
 
-        self.init_weights()
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -1099,7 +1099,7 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         self.layoutlmv3 = LayoutLMv3Model(config)
         self.classifier = LayoutLMv3ClassificationHead(config, pool_feature=False)
 
-        self.init_weights()
+        self.post_init()
 
     @auto_docstring
     def forward(

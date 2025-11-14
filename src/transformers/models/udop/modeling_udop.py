@@ -1074,6 +1074,7 @@ class UdopStack(UdopPreTrainedModel):
 
         # get weights from encoder position bias
         self.relative_bias = self._get_relative_bias(config)
+        self.post_init()
 
     @staticmethod
     def _get_relative_bias(config: UdopConfig) -> RelativePositionBiasAggregated:
