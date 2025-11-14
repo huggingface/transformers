@@ -118,7 +118,7 @@
   - local: tools
     title: Tools
   - local: transformers_as_backend
-    title: Inference server backends
+    title: Transformers as modeling backend
   - local: continuous_batching
     title: Continuous Batching
   title: Inference

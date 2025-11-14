@@ -125,8 +125,9 @@ If you're contributing a **vision-language model** (or any multimodal model that
 All new models should use the modular architecture pattern. Create a `modular_<model_name>.py` file using the modular model converter:
 
 - Use the CLI, [`transformers add-new-model-like`](https://github.com/huggingface/transformers/blob/main/src/transformers/cli/add_new_model_like.py) to generate a modular skeleton and get started
-- All code should be in the modular file if possible. Modeling must be in it, it's better if configuration is in it as well. 
+- All code should be in the modular file if possible. Modeling must be in it, it's better if configuration is in it as well. [Modular guide](./modular_transformers#implementing-a-modular-file) shows a quick way to set up a modular file.
 - Reuse existing patterns from similar models as much as possible
+- You can make the model compatible with inference engines such as vLLM or SGLang, and enable zero-effort integration. See specific requirements for model implementation in ["Transformers modeling backend"](./transformers_as_backend#multimodal-models)
 
 To verify your modular file is correct, run:
 

@@ -14,9 +14,9 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Inference server backends
+# Transformers as modeling backend
 
-Transformers' models are compatible with different inference servers like vLLM and SGLang. Instead of implementing a model for each inference server, you only need one model, which can be plugged into any inference server. It simplifies maintenance and makes it easy for users to use different inference servers for different use cases.
+Transformers' models are compatible with different inference servers like vLLM and SGLang. Instead of implementing a new model architecture from scratch for each inference server, you only need a model definition in `transformers`, which can be plugged into any inference server. It simplifies maintenance and makes it easy for users to use different inference servers for different use cases.
 
 With Transformers as a backend, you can also serve any model - including custom and Hub-hosted models - without waiting for native support.
 
@@ -157,57 +157,13 @@ class MyConfig(PreTrainedConfig):
 
 ### Multimodal models
 
-For multimodal models, you need to include a few more changes on top of the general recommendations. These rules ensure that your model integrates properly with multimodal data.
+For multimodal models, you need to include a few more changes on top of the general recommendations outlined in ["contribuiting a model"](./contributing#vision-language-model-contribution-checklist). These rules ensure that your model integrates properly and enables processing multimodal data.
 
-1. A multimodal model requires a base `MyMultiModalModel` class to handle multimodal fusion without a language modeling head and a separate generative class that adds a head.
+1. A multimodal model's processing class must have the `self.image_token` and `self.image_token_ids` attributes. These are placeholder tokens used to indicate image positions in the input. This placeholder token is the same token used in the input prompt to denote images and used in model code to scatter image features.
 
-    The base model needs to implement the `get_image_features()` method to accept image pixel values and return encoded outputs. These are later merged with the language embeddings and don't require any postprocessing. The shape of the returned features must match the number of input images. If a vision encoder returns variable-length outputs (patch-based), return a list of 2D tensors of size `(image_seq_len, image_dim)` for each image.
+2. The processing class needs `self._get_num_multimodal_tokens` method to compute the number of placeholder tokens needed for multimodal inputs with given sizes and to return a [`MultiModalData`] object. The placeholders between `<image>` tokens such as row or column tokens don't count as image placeholders. Only tokens that are actually replaced by image features later in modeling should be counted!
 
-Expand the code below for an example.
-
-<details>
-<summary>modeling_my_multimodal_model.py</summary>
-
-```python
-from transformers.generation import GenerationMixin
-
-class MyMultimodalModel(MyMultimodalPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.language_model = AutoModel.from_config(config.text_config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
-        self.multimodal_projection = nn.Linear(vision_dim, text_dim)
-    
-    def get_image_features(self, pixel_values):
-        return self.vision_tower(pixel_values).last_hidden_states
-    
-    def forward(self, input_ids, pixel_values, **kwargs):
-        # process your inputs
-        return MyModelOutputWithPast(
-            last_hidden_state=last_hidden_state,
-            image_hidden_states=image_features,
-            [...]
-        )
-
-class MyMultimodalModelForConditionalGeneration(MyMultimodalPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = MyMultimodalModel(config)
-        self.lm_head = nn.Linear(hidden_dim, vocab_size)
-```
-
-</details>
-
-2. A multimodal model config must be nested with the following fields.
-    * text_config: decoder language model config
-    * vision_config: vision encoder config
-    * image_token_id: ID of the image placeholder token used in the input to indicate image position
-
-3. A multimodal model's processing class must have the `self.image_token` and `self.image_token_ids` attributes. These are placeholder tokens used to indicate image positions in the input. The placeholder token is the same token used in the input prompt and to mask scatter image features.
-
-   The processing class also needs `self._get_num_multimodal_tokens` method to compute the number of placeholder tokens needed for multimodal inputs with given sizes and to return a [`MultiModalData`] object. The placeholder for row and column tokens don't count as image placeholders. Only the tokens that are actually replaced by image features are computed.
-
-Finally, when `return_mm_token_type_ids=True`, the class has to return `mm_token_type_ids` to indicate whether each position is a text token (`0`) or image placeholder token (`1`). Each image's token type IDs must be contiguous with no breaks between consecutive ones.
+3. The processor needs to check the value of `return_mm_token_type_ids` and return `mm_token_type_ids` to indicate whether each position is a text token (`0`), image placeholder token (`1`) or video placeholder token (`2`). Each multimodal token type ID sequence must be contiguous without breaks between consecutive tokens, therefore special tokens for begin/end/row/column must be treated as placeholders.
 
 Expand the code below for an example.
 
@@ -246,5 +202,5 @@ class MyMultimodalProcessor(ProcessorMixin):
 
 ## Resources
 
-* Read the [Transformers backend integration in vLLM](https://blog.vllm.ai/2025/04/11/transformers-backend.html) blog post for more details about the Transformers backend in vLLM.
-* Read the [Transformers backend integration in SGLang](https://huggingface.co/blog/transformers-backend-sglang) blog post for more details about the Transformers backend in SGLang.
+* Read the [Transformers modeling backend integration in vLLM](https://blog.vllm.ai/2025/04/11/transformers-backend.html) blog post for more details about the Transformers modeling backend in vLLM.
+* Read the [Transformers modeling  backend integration in SGLang](https://huggingface.co/blog/transformers-backend-sglang) blog post for more details about the Transformers modeling backend in SGLang.
