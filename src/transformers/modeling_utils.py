@@ -1299,12 +1299,6 @@ class EmbeddingAccessMixin:
             self.lm_head = new_embeddings
 
 
-def _get_lowest_module(module):
-    if len(list(module.children())) == 0:
-        return module
-    return _get_lowest_module(list(module.children())[0])
-
-
 class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
     Base class for all models.
@@ -2220,38 +2214,44 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         def make_inputs_require_grads(module, input, output):
             output.requires_grad_(True)
 
-        self._require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
+        hooks = []
+        seen_modules = set()
 
-        vision_module_attributes = [
-            "vision_tower",
-            "vision_model",
-            "visual",
-            "vision_encoder",
-            "image_encoder",
-        ]
+        for module in self.modules():
+            if not (isinstance(module, PreTrainedModel) and hasattr(module, "get_input_embeddings")):
+                continue
 
-        vision_module = None
-        for attribute_name in vision_module_attributes:
-            if hasattr(self, attribute_name):
-                vision_module = getattr(self, attribute_name)
-            elif hasattr(self, "model") and hasattr(self.model, attribute_name):
-                vision_module = getattr(self.model, attribute_name)
+            input_embeddings = module.get_input_embeddings()
 
-            if vision_module is not None:
-                break
+            if input_embeddings is None:
+                continue
 
-        if vision_module is not None:
-            self._vision_require_grads_hook = _get_lowest_module(vision_module).register_forward_hook(
-                make_inputs_require_grads
-            )
+            embedding_id = id(input_embeddings)
+            if embedding_id in seen_modules:
+                continue
+
+            seen_modules.add(embedding_id)
+            hooks.append(input_embeddings.register_forward_hook(make_inputs_require_grads))
+
+        self._require_grads_hooks = hooks
+        if hooks:
+            # for BC
+            self._require_grads_hook = hooks[0]
 
     def disable_input_require_grads(self):
         """
         Removes the `_require_grads_hook`.
         """
-        self._require_grads_hook.remove()
-        if hasattr(self, "_vision_require_grads_hook"):
-            self._vision_require_grads_hook.remove()
+        hooks = getattr(self, "_require_grads_hooks", None)
+        if not hooks:
+            return
+
+        for hook in hooks:
+            hook.remove()
+
+        self._require_grads_hooks = []
+        if hasattr(self, "_require_grads_hook"):
+            del self._require_grads_hook
 
     def get_decoder(self):
         """

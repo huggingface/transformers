@@ -424,9 +424,13 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             elif hasattr(model, "model") and hasattr(model.model, "visual"):
                 vision_module = model.model.visual
 
-            if vision_module is not None:
-                for parameter in vision_module.parameters():
-                    parameter.requires_grad = True
+            if vision_module is None:
+                continue
+
+            target_linear = vision_module.blocks[0].attn.qkv
+            target_linear.weight.requires_grad = True
+            if target_linear.bias is not None:
+                target_linear.bias.requires_grad = True
 
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             outputs = model(**inputs)
@@ -439,15 +443,15 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
             loss.backward()
 
-            if vision_module is not None:
-                vision_params_with_grad = [
-                    name for name, param in vision_module.named_parameters() if param.grad is not None
-                ]
-                self.assertGreater(
-                    len(vision_params_with_grad),
-                    0,
-                    f"Vision module parameters should have gradients when enable_input_require_grads is used with gradient checkpointing. Model: {model_class.__name__}",
-                )
+            self.assertIsNotNone(
+                target_linear.weight.grad,
+                f"qkv weights should receive gradients when enable_input_require_grads is used with gradient checkpointing. Model: {model_class.__name__}",
+            )
+            self.assertGreater(
+                target_linear.weight.grad.abs().sum().item(),
+                0,
+                f"qkv weights should have non-zero gradients when enable_input_require_grads is used with gradient checkpointing. Model: {model_class.__name__}",
+            )
 
 
 @require_torch
