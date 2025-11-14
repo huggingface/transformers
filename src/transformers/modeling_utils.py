@@ -2270,10 +2270,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         elif isinstance(module, nn.Embedding):
             if getattr(module, "weight", None) is not None:
                 init.normal_(module.weight, mean=0.0, std=std)
-            if getattr(
-                self.config, "pad_token_id", None
-            ) is not None and self.config.pad_token_id < module.weight.size(0):
-                init.zeros_(module.weight[self.config.pad_token_id])
+                if module.padding_idx is not None:
+                    init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
             module._reset_parameters()
@@ -2387,6 +2385,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         If you call this function, it will always tie. There is only 1 tricky case, if all weights are missing, you still want to mention that
         the ones you tied were missing.
         """
+        # TODO Cyril: using this fixed set of keys (set in post_init()) does not allow to switch the config flag and re-tie
         mapping = getattr(self, "all_tied_weights_keys", None)
         if not isinstance(mapping, dict):
             return
