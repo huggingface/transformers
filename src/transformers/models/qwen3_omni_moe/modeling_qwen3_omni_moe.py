@@ -3178,7 +3178,13 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
     ):
         hidden_states = kwargs.pop("hidden_states", None)
         inputs = super().prepare_inputs_for_generation(
-            input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, is_first_iteration=is_first_iteration, **kwargs
+            input_ids,
+            past_key_values,
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
         )
         # Decode stage
         # TODO(raushan, gante): Refactor this part to a utility function
