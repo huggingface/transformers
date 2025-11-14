@@ -516,21 +516,6 @@ class ViltPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViltEmbeddings", "ViltSelfAttention"]
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-
 
 @auto_docstring
 class ViltModel(ViltPreTrainedModel):

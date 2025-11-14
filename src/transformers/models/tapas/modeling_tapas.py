@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...modeling_layers import GradientCheckpointingLayer
@@ -511,19 +512,9 @@ class TapasPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, TapasLMPredictionHead):
-            module.bias.zero_()
+        super()._init_weights(module)
+        if isinstance(module, TapasLMPredictionHead):
+            init.zeros_(module.bias)
 
 
 @auto_docstring
@@ -819,11 +810,11 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             self.column_output_weights = nn.Parameter(torch.zeros(config.hidden_size))
         else:
             self.output_weights = nn.Parameter(torch.empty(config.hidden_size))
-            nn.init.normal_(
+            init.normal_(
                 self.output_weights, std=config.initializer_range
             )  # here, a truncated normal is used in the original implementation
             self.column_output_weights = nn.Parameter(torch.empty(config.hidden_size))
-            nn.init.normal_(
+            init.normal_(
                 self.column_output_weights, std=config.initializer_range
             )  # here, a truncated normal is used in the original implementation
         self.output_bias = nn.Parameter(torch.zeros([]))

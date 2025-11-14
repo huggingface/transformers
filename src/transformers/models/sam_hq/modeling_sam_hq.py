@@ -32,6 +32,7 @@ from torch import Tensor, nn
 from transformers.modeling_outputs import ModelOutput
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -427,11 +428,11 @@ class SamHQPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, SamHQVisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.zero_()
-                module.rel_pos_w.zero_()
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, SamHQVisionEncoder):
             if self.config.use_abs_pos:
-                module.pos_embed.zero_()
+                init.zeros_(module.pos_embed)
 
 
 class SamHQPatchEmbeddings(nn.Module):
