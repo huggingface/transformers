@@ -123,7 +123,6 @@ class MT5Config(PreTrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
-
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"
@@ -146,6 +145,9 @@ class MT5Config(PreTrainedConfig):
         self.eos_token_id = eos_token_id
         self.decoder_start_token_id = decoder_start_token_id
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+
+        # TODO: Mt5 never supported not tying encoder decoder so this has to be true.
+        self.tie_encoder_decoder = True
 
 
 __all__ = ["MT5Config"]

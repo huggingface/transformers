@@ -458,26 +458,27 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "layoutlmv2"
     input_modalities = ["image", "text"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, LayoutLMv2SelfAttention):
             if self.config.fast_qkv:
-                module.q_bias.data.zero_()
-                module.v_bias.data.zero_()
+                module.q_bias.zero_()
+                module.v_bias.zero_()
         elif isinstance(module, LayoutLMv2Model):
             if hasattr(module, "visual_segment_embedding"):
-                module.visual_segment_embedding.data.normal_(mean=0.0, std=self.config.initializer_range)
+                module.visual_segment_embedding.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 def my_convert_sync_batchnorm(module, process_group=None):

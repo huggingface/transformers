@@ -37,7 +37,6 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_aimv2 import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
 
@@ -406,13 +405,14 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if hasattr(module, "logit_scale"):
             if isinstance(module.logit_scale, nn.Parameter):
-                module.logit_scale.data.fill_(math.log(1 / 0.07))
+                module.logit_scale.fill_(math.log(1 / 0.07))
         elif isinstance(module, Aimv2AttentionPoolingHead):
-            module.cls_token.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.cls_token.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring(
@@ -445,13 +445,11 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embed
 
-    @deprecate_kwarg("attention_mask", version="v4.58.0")
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values,
-        attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""

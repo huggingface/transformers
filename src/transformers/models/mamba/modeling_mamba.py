@@ -504,6 +504,7 @@ class MambaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         std = self.config.initializer_range
@@ -513,7 +514,7 @@ class MambaPreTrainedModel(PreTrainedModel):
             A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
             A = A.expand(module.intermediate_size, -1).contiguous()
             module.A_log.copy_(torch.log(A))
-            module.D.data.fill_(1.0)
+            module.D.fill_(1.0)
 
             dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale
             if self.config.time_step_init_scheme == "constant":
@@ -558,7 +559,7 @@ class MambaPreTrainedModel(PreTrainedModel):
                 if not getattr(module.bias, "_no_reinit", False):
                     nn.init.zeros_(module.bias)
         elif isinstance(module, MambaRMSNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, std=std)
 
@@ -721,7 +722,7 @@ class MambaModel(MambaPreTrainedModel):
     """
 )
 class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "backbone.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
