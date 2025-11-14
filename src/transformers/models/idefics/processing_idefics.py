@@ -29,7 +29,6 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available
-from ...utils.deprecation import deprecate_kwarg
 
 
 if is_torch_available():
@@ -171,7 +170,6 @@ class IdeficsProcessor(ProcessorMixin):
             "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
         )
 
-    @deprecate_kwarg(old_name="prompts", version="5.0.0", new_name="text", raise_if_both_names=True)
     def __call__(
         self,
         images: Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]] = None,

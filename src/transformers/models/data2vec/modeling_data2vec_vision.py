@@ -16,7 +16,6 @@
 
 import collections.abc
 import math
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -162,14 +161,7 @@ class Data2VecVisionEmbeddings(nn.Module):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
     ) -> torch.Tensor:
-        if self.position_embeddings is not None and interpolate_pos_encoding is not None:
-            warnings.warn(
-                "`interpolate_pos_encoding` argument has no effect for BEiTEmbeddings, embeddings are always "
-                "interpolated to the input image size. The argument will be removed in transformers v4.51.0."
-            )
-
         _, _, height, width = pixel_values.shape
         embeddings, (patch_height, patch_width) = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
@@ -327,19 +319,9 @@ class Data2VecVisionSdpaSelfAttention(Data2VecVisionSelfAttention):
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         if output_attentions:
             logger.warning_once(
-                "`Data2VecVisionSdpaSelfAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not "
-                "support `output_attentions=True`. Falling back to the manual attention implementation, "
-                "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
-                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
+                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
             )
-            return super().forward(
-                hidden_states=hidden_states,
-                output_attentions=output_attentions,
-                relative_position_bias=relative_position_bias,
-                interpolate_pos_encoding=interpolate_pos_encoding,
-                resolution=resolution,
-            )
-
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
             self.query(hidden_states)

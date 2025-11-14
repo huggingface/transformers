@@ -61,20 +61,6 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         kwargs.setdefault("size_divisor", size_divisibility)
         super().__init__(**kwargs)
 
-    @property
-    def size_divisibility(self):
-        logger.warning(
-            "`self.size_divisibility` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead"
-        )
-        return self.size_divisor
-
-    @size_divisibility.setter
-    def size_divisibility(self, value):
-        logger.warning(
-            "`self.size_divisibility` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead"
-        )
-        self.size_divisor = value
-
     def _pad_image(
         self,
         images: torch.Tensor,

@@ -16,7 +16,6 @@
 
 import json
 import os
-import warnings
 from functools import lru_cache
 from typing import Optional, Union
 
@@ -498,20 +497,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         tokens as "", thus we do not use the `unk_token` here.
         """
         return self.decoder.get(index, "")
-
-    def _normalize(self, text):
-        warnings.warn(
-            "The private method `_normalize` is deprecated and will be removed in v5 of Transformers."
-            "You can normalize an input string using the Whisper English normalizer using the `normalize` method."
-        )
-        return self.normalize(text)
-
-    def _basic_normalize(self, text, remove_diacritics=False):
-        warnings.warn(
-            "The private method `_basic_normalize` is deprecated and will be removed in v5 of Transformers."
-            "You can normalize an input string using the Whisper basic normalizer using the `basic_normalize` method."
-        )
-        return self.basic_normalize(text, remove_diacritics=remove_diacritics)
 
     def normalize(self, text):
         """
