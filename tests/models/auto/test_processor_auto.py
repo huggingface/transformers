@@ -69,6 +69,7 @@ from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 SAMPLE_PROCESSOR_CONFIG = get_tests_dir("fixtures/dummy_feature_extractor_config.json")
 SAMPLE_VOCAB_LLAMA = get_tests_dir("fixtures/test_sentencepiece.model")
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.json")
+SAMPLE_CONFIG = get_tests_dir("fixtures/config.json")
 SAMPLE_PROCESSOR_CONFIG_DIR = get_tests_dir("fixtures")
 
 
@@ -109,6 +110,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # copy relevant files
             copyfile(SAMPLE_PROCESSOR_CONFIG, os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME))
             copyfile(SAMPLE_VOCAB, os.path.join(tmpdirname, "vocab.json"))
+            copyfile(SAMPLE_CONFIG, os.path.join(tmpdirname, "config.json"))
 
             processor = AutoProcessor.from_pretrained(tmpdirname)
 

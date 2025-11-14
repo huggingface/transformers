@@ -1119,10 +1119,9 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         # Either attention or mamba will be initialized, depending on the layer type.
         self.self_attn = None
-        self.block_sparse_moe = GraniteMoeHybridMoE(config)
         self.input_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
+        self.block_sparse_moe = GraniteMoeHybridMoE(config)
         self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!
         self.shared_mlp = GraniteMoeHybridMLP(config)
         self.mamba = None
@@ -1202,16 +1201,17 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     }
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeHybridParallelExperts):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if isinstance(module, GraniteMoeHybridMambaLayer):
-            module.dt_bias.data.fill_(1.0)
-            module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
-            module.D.data.fill_(1.0)
+            module.dt_bias.fill_(1.0)
+            module.A_log.copy_(torch.log(torch.arange(1, module.num_heads + 1)))
+            module.D.fill_(1.0)
         elif isinstance(module, GraniteMoeHybridRMSNormGated):
-            module.weight.data.fill_(1.0)
+            module.weight.fill_(1.0)
 
 
 @auto_docstring
@@ -1395,7 +1395,7 @@ def load_balancing_loss_func(
 
 @auto_docstring
 class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

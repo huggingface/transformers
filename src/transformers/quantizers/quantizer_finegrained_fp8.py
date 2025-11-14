@@ -75,6 +75,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             dtype = torch.float32
         return dtype
 
+    # TODO: make this into a `ConversionType` ops -> potentially requires all weights on all ranks
+    # depending on the layer type (moe -> no if ep)
     def create_quantized_param(
         self,
         model: "PreTrainedModel",
@@ -93,8 +95,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
                     raise ValueError("Expect quantized weights but got an unquantized weight")
             else:
-                if tensor_name == "weight_scale_inv":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+                return
+                # if tensor_name == "weight_scale_inv":
+                #     raise ValueError("Expect unquantized weights but got a quantized weight_scale")
 
         param_value = param_value.to(target_device)
 
@@ -137,10 +140,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         _load_parameter_into_model(model, param_name.rsplit(".", 1)[0] + ".weight_scale_inv", scale)
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from ..integrations.finegrained_fp8 import FP8Linear
+        from ..integrations.finegrained_fp8 import FP8Expert, FP8Linear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, FP8Linear):
+        if isinstance(module, (FP8Linear, FP8Expert)):
             if self.pre_quantized or tensor_name == "bias":
                 return False
             else:
@@ -155,10 +158,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 
+        # takes 2 fucking seconds
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
 
+        # while this one is 81ms :)
         model = replace_with_fp8_linear(
             model,
             modules_to_not_convert=self.modules_to_not_convert,
@@ -182,6 +187,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
 
+    # NOTE: TP is applied before quantization so this is only to add hooks.
+    # Quantization is incompatible with DTensors, so we have to anyway have
+    # gathers! But it should be model independant -> figure out where to put
+    # the gather and that's it.
     def update_tp_plan(self, config):
         if "Qwen3" in config.__class__.__name__:
             text_plan = {

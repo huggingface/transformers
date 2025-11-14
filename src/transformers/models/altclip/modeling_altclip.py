@@ -770,6 +770,7 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_module = []
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
@@ -797,23 +798,21 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
                 module.text_projection.weight,
                 std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
             )
-            module.text_projection._is_hf_initialized = True
             nn.init.normal_(
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
             )
-            module.visual_projection._is_hf_initialized = True
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            module.bias.zero_()
+            module.weight.fill_(1.0)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_factor)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_factor)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_factor)
+            module.weight.normal_(mean=0.0, std=self.config.initializer_factor)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.weight[module.padding_idx].zero_()
 
 
 class AltCLIPVisionTransformer(nn.Module):

@@ -16,7 +16,6 @@
 Image/Text processor class for OWL-ViT
 """
 
-import warnings
 from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
@@ -174,18 +173,6 @@ class OwlViTProcessor(ProcessorMixin):
         of this method for more information.
         """
         return self.image_processor.post_process(*args, **kwargs)
-
-    def post_process_object_detection(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to [`OwlViTImageProcessor.post_process_object_detection`]. Please refer
-        to the docstring of this method for more information.
-        """
-        warnings.warn(
-            "`post_process_object_detection` method is deprecated for OwlVitProcessor and will be removed in v5. "
-            "Use `post_process_grounded_object_detection` instead.",
-            FutureWarning,
-        )
-        return self.image_processor.post_process_object_detection(*args, **kwargs)
 
     def post_process_grounded_object_detection(
         self,
