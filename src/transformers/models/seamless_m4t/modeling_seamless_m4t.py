@@ -2958,11 +2958,11 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.text_decoder = SeamlessM4TDecoder(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4TCodeHifiGan(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_encoder(self):
         return self.text_encoder
@@ -3602,9 +3602,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.text_decoder = SeamlessM4TDecoder(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
         self.current_modality = current_modality
         if current_modality == "speech":
             self.main_input_name = "input_features"
@@ -3612,6 +3609,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
         # these models already call post_init in their initialization
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4TCodeHifiGan(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def set_modality(self, modality="text"):
         if modality == "text":

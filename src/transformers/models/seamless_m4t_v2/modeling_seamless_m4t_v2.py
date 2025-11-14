@@ -3171,11 +3171,11 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
         self.text_decoder = SeamlessM4Tv2Decoder(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
         self.t2u_model = SeamlessM4Tv2TextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4Tv2CodeHifiGan(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.get_encoder
     def get_encoder(self):
@@ -3888,9 +3888,6 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
         self.text_decoder = SeamlessM4Tv2Decoder(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
         self.current_modality = current_modality
         if current_modality == "speech":
             self.main_input_name = "input_features"
@@ -3898,6 +3895,9 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
         # these models already call post_init in their initialization
         self.t2u_model = SeamlessM4Tv2TextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4Tv2CodeHifiGan(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel.set_modality
     def set_modality(self, modality="text"):
