@@ -84,12 +84,16 @@ print(processor.decode(generation[0]))
 
 [[autodoc]] T5Gemma2Config
 
-## T5Gemma2ModuleConfig
+## T5Gemma2TextConfig
 
-[[autodoc]] T5Gemma2ModuleConfig
+[[autodoc]] T5Gemma2TextConfig
 
-## T5Gemma2VisionConfig
-[[autodoc]] T5Gemma2VisionConfig
+## T5Gemma2EncoderConfig
+
+[[autodoc]] T5Gemma2EncoderConfig
+
+## T5Gemma2DecoderConfig
+[[autodoc]] T5Gemma2DecoderConfig
 
 ## T5Gemma2Model
 
