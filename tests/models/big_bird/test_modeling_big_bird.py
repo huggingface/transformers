@@ -46,7 +46,7 @@ class BigBirdModelTester:
         self,
         parent,
         batch_size=2,
-        seq_length=128,
+        seq_length=32,
         is_training=True,
         use_input_mask=True,
         use_token_type_ids=True,

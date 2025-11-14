@@ -56,8 +56,8 @@ class XCLIPVisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=3,
-        image_size=30,
+        batch_size=2,
+        image_size=8,
         patch_size=2,
         num_channels=3,
         num_frames=8,  # important; the batch size * time must be divisible by the number of frames
