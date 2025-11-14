@@ -15,7 +15,6 @@
 """PyTorch SEW model."""
 
 import math
-import warnings
 from collections.abc import Sequence
 from typing import Optional, Union
 
@@ -432,17 +431,6 @@ class SEWDFeatureEncoder(nn.Module):
             hidden_states = conv_layer(hidden_states)
 
         return hidden_states
-
-
-class SEWDFeatureExtractor(SEWDFeatureEncoder):
-    def __init__(self, config):
-        super().__init__(config)
-        warnings.warn(
-            f"The class `{self.__class__.__name__}` has been depreciated "
-            "and will be removed in Transformers v5. "
-            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
-            FutureWarning,
-        )
 
 
 class ContextPooler(nn.Module):
@@ -1431,18 +1419,6 @@ class SEWDForCTC(SEWDPreTrainedModel):
         elif target_lang is not None:
             self.load_adapter(target_lang, force_load=True)
 
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1554,18 +1530,6 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """

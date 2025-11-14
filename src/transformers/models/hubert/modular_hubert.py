@@ -214,9 +214,6 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
 
         del self.adapter
 
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for Hubert")
-
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Hubert")
 
