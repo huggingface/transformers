@@ -42,10 +42,6 @@ from .utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 
 
 logger = logging.get_logger(__name__)
-
-# Slow tokenizers are saved in a vocabulary plus three separated files
-SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
-ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 
