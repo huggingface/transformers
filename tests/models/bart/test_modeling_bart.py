@@ -21,7 +21,10 @@ from functools import cached_property
 
 import timeout_decorator  # noqa
 
+from parameterized import parameterized
+
 from transformers import BartConfig, is_torch_available
+from transformers.cache_utils import DynamicCache, EncoderDecoderCache
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
@@ -315,6 +318,57 @@ class BartHeadTests(unittest.TestCase):
         summary = torch.tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]], device=torch_device, dtype=torch.long)
         outputs = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
+        self.assertEqual(outputs["logits"].shape, expected_shape)
+
+    @parameterized.expand(["sdpa", "eager"])
+    def test_lm_uneven_forward_with_mask(self, attn_implementation):
+        config = BartConfig(
+            vocab_size=self.vocab_size,
+            d_model=14,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_ffn_dim=8,
+            decoder_ffn_dim=8,
+            max_position_embeddings=48,
+        )
+        config._attn_implementation = attn_implementation
+        lm_model = BartForConditionalGeneration(config).to(torch_device)
+        context = torch.tensor(
+            [[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]], device=torch_device, dtype=torch.long
+        )
+        mask = torch.ones((context.shape[0], context.shape[1] + 2), device=context.device, dtype=torch.int64)
+        shape1 = (2, 2, 7, 7)
+        shape2 = (2, 2, 2, 7)
+        past_key_values = EncoderDecoderCache(
+            self_attention_cache = DynamicCache(
+                [
+                    (
+                        torch.zeros(shape1, device=context.device, dtype=torch.float),
+                        torch.zeros(shape1, device=context.device, dtype=torch.float),
+                    ),
+                    (
+                        torch.zeros(shape1, device=context.device, dtype=torch.float),
+                        torch.zeros(shape1, device=context.device, dtype=torch.float),
+                    ),
+                ]
+            ),
+            cross_attention_cache = DynamicCache(
+                [
+                    (
+                        torch.zeros(shape2, device=context.device, dtype=torch.float),
+                        torch.zeros(shape2, device=context.device, dtype=torch.float),
+                    ),
+                    (
+                        torch.zeros(shape2, device=context.device, dtype=torch.float),
+                        torch.zeros(shape2, device=context.device, dtype=torch.float),
+                    ),
+                ]
+            ),
+        )
+        outputs = lm_model(input_ids=context, attention_mask=mask, past_key_values=past_key_values)
+        expected_shape = (2, 7, config.vocab_size)
         self.assertEqual(outputs["logits"].shape, expected_shape)
 
     def test_generate_beam_search(self):
