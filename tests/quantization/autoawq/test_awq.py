@@ -305,6 +305,9 @@ class AwqFusedTest(unittest.TestCase):
     multi_modal_model_name = "ybelkada/llava-1.5-7b-hf-awq"
     multi_modal_model_code_revision = "ad108a50f5b9e681bdd7378409f57b7fa59a7442"
 
+    awq_rope_model_name = "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
+    awq_rope_model_revision = "db1f81ad4b8c7e39777509fac66c652eb0a52f91"
+
     prompt = (
         "You're standing on the surface of the Earth. "
         "You walk one mile south, one mile west and one mile north. "
@@ -314,6 +317,7 @@ class AwqFusedTest(unittest.TestCase):
     EXPECTED_GENERATION = prompt + "\n\nYou're at the center of a square."
     EXPECTED_GENERATION_CUSTOM_MODEL = "Hello,\n\nI have a problem with my 20"
     EXPECTED_GENERATION_MIXTRAL = prompt + " You're on the North Pole.\n\nThe"
+    EXPECTED_GENERATION_AWQ_ROPE = prompt + " [Note: You can't be in a city, and"
 
     def tearDown(self):
         gc.collect()
@@ -512,6 +516,33 @@ class AwqFusedTest(unittest.TestCase):
 
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_MIXTRAL)
+
+    @pytest.mark.flash_attn_test
+    @require_flash_attn
+    @require_torch_multi_gpu
+    @unittest.skipIf(
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
+    )
+    def test_generation_awq_rope_fused(self):
+        """
+        Text generation test for AWQ model with special RoPE implementation (e.g. LLaMA3) + fused
+        """
+        quantization_config = AwqConfig(bits=4, fuse_max_seq_len=1024, do_fuse=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.awq_rope_model_name,
+            quantization_config=quantization_config,
+            device_map="auto",
+            revision=self.awq_rope_model_revision,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(self.awq_rope_model_name)
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer([self.prompt, self.prompt], return_tensors="pt", padding=True).to(torch_device)
+
+        outputs = model.generate(**inputs, max_new_tokens=12, do_sample=False)
+        self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_AWQ_ROPE)
 
 
 @slow
