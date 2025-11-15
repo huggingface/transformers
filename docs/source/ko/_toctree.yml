@@ -392,8 +392,8 @@
   - sections:
     - local: model_doc/auto
       title: Auto Classes
-    - local: in_translation
-      title: (번역중) Backbones
+    - local: main_classes/backbones
+      title: 백본
     - local: main_classes/callback
       title: Callbacks
     - local: main_classes/configuration
