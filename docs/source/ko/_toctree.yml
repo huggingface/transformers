@@ -273,8 +273,8 @@
         title: 문서 질의 응답(Document Question Answering)
       - local: tasks/visual_question_answering
         title: 시각적 질의응답 (Visual Question Answering)
-      - local: in_translation
-        title: (번역중) Text to speech
+      - local: tasks/text-to-speech
+        title: 텍스트 음성 변환
       - local: tasks/idefics
         title: IDEFICS를 이용한 이미지 작업
       - local: in_translation
