@@ -103,6 +103,9 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
     model_type = "csm_depth_decoder_model"
     base_config_key = "depth_decoder_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "codebook_size": "vocab_size",
+    }
 
     def __init__(
         self,
