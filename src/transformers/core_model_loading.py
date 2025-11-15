@@ -32,6 +32,7 @@ import torch
 
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, DTensor, Replicate, TensorParallelLayer
 from .utils import is_torch_greater_or_equal, logging
+from .utils.quantization_config import QuantizationMethod
 
 
 _torch_distributed_available = torch.distributed.is_available()
@@ -63,6 +64,21 @@ str_to_torch_dtype = {
 
 
 logger = logging.get_logger(__name__)
+
+str_to_torch_dtype = {
+    "BOOL": torch.bool,
+    "U8": torch.uint8,
+    "I8": torch.int8,
+    "I16": torch.int16,
+    "F16": torch.float16,
+    "BF16": torch.bfloat16,
+    "I32": torch.int32,
+    "F32": torch.float32,
+    "F64": torch.float64,
+    "I64": torch.int64,
+    "F8_E4M3": torch.float8_e4m3fn,
+    "F8_E5M2": torch.float8_e5m2,
+}
 
 
 def _glob_to_regex_src(glob: str, *, digits_only: bool = True) -> str:
@@ -389,11 +405,15 @@ def set_param_for_module(
     missing_keys: MutableSet[str],
     misc: MutableMapping[str, Any],
     distributed_operation: Optional[TensorParallelLayer],
+    hf_quantizer: HfQuantizer
 ):
     with log_to_misc(layer_name, misc, layer_name):
         module_path, _, param_name = layer_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
-        param_value = param_value[0] if isinstance(param_value, list) else param_value[...]
+        if isinstance(param_value, list):
+            param_value = param_value[0]
+        elif not isinstance(param_value, torch.nn.Parameter):
+            param_value = param_value[...]
         ref = getattr(module_obj, param_name)
 
         use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
@@ -415,7 +435,7 @@ def set_param_for_module(
 
         # Remove from missing keys (it's either mismatched, or all good)
         missing_keys.discard(layer_name)
-        if ref is not None and ref.shape != param_value.shape:
+        if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
             module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
         else:
@@ -434,7 +454,7 @@ def convert_and_load_state_dict_in_model(
     state_dict: dict[str, Any],
     weight_mapping: dict[str, WeightConverter] | None,
     tp_plan: dict[str, str] | None,
-    quantizer: HfQuantizer | None,
+    hf_quantizer: HfQuantizer | None,
     dtype: torch.dtype | None = None,
     device_map: dict | None = None,
     dtype_plan: dict | None = None,
@@ -496,13 +516,13 @@ def convert_and_load_state_dict_in_model(
                 unexpected_keys.add(t)
                 continue
 
-            if quantizer is not None and quantizer.param_needs_quantization(model, t):
-                if quantizer.__class__.__name__ == "FineGrainedFP8HfQuantizer":
-                    from .integrations.finegrained_fp8 import Fp8Quantize
-
-                    converter.quantization_operation = Fp8Quantize()  # TODO support other methods
-                else:
-                    raise ValueError("This quantization method is gonna be supported SOOOON")
+            if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, t):
+                converter.quantization_operation = hf_quantizer.get_quantize_ops()
+                # TODO: to clean later. We need to use the empty_param from the checkpoint to decide if we upcast the param to a specific dtype
+                k_dtype = tensor.get_dtype()
+                dtype = str_to_torch_dtype[k_dtype]
+                empty_param_checkpoint = torch.empty(size=tensor.get_shape(), dtype=dtype, device="meta")
+                _, _dtype = _infer_parameter_dtype(model, t, empty_param_checkpoint, hf_quantizer)
             else:
                 _dtype = dtype
                 matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
@@ -570,9 +590,7 @@ def convert_and_load_state_dict_in_model(
                             if op := converter.quantization_operation:
                                 with log_to_misc(layer_name, misc, op=op):
                                     realized_value.update(
-                                        op.convert(
-                                            {k: realized_value.pop(k)}, quant_config=quantizer.quantization_config
-                                        )
+                                        op.convert({k: realized_value.pop(k)}, model=model, missing_keys=missing_keys)
                                     )
 
                         for k, output_value in realized_value.items():
@@ -586,6 +604,7 @@ def convert_and_load_state_dict_in_model(
                                 missing_keys,
                                 misc,
                                 converter.distributed_operation,
+                                hf_quantizer
                             )
 
                 except SkipLayer:
@@ -614,3 +633,34 @@ def revert_weight_conversion(model, state_dict):
         original_state_dict[key] = value
     state_dict = original_state_dict
     return state_dict
+
+def _infer_parameter_dtype(
+    model: torch.nn.Module,
+    param_name: str,
+    empty_param: torch.Tensor,
+    hf_quantizer: Optional[HfQuantizer] = None,
+) -> tuple[bool, Optional[torch.dtype]]:
+    try:
+        old_param = model.get_parameter_or_buffer(param_name)
+    except Exception as e:
+        if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
+            QuantizationMethod.HQQ,
+            QuantizationMethod.QUARK,
+            QuantizationMethod.MXFP4,
+            QuantizationMethod.BITS_AND_BYTES,
+        }:
+            return True, None
+        else:
+            raise e
+    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
+    # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
+    # in int/uint/bool and not cast them.
+    casting_dtype = None
+    is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
+    if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+        # dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
+        if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, param_name):
+            casting_dtype = model.config._pre_quantization_dtype
+        else:
+            casting_dtype = old_param.dtype
+    return old_param is not None and old_param.is_contiguous(), casting_dtype

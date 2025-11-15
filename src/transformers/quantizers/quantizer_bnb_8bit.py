@@ -238,3 +238,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             model, self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         return model
+
+    def get_quantize_ops(self):
+        from ..integrations.bitsandbytes import Bnb8bitQuantize
+        return Bnb8bitQuantize(self)

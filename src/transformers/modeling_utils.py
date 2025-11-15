@@ -47,7 +47,11 @@ from torch.utils.checkpoint import checkpoint
 from . import initialization as init
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_checkpoint_conversion_mapping
-from .core_model_loading import WeightConverter, convert_and_load_state_dict_in_model, revert_weight_conversion
+from .core_model_loading import (
+    WeightConverter,
+    convert_and_load_state_dict_in_model,
+    revert_weight_conversion,
+)
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -3325,6 +3329,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 error_names.extend(shared_names)
 
             if len(error_names) > 0:
+                suggested_fix = {v: k for k, v in list(shared_ptrs.values())} if shared_ptrs else None
                 raise RuntimeError(
                     f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined. We found `_tied_weights_keys` to be: {_tied_weights_keys}.\n"
                     "This can also just mean that the module's tied weight keys are wrong vs the actual tied weights in the model.",
@@ -4053,26 +4058,30 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
+            copy_model = cls(config, *model_args, **model_kwargs)
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
         if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
-            hf_quantizer.preprocess_model(
-                model=model,
-                device_map=device_map,
-                keep_in_fp32_modules=model._keep_in_fp32_modules,  # TODO prob no longer needed?
-                config=config,
-                checkpoint_files=checkpoint_files,
-                use_kernels=use_kernels,
-            )
+            for m in [model, copy_model]:
+                hf_quantizer.preprocess_model(
+                    model=m,
+                    device_map=device_map,
+                    keep_in_fp32_modules=model._keep_in_fp32_modules,  # TODO prob no longer needed?
+                    config=config,
+                    checkpoint_files=checkpoint_files,
+                    use_kernels=use_kernels,
+                )
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
             model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
 
         # Prepare the full device map
         if device_map is not None:
-            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, dtype)
+            # simple solution as deepcopy don't work. We want to tie the weights afterwards.
+            copy_model.tie_weights()
+            device_map = _get_device_map(copy_model, device_map, max_memory, hf_quantizer, dtype)
 
         # restore default dtype
         if dtype_orig is not None:
@@ -4723,6 +4732,9 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         try:
             param = model.get_parameter_or_buffer(param_name)
         except AttributeError:
+            # TODO: for now let's skip if we can't find the parameters
+            if hf_quantizer is not None:
+                continue
             raise AttributeError(f"Parameter {param_name} not found in model")
 
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
