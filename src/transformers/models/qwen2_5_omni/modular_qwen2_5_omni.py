@@ -361,12 +361,13 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         max_window_layers: Optional[int] = 28,
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[float] = 0.0,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
         **kwargs,
     ):
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -376,6 +377,9 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window if self.use_sliding_window else None
         self.max_window_layers = max_window_layers
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -740,6 +744,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
 
         self.initializer_range = initializer_range
         self.spatial_merge_size = spatial_merge_size
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -756,7 +761,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 class Qwen2_5OmniDiTConfig(PreTrainedConfig):
@@ -2067,7 +2072,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         self.vocab_size = config.text_config.vocab_size
         self.model = Qwen2_5OmniThinkerTextModel._from_config(config.text_config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.spatial_merge_size = config.vision_config.spatial_merge_size
         self.rope_deltas = None
         self.post_init()

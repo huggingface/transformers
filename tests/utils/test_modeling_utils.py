@@ -1462,8 +1462,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config_no_pad_token = PreTrainedConfig()
-                    config_no_pad_token.pad_token_id = None
+                    config_no_pad_token = PreTrainedConfig(pad_token_id=None, bos_token_id=None, eos_token_id=None)
                     model = ModelWithHead(config_no_pad_token)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
@@ -1473,8 +1472,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PreTrainedConfig()
-                    config.pad_token_id = 0
+                    config = PreTrainedConfig(pad_token_id=0, bos_token_id=None, eos_token_id=None)
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
                     attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]])
@@ -1485,8 +1483,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PreTrainedConfig()
-                    config.pad_token_id = 0
+                    config = PreTrainedConfig(pad_token_id=0, bos_token_id=None, eos_token_id=None)
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[1, 345, 232, 328, 740, 140, 1695, 69, 6078, 2341, 25]])
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
@@ -1496,8 +1493,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PreTrainedConfig()
-                    config.pad_token_id = 0
+                    config = PreTrainedConfig(pad_token_id=0, bos_token_id=None, eos_token_id=None)
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
@@ -1507,8 +1503,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PreTrainedConfig()
-                    config.pad_token_id = 0
+                    config = PreTrainedConfig(pad_token_id=0, bos_token_id=None, eos_token_id=None)
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[432, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
@@ -1518,8 +1513,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PreTrainedConfig()
-                    config.pad_token_id = 0
+                    config = PreTrainedConfig(pad_token_id=0, bos_token_id=None, eos_token_id=None)
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
@@ -1530,9 +1524,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PreTrainedConfig()
-                    config.pad_token_id = 0
-                    config.bos_token_id = config.pad_token_id
+                    config = PreTrainedConfig(pad_token_id=0, bos_token_id=0, eos_token_id=None)
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
@@ -1542,8 +1534,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             from torch._dynamo import config, testing
 
-            config = PreTrainedConfig()
-            config.pad_token_id = 0
+            config = PreTrainedConfig(pad_token_id=0, bos_token_id=None, eos_token_id=None)
             model = ModelWithHead(config)
             input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
 

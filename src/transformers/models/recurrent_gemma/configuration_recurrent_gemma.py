@@ -87,6 +87,8 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         num_key_value_heads (`16`, *optional*, defaults to 16): Number of key value heads to use GQA.
         attention_bias (`bool`, *optional*, defaults to `False`): whether or not the linear q,k,v of the Attention layer should have bias
         w_init_variance_scale (`float`, *optional*, defaults to 0.01): weight initialization variance.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     ```python
     >>> from transformers import RecurrentGemmaModel, RecurrentGemmaConfig
 
@@ -126,6 +128,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         num_key_value_heads: Optional[int] = None,
         attention_bias: Optional[str] = False,
         w_init_variance_scale: Optional[float] = 0.01,
+        tie_word_embeddings: Optional[bool] = True,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -150,6 +153,10 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.w_init_variance_scale = w_init_variance_scale
         self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
@@ -159,12 +166,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     @property
     def layers_block_type(self):

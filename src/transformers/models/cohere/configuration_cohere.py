@@ -173,13 +173,11 @@ class CohereConfig(PreTrainedConfig):
         rope_theta = kwargs.get("rope_theta", 500000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["CohereConfig"]
