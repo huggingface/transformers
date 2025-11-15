@@ -26,7 +26,6 @@ import regex as re
 import torch
 
 from transformers import CLIPTokenizerFast
-from transformers.models.sam2_video.configuration_sam2_video import Sam2VideoConfig, Sam2VideoPromptEncoderConfig
 from transformers.models.sam2_video.video_processing_sam2_video import Sam2VideoVideoProcessor
 from transformers.models.sam3.image_processing_sam3_fast import Sam3ImageProcessorFast
 from transformers.models.sam3_video.configuration_sam3_video import Sam3VideoConfig
@@ -549,14 +548,7 @@ def get_sam3_video_config(
     Returns:
         Sam3Config instance
     """
-    prompt_encoder_config = Sam2VideoPromptEncoderConfig(image_size=1008, patch_size=14)
-    tracker_config = Sam2VideoConfig(
-        prompt_encoder_config=prompt_encoder_config,
-        image_size=1008,
-        memory_attention_rope_feat_sizes=[72, 72],
-    )
-    tracker_config.vision_config.backbone_feature_sizes = [[288, 288], [144, 144], [72, 72]]
-    config = Sam3VideoConfig(tracker_config=tracker_config)
+    config = Sam3VideoConfig()
 
     # Update with any provided overrides
     if vision_config is not None:

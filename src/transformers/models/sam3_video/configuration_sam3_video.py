@@ -16,8 +16,7 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ..sam2_video.configuration_sam2_video import Sam2VideoConfig
-from ..sam3.configuration_sam3 import Sam3Config
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -102,8 +101,8 @@ class Sam3VideoConfig(PreTrainedConfig):
     model_type = "sam3_video"
     is_composition = True
     sub_configs = {
-        "detector_config": Sam3Config,
-        "tracker_config": Sam2VideoConfig,
+        "detector_config": AutoConfig,
+        "tracker_config": AutoConfig,
     }
 
     def __init__(
@@ -147,8 +146,9 @@ class Sam3VideoConfig(PreTrainedConfig):
             detector_config = {}
             logger.info("detector_config is None. Initializing the Sam3Config with default values.")
         if isinstance(detector_config, dict):
-            self.detector_config = Sam3Config(**detector_config)
-        elif isinstance(detector_config, Sam3Config):
+            detector_config["model_type"] = detector_config.get("model_type", "sam3")
+            self.detector_config = CONFIG_MAPPING[detector_config["model_type"]](**detector_config)
+        elif isinstance(detector_config, PreTrainedConfig):
             self.detector_config = detector_config
         else:
             raise ValueError(f"detector_config must be a dict or Sam3Config, got {type(detector_config)}")
@@ -158,8 +158,9 @@ class Sam3VideoConfig(PreTrainedConfig):
             tracker_config = {}
             logger.info("tracker_config is None. Initializing the Sam2VideoConfig with default values.")
         if isinstance(tracker_config, dict):
-            self.tracker_config = Sam2VideoConfig(**tracker_config)
-        elif isinstance(tracker_config, Sam2VideoConfig):
+            tracker_config["model_type"] = tracker_config.get("model_type", "sam3_tracker_video")
+            self.tracker_config = CONFIG_MAPPING[tracker_config["model_type"]](**tracker_config)
+        elif isinstance(tracker_config, PreTrainedConfig):
             self.tracker_config = tracker_config
         else:
             raise ValueError(f"tracker_config must be a dict or Sam2VideoConfig, got {type(tracker_config)}")

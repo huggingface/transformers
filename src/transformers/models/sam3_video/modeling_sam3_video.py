@@ -2,21 +2,18 @@ from collections import OrderedDict, defaultdict
 from copy import deepcopy
 from typing import Any, Optional, Union
 
-import numpy as np
-import numpy.typing as npt
 import torch
 import torch.nn.functional as F
 from kernels import get_kernel
 from torch import Tensor, nn
 from tqdm.auto import tqdm
 
-from transformers import Sam2VideoModel, Sam3Model
+from transformers import Sam3Model
 from transformers.models.sam3.modeling_sam3 import Sam3VisionNeck
 
-# Optional dependencies for post-processing
-# Optional dependencies for post-processing
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ..auto import AutoModel
 from .configuration_sam3_video import Sam3VideoConfig
 
 
@@ -210,6 +207,56 @@ class Sam3VideoInferenceSession:
         """Remove mask inputs."""
         self.mask_inputs_per_obj[obj_idx].pop(frame_idx, None)
 
+    def remove_object(self, obj_id: int, strict: bool = False):
+        """
+        Remove an object from the inference session. This would remove the object from
+        all frames in the video.
+
+        Args:
+            obj_id (`int`): The object ID to remove.
+        """
+        old_obj_idx_to_rm = self._obj_id_to_idx.get(obj_id, None)
+        # Check whether this object_id to remove actually exists and possibly raise an error.
+        if old_obj_idx_to_rm is None:
+            if not strict:
+                return
+            raise RuntimeError(
+                f"Cannot remove object id {obj_id} as it doesn't exist. All existing object ids: {self.obj_ids}."
+            )
+
+        # If this is the only remaining object id, we simply reset the state.
+        if len(self._obj_id_to_idx) == 1:
+            self.reset_inference_session()
+            return
+
+        # Step 1: Update the object id mapping (note that it must be done after Step 0,
+        # since Step 0 still requires the old object id mappings in inference_state)
+        old_obj_ids = self.obj_ids
+        old_obj_inds = list(range(len(old_obj_ids)))
+        remain_old_obj_inds = old_obj_inds.copy()
+        remain_old_obj_inds.remove(old_obj_idx_to_rm)
+        new_obj_ids = [old_obj_ids[old_idx] for old_idx in remain_old_obj_inds]
+        new_obj_inds = list(range(len(new_obj_ids)))
+        # build new mappings
+        old_idx_to_new_idx = dict(zip(remain_old_obj_inds, new_obj_inds))
+        self._obj_id_to_idx = dict(zip(new_obj_ids, new_obj_inds))
+        self._obj_idx_to_id = dict(zip(new_obj_inds, new_obj_ids))
+        self.obj_ids = new_obj_ids
+
+        # Step 2: For per-object tensor storage, we shift their obj_idx in the dict keys.
+        def _map_keys(container):
+            new_kvs = []
+            for k in old_obj_inds:
+                v = container.pop(k)
+                if k in old_idx_to_new_idx:
+                    new_kvs.append((old_idx_to_new_idx[k], v))
+            container.update(new_kvs)
+
+        _map_keys(self.point_inputs_per_obj)
+        _map_keys(self.mask_inputs_per_obj)
+        _map_keys(self.output_dict_per_obj)
+        _map_keys(self.frames_tracked_per_obj)
+
     # Output management with smart device placement
     def store_output(
         self,
@@ -389,7 +436,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.detector_model = Sam3Model(config.detector_config)
-        self.tracker_model = Sam2VideoModel(config.tracker_config)
+        self.tracker_model = AutoModel.from_config(config.tracker_config)
         self.low_res_mask_size = config.low_res_mask_size
         self.score_threshold_detection = config.score_threshold_detection
         self.det_nms_thresh = config.det_nms_thresh
@@ -423,11 +470,10 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
         self.tracker_neck = Sam3VisionNeck(config.detector_config.vision_config)
 
-    def get_vision_features_for_tracker(self, input_height: int, input_width: int, vision_embeds: torch.Tensor):
+    def get_vision_features_for_tracker(self, vision_embeds: torch.Tensor):
         hidden_states = vision_embeds.last_hidden_state
         batch_size = hidden_states.shape[0]
-        height = input_height // self.config.detector_config.vision_config.backbone_config.patch_size
-        width = input_width // self.config.detector_config.vision_config.backbone_config.patch_size
+        height, width = self.tracker_model.prompt_encoder.image_embedding_size
         hidden_states_spatial = hidden_states.view(batch_size, height, width, -1).permute(0, 3, 1, 2)
 
         fpn_hidden_states, fpn_position_encoding = self.tracker_neck(hidden_states_spatial)
@@ -446,15 +492,13 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         ]
         return feature_maps, feature_maps_position_embeddings
 
-    def run_backbone_and_detection(
+    def run_detection(
         self,
         inference_session: Sam3VideoInferenceSession,
+        vision_embeds: torch.Tensor,
         frame_idx: int,
         reverse: bool,
     ):
-        pixel_values = inference_session.get_frame(frame_idx).unsqueeze(0)
-        input_height, input_width = pixel_values.shape[-2:]
-        vision_embeds = self.detector_model.get_vision_features(pixel_values=pixel_values)
         if inference_session.has_new_text_input:
             text_embeds = self.detector_model.get_text_features(
                 input_ids=inference_session.text_input_ids,
@@ -493,15 +537,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             "scores": pred_probs[pos_pred_idx[0], pos_pred_idx[1]],
         }
 
-        # share the vision encoder outputs from the detector to the tracker
-        vision_feats, vision_pos_embeds = self.get_vision_features_for_tracker(
-            input_height=input_height,
-            input_width=input_width,
-            vision_embeds=vision_embeds,
-        )
-        inference_session.cache.cache_vision_features(
-            frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
-        )
         return det_out
 
     def run_tracker_propagation(
@@ -550,26 +585,26 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
     def _associate_det_trk(
         self,
         det_masks: Tensor,
-        det_scores_np: npt.NDArray,
+        det_scores: Tensor,
         trk_masks: Tensor,
-        trk_obj_ids: npt.NDArray,
+        trk_obj_ids: list[int],
     ):
         """
         Match detections on the current frame with the existing masklets.
 
         Args:
           - det_masks: (N, H, W) tensor of predicted masks
-          - det_scores_np: (N,) array of detection scores
+          - det_scores: (N,) tensor of detection scores
           - trk_masks: (M, H, W) tensor of track masks
-          - trk_obj_ids: (M,) array of object IDs corresponding to trk_masks
+          - trk_obj_ids: (M,) list of object IDs corresponding to trk_masks
 
         Returns:
-          - new_det_out_inds: array of new object indices among in FA detection outputs
-          - unmatched_trk_obj_ids: array of existing masklet object IDs that are not matched
+          - new_det_out_inds: list of new object indices among in FA detection outputs
+          - unmatched_trk_obj_ids: list of existing masklet object IDs that are not matched
             to any detections on this frame (for unmatched, we only count masklets with >0 area)
-          - det_to_matched_trk_obj_ids: dict[int, npt.NDArray]: mapping from FA detection indices
+          - det_to_matched_trk_obj_ids: dict[int, list[int]]: mapping from FA detection indices
             to the list of matched tracklet object IDs
-          - empty_trk_obj_ids: array of existing masklet object IDs with zero area in SAM2 prediction
+          - empty_trk_obj_ids: list of existing masklet object IDs with zero area in SAM2 prediction
         """
         iou_threshold = self.assoc_iou_thresh
         iou_threshold_trk = self.trk_assoc_iou_thresh
@@ -578,11 +613,19 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         assert det_masks.is_floating_point(), "float tensor expected (do not binarize)"
         assert trk_masks.is_floating_point(), "float tensor expected (do not binarize)"
         assert trk_masks.size(0) == len(trk_obj_ids)
+        assert det_scores.ndim == 1, "det_scores should be 1D tensor"
+        assert det_scores.size(0) == det_masks.size(0), "scores and masks must match"
+
+        trk_obj_ids_tensor = (
+            torch.tensor(trk_obj_ids, dtype=torch.long, device=det_masks.device)
+            if trk_obj_ids
+            else torch.empty(0, dtype=torch.long, device=det_masks.device)
+        )
         if trk_masks.size(0) == 0:
             # all detections are new
-            new_det_out_inds = np.arange(det_masks.size(0))
-            unmatched_trk_obj_ids = np.array([], np.int64)
-            empty_trk_obj_ids = np.array([], np.int64)
+            new_det_out_inds = list(range(det_masks.size(0)))
+            unmatched_trk_obj_ids = []
+            empty_trk_obj_ids = []
             det_to_matched_trk_obj_ids = {}
             trk_id_to_max_iou_high_conf_det = {}
             return (
@@ -594,10 +637,11 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             )
         elif det_masks.size(0) == 0:
             # all previous tracklets are unmatched if they have a non-zero area
-            new_det_out_inds = np.array([], np.int64)
-            trk_is_nonempty = (trk_masks > 0).any(dim=(1, 2)).cpu().numpy()
-            unmatched_trk_obj_ids = trk_obj_ids[trk_is_nonempty]
-            empty_trk_obj_ids = trk_obj_ids[~trk_is_nonempty]
+            new_det_out_inds = []
+            trk_is_nonempty = (trk_masks > 0).any(dim=(1, 2))  # (M,) tensor
+            # Use tensor boolean indexing - elegant and avoids intermediate conversions
+            unmatched_trk_obj_ids = trk_obj_ids_tensor[trk_is_nonempty].tolist()
+            empty_trk_obj_ids = trk_obj_ids_tensor[~trk_is_nonempty].tolist()
             det_to_matched_trk_obj_ids = {}
             trk_id_to_max_iou_high_conf_det = {}
             return (
@@ -610,7 +654,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
         if det_masks.shape[-2:] != trk_masks.shape[-2:]:
             # resize to the smaller size to save GPU memory
-            if np.prod(det_masks.shape[-2:]) < np.prod(trk_masks.shape[-2:]):
+            if (det_masks.shape[-2] * det_masks.shape[-1]) < (trk_masks.shape[-2] * trk_masks.shape[-1]):
                 trk_masks = F.interpolate(
                     trk_masks.unsqueeze(1),
                     size=det_masks.shape[-2:],
@@ -628,36 +672,41 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
         det_masks_binary = det_masks > 0
         trk_masks_binary = trk_masks > 0
-        ious = mask_iou(det_masks_binary, trk_masks_binary)  # (N, M)
+        ious = mask_iou(det_masks_binary, trk_masks_binary)  # (N, M) tensor
 
-        ious_np = ious.cpu().numpy()
-        trk_is_matched = (ious_np >= iou_threshold_trk).any(axis=0)
+        # trk_is_matched: for each track, True if matched to any detection above threshold
+        trk_is_matched = (ious >= iou_threshold_trk).any(dim=0)  # (M,)
         # Non-empty tracks not matched by Hungarian assignment above threshold are unmatched
-        trk_is_nonempty = trk_masks_binary.any(dim=(1, 2)).cpu().numpy()
-        trk_is_unmatched = np.logical_and(trk_is_nonempty, ~trk_is_matched)
-        unmatched_trk_obj_ids = trk_obj_ids[trk_is_unmatched]
-        # also record masklets that have zero area in SAM 2 prediction
-        empty_trk_obj_ids = trk_obj_ids[~trk_is_nonempty]
+        trk_is_nonempty = trk_masks_binary.any(dim=(1, 2))  # (M,)
+        trk_is_unmatched = trk_is_nonempty & ~trk_is_matched  # (M,)
+        # Use tensor boolean indexing directly - no intermediate conversions
+        unmatched_trk_obj_ids = trk_obj_ids_tensor[trk_is_unmatched].tolist()
+        empty_trk_obj_ids = trk_obj_ids_tensor[~trk_is_nonempty].tolist()
 
         # For detections: allow many tracks to match to the same detection (many-to-one)
         # So, a detection is 'new' if it does not match any track above threshold
-        is_new_det = np.logical_and(
-            det_scores_np >= new_det_thresh,
-            np.logical_not(np.any(ious_np >= iou_threshold, axis=1)),
-        )
-        new_det_out_inds = np.nonzero(is_new_det)[0]
+        det_matches_any_trk = (ious >= iou_threshold).any(dim=1)  # (N,)
+        is_new_det = (det_scores >= new_det_thresh) & ~det_matches_any_trk  # (N,)
+        new_det_out_inds = torch.where(is_new_det)[0].tolist()
 
-        # for each detection, which tracks it matched to (above threshold)
+        # Build detection-to-track mappings using tensor operations
         det_to_matched_trk_obj_ids = {}
         trk_id_to_max_iou_high_conf_det = {}  # trk id --> exactly one detection idx
-        det_to_max_iou_trk_idx = np.argmax(ious_np, axis=1)
-        det_is_high_conf = (det_scores_np >= self.high_conf_thresh) & ~is_new_det
-        det_is_high_iou = np.max(ious_np, axis=1) >= self.high_iou_thresh
-        det_is_high_conf_and_iou = set(np.nonzero(det_is_high_conf & det_is_high_iou)[0])
+        det_to_max_iou_trk_idx = ious.argmax(dim=1)  # (N,)
+        det_is_high_conf = (det_scores >= self.high_conf_thresh) & ~is_new_det  # (N,)
+        det_max_iou = ious.max(dim=1)[0]  # (N,)
+        det_is_high_iou = det_max_iou >= self.high_iou_thresh  # (N,)
+        det_is_high_conf_and_iou = det_is_high_conf & det_is_high_iou  # (N,)
+        high_conf_and_iou_mask = det_is_high_conf_and_iou  # Keep as tensor
+
         for d in range(det_masks.size(0)):
-            det_to_matched_trk_obj_ids[d] = trk_obj_ids[ious_np[d, :] >= iou_threshold]
-            if d in det_is_high_conf_and_iou:
-                trk_obj_id = trk_obj_ids[det_to_max_iou_trk_idx[d]].item()
+            # Find which tracks match this detection using tensor boolean indexing
+            matched_trk_mask = ious[d] >= iou_threshold  # (M,)
+            det_to_matched_trk_obj_ids[d] = trk_obj_ids_tensor[matched_trk_mask].tolist()
+
+            if high_conf_and_iou_mask[d].item():
+                trk_idx = det_to_max_iou_trk_idx[d].item()
+                trk_obj_id = trk_obj_ids_tensor[trk_idx].item()
                 trk_id_to_max_iou_high_conf_det[trk_obj_id] = d
 
         return (
@@ -673,10 +722,10 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         inference_session: Sam3VideoInferenceSession,
         frame_idx: int,
         reverse: bool,
-        det_to_matched_trk_obj_ids: dict[int, npt.NDArray],
-        new_det_obj_ids: npt.NDArray,
-        empty_trk_obj_ids: npt.NDArray,
-        unmatched_trk_obj_ids: npt.NDArray,
+        det_to_matched_trk_obj_ids: dict[int, list[int]],
+        new_det_obj_ids: list[int],
+        empty_trk_obj_ids: list[int],
+        unmatched_trk_obj_ids: list[int],
         extra_metadata: dict[str, Any],
     ):
         """Handle hotstart heuristics to remove unmatched or duplicated objects."""
@@ -693,9 +742,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
         obj_ids_newly_removed = set()  # object IDs to be newly removed on this frame
         hotstart_diff = frame_idx - self.hotstart_delay if not reverse else frame_idx + self.hotstart_delay
-        new_det_obj_ids = list(new_det_obj_ids)
-        empty_trk_obj_ids = list(empty_trk_obj_ids)
-        unmatched_trk_obj_ids = list(unmatched_trk_obj_ids)
 
         # Step 1: log the frame index where each object ID first appears
         for obj_id in new_det_obj_ids:
@@ -808,8 +854,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         )
         return maskmem_features, maskmem_pos_enc
 
-    def _add_new_mask(self, inference_session: Sam3VideoInferenceSession, frame_idx: int, obj_id: int, mask: Tensor):
-        obj_idx = inference_session.obj_id_to_idx(obj_id)
+    def _add_new_mask(self, inference_session: Sam3VideoInferenceSession, frame_idx: int, obj_idx: int, mask: Tensor):
         high_res_masks = F.interpolate(
             mask.float(),
             size=self.tracker_model.prompt_encoder.mask_input_size,
@@ -854,14 +899,14 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 align_corners=False,
             )
             new_mask_binary = new_mask > 0
-            obj_idx = np.where(np.array(inference_session.obj_ids) == trk_obj_id)[0].item()
+            obj_idx = inference_session.obj_id_to_idx(trk_obj_id)
             obj_score = tracker_obj_scores_global[obj_idx]
             if obj_score <= self.high_conf_thresh:
                 continue
             self._add_new_mask(
                 inference_session=inference_session,
                 frame_idx=frame_idx,
-                obj_id=trk_obj_id,
+                obj_idx=obj_idx,
                 mask=new_mask_binary,
             )
 
@@ -870,7 +915,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         binary_low_res_masks: Tensor,
         last_occluded: list[int],
         obj_ids: list[int],
-        frame_idx: int = None,
+        frame_idx: Optional[int] = None,
         reverse: bool = False,
     ):
         # Suppress overlapping masks for objects that were most recently occluded
@@ -1087,7 +1132,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
         # Step 1: make the update plan and resolve heuristics on GPU 0
         det_mask_preds: Tensor = det_out["mask"]  # low-res mask logits
-        det_scores_np: npt.NDArray = det_out["scores"].float().cpu().numpy()
+        det_scores: Tensor = det_out["scores"].float()  # Keep as tensor!
         # a) match FA and SAM2 masks and find new objects
         (
             new_det_out_inds,
@@ -1097,9 +1142,9 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             empty_trk_obj_ids,
         ) = self._associate_det_trk(
             det_masks=det_mask_preds,
-            det_scores_np=det_scores_np,
+            det_scores=det_scores,
             trk_masks=tracker_low_res_masks_global,
-            trk_obj_ids=np.array(inference_session.obj_ids),
+            trk_obj_ids=inference_session.obj_ids,
         )
 
         # check whether we've hit the maximum number of objects we can track (and if so, drop some detections)
@@ -1110,13 +1155,17 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             logger.warning(f"hitting {self.max_num_objects=} with {new_det_num=} and {prev_obj_num=}")
             new_det_num_to_keep = self.max_num_objects - prev_obj_num
             num_obj_dropped_due_to_limit = new_det_num - new_det_num_to_keep
-            new_det_out_inds = self._drop_new_det_with_obj_limit(new_det_out_inds, det_scores_np, new_det_num_to_keep)
+            # Keep top scoring detections
+            new_det_inds_tensor = torch.tensor(new_det_out_inds, dtype=torch.long, device=det_scores.device)
+            scores_for_new_dets = det_scores[new_det_inds_tensor]
+            _, top_inds = torch.topk(scores_for_new_dets, k=new_det_num_to_keep, largest=True)
+            new_det_out_inds = [new_det_out_inds[i] for i in top_inds]
             assert len(new_det_out_inds) == new_det_num_to_keep
             new_det_num = len(new_det_out_inds)
 
         # assign object IDs to new detections and decide which GPU to place them
         new_det_start_obj_id = inference_session.max_obj_id + 1
-        new_det_obj_ids = new_det_start_obj_id + np.arange(new_det_num)
+        new_det_obj_ids = list(range(new_det_start_obj_id, new_det_start_obj_id + new_det_num))
 
         # b) handle hotstart heuristics to remove objects
         # here `extra_metadata` contains metadata stored on (and only accessible to) GPU 0;
@@ -1145,9 +1194,9 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
         # `tracker_update_plan` should be identical on all GPUs after broadcasting
         tracker_update_plan = {
-            "new_det_out_inds": new_det_out_inds,  # npt.NDArray
-            "new_det_obj_ids": new_det_obj_ids,  # npt.NDArray
-            "unmatched_trk_obj_ids": unmatched_trk_obj_ids,  # npt.NDArray
+            "new_det_out_inds": new_det_out_inds,  # List[int]
+            "new_det_obj_ids": new_det_obj_ids,  # List[int]
+            "unmatched_trk_obj_ids": unmatched_trk_obj_ids,  # List[int]
             "det_to_matched_trk_obj_ids": det_to_matched_trk_obj_ids,  # dict
             "obj_ids_newly_removed": obj_ids_newly_removed,  # set
             "num_obj_dropped_due_to_limit": num_obj_dropped_due_to_limit,  # int
@@ -1199,22 +1248,25 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         # the updated `tracker_metadata_new` should be identical on all GPUs
         updated_obj_ids = tracker_metadata_new["obj_ids"]
         if len(new_det_obj_ids) > 0:
-            updated_obj_ids = np.concatenate([updated_obj_ids, new_det_obj_ids])
+            updated_obj_ids = updated_obj_ids + new_det_obj_ids
         if len(obj_ids_newly_removed) > 0:
-            is_removed = np.isin(updated_obj_ids, list(obj_ids_newly_removed))
-            updated_obj_ids = updated_obj_ids[~is_removed]
+            updated_obj_ids = [obj_id for obj_id in updated_obj_ids if obj_id not in obj_ids_newly_removed]
         tracker_metadata_new["obj_ids"] = updated_obj_ids
 
         # update object scores and the maximum object ID assigned so far
         if len(new_det_obj_ids) > 0:
-            tracker_metadata_new["obj_id_to_score"].update(zip(new_det_obj_ids, det_scores_np[new_det_out_inds]))
+            # Index tensor with list of indices and convert to list
+            new_det_scores = det_scores[
+                torch.tensor(new_det_out_inds, dtype=torch.long, device=det_scores.device)
+            ].tolist()
+            tracker_metadata_new["obj_id_to_score"].update(zip(new_det_obj_ids, new_det_scores))
             # tracker scores are not available for new objects, use det score instead.
             tracker_metadata_new["obj_id_to_tracker_score_frame_wise"][frame_idx].update(
-                zip(new_det_obj_ids, det_scores_np[new_det_out_inds])
+                zip(new_det_obj_ids, new_det_scores)
             )
             tracker_metadata_new["max_obj_id"] = max(
                 tracker_metadata_new["max_obj_id"],
-                np.max(new_det_obj_ids),
+                max(new_det_obj_ids),
             )
         # for removed objects, we set their scores to a very low value (-1e4) but still
         # keep them in "obj_id_to_score" (it's easier to handle outputs this way)
@@ -1229,7 +1281,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         self,
         inference_session: Sam3VideoInferenceSession,
         frame_idx: int,
-        new_obj_ids: npt.NDArray,
+        new_obj_ids: list[int],
         new_obj_masks: Tensor,
         reverse: bool = False,
     ):
@@ -1261,17 +1313,17 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         inference_session: Sam3VideoInferenceSession,
         frame_idx: int,
         det_out: dict[str, Tensor],
-        tracker_update_plan: dict[str, npt.NDArray],
+        tracker_update_plan: dict,
         reverse: bool = False,
     ):
         # initialize tracking scores with detection scores
-        new_det_out_inds: npt.NDArray = tracker_update_plan["new_det_out_inds"]
-        new_det_obj_ids: npt.NDArray = tracker_update_plan["new_det_obj_ids"]
+        new_det_out_inds: list[int] = tracker_update_plan["new_det_out_inds"]
+        new_det_obj_ids: list[int] = tracker_update_plan["new_det_obj_ids"]
         obj_ids_newly_removed: set[int] = tracker_update_plan["obj_ids_newly_removed"]
 
         # Step 1: add new objects from FA detection to SAM2 inference states
         if len(new_det_out_inds) > 0:
-            new_det_out_inds_t = torch.from_numpy(new_det_out_inds)
+            new_det_out_inds_t = torch.tensor(new_det_out_inds, dtype=torch.long)
             new_det_masks: Tensor = det_out["mask"][new_det_out_inds_t]
             # initialize SAM2 with new object masks
             self._tracker_add_new_objects(
@@ -1293,12 +1345,12 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         det_out: dict[str, Tensor],
         tracker_low_res_masks_global: Tensor,
         tracker_obj_scores_global: Tensor,
-        tracker_update_plan: dict[str, npt.NDArray],
+        tracker_update_plan: dict,
         reconditioned_obj_ids: Optional[set] = None,
         det_to_matched_trk_obj_ids: Optional[dict] = None,
     ):
-        new_det_out_inds: npt.NDArray = tracker_update_plan["new_det_out_inds"]
-        new_det_obj_ids: npt.NDArray = tracker_update_plan["new_det_obj_ids"]
+        new_det_out_inds: list[int] = tracker_update_plan["new_det_out_inds"]
+        new_det_obj_ids: list[int] = tracker_update_plan["new_det_obj_ids"]
         obj_id_to_mask = {}  # obj_id --> output mask tensor
 
         # Part 1: masks from previous SAM2 propagation
@@ -1315,25 +1367,26 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             obj_id_to_mask[int(obj_id)] = mask  # (1, H_video, W_video)
 
         # Part 2: masks from new detections
-        new_det_out_inds_t = torch.from_numpy(new_det_out_inds)
-        new_det_low_res_masks = det_out["mask"][new_det_out_inds_t].unsqueeze(1)
-        new_det_low_res_masks = fill_holes_in_mask_scores(
-            new_det_low_res_masks,
-            max_area=self.fill_hole_area,
-            fill_holes=True,
-            remove_sprinkles=True,
-        )
-        new_masklet_video_res_masks = F.interpolate(
-            new_det_low_res_masks,
-            size=(inference_session.video_height, inference_session.video_width),
-            mode="bilinear",
-            align_corners=False,
-        )  # (num_obj, 1, H_video, W_video)
+        if len(new_det_out_inds) > 0:
+            new_det_out_inds_t = torch.tensor(new_det_out_inds, dtype=torch.long)
+            new_det_low_res_masks = det_out["mask"][new_det_out_inds_t].unsqueeze(1)
+            new_det_low_res_masks = fill_holes_in_mask_scores(
+                new_det_low_res_masks,
+                max_area=self.fill_hole_area,
+                fill_holes=True,
+                remove_sprinkles=True,
+            )
+            new_masklet_video_res_masks = F.interpolate(
+                new_det_low_res_masks,
+                size=(inference_session.video_height, inference_session.video_width),
+                mode="bilinear",
+                align_corners=False,
+            )  # (num_obj, 1, H_video, W_video)
 
-        new_masklet_binary = new_masklet_video_res_masks > 0
-        assert len(new_det_obj_ids) == len(new_masklet_video_res_masks)
-        for obj_id, mask in zip(new_det_obj_ids, new_masklet_binary):
-            obj_id_to_mask[int(obj_id)] = mask  # (1, H_video, W_video)
+            new_masklet_binary = new_masklet_video_res_masks > 0
+            assert len(new_det_obj_ids) == len(new_masklet_video_res_masks)
+            for obj_id, mask in zip(new_det_obj_ids, new_masklet_binary):
+                obj_id_to_mask[int(obj_id)] = mask  # (1, H_video, W_video)
 
         # Part 3: Override masks for reconditioned objects using detection masks
         if reconditioned_obj_ids is not None and len(reconditioned_obj_ids) > 0:
@@ -1378,15 +1431,27 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
           it contains both global and local masklet information
         """
 
+        pixel_values = inference_session.get_frame(frame_idx).unsqueeze(0)
+        vision_embeds = self.detector_model.get_vision_features(pixel_values=pixel_values)
+
         # Step 1: run backbone and FA in a distributed manner -- this is done via Sam3ImageOnVideoMultiGPU,
         # a MultiGPU FA model (assigned to `self.detector`) that shards frames in a round-robin manner.
         # It returns a "det_out" dict for `frame_idx` and fills SAM2 backbone features for `frame_idx`
         # into `feature_cache`. Despite its distributed inference under the hood, the results would be
         # the same as if it is running backbone and FA for every frame on a single GPU.
-        det_out = self.run_backbone_and_detection(
+        det_out = self.run_detection(
             inference_session=inference_session,
+            vision_embeds=vision_embeds,
             frame_idx=frame_idx,
             reverse=reverse,
+        )
+
+        # share the vision encoder outputs from the detector to the tracker
+        vision_feats, vision_pos_embeds = self.get_vision_features_for_tracker(
+            vision_embeds=vision_embeds,
+        )
+        inference_session.cache.cache_vision_features(
+            frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
         )
 
         # Step 2: each GPU propagates its local SAM2 states to get the SAM2 prediction masks.

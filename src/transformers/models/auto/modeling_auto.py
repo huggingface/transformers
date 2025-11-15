@@ -352,6 +352,12 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("sam2_hiera_det_model", "Sam2HieraDetModel"),
         ("sam2_video", "Sam2VideoModel"),
         ("sam2_vision_model", "Sam2VisionModel"),
+        ("sam3_tracker", "Sam3TrackerModel"),
+        ("sam3_tracker", "Sam3TrackerModel"),
+        ("sam3_tracker_video", "Sam3TrackerVideoModel"),
+        ("sam3_video", "Sam3VideoModel"),
+        ("sam3_vision_model", "Sam3VisionModel"),
+        ("sam3_vit_model", "Sam3ViTModel"),
         ("sam_hq", "SamHQModel"),
         ("sam_hq_vision_model", "SamHQVisionModel"),
         ("sam_vision_model", "SamVisionModel"),
@@ -1723,7 +1729,9 @@ MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
         ("edgetam_video", "EdgeTamModel"),
         ("sam", "SamModel"),
         ("sam2", "Sam2Model"),
+        ("sam3_tracker", "Sam3TrackerModel"),
         ("sam2_video", "Sam2Model"),
+        ("sam3_video", "Sam3TrackerModel"),
         ("sam_hq", "SamHQModel"),
     ]
 )

@@ -41,6 +41,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, check_model_inputs
+from ..auto import AutoModel
 from .configuration_sam3 import (
     Sam3Config,
     Sam3DETRDecoderConfig,
@@ -1024,7 +1025,7 @@ class Sam3VisionModel(Sam3PreTrainedModel):
     def __init__(self, config: Sam3VisionConfig):
         super().__init__(config)
         self.config = config
-        self.backbone = Sam3ViTModel(config.backbone_config)
+        self.backbone = AutoModel.from_config(config.backbone_config)
         self.neck = Sam3VisionNeck(config)
 
         self.post_init()
@@ -2438,4 +2439,4 @@ class Sam3Model(Sam3PreTrainedModel):
         )
 
 
-__all__ = ["Sam3Model", "Sam3VisionModel"]
+__all__ = ["Sam3Model", "Sam3VisionModel", "Sam3ViTModel"]

@@ -17,6 +17,7 @@
 from transformers import CLIPTextConfig
 
 from ...configuration_utils import PreTrainedConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class Sam3ViTConfig(PreTrainedConfig):
@@ -145,10 +146,6 @@ class Sam3VisionConfig(PreTrainedConfig):
         backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
             Configuration for the vision backbone. This is used to instantiate the backbone using
             `AutoModel.from_config`.
-        backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
-            The list of channel dimensions for the backbone.
-        backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[256, 256], [128, 128], [64, 64]]`):
-            The spatial sizes of the feature maps from the backbone.
         fpn_hidden_size (`int`, *optional*, defaults to 256):
             The hidden dimension of the FPN.
         fpn_kernel_size (`int`, *optional*, defaults to 1):
@@ -173,14 +170,12 @@ class Sam3VisionConfig(PreTrainedConfig):
     base_config_key = "vision_config"
     model_type = "sam3_vision_model"
     sub_configs = {
-        "backbone_config": Sam3ViTConfig,
+        "backbone_config": AutoConfig,
     }
 
     def __init__(
         self,
         backbone_config=None,
-        backbone_channel_list=None,
-        backbone_feature_sizes=None,
         fpn_hidden_size=256,
         fpn_kernel_size=2,
         fpn_stride=2,
@@ -191,25 +186,17 @@ class Sam3VisionConfig(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        backbone_channel_list = [1024, 512, 256, 128] if backbone_channel_list is None else backbone_channel_list
-        backbone_feature_sizes = (
-            [[256, 256], [128, 128], [64, 64]] if backbone_feature_sizes is None else backbone_feature_sizes
-        )
         scale_factors = [4.0, 2.0, 1.0, 0.5] if scale_factors is None else scale_factors
 
         if isinstance(backbone_config, dict):
             backbone_config["model_type"] = backbone_config.get("model_type", "sam3_vit_model")
-            backbone_config = Sam3ViTConfig(**backbone_config)
-        elif isinstance(backbone_config, Sam3ViTConfig):
-            pass
+            backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
         elif backbone_config is None:
-            backbone_config = Sam3ViTConfig()
+            backbone_config = CONFIG_MAPPING["sam3_vit_model"]()
 
         self.backbone_config = backbone_config
 
         # Neck
-        self.backbone_channel_list = backbone_channel_list
-        self.backbone_feature_sizes = backbone_feature_sizes
         self.fpn_hidden_size = fpn_hidden_size
         self.fpn_kernel_size = fpn_kernel_size
         self.fpn_stride = fpn_stride
