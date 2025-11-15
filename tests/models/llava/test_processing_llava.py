@@ -12,19 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import json
-import shutil
-import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, LlamaTokenizerFast, LlavaProcessor
+from transformers import AutoTokenizer, LlavaProcessor
 from transformers.testing_utils import require_vision
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from transformers import CLIPImageProcessor
 
 
 @require_vision
@@ -32,26 +25,24 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaProcessor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-
-        image_processor = CLIPImageProcessor(do_center_crop=False)
-        tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = LlavaProcessor(image_processor, tokenizer, **processor_kwargs)
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.image_token
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(do_center_crop=False)
 
     @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        tokenizer = tokenizer_class.from_pretrained("huggyllama/llama-7b")
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = "[PAD]"
+            if tokenizer.pad_token_id is None:
+                tokenizer.pad_token_id = 0
+        return tokenizer
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = processor.image_token
 
     @staticmethod
     def prepare_processor_dict():

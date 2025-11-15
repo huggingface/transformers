@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
@@ -34,9 +32,10 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     """This tests Pixtral processor with the new `spatial_merge_size` argument in Mistral3."""
 
     processor_class = PixtralProcessor
+    model_id = "hf-internal-testing/Mistral-Small-3.1-24B-Instruct-2503-only-processor"
 
     @classmethod
-    def setUpClass(cls):
+    def _setup_test_attributes(cls, processor):
         cls.url_0 = url_to_local_path(
             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         )
@@ -44,19 +43,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
         cls.image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
         cls.image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
-
-        cls.tmpdirname = tempfile.mkdtemp()
-        cls.addClassCleanup(lambda tempdir=cls.tmpdirname: shutil.rmtree(tempdir))
-
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = PixtralProcessor.from_pretrained(
-            "hf-internal-testing/Mistral-Small-3.1-24B-Instruct-2503-only-processor", **processor_kwargs
-        )
-        processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
-
-    def get_processor(self):
-        return self.processor_class.from_pretrained(self.tmpdirname)
 
     @staticmethod
     def prepare_processor_dict():
