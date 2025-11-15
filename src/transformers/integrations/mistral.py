@@ -84,20 +84,18 @@ def convert_tekken_tokenizer(tokenizer_file: str):
 
     # Extract vocab and special tokens
     vocab = mistral_tokenizer.instruct_tokenizer.tokenizer._tekken_token2id_nospecial
-    all_special = [
-        token.value if hasattr(token, "value") else token
-        for token in mistral_tokenizer.instruct_tokenizer.tokenizer._all_special_tokens
-    ]
-    specials_tokens = {token: all_special.index(token) for token in all_special}
+    sorted_tokens = sorted(mistral_tokenizer.instruct_tokenizer.tokenizer._all_special_tokens, key=lambda x: x["rank"])
+    all_specials = [token["token_str"] for token in sorted_tokens]
+    specials_tokens = {token: idx for idx, token in enumerate(all_specials)}
     specials_tokens.update(vocab)
     vocab = specials_tokens
 
     # Convert
     tokenizer = LlamaTokenizerFast(
-        tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special).converted(),
+        tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_specials).converted(),
     )
 
     # Post-process
-    tokenizer.add_special_tokens({"additional_special_tokens": all_special})
+    tokenizer.add_special_tokens({"additional_special_tokens": all_specials})
 
     return tokenizer

@@ -173,7 +173,7 @@ class MistralConfig(PreTrainedConfig):
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        rope_config_validation(self, ignore_keys={"llama_4_scaling_beta"})
 
         super().__init__(
             pad_token_id=pad_token_id,

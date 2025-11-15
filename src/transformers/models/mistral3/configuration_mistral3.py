@@ -103,7 +103,7 @@ class Mistral3Config(PreTrainedConfig):
                 num_attention_heads=16,
                 vocab_size=32000,
                 head_dim=64,
-                hidden_act="gelu",
+                hidden_act="silu",
             )
 
         self.vision_config = vision_config
