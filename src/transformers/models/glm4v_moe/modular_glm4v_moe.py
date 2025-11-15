@@ -45,6 +45,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4vTextModel,
     Glm4vTextRotaryEmbedding,
+    Glm4vVisionModel,
     rotate_half,
 )
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
@@ -150,7 +151,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "Glm4vMoe_text"
+    model_type = "glm4v_moe_text"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `Glm4vMoe`
@@ -491,6 +492,11 @@ class Glm4vMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
 
 
 @auto_docstring
+class Glm4vMoeVisionModel(Glm4vVisionModel):
+    pass
+
+
+@auto_docstring
 class Glm4vMoeTextModel(Glm4vTextModel):
     def forward(
         self,
@@ -647,8 +653,10 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
 __all__ = [
     "Glm4vMoeConfig",
     "Glm4vMoeTextConfig",
+    "Glm4vMoeVisionConfig",
     "Glm4vMoeForConditionalGeneration",
     "Glm4vMoeModel",  # noqa: F822
     "Glm4vMoePreTrainedModel",
-    "Glm4vMoeTextModel",  # noqa: F822
+    "Glm4vMoeTextModel",
+    "Glm4vMoeVisionModel",
 ]
