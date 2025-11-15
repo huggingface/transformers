@@ -216,6 +216,7 @@ OBJECTS_TO_IGNORE = {
     "FNetTokenizerFast",
     "FSMTConfig",
     "FeatureExtractionPipeline",
+    "Fgclip2ImageProcessor",
     "FillMaskPipeline",
     "FlaubertConfig",
     "FlavaConfig",
