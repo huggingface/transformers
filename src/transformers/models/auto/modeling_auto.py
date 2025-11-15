@@ -1053,6 +1053,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("ovis2", "Ovis2ForConditionalGeneration"),
         ("paligemma", "PaliGemmaForConditionalGeneration"),
         ("perception_lm", "PerceptionLMForConditionalGeneration"),
+        ("phi3_v", "Phi3VForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
         ("pixtral", "LlavaForConditionalGeneration"),
         ("qwen2_5_vl", "Qwen2_5_VLForConditionalGeneration"),
