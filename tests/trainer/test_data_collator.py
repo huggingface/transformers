@@ -18,6 +18,8 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
+import torch
 
 from transformers import (
     BertTokenizer,
@@ -1965,3 +1967,36 @@ class DataCollatorForLanguageModelingUnitTest(unittest.TestCase):
         ).astype(bool)
 
         np.testing.assert_array_equal(output_mask, expected_mask)
+
+
+@pytest.mark.parametrize("pack_sequence_labels", [True, False])
+def test_data_collator_with_flattening_for_sequence_classification(pack_sequence_labels):
+    """
+    Tests that DataCollatorWithFlattening can handle integer labels for sequence classification,
+    both with broadcasting (default) and simple packing (for advanced use cases).
+    """
+    from transformers import DataCollatorWithFlattening
+
+    features = [
+        {"input_ids": [0, 1, 2, 3], "labels": 1},
+        {"input_ids": [4, 5, 6], "labels": 0},
+    ]
+
+    collator = DataCollatorWithFlattening(pack_sequence_labels=pack_sequence_labels, return_tensors="pt")
+    batch = collator(features)
+
+    # The input_ids are always concatenated.
+    expected_input_ids = torch.tensor([[0, 1, 2, 3, 4, 5, 6]])
+    assert torch.equal(batch["input_ids"], expected_input_ids)
+
+    # The labels tensor shape and content depend on the packing flag.
+    if pack_sequence_labels:
+        # The reviewer's requested behavior: a 1D tensor of shape (batch_size,).
+        expected_labels = torch.tensor([1, 0])
+        assert batch["labels"].shape == (2,)
+    else:
+        # The default, safe behavior: broadcast the label to all tokens, resulting in a 2D tensor.
+        expected_labels = torch.tensor([[1, 1, 1, 1, 0, 0, 0]])
+        assert batch["labels"].shape == (1, 7)
+
+    assert torch.equal(batch["labels"], expected_labels)
