@@ -176,6 +176,7 @@ class MistralCommonTokenizer(PushToHubMixin):
     - [`~MistralCommonTokenizer.decode`]: Decode a list of integers to a string.
     - [`~MistralCommonTokenizer.batch_decode`]: Decode a batch of list of integers to a list of strings.
     - [`~MistralCommonTokenizer.convert_tokens_to_ids`]: Convert a list of tokens to a list of integers.
+    - [`~MistralCommonTokenizer.convert_tokens_to_string`]: Convert a list of tokens to a string.
     - [`~MistralCommonTokenizer.convert_ids_to_tokens`]: Convert a list of integers to a list of tokens.
     - [`~MistralCommonTokenizer.tokenize`]: Tokenize a string.
     - [`~MistralCommonTokenizer.get_special_tokens_mask`]: Get the special tokens mask for a list of tokens.
@@ -294,6 +295,30 @@ class MistralCommonTokenizer(PushToHubMixin):
         Id of the unknown token in the vocabulary.
         """
         return self.tokenizer.instruct_tokenizer.tokenizer.unk_id
+
+    @property
+    def all_special_ids(self) -> list[int]:
+        """
+        List of all special token ids.
+        For compatibility with vLLM and other frameworks.
+        """
+        return list(self._all_special_ids())
+
+    @property
+    def all_special_tokens(self) -> list[str]:
+        """
+        List of all special tokens as strings.
+        For compatibility with vLLM and other frameworks.
+        """
+        return self.convert_ids_to_tokens(self.all_special_ids, skip_special_tokens=False)
+
+    @property
+    def all_special_tokens_extended(self) -> list[str]:
+        """
+        List of all special tokens including user-defined ones.
+        For compatibility with vLLM and other frameworks.
+        """
+        return self.all_special_tokens.copy()
 
     @property
     def pad_token_id(self) -> int:
@@ -612,6 +637,13 @@ class MistralCommonTokenizer(PushToHubMixin):
         if one_token:
             return ids[0]
         return ids
+
+    def convert_tokens_to_string(self, tokens) -> str:
+        """Converts a sequence of tokens (string) in a single string."""
+        ids = []
+        for token in tokens:
+            ids.append(self._tekken_piece_to_id(token, False))
+        return self.decode(ids)
 
     def _text_to_ids(self, text: TextInput, add_special_tokens: bool) -> list[int]:
         """
