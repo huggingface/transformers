@@ -17,10 +17,12 @@ rendered properly in your Markdown viewer.
 
 # Audio Spectrogram Transformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
 ## Overview
@@ -40,6 +42,61 @@ alt="drawing" width="600"/>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/YuanGongND/ast).
+
+You can find all the original AST checkpoints under the [MIT](https://huggingface.co/MIT?search_models=ast) organization.
+
+> [!TIP]
+> Click on the AST models in the right sidebar for more examples of how to apply AST to different audio classification tasks.
+
+The example below demonstrates how to classify audio with [`Pipeline`] or the [`AutoModel`] class.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="audio-classification",
+    model="MIT/ast-finetuned-audioset-10-10-0.4593",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("path/to/your/audio.wav")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+import librosa
+from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
+
+feature_extractor = AutoFeatureExtractor.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593")
+model = AutoModelForAudioClassification.from_pretrained(
+    "MIT/ast-finetuned-audioset-10-10-0.4593",
+    dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+
+# Load and preprocess audio
+audio, sr = librosa.load("path/to/your/audio.wav", sr=16000)
+inputs = feature_extractor(audio, sampling_rate=16000, return_tensors="pt")
+
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_class_id = logits.argmax(dim=-1).item()
+
+class_labels = model.config.id2label
+predicted_class_label = class_labels[predicted_class_id]
+print(f"Predicted class: {predicted_class_label}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
