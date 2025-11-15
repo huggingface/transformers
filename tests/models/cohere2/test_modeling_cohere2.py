@@ -269,3 +269,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(out)
 
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
+
+
+del CohereModelTest, CohereModelTester  # So the parent tests don't run in this file too
