@@ -70,7 +70,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "'''def print_prime(n): """ Print all primes between 1 and n"""'''" | transformers run --task text-classification --model microsoft/phi-1.5 --device 0
+echo -e "'''def print_prime(n): """ Print all primes between 1 and n"""'''" | transformers run text-classification --model microsoft/phi-1.5 --device 0
 ```
 
 </hfoption>
