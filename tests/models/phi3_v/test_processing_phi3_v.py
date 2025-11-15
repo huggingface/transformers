@@ -83,7 +83,7 @@ class Phi3VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
-    @unittest.skip("Not possible as processor creates a custom attention mask.")
+    @unittest.skip("Not possible as processor can't create an assistant mask.")
     def test_apply_chat_template_assistant_mask(self):
         pass
 
