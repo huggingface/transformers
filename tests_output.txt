@@ -1,0 +1,957 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.0, pluggy-1.6.0 -- /home/ubuntu/transformers/.venv/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: /home/ubuntu/transformers
+configfile: pyproject.toml
+plugins: rich-0.2.0, hypothesis-6.147.0, asyncio-1.3.0, rerunfailures-15.1, xdist-3.8.0, timeout-2.4.0, anyio-4.11.0, order-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+created: 8/8 workers
+8 workers [31 items]
+
+scheduling tests via LoadScheduling
+
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_assisted_decoding_sample <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_assisted_decoding_matches_greedy_search_0_random <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_generate <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_continue_from_past_key_values <- tests/generation/test_utils.py 
+[gw1] [  3%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_generate <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_search_generate_dict_output <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_sample_generate_dict_output <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_random_inputs_embeds <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_compile_model_forward_fullgraph <- tests/generation/test_utils.py 
+[gw5] [  6%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_assisted_decoding_sample <- tests/generation/test_utils.py 
+[gw7] [  9%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_continue_from_past_key_values <- tests/generation/test_utils.py 
+[gw6] [ 12%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_random_inputs_embeds <- tests/generation/test_utils.py 
+[gw2] [ 16%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_assisted_decoding_matches_greedy_search_0_random <- tests/generation/test_utils.py 
+[gw4] [ 19%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_compile_model_forward_fullgraph <- tests/generation/test_utils.py 
+[gw0] [ 22%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_sample_generate_dict_output <- tests/generation/test_utils.py 
+[gw3] [ 25%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_search_generate_dict_output <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_sample_generate <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_assisted_decoding_matches_greedy_search_1_same <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_inputs_embeds_with_static_cache <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_compilation_all_outputs <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_search_generate <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_methods_with_logits_to_keep <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_search_generate_dict_outputs_use_cache <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_continue_from_inputs_embeds <- tests/generation/test_utils.py 
+[gw2] [ 29%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_assisted_decoding_matches_greedy_search_1_same <- tests/generation/test_utils.py 
+[gw7] [ 32%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_inputs_embeds_with_static_cache <- tests/generation/test_utils.py 
+[gw5] [ 35%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_sample_generate <- tests/generation/test_utils.py 
+[gw1] [ 38%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_compilation_all_outputs <- tests/generation/test_utils.py 
+[gw6] [ 41%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_methods_with_logits_to_keep <- tests/generation/test_utils.py 
+[gw0] [ 45%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_search_generate <- tests/generation/test_utils.py 
+[gw3] [ 48%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_search_generate_dict_outputs_use_cache <- tests/generation/test_utils.py 
+[gw4] [ 51%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_continue_from_inputs_embeds <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_with_static_cache <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_greedy_generate_dict_outputs <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_without_input_ids <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_with_quant_cache <- tests/generation/test_utils.py 
+[gw1] [ 54%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_with_quant_cache <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_inherits_generation_mixin <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_greedy_generate <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_left_padding_compatibility <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_greedy_generate_dict_outputs_use_cache <- tests/generation/test_utils.py 
+[gw2] [ 58%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_greedy_generate_dict_outputs <- tests/generation/test_utils.py 
+[gw5] [ 61%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_with_static_cache <- tests/generation/test_utils.py 
+[gw7] [ 64%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_without_input_ids <- tests/generation/test_utils.py 
+[gw6] [ 67%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_greedy_generate <- tests/generation/test_utils.py 
+[gw3] [ 70%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_left_padding_compatibility <- tests/generation/test_utils.py 
+[gw0] [ 74%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_inherits_generation_mixin <- tests/generation/test_utils.py 
+[gw4] [ 77%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_greedy_generate_dict_outputs_use_cache <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_prepare_inputs_for_generation_kwargs_forwards <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_past_key_values_format <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_parallel_beam_search <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_prompt_lookup_decoding_matches_greedy_search <- tests/generation/test_utils.py 
+[gw2] [ 80%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_parallel_beam_search <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_prompt_lookup_decoding_stops_at_eos <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sample_generate <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sample_generate_dict_output <- tests/generation/test_utils.py 
+[gw5] [ 83%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_prepare_inputs_for_generation_kwargs_forwards <- tests/generation/test_utils.py 
+[gw7] [ 87%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_past_key_values_format <- tests/generation/test_utils.py 
+[gw1] [ 90%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_prompt_lookup_decoding_matches_greedy_search <- tests/generation/test_utils.py 
+[gw6] [ 93%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_prompt_lookup_decoding_stops_at_eos <- tests/generation/test_utils.py 
+[gw3] [ 96%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sample_generate_dict_output <- tests/generation/test_utils.py 
+[gw0] [100%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sample_generate <- tests/generation/test_utils.py sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+
+=================================== FAILURES ===================================
+_________________ AfmoeModelTest.test_assisted_decoding_sample _________________
+[gw5] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+__________ AfmoeModelTest.test_generate_continue_from_past_key_values __________
+[gw7] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+____________ AfmoeModelTest.test_generate_from_random_inputs_embeds ____________
+[gw6] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+_____ AfmoeModelTest.test_assisted_decoding_matches_greedy_search_0_random _____
+[gw2] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+_________ AfmoeModelTest.test_generate_compile_model_forward_fullgraph _________
+[gw4] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+_____________ AfmoeModelTest.test_beam_sample_generate_dict_output _____________
+[gw0] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+_____________ AfmoeModelTest.test_beam_search_generate_dict_output _____________
+[gw3] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+______ AfmoeModelTest.test_assisted_decoding_matches_greedy_search_1_same ______
+[gw2] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+______ AfmoeModelTest.test_generate_from_inputs_embeds_with_static_cache _______
+[gw7] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+___________________ AfmoeModelTest.test_beam_sample_generate ___________________
+[gw5] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+_____________ AfmoeModelTest.test_generate_compilation_all_outputs _____________
+[gw1] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+___________ AfmoeModelTest.test_generate_methods_with_logits_to_keep ___________
+[gw6] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+___________________ AfmoeModelTest.test_beam_search_generate ___________________
+[gw0] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+_______ AfmoeModelTest.test_beam_search_generate_dict_outputs_use_cache ________
+[gw3] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+___________ AfmoeModelTest.test_generate_continue_from_inputs_embeds ___________
+[gw4] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+_______________ AfmoeModelTest.test_greedy_generate_dict_outputs _______________
+[gw2] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+________________ AfmoeModelTest.test_generate_with_static_cache ________________
+[gw5] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+________________ AfmoeModelTest.test_generate_without_input_ids ________________
+[gw7] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+_____________________ AfmoeModelTest.test_greedy_generate ______________________
+[gw6] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+________________ AfmoeModelTest.test_left_padding_compatibility ________________
+[gw3] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+________________ AfmoeModelTest.test_inherits_generation_mixin _________________
+[gw0] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+__________ AfmoeModelTest.test_greedy_generate_dict_outputs_use_cache __________
+[gw4] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+______ AfmoeModelTest.test_prepare_inputs_for_generation_kwargs_forwards _______
+[gw5] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+__________________ AfmoeModelTest.test_past_key_values_format __________________
+[gw7] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+_______ AfmoeModelTest.test_prompt_lookup_decoding_matches_greedy_search _______
+[gw1] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+___________ AfmoeModelTest.test_prompt_lookup_decoding_stops_at_eos ____________
+[gw6] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+_______________ AfmoeModelTest.test_sample_generate_dict_output ________________
+[gw3] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+_____________________ AfmoeModelTest.test_sample_generate ______________________
+[gw0] linux -- Python 3.12.12 /home/ubuntu/transformers/.venv/bin/python3
+tests/causal_lm_tester.py:316: in setUp
+    self.model_tester = self.model_tester_class(self)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/models/afmoe/test_modeling_afmoe.py:63: in __init__
+    super().__init__(
+tests/causal_lm_tester.py:208: in __init__
+    self._verify_and_infer_model_attributes()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'tests.models.afmoe.test_modeling_afmoe.AfmoeModelTester'>
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+>           raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+E           ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+
+tests/causal_lm_tester.py:72: ValueError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/triton/runtime/autotuner.py:97: 32 warnings
+  /home/ubuntu/transformers/.venv/lib/python3.12/site-packages/triton/runtime/autotuner.py:97: DeprecationWarning: warmup, rep, and use_cuda_graph parameters are deprecated. See https://github.com/triton-lang/triton/pull/4496 for details.
+    warnings.warn(("warmup, rep, and use_cuda_graph parameters are deprecated. See "
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+----- generated xml file: /home/ubuntu/transformers/test-results/junit.xml -----
+=========================== short test summary info ============================
+SKIPPED [1] tests/generation/test_utils.py:1843: test is slow
+SKIPPED [1] tests/generation/test_utils.py:1461: test requires optimum-quanto
+SKIPPED [1] tests/generation/test_utils.py:536: test requires multiple accelerators
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_assisted_decoding_sample - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_continue_from_past_key_values - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_random_inputs_embeds - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_assisted_decoding_matches_greedy_search_0_random - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_compile_model_forward_fullgraph - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_sample_generate_dict_output - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_search_generate_dict_output - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_assisted_decoding_matches_greedy_search_1_same - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_inputs_embeds_with_static_cache - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_sample_generate - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_compilation_all_outputs - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_methods_with_logits_to_keep - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_search_generate - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_beam_search_generate_dict_outputs_use_cache - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_continue_from_inputs_embeds - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_greedy_generate_dict_outputs - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_with_static_cache - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_without_input_ids - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_greedy_generate - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_left_padding_compatibility - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_inherits_generation_mixin - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_greedy_generate_dict_outputs_use_cache - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_prepare_inputs_for_generation_kwargs_forwards - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_past_key_values_format - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_prompt_lookup_decoding_matches_greedy_search - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_prompt_lookup_decoding_stops_at_eos - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sample_generate_dict_output - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sample_generate - ValueError: You have inherited from `CausalLMModelTester` but did not set the `base_model_class` attribute to a valid model class. (It's set to `None`)
+================= 28 failed, 3 skipped, 48 warnings in 13.88s ==================
