@@ -17,7 +17,7 @@ import unittest
 from functools import cached_property
 
 from transformers import ResNetConfig, TimmBackboneConfig, TvpConfig
-from transformers.testing_utils import require_timm, require_torch, require_vision, torch_device
+from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_modeling_common import (
@@ -234,6 +234,7 @@ def prepare_img():
 
 @require_vision
 @require_torch
+@slow
 class TvpModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):

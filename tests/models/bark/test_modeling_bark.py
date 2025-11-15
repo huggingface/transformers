@@ -903,6 +903,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
+@slow
 class BarkModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
@@ -940,7 +941,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
         # Bark has custom generate without inheriting GenerationMixin. This test could prevent regression.
         self.assertTrue(self.model.can_generate())
 
-    @slow
     def test_generate_semantic(self):
         input_ids = self.inputs
 
@@ -957,7 +957,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
             )
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
-    @slow
     def test_generate_semantic_early_stop(self):
         input_ids = self.inputs
         min_eos_p = 0.01
@@ -1000,7 +999,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
         self.assertLess(len(output_ids[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist()))
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
-    @slow
     def test_generate_coarse(self):
         input_ids = self.inputs
 
@@ -1029,7 +1027,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
-    @slow
     def test_generate_fine(self):
         input_ids = self.inputs
 
@@ -1079,7 +1076,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(output_ids[0, :, : len(expected_output_ids[0])].tolist(), expected_output_ids)
 
-    @slow
     def test_generate_end_to_end(self):
         input_ids = self.inputs
 
@@ -1087,7 +1083,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
             self.model.generate(**input_ids)
             self.model.generate(**{key: val for (key, val) in input_ids.items() if key != "history_prompt"})
 
-    @slow
     def test_generate_end_to_end_with_args(self):
         input_ids = self.inputs
 
@@ -1095,7 +1090,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
             self.model.generate(**input_ids, do_sample=True, temperature=0.6, penalty_alpha=0.6)
             self.model.generate(**input_ids, do_sample=True, temperature=0.6, num_beams=4)
 
-    @slow
     def test_generate_batching(self):
         args = {"do_sample": False, "temperature": None}
 
@@ -1126,7 +1120,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
         outputs, _ = self.model.generate(**s1, **args, return_output_lengths=True)
         self.assertTrue((outputs == output1).all().item())
 
-    @slow
     def test_generate_end_to_end_with_sub_models_args(self):
         input_ids = self.inputs
 
@@ -1157,7 +1150,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
         )
 
     @require_torch_accelerator
-    @slow
     def test_generate_end_to_end_with_offload(self):
         input_ids = self.inputs
 

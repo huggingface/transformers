@@ -556,6 +556,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 
 @require_torch
+@slow
 class JambaModelIntegrationTest(unittest.TestCase):
     model = None
     tokenizer = None
@@ -574,7 +575,6 @@ class JambaModelIntegrationTest(unittest.TestCase):
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
         cls.device_properties = get_device_properties()
 
-    @slow
     def test_simple_generate(self):
         # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4.
         #
@@ -599,7 +599,6 @@ class JambaModelIntegrationTest(unittest.TestCase):
         output_sentence = self.tokenizer.decode(out[0, :])
         self.assertEqual(output_sentence, expected_sentence)
 
-    @slow
     def test_simple_batched_generate_with_padding(self):
         # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4.
         #
