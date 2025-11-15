@@ -71,6 +71,7 @@ else:
             ("smolvlm", "SmolVLMVideoProcessor"),
             ("video_llama_3", "VideoLlama3VideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
+            ("videoprism", "VideoPrismVideoProcessor"),
             ("videomae", "VideoMAEVideoProcessor"),
             ("vjepa2", "VJEPA2VideoProcessor"),
         ]
