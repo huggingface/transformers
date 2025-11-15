@@ -133,7 +133,6 @@ class Phi3VPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -168,8 +167,8 @@ class Phi3VModel(Phi3VPreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.image_projection = Phi3VImageProjection(config)
 
-        self.glb_GN = nn.Parameter(torch.zeros([1, 1, self.image_dim_out * 4]))
-        self.sub_GN = nn.Parameter(torch.zeros([1, 1, 1, self.image_dim_out * 4]))
+        self.glb_newline = nn.Parameter(torch.zeros([1, 1, self.image_dim_out * 4]))
+        self.sub_newline = nn.Parameter(torch.zeros([1, 1, 1, self.image_dim_out * 4]))
 
         self.post_init()
 
@@ -181,30 +180,37 @@ class Phi3VModel(Phi3VPreTrainedModel):
 
     def reshape_hd_patches_2x2merge(self, image_features, h_crop, w_crop):
         """Reshape high-dimensional patches by merging 2x2 patches."""
-        N, L, C = image_features.shape  # Shape: (num_images*num_crops, 24*24, 1024)
-        H = int(L**0.5)
+        batch_size, num_patches, in_channels = image_features.shape
+        height_patches = int(num_patches**0.5)
 
-        num_images = N // (h_crop * w_crop)
+        num_images = batch_size // (h_crop * w_crop)
 
-        # Reshape and merge patches
-        image_features_hd = image_features.reshape(N, H, H, C)  # (N, 24, 24, 1024)
-        image_features_hd = image_features_hd.reshape(N, H // 2, 2, H // 2, 2, C)  # (N, 12, 2, 12, 2, 1024)
-        image_features_hd = image_features_hd.permute(0, 1, 3, 2, 4, 5)  # (N, 12, 12, 2, 2, 1024)
-        image_features_hd = image_features_hd.reshape(N, -1, 4 * C)  # (N, 144, 4096)
-        image_features_hd = image_features_hd.reshape(
-            num_images, h_crop, w_crop, H // 2, H // 2, -1
-        )  # (num_images, h_crop, w_crop, 12, 12, 4096)
-        image_features_hd = image_features_hd.permute(0, 1, 3, 2, 4, 5)  # (num_images, h_crop, 12, w_crop, 12, 4096)
-        image_features_hd = image_features_hd.reshape(
-            num_images, h_crop * H // 2, w_crop * H // 2, 4 * C
-        )  # (num_images, h_crop*12, w_crop*12, 4096)
+        # Reshape into patch grid
+        image_features_grid = image_features.reshape(batch_size, height_patches, height_patches, in_channels)
 
-        return image_features_hd
+        # Split each dimension into (H/2, 2) so we can merge 2×2 blocks
+        image_features_grid = image_features_grid.reshape(
+            batch_size, height_patches // 2, 2, height_patches // 2, 2, in_channels
+        )
+
+        image_features_grid = image_features_grid.permute(0, 1, 3, 2, 4, 5)
+        merged_features = image_features_grid.reshape(batch_size, -1, 4 * in_channels)
+
+        merged_features = merged_features.reshape(
+            num_images, h_crop, w_crop, height_patches // 2, height_patches // 2, -1
+        )
+
+        merged_features = merged_features.permute(0, 1, 3, 2, 4, 5)
+        output = merged_features.reshape(
+            num_images, h_crop * (height_patches // 2), w_crop * (height_patches // 2), 4 * in_channels
+        )
+
+        return output
 
     def add_newline_embeds(self, image_features):
         """Add the newline token embeds to the image feature patches"""
         num_images, h, w, hid_dim = image_features.shape
-        newline_embeddings = self.sub_GN.expand(num_images, h, -1, -1)
+        newline_embeddings = self.sub_newline.expand(num_images, h, -1, -1)
         image_features_newline = torch.cat([image_features, newline_embeddings], dim=2)
         image_features_newline = image_features_newline.reshape(num_images, -1, hid_dim)
         return image_features_newline
@@ -233,7 +239,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
             all_image_embeddings.extend(
                 [
                     sub_image_features_hd_newline.squeeze(0),
-                    self.glb_GN.squeeze(0),
+                    self.glb_newline.squeeze(0),
                     global_image_features_hd_newline[i],
                 ]
             )
@@ -306,6 +312,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
             num_images, num_crops, c, h, w = pixel_values.shape
             pixel_values = pixel_values.flatten(0, 1)
             image_features = self.get_image_features(pixel_values, image_sizes, num_images, num_crops)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 

@@ -40,8 +40,8 @@ MAPPINGS = {
     r"model.vision_embed_tokens.img_processor": r"model.vision_model",
     r"model.vision_embed_tokens.img_projection.0": r"model.image_projection.fc1",
     r"model.vision_embed_tokens.img_projection.2": r"model.image_projection.fc2",
-    r"model.vision_embed_tokens.glb_GN": r"model.glb_GN",
-    r"model.vision_embed_tokens.sub_GN": r"model.sub_GN",
+    r"model.vision_embed_tokens.glb_GN": r"model.glb_newline",
+    r"model.vision_embed_tokens.sub_GN": r"model.sub_newline",
     r"model.embed_tokens": r"model.language_model.embed_tokens",
     r"model.norm.weight": r"model.language_model.norm.weight",
     r"model.layers": r"model.language_model.layers",
@@ -184,10 +184,13 @@ def convert_model(
     # Create tokenizer directly from tokenizer.json if it exists
     tokenizer_json_path = os.path.join(input_path, "tokenizer.json")
 
+    special_image_tokens = {"image_token": "<|image|>"}
+
     if os.path.exists(tokenizer_json_path) and not text_model_id:
         tokenizer = AutoTokenizer.from_pretrained(
             input_path,  # This will load tokenizer.json directly
             model_max_length=tokenizer_config["model_max_length"],
+            extra_special_tokens=special_image_tokens,
         )
     else:
         # Fallback to creating from text_model_id with special tokens
@@ -198,7 +201,7 @@ def convert_model(
             pad_token=special_tokens_map["pad_token"],
             additional_special_tokens=special_tokens_map["additional_special_tokens"],
             model_max_length=tokenizer_config["model_max_length"],
-            # extra_special_tokens=special_image_tokens,
+            extra_special_tokens=special_image_tokens,
         )
 
     # Create image processor from config
@@ -271,14 +274,6 @@ def convert_model(
     with init_empty_weights():
         model = Phi3VForConditionalGeneration(config)
 
-    # model.generation_config._from_model_config = False
-    # model.generation_config.temperature = 1
-    # model.generation_config.guidance_scale = 5
-    # model.generation_config.pad_token_id = tokenizer.vocab.get("<\uff5c\u2581pad\u2581\uff5c>")
-    # if not hasattr(model.generation_config, "generation_kwargs"):
-    #     model.generation_config.generation_kwargs = {}
-    # model.generation_config.generation_kwargs["boi_token_id"] = tokenizer.vocab.get("<begin_of_image>")
-
     # Load and convert state dict
     print("Loading state dict...")
     state_dict = load_model_state_dict(input_path)
@@ -290,7 +285,7 @@ def convert_model(
 
     # Tie weights before any device mapping
     print("Tying weights...")
-    # model.tie_weights()
+    model.tie_weights()
 
     # Save the model
     if output_dir:

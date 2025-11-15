@@ -17,6 +17,8 @@
 from typing import Optional, Union
 
 import numpy as np
+import torch
+import torchvision
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -36,17 +38,7 @@ from ...utils import (
     TensorType,
     auto_docstring,
     filter_out_non_signature_kwargs,
-    is_torch_available,
-    is_vision_available,
 )
-
-
-if is_torch_available():
-    import torch
-    import torchvision
-
-if is_vision_available():
-    pass
 
 
 class Phi3VFastImageProcessorKwargs(ImagesKwargs, total=False):
@@ -87,7 +79,7 @@ class Phi3VImageProcessorFast(BaseImageProcessorFast):
 
         is_transposed = False
         if width < height:
-            image = image.transpose(1, 2)
+            image = image.transpose(2, 3)
             is_transposed = True
             height, width = image.size()[-2:]
 
@@ -151,17 +143,6 @@ class Phi3VImageProcessorFast(BaseImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]] = None,
         disable_grouping: Optional[bool] = None,
     ):
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        resample = resample if resample is not None else self.resample
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-
-        size = size if size is not None else self.size
-        images = self.fetch_images(images)
-
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
@@ -189,30 +170,29 @@ class Phi3VImageProcessorFast(BaseImageProcessorFast):
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             stacked_images = torch.nn.functional.interpolate(
-                stacked_images.float(),
+                stacked_images,
                 size=(size["height"], size["width"]),
                 mode="bicubic",
             )
             processed_images_grouped[shape] = stacked_images
         global_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        image_sizes = [[image.shape[1], image.shape[2]] for image in images]  # expecting h,w
+        images_combined, image_sizes = [], []
+        #  Process each image to create local crops of shape (num_images, num_crops, 3, 336, 336)
+        #  and combine with global image.
+        for image, global_image in zip(images, global_images):
+            h, w = image.shape[1], image.shape[2]
+            reshaped = image.reshape(1, 3, h // size["height"], size["height"], w // size["width"], size["width"])
+            permuted = reshaped.permute(0, 2, 4, 1, 3, 5)
+            reshaped_final = permuted.reshape(-1, 3, size["height"], size["width"]).contiguous()
+            combined_image = torch.cat([global_image.unsqueeze(0), reshaped_final], axis=0)
+            images_combined.append(combined_image)
+            image_sizes.append([h, w])
+
+        # Calculate the number of image tokens for each image based on height and width dynamically.
         num_img_tokens = [
             int(((h // size["height"]) * (w // size["width"]) + 1) * 144 + 1 + (h // size["height"] + 1) * 12)
             for h, w in image_sizes
-        ]
-
-        final_reshaped_images = []
-        for image, (h, w) in zip(images, image_sizes):
-            reshaped = image.reshape(1, 3, h // size["height"], size["width"], w // size["width"], size["width"])
-            permuted = reshaped.permute(0, 2, 4, 1, 3, 5)
-            reshaped_final = permuted.reshape(-1, 3, size["height"], size["width"]).contiguous()
-            final_reshaped_images.append(reshaped_final)
-
-        # Combine global and local feature images.
-        images_combined = [
-            torch.cat([_global_image.unsqueeze(0)] + [_image], axis=0)
-            for _global_image, _image in zip(global_images, final_reshaped_images)
         ]
 
         # Pad all the images to max_crops.
@@ -223,7 +203,6 @@ class Phi3VImageProcessorFast(BaseImageProcessorFast):
             data={"pixel_values": processed_images, "image_sizes": image_sizes, "num_img_tokens": num_img_tokens},
             tensor_type=return_tensors,
         )
-
         return encoded_outputs
 
 

@@ -134,7 +134,8 @@ class Phi3VProcessor(ProcessorMixin):
         tokenized_prompts = []
         image_token_counter = 0
         for prompt in text:
-            prompt_splits = re.split(r"(\<\|image\|\>)", prompt)
+            image_token = re.escape(self.image_token)
+            prompt_splits = re.split(f"({image_token})", prompt)
 
             tokenized_outputs = []
             for split in prompt_splits:
@@ -178,20 +179,6 @@ class Phi3VProcessor(ProcessorMixin):
         }
 
         return BatchFeature(data=data)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
     @property
     def model_input_names(self):
