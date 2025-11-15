@@ -135,7 +135,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
         # Regular expression to remove non-printing characters (e.g. some unicode control chars) in preprocessing
         self.non_printing_characters_re = re.compile(
-            f"[{''.join(map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + [160, 173, 8203]))}]"
+            f"[{''.join(map(chr, list(range(9)) + list(range(11, 32)) + list(range(127, 160)) + [160, 173, 8203]))}]"
         )
 
         super().__init__(

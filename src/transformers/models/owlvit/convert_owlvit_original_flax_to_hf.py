@@ -285,11 +285,8 @@ def convert_clip_backbone(flax_params, torch_config):
         torch_key = flax_key.replace("/", ".")
         torch_key = torch_key.replace("text.token_embedding.embedding", "token_embedding.kernel")
 
-        if (
-            torch_key.startswith("text.transformer")
-            or torch_key.startswith("text.text_projection")
-            or torch_key.startswith("text.ln_final")
-            or torch_key.startswith("text.positional_embedding")
+        if torch_key.startswith(
+            ("text.transformer", "text.text_projection", "text.ln_final", "text.positional_embedding")
         ):
             torch_key = torch_key[5:]
 

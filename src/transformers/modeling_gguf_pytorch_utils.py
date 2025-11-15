@@ -120,7 +120,7 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
         # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L1994-L2022
         name = tensor_key_mapping[name]
         w_counter = self.config.get("num_experts", 60)
-        for i in range(0, w_counter):
+        for i in range(w_counter):
             temp_name = name.replace("mlp.experts.", f"mlp.experts.{i}.")
             exp_weight = weights[i]
             parsed_parameters["tensors"][temp_name] = torch.from_numpy(np.copy(exp_weight))
@@ -338,7 +338,7 @@ def get_gguf_hf_weights_map(
             hf_name = re.sub(r"mlp.experts.\d+.", "mlp.experts.", hf_name)
 
         name, suffix = hf_name, ""
-        if hf_name.endswith(".weight") or hf_name.endswith(".bias"):
+        if hf_name.endswith((".weight", ".bias")):
             name, suffix = hf_name.rsplit(".", 1)
             suffix = "." + suffix
 

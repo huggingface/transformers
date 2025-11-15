@@ -31,7 +31,7 @@ class UnpicklerWrapper(pickle.Unpickler):
             def __init__(self, *args, **kwargs):
                 pass
 
-        if mod_name.startswith("megatron") or mod_name.startswith("glm") or mod_name.startswith("__main__"):
+        if mod_name.startswith(("megatron", "glm", "__main__")):
             return DummyClass
         return super().find_class(mod_name, name)
 

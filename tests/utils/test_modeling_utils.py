@@ -3145,8 +3145,6 @@ class TestGetDecoder(unittest.TestCase):
         class MockInnerModel:
             """Mock model without get_decoder method."""
 
-            pass
-
         class MockWrapperModel:
             """Mock wrapper with model attribute but inner has no get_decoder."""
 

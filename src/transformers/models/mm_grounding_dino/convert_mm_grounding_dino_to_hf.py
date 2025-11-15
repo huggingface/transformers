@@ -377,10 +377,7 @@ def preprocess_old_state(state_dict: dict, config: MMGroundingDinoConfig) -> dic
             k == "dn_query_generator.label_embedding.weight"
             or k == "language_model.language_backbone.body.model.embeddings.position_ids"
             or k == "image_seperate.weight"
-            or k.startswith("lmm")
-            or k.startswith("connector")
-            or k.startswith("region_connector")
-            or k.startswith("ref_point_head")
+            or k.startswith(("lmm", "connector", "region_connector", "ref_point_head"))
         ):
             new_state_dict.pop(k)
 

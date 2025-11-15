@@ -40,7 +40,7 @@ def convert_tf_gptsan_to_pt(args):
         shapes = reader.get_variable_to_shape_map()
         for key_name in shapes:
             vnp = reader.get_tensor(key_name).astype(np.float16)
-            if key_name.endswith("/adam_m") or key_name.endswith("/adam_v"):
+            if key_name.endswith(("/adam_m", "/adam_v")):
                 continue
             if key_name.startswith("pasts/"):
                 if key_name.startswith("pasts/mlp"):
@@ -60,7 +60,7 @@ def convert_tf_gptsan_to_pt(args):
                     name = "model.blocks.%d.feed_forward.soft_bypass_mlp.weight" % player
                     state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
-                elif key_name.endswith("/wo/kernel") or key_name.endswith("/wi/kernel"):
+                elif key_name.endswith(("/wo/kernel", "/wi/kernel")):
                     nlayer = key_name[-9:-7]
                     for i in range(16):
                         name = "model.blocks.%d.feed_forward.mlp.experts.expert_%d.%s.weight" % (player, i, nlayer)
@@ -140,11 +140,7 @@ def convert_tf_gptsan_to_pt(args):
                     name = "model.blocks.%d.self_attn.norm.weight" % player
                     state = vnp.copy()  # same because it is one dimensional
                     new_state[name] = torch.tensor(state)
-            elif (
-                key_name.startswith("model/wte")
-                or key_name.startswith("model/wpe")
-                or key_name.startswith("model/ete")
-            ):
+            elif key_name.startswith(("model/wte", "model/wpe", "model/ete")):
                 nlayer = {"wte": "embed_tokens", "wpe": "position_embeddings", "ete": "extra_position_embeddings"}[
                     key_name[-3:]
                 ]

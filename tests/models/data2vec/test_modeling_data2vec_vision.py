@@ -345,9 +345,7 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_interpolate_pos_encoding(self):
         model_name = "facebook/data2vec-vision-base-ft1k"
-        model = Data2VecVisionModel.from_pretrained(model_name, **{"use_absolute_position_embeddings": True}).to(
-            torch_device
-        )
+        model = Data2VecVisionModel.from_pretrained(model_name, use_absolute_position_embeddings=True).to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         processor = BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k")

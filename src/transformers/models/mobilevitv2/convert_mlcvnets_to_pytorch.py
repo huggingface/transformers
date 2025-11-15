@@ -242,7 +242,7 @@ def convert_mobilevitv2_checkpoint(task_name, checkpoint_path, orig_config_path,
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # load huggingface model
-    if task_name.startswith("ade20k_") or task_name.startswith("voc_"):
+    if task_name.startswith(("ade20k_", "voc_")):
         model = MobileViTV2ForSemanticSegmentation(config).eval()
         base_model = False
     else:

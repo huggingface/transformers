@@ -118,7 +118,7 @@ def convert_to_relative_import(import_node: cst.ImportFrom, file_path: str, pack
 
     # Check if it's from the target package
     if (
-        not (module_name.startswith(package_name + ".") or module_name.startswith("optimum." + package_name + "."))
+        not (module_name.startswith((package_name + ".", "optimum." + package_name + ".")))
         and module_name != package_name
     ):
         return import_node  # Not from target package
