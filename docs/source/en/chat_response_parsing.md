@@ -74,14 +74,15 @@ messages = [
     }
 ]
 
-input_ids = tokenizer.apply_chat_template(
+processed = tokenizer.apply_chat_template(
     messages,
     add_generation_prompt=True,
     tokenize=True,
     return_tensors="pt"
-).to(model.device)
+)
+input_ids = processed["input_ids"].to(model.device)
 
-outputs = model.generate(input_ids, max_new_tokens=1024)[0, input_ids.shape[1]:]
+outputs = model.generate(input_ids, max_new_tokens=1024)[0, input_ids.shape[1] :]
 out_text = tokenizer.decode(outputs)
 parsed = tokenizer.parse_response(out_text)
 print(parsed.keys())
