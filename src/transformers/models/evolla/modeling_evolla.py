@@ -915,7 +915,8 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
         hidden_states = query_states
         # only when there's at least one valid modality, crossattention will be performed
         if (
-            (protein_kv_states is not None and protein_kv_attn_mask.any())
+            torch.compiler.is_exporting()
+            or (protein_kv_states is not None and protein_kv_attn_mask.any())
             or (structure_kv_states is not None and structure_kv_attn_mask.any())
             or (msa_kv_states is not None and msa_kv_attn_mask.any())
         ):

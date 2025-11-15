@@ -269,7 +269,9 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             2. Attending to all inputs
         """
         mamba_mask = attention_mask
-        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
+        if not torch.compiler.is_exporting() and (
+            cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1))
+        ):
             mamba_mask = None
         return mamba_mask
 

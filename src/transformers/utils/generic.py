@@ -257,9 +257,10 @@ class ModelOutput(OrderedDict):
 
             register_pytree_node(
                 cls,
-                _model_output_flatten,
-                partial(_model_output_unflatten, output_type=cls),
+                flatten_fn=_model_output_flatten,
+                unflatten_fn=partial(_model_output_unflatten, output_type=cls),
                 serialized_type_name=f"{cls.__module__}.{cls.__name__}",
+                flatten_with_keys_fn=lambda output: torch.utils._pytree._dict_flatten_with_keys(dict(output)),
             )
 
     def __init__(self, *args, **kwargs):

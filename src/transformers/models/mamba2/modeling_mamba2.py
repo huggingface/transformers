@@ -315,7 +315,11 @@ class Mamba2Mixer(nn.Module):
         ) // 2
 
         # Single step calculations via cache
-        if cache_params is not None and cache_position is not None and cache_position[0] > 0:
+        if (
+            cache_params is not None
+            and cache_position is not None
+            and (torch.compiler.is_exporting() or cache_position[0] > 0)
+        ):
             _, _, gate, hidden_states_B_C, dt = projected_states.squeeze(1).split(
                 [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
             )
@@ -475,7 +479,11 @@ class Mamba2Mixer(nn.Module):
         )
 
         # 2. Convolution sequence transformation
-        if cache_params is not None and cache_position is not None and cache_position[0] > 0:
+        if (
+            cache_params is not None
+            and cache_position is not None
+            and (torch.compiler.is_exporting() or cache_position[0] > 0)
+        ):
             cache_params.update_conv_state(layer_idx=self.layer_idx, new_conv_state=hidden_states_B_C, cache_init=False)
 
             # We need to guarantee that anything regarding the cache is on the same device
@@ -507,7 +515,11 @@ class Mamba2Mixer(nn.Module):
 
         # 3. SSM transformation
         A = -torch.exp(self.A_log.float())                            # [num_heads]
-        if cache_params is not None and cache_position is not None and cache_position[0] > 0:
+        if (
+            cache_params is not None
+            and cache_position is not None
+            and (torch.compiler.is_exporting() or cache_position[0] > 0)
+        ):
             # We need to guarantee that anything regarding the cache is on the same device
             cache_device = cache_params.ssm_states.device
 
@@ -612,7 +624,11 @@ class Mamba2Mixer(nn.Module):
 
             # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
             # (middle term of factorization of off-diag blocks; A terms)
-            if cache_params is not None and cache_position is not None and cache_position[0] > 0:
+            if (
+                    cache_params is not None
+                    and cache_position is not None
+                    and (torch.compiler.is_exporting() or cache_position[0] > 0)
+                ):
                 previous_states = cache_params.ssm_states[self.layer_idx][:, None, ...].to(device=states.device)
             else:
                 previous_states = torch.zeros_like(states[:, :1])

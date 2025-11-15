@@ -42,6 +42,8 @@ from transformers import (
     logging,
     set_seed,
 )
+from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
+from transformers.exporters.utils import prepare_inputs_for_export
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -574,7 +576,7 @@ class ModelTesterMixin:
     test_resize_position_embeddings = False
     test_mismatched_shapes = True
     test_missing_keys = True
-    test_torch_exportable = False
+
     # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
     test_all_params_have_gradient = True
     is_encoder_decoder = False
@@ -3539,7 +3541,7 @@ class ModelTesterMixin:
     @slow
     @require_torch_greater_or_equal("2.5")
     @pytest.mark.torch_export_test
-    def test_torch_export(self, config=None, inputs_dict=None, tolerance=1e-4):
+    def test_torch_export(self, atol=1e-4, rtol=1e-4):
         """
         Test if model can be exported with torch.export.export()
 
@@ -3551,13 +3553,11 @@ class ModelTesterMixin:
             tolerance (float):
                 `atol` for torch.allclose(), defined in signature for test overriding
         """
-        if not self.test_torch_exportable:
-            self.skipTest(reason="test_torch_exportable=False for this model.")
 
         def recursively_check(eager_outputs, exported_outputs):
             is_tested = False
             if isinstance(eager_outputs, torch.Tensor):
-                torch.testing.assert_close(eager_outputs, exported_outputs, atol=tolerance, rtol=tolerance)
+                torch.testing.assert_close(eager_outputs, exported_outputs, atol=atol, rtol=rtol)
                 return True
             elif isinstance(eager_outputs, (tuple, list)):
                 for eager_output, exported_output in zip(eager_outputs, exported_outputs):
@@ -3569,29 +3569,52 @@ class ModelTesterMixin:
                 return is_tested
             return is_tested
 
-        default_config, default_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config = config or default_config
-        inputs_dict = inputs_dict or default_inputs_dict
+        exporter = DynamoExporter(export_config=DynamoConfig())
 
         for model_class in self.all_model_classes:
-            if model_class.__name__.endswith("ForPreTraining"):
-                continue
+            if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+            else:
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
 
             with self.subTest(model_class.__name__):
                 model = model_class(config).eval().to(torch_device)
+                # needed to prepare cache inputs for auto-regressive models and process
+                # output flags (e.g. use_cache, output_attentions, etc) to avoid passing them as inputs
+                model, inputs_dict = prepare_inputs_for_export(model, inputs_dict)
+                # filtering of inputs that are not in the forward signature or that are None
+                # this is needed since sometimes inputs_dict contains extra inputs that are not
+                # accepted by model (e.g. output_router_logits is not used by SwitchTransformersModel)
+                inputs_dict = {
+                    k: v
+                    for k, v in inputs_dict.items()
+                    if k in inspect.signature(model.forward).parameters and v is not None
+                }
 
-                # Export model
-                exported_model = torch.export.export(
-                    model, args=(), kwargs=inputs_dict, strict=getattr(self, "test_torch_exportable_strictly", True)
-                )
-
-                # Run exported model and eager model
                 with torch.no_grad():
-                    # set seed in case anything is not deterministic in model (e.g. vit_mae noise)
-                    torch.manual_seed(1234)
-                    eager_outputs = model(**inputs_dict)
-                    torch.manual_seed(1234)
-                    exported_outputs = exported_model.module().forward(**inputs_dict)
+                    set_seed(1234)
+                    # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
+                    # the export, the model used for export will return FakeTensors instead of real ones (torch cuda/inductor issue)
+                    # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
+                    eager_outputs = model(**copy.deepcopy(inputs_dict))
+
+                try:
+                    exported_program = exporter.export(model, sample_inputs=copy.deepcopy(inputs_dict))
+                except NotImplementedError:
+                    continue
+                except Exception as e:
+                    raise e
+
+                with torch.no_grad():
+                    set_seed(1234)
+                    exported_outputs = exported_program.module().forward(**copy.deepcopy(inputs_dict))
+
+                if "lsh" in getattr(config, "attn_layers", []):
+                    self.skipTest(
+                        "LSH attention is not deterministic (uses torch.randn). "
+                        "Skipping the exported vs eager outputs comparison."
+                    )
 
                 # Check if outputs are close:
                 # is_tested is a boolean flag indicating if we compare any outputs,

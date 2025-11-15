@@ -191,7 +191,9 @@ class NllbMoeTop2Router(nn.Module):
         `bitsandbytes` `Linear8bitLt` layers does not support manual casting Therefore we need to check if they are an
         instance of the `Linear8bitLt` class by checking special attributes.
         """
-        if not (hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")):
+        if not torch.compiler.is_exporting() and not (
+            hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")
+        ):
             self.classifier = self.classifier.to(self.dtype)
 
     def normalize_router_probabilities(self, router_probs, top_1_mask, top_2_mask):

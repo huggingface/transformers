@@ -1466,7 +1466,9 @@ class LEDEncoder(LEDPreTrainedModel):
         # get masking tensors
         is_index_masked = attention_mask < 0
         is_index_global_attn = attention_mask > 0
-        is_global_attn = is_index_global_attn.flatten().any().item()
+
+        # Default to false during export to avoid issues in global attention handling
+        is_global_attn = not torch.compiler.is_exporting() and is_index_global_attn.flatten().any().item()
 
         embed_pos = self.embed_positions(input_shape)
 
@@ -1501,7 +1503,7 @@ class LEDEncoder(LEDPreTrainedModel):
                 # bzs x seq_len x num_attn_heads x (num_global_attn + attention_window_len + 1) => bzs x num_attn_heads x seq_len x (num_global_attn + attention_window_len + 1)
                 all_attentions = all_attentions + (layer_outputs[1].transpose(1, 2),)
 
-                if is_global_attn:
+                if not torch.compiler.is_exporting() and is_global_attn:
                     # bzs x num_attn_heads x num_global_attn x seq_len => bzs x num_attn_heads x seq_len x num_global_attn
                     all_global_attentions = all_global_attentions + (layer_outputs[2].transpose(2, 3),)
 
@@ -2189,8 +2191,9 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
-        if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
+        if not torch.compiler.is_exporting() and len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
+
         sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
             :, -1, :
         ]

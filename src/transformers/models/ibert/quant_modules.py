@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import decimal
 
 import numpy as np
@@ -720,6 +721,7 @@ def batch_frexp(inputs, max_bit=31):
     inputs = inputs.view(-1)
 
     output_m, output_e = np.frexp(inputs.cpu().numpy())
+
     tmp_m = []
     for m in output_m:
         int_m_shifted = int(

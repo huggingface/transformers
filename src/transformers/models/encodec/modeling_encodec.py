@@ -710,7 +710,11 @@ class EncodecModel(EncodecPreTrainedModel):
             audio_values = self._linear_overlap_add(decoded_frames, self.config.chunk_stride or 1)
 
         # truncate based on padding mask
-        if padding_mask is not None and padding_mask.shape[-1] < audio_values.shape[-1]:
+        if (
+            padding_mask is not None
+            and not torch.compiler.is_exporting()
+            and padding_mask.shape[-1] < audio_values.shape[-1]
+        ):
             audio_values = audio_values[..., : padding_mask.shape[-1]]
 
         if not return_dict:
