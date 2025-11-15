@@ -20,9 +20,9 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
-import regex as re
 
 from ...utils import logging, to_py_obj
+from ...utils.safe import regex as re
 
 
 if TYPE_CHECKING:

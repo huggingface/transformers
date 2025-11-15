@@ -19,11 +19,10 @@ import os
 from functools import lru_cache
 from typing import Optional, Union
 
-import regex as re
-
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding, EncodedInput
 from ...utils import PaddingStrategy, logging
+from ...utils.safe import regex as re
 
 
 logger = logging.get_logger(__name__)

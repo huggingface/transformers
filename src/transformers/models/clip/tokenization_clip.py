@@ -20,10 +20,9 @@ import unicodedata
 from functools import lru_cache
 from typing import Optional
 
-import regex as re
-
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
+from ...utils.safe import regex as re
 
 
 logger = logging.get_logger(__name__)

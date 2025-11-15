@@ -19,6 +19,7 @@ import torch
 from accelerate import init_empty_weights
 
 from transformers import GemmaTokenizer, RecurrentGemmaConfig, RecurrentGemmaForCausalLM
+from transformers.utils.safe import regex as re
 
 
 try:
@@ -29,8 +30,6 @@ except ImportError as e:
         "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
     )
     GemmaTokenizerFast = None
-
-import regex as re
 
 
 """
@@ -62,6 +61,7 @@ gemma_2b_config = RecurrentGemmaConfig(
     vocab_size=256000,
     num_hidden_layers=26,
 )
+
 
 gemma_7b_config = RecurrentGemmaConfig()
 

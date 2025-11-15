@@ -19,7 +19,6 @@ import os
 from pathlib import Path
 from typing import Optional
 
-import regex as re
 import tiktoken
 import torch
 from safetensors.torch import load_file as safe_load
@@ -31,6 +30,7 @@ from transformers import (
     PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
+from transformers.utils.safe import regex as re
 
 
 # fmt: off
