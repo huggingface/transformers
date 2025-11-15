@@ -702,7 +702,6 @@ class TorchAoSerializationTest(unittest.TestCase):
     def test_original_model_expected_output(self):
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device)
         output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def check_serialization_expected_output(self, device, expected_output, safe_serialization=False):
@@ -723,11 +722,12 @@ class TorchAoSerializationTest(unittest.TestCase):
 
 
 @require_torchao
-@require_torchao_version_greater_or_equal("0.14.0")
+@require_torchao_version_greater_or_equal("0.15.0")
 class TorchAoSafeSerializationTest(TorchAoSerializationTest):
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
         # placeholder
@@ -748,6 +748,16 @@ class TorchAoSafeSerializationTest(TorchAoSerializationTest):
                 "What are we having for dinner?\n\nJess: (smiling) I",
             ),
             (torchao.quantization.Float8WeightOnlyConfig(), "What are we having for dinner?\n\nJessica: (smiling)"),
+            (Int4WeightOnlyConfig(), "What are we having for dinner?"),
+            (
+                Int4WeightOnlyConfig(int4_packing_format="tile_packed_to_4d"),
+                "What are we having for dinner?\nRed, white, and green beans,",
+            ),
+            (
+                torchao.quantization.Int8DynamicActivationIntxWeightConfig(),
+                "What are we having for dinner?\n\nJessica: (smiling)",
+            ),
+            (torchao.quantization.IntxWeightOnlyConfig(), "What are we having for dinner?\n\nJessica: (smiling)"),
         ]
         if is_torchao_available()
         else []
