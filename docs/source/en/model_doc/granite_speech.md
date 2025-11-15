@@ -78,7 +78,7 @@ print(transcription)
 
 ### Speech-to-Text with Chat Template
 
-For instruction-following with audio, use the chat template to format prompts properly:
+For instruction-following with audio, use the chat template with audio directly in the conversation format:
 
 ```python
 from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
@@ -95,22 +95,21 @@ processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-s
 # Load audio from dataset
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-audio = ds['audio'][0]['array']
+audio = ds['audio'][0]
 
-# Prepare chat-formatted inputs with audio
-messages = [
-    {"role": "user", "content": "Transcribe the following audio:"}
+# Prepare conversation with audio and text
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "audio", "audio": audio},
+            {"type": "text", "text": "Transcribe the following audio:"},
+        ],
+    }
 ]
 
-# Apply chat template to format the prompt
-text = processor.tokenizer.apply_chat_template(
-    messages, 
-    tokenize=False, 
-    add_generation_prompt=True
-)
-
-# Process text and audio together
-inputs = processor(text=text, audio=audio, return_tensors="pt").to(model.device)
+# Apply chat template with audio - processor handles both tokenization and audio processing
+inputs = processor.apply_chat_template(conversation, tokenize=True, return_tensors="pt").to(model.device)
 
 # Generate transcription
 generated_ids = model.generate(**inputs, max_new_tokens=512)
