@@ -190,6 +190,7 @@ else:
             ("swin", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin2sr", ("Swin2SRImageProcessor", "Swin2SRImageProcessorFast")),
             ("swinv2", ("ViTImageProcessor", "ViTImageProcessorFast")),
+            ("t5gemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("table-transformer", ("DetrImageProcessor", "DetrImageProcessorFast")),
             ("textnet", ("TextNetImageProcessor", "TextNetImageProcessorFast")),
             ("timesformer", ("VideoMAEImageProcessor", None)),
