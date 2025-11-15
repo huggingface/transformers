@@ -299,7 +299,7 @@ class Phi3VIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_id = "yaswanthgali/Phi-3.5-vision-instruct"
 
-    @slow
+    # @slow
     def test_model_text_generation(self):
         model = Phi3VForConditionalGeneration.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         model.eval()
@@ -333,7 +333,7 @@ class Phi3VIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
+    # @slow
     def test_model_text_generation_batched(self):
         model = Phi3VForConditionalGeneration.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -379,7 +379,7 @@ class Phi3VIntegrationTest(unittest.TestCase):
         text = processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
-    @slow
+    # @slow
     def test_model_text_generation_with_multi_image(self):
         model = Phi3VForConditionalGeneration.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         processor = AutoProcessor.from_pretrained(self.model_id)

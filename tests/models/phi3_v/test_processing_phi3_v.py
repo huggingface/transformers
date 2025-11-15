@@ -95,7 +95,7 @@ class Phi3VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        # The <|imag|> token used in original test is a special image token hence replace with dummy image token.
+        # The <|image|> token used in comman test is a special image token hence replace with dummy image token.
         input_str = ["lower newer |image|", " |image| upper older longer string"]
         image_input = self.prepare_image_inputs(batch_size=2)
         inputs = processor(
