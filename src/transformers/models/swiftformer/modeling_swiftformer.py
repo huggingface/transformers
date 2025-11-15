@@ -20,6 +20,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2CLS
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
@@ -393,20 +394,20 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Conv2d, nn.Linear)):
-            nn.init.trunc_normal_(module.weight, std=0.02)
+            init.trunc_normal_(module.weight, std=0.02)
             if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
+                init.constant_(module.bias, 0)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            nn.init.constant_(module.bias, 0)
-            nn.init.constant_(module.weight, 1.0)
+            init.constant_(module.bias, 0)
+            init.constant_(module.weight, 1.0)
         elif isinstance(module, (SwiftFormerConvEncoder, SwiftFormerLocalRepresentation)):
-            module.layer_scale.fill_(1.0)
+            init.ones_(module.layer_scale)
         elif isinstance(module, SwiftFormerEncoderBlock):
             if self.config.use_layer_scale:
-                module.layer_scale_1.fill_(self.config.layer_scale_init_value)
-                module.layer_scale_2.fill_(self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_1, self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_2, self.config.layer_scale_init_value)
         elif isinstance(module, SwiftFormerEfficientAdditiveAttention):
-            nn.init.normal_(module.w_g)
+            init.normal_(module.w_g)
 
 
 @auto_docstring
