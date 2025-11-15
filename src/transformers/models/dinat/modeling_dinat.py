@@ -37,13 +37,10 @@ from .configuration_dinat import DinatConfig
 
 
 if is_natten_available():
-    from natten.functional import natten2dav, natten2dqkrpb
+    from natten.functional import na2d
 else:
 
-    def natten2dqkrpb(*args, **kwargs):
-        raise OptionalDependencyNotAvailable()
-
-    def natten2dav(*args, **kwargs):
+    def na2d(*args, **kwargs):
         raise OptionalDependencyNotAvailable()
 
 
@@ -253,7 +250,8 @@ class NeighborhoodAttention(nn.Module):
         self.kernel_size = kernel_size
         self.dilation = dilation
 
-        # rpb is learnable relative positional biases; same concept is used Swin.
+        # Note: rpb (relative positional bias) is no longer used with the new natten API
+        # It's kept here for backward compatibility with model checkpoints
         self.rpb = nn.Parameter(torch.zeros(num_heads, (2 * self.kernel_size - 1), (2 * self.kernel_size - 1)))
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -267,44 +265,39 @@ class NeighborhoodAttention(nn.Module):
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
+        batch_size, height, width, _ = hidden_states.shape
+
+        # Project to Q, K, V and reshape to [batch, height, width, heads, head_dim]
+        query_layer = self.query(hidden_states).view(
+            batch_size, height, width, self.num_attention_heads, self.attention_head_size
         )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
+        key_layer = self.key(hidden_states).view(
+            batch_size, height, width, self.num_attention_heads, self.attention_head_size
         )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
+        value_layer = self.value(hidden_states).view(
+            batch_size, height, width, self.num_attention_heads, self.attention_head_size
         )
 
-        # Apply the scale factor before computing attention weights. It's usually more efficient because
-        # attention weights are typically a bigger tensor compared to query.
-        # It gives identical results because scalars are commutable in matrix multiplication.
-        query_layer = query_layer / math.sqrt(self.attention_head_size)
+        context_layer = na2d(
+            query=query_layer,
+            key=key_layer,
+            value=value_layer,
+            kernel_size=self.kernel_size,
+            dilation=self.dilation,
+            is_causal=False,
+            scale=1.0 / math.sqrt(self.attention_head_size),
+        )
 
-        # Compute NA between "query" and "key" to get the raw attention scores, and add relative positional biases.
-        attention_scores = natten2dqkrpb(query_layer, key_layer, self.rpb, self.kernel_size, self.dilation)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = natten2dav(attention_probs, value_layer, self.kernel_size, self.dilation)
-        context_layer = context_layer.permute(0, 2, 3, 1, 4).contiguous()
+        # Reshape output to [batch, height, width, all_head_size]
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        # Apply dropout
+        context_layer = self.dropout(context_layer)
+
+        # Note: The new na2d interface doesn't support returning attention weights
+        # If output_attentions is True, we return None for attention weights
+        outputs = (context_layer, None) if output_attentions else (context_layer,)
 
         return outputs
 
