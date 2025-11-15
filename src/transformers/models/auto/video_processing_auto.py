@@ -53,6 +53,7 @@ if TYPE_CHECKING:
 else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
+            ("glm46v", "Glm46VVideoProcessor"),
             ("glm4v", "Glm4vVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
             ("instructblipvideo", "InstructBlipVideoVideoProcessor"),

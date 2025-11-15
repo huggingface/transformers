@@ -1680,4 +1680,4 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         return input_ids, model_kwargs
 
 
-__all__ = ["Glm4vForConditionalGeneration", "Glm4vModel", "Glm4vPreTrainedModel", "Glm4vTextModel"]
+__all__ = ["Glm4vForConditionalGeneration", "Glm4vModel", "Glm4vPreTrainedModel", "Glm4vTextModel", "Glm4vVisionModel"]

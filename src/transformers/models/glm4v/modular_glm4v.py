@@ -69,39 +69,35 @@ class Glm4vVisionConfig(PreTrainedConfig):
     GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the encoder layers and the pooler layer.
-        depth (`int`, *optional*, defaults to 24):
-            Number of layers (depth) in the model.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to add a bias to the queries, keys and values.
-        intermediate_size (`int`, *optional*, defaults to 13696):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"selu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for attention weights.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for the projection layer.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        image_size (`int` or `list[int]`, *optional*, defaults to `[336, 336]`):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to `14`):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        out_hidden_size (`int`, *optional*, defaults to 4096):
-            The output hidden size of the vision model.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size used for merging spatial dimensions.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The size used for patches along the temporal dimension.
+            depth (`int`, *optional*, defaults to 24):
+                Number of layers (depth) in the model.
+            hidden_size (`int`, *optional*, defaults to 1536):
+                Dimensionality of the encoder layers and the pooler layer.
+            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+                `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            attention_bias (`bool`, *optional*, defaults to `False`):
+                Whether to add a bias to the queries, keys and values.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                Dropout probability for attention weights.
+            num_heads (`<fill_type>`, *optional*, defaults to 12): <fill_docstring>
+            in_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+            image_size (`int` or `list[int]`, *optional*, defaults to 336):
+                The size (resolution) of each image.
+            patch_size (`int`, *optional*, defaults to 14):
+                The size (resolution) of each patch.
+            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+                The epsilon used by the rms normalization layers.
+            spatial_merge_size (`int`, *optional*, defaults to 2):
+                The size used for merging spatial dimensions.
+            temporal_patch_size (`int`, *optional*, defaults to 2):
+                The size used for patches along the temporal dimension.
+            out_hidden_size (`int`, *optional*, defaults to 4096):
+                The output hidden size of the vision model.
+            intermediate_size (`int`, *optional*, defaults to 13696):
+                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
 
     ```python
@@ -117,7 +113,7 @@ class Glm4vVisionConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "glm4v"
+    model_type = "glm4v_vision"
     base_config_key = "vision_config"
 
     def __init__(
@@ -1653,7 +1649,7 @@ class Glm4vProcessor(Qwen2VLProcessor):
 
                     for frame_idx in range(num_frames):
                         timestamp_sec = selected_timestamps[frame_idx]
-                        frame_structure = f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"
+                        frame_structure = self.replace_frame_token_id(timestamp_sec)
                         video_structure += frame_structure
 
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
@@ -1679,13 +1675,18 @@ class Glm4vProcessor(Qwen2VLProcessor):
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
+    def replace_frame_token_id(self, timestamp_sec):
+        return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"
+
 
 __all__ = [
     "Glm4vConfig",
     "Glm4vTextConfig",
+    "Glm4vVisionConfig",
     "Glm4vForConditionalGeneration",
     "Glm4vModel",
     "Glm4vPreTrainedModel",
     "Glm4vProcessor",
     "Glm4vTextModel",
+    "Glm4vVisionModel",
 ]

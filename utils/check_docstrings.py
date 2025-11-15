@@ -235,6 +235,8 @@ OBJECTS_TO_IGNORE = {
     "GPTSanJapaneseConfig",
     "GitConfig",
     "GitVisionConfig",
+    "Glm4vVisionConfig",
+    "Glm4vMoeVisionConfig",
     "GraphormerConfig",
     "GroupViTTextConfig",
     "GroupViTVisionConfig",

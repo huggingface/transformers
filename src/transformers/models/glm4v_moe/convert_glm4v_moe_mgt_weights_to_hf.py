@@ -713,7 +713,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
 
     if "vision_config" in model_config:
         vision_config = {
-            "model_type": "glm4v_moe",
+            "model_type": "glm4v_moe_vision",
             "hidden_size": model_config["vision_config"].get("hidden_size", 1536),
             "depth": model_config["vision_config"].get("num_layers", 24),
             "num_heads": model_config["vision_config"].get("num_attention_heads", 12),

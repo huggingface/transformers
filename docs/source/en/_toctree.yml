@@ -1066,6 +1066,8 @@
         title: Gemma3n
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glm46v
+        title: Glm46V
       - local: model_doc/glm4v
         title: glm4v
       - local: model_doc/glm4v_moe
