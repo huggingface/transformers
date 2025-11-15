@@ -424,8 +424,8 @@
       title: 토크나이저
     - local: main_classes/trainer
       title: Trainer
-    - local: in_translation
-      title: (번역중) DeepSpeed
+    - local: main_classes/deepspeed
+      title: DeepSpeed
     - local: in_translation
       title: ExecuTorch
     - local: main_classes/feature_extractor
