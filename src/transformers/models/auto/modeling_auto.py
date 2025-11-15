@@ -138,7 +138,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("edgetam_video", "EdgeTamVideoModel"),
         ("edgetam_vision_model", "EdgeTamVisionModel"),
         ("efficientformer", "EfficientFormerModel"),
-        ("efficientloftr", "EfficientLoFTRModel"),
+        ("efficientloftr", ("EfficientLoFTRModel", "EfficientLoFTRForKeypointMatching")),
         ("efficientnet", "EfficientNetModel"),
         ("electra", "ElectraModel"),
         ("emu3", "Emu3Model"),
