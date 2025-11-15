@@ -13,11 +13,18 @@
 # limitations under the License.
 
 import math
+import sys
 from functools import wraps
 from typing import Optional, TypedDict
 
 from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_available, logging
+
+
+if sys.version_info >= (3, 11):
+    from typing import Required
+else:
+    from typing_extensions import Required
 
 
 logger = logging.get_logger(__name__)
@@ -27,55 +34,147 @@ if is_torch_available():
     import torch
 
 
-def standardize_rope_params(config, rope_theta: float | dict[str, float] | None = None):
+class RopeParameters(TypedDict, total=False):
     """
-    Helper to standardize the config's rope params field by ensuring the params are defined for each
-    later type. For old model the fn will duplicate a single rope param in each layer type (backward compatibility)
+    Args:
+        rope_theta (`float`):
+            The base period of the RoPE embeddings.
+        rope_type (`str`):
+            The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+            'llama3'], with 'default' being the original RoPE implementation. This value will be "default" if
+            constructed by `standardize_rope_params()` from a legacy config without a `rope_parameters` or
+            `rope_scaling` field that specifies this value.
+        factor (`float`, *optional*):
+            Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
+            most scaling types, a `factor` of x will enable the model to handle sequences of length x *
+            original maximum pre-trained length.
+        original_max_position_embeddings (`int`, *optional*):
+            Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
+            pretraining.
+        attention_factor (`float`, *optional*):
+            Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+            computation. If unspecified, it defaults to value recommended by the implementation, using the
+            `factor` field to infer the suggested value.
+        beta_fast (`float`, *optional*):
+            Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+            ramp function. If unspecified, it defaults to 32.
+        beta_slow (`float`, *optional*):
+            Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+            ramp function. If unspecified, it defaults to 1.
+        short_factor (`list[float]`, *optional*):
+            Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+            `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+            size divided by the number of attention heads divided by 2
+        long_factor (`list[float]`, *optional*):
+            Only used with 'longrope'. The scaling factor to be applied to long contexts (<
+            `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+            size divided by the number of attention heads divided by 2
+        low_freq_factor (`float`, *optional*):
+            Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
+        high_freq_factor (`float`, *optional*):
+            Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
     """
-    rope_parameters = getattr(config, "rope_parameters", None)
-    layer_types = getattr(config, "layer_types", None)
+
+    rope_theta: Required[float]
+    rope_type: Required[str]
+    factor: Optional[float]
+    original_max_position_embeddings: Optional[int]
+    attention_factor: Optional[float]
+    beta_fast: Optional[float]
+    beta_slow: Optional[float]
+    short_factor: Optional[list[float]]
+    long_factor: Optional[list[float]]
+    low_freq_factor: Optional[float]
+    high_freq_factor: Optional[float]
+    mrope_section: Optional[list[int]]
+
+
+def standardize_rope_params(config: PreTrainedConfig, rope_theta: float | dict[str, float] | None = None) -> None:
+    """
+    Standardizes the config's `rope_parameters` field by ensuring the params are defined, possibly by layer type.
+
+    For backward compatibility with old models, this function will duplicate a single rope param for each layer type.
+
+    Args:
+        config (`~transformers.PreTrainedConfig`):
+            The model configuration.
+        rope_theta (`float`):
+            The base period of the RoPE embeddings. This value will be superceded by
+            `config.rope_parameters.rope_theta` if this value is a `float | None` and
+            `config.rope_parameters.rope_theta` is truthy.
+
+    Returns:
+        None. This function _may_ modify `config` in-place:
+            *   If `rope_theta` is a dictionary, the udpated `config.rope_parameters` will be a
+                `dict[str, RopeParameters]` with keys for every unique layer type in `config.layer_types`.
+            *   If `rope_theta` is a float, `config.rope_parameters` will be a `RopeParameters` dictionary and the same
+                rope_theta will be used for all layer types.
+            *   If `rope_theta` is None, the function
+
+    Raises:
+        KeyError: If `rope_theta` (either from the config or provided directly) is a dictionary and does not contain an
+            entry for a value of `config.layer_types`.
+    """
+    rope_parameters: RopeParameters | dict[str, RopeParameters] | None = getattr(config, "rope_parameters", None)
+    layer_types: list[str] | None = getattr(config, "layer_types", None)
+
+    # Caller did not provide rope_theta. Attempt to get it from the config.
     if rope_theta is None:
         rope_theta = getattr(config, "rope_theta", None)
 
-    # Case 1: one RoPE theat = one RoPE param per model without nesting
+    def process_rope_parameters_for_layer_type(rope_theta: dict[str, float], layer_type: str) -> RopeParameters:
+        if rope_parameters is None:
+            return RopeParameters(rope_type="default", rope_theta=rope_theta[layer_type])
+        elif layer_type in rope_parameters:
+            layer_type_rope_params: RopeParameters = rope_parameters[layer_type]
+            curr_rope_type = layer_type_rope_params.get("rope_type", layer_type_rope_params.get("type"))
+            normalized_params = RopeParameters(**layer_type_rope_params)
+            normalized_params.update(
+                {
+                    "rope_type": curr_rope_type,
+                    "rope_theta": rope_theta[layer_type],
+                }
+            )
+            return normalized_params
+        else:
+            curr_rope_type = rope_parameters.get("rope_type", rope_parameters.get("type"))
+            normalized_params = RopeParameters(**rope_parameters)
+            normalized_params.update(
+                {
+                    "rope_type": curr_rope_type,
+                    "rope_theta": rope_theta[layer_type],
+                }
+            )
+            return normalized_params
+
+    # Case 1: No RoPE theta? No change to config. One RoPE theta? One `rope_parameters` per model without nesting
     if not isinstance(rope_theta, dict):
         if rope_parameters is None:
-            rope_parameters = {"rope_type": "default", "rope_theta": rope_theta}
+            rope_type = "default"
         else:
             # BC: if there is a 'type' field, copy it it to 'rope_type'.
             rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
             rope_theta = rope_parameters.get("rope_theta") or rope_theta
-            rope_parameters.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        config.rope_parameters = rope_parameters
+
+        if rope_theta is None:
+            logger.warning(
+                "Unable to find a rope_theta and defaults are not supported for this value. Returning the config"
+                " un-modified. Verify that the model uses RoPE and that it should have been present in this config."
+            )
+            return
+
+        config.rope_parameters = RopeParameters(rope_type=rope_type, rope_theta=rope_theta)
 
     # Case 2: different RoPE for each layer as nested dict
+    elif layer_types is not None:
+        config.rope_parameters = {
+            layer_type: process_rope_parameters_for_layer_type(rope_theta, layer_type) for layer_type in layer_types
+        }
     else:
-        rope_parameters_per_layer_type = {}
-        for layer_type in layer_types:
-            if rope_parameters is None:
-                rope_parameters_per_layer_type[layer_type] = {
-                    "rope_type": "default",
-                    "rope_theta": rope_theta[layer_type],
-                }
-            else:
-                is_field_in_new_format = any(layer_type in rope_parameters for layer_type in layer_types)
-                if not is_field_in_new_format:
-                    curr_rope_type = rope_parameters.get("rope_type", rope_parameters.get("type"))
-                    rope_parameters_per_layer_type[layer_type] = {
-                        **rope_parameters,
-                        "rope_type": curr_rope_type,
-                        "rope_theta": rope_theta[layer_type],
-                    }
-                else:
-                    curr_rope_type = rope_parameters[layer_type].get(
-                        "rope_type", rope_parameters[layer_type].get("type")
-                    )
-                    rope_parameters_per_layer_type[layer_type] = {
-                        **rope_parameters[layer_type],
-                        "rope_type": curr_rope_type,
-                        "rope_theta": rope_theta[layer_type],
-                    }
-            config.rope_parameters = rope_parameters_per_layer_type
+        config.rope_parameters = {
+            layer_type: process_rope_parameters_for_layer_type({layer_type: theta}, layer_type)
+            for layer_type, theta in rope_theta.items()
+        }
 
 
 def dynamic_rope_update(rope_forward):
@@ -883,55 +982,3 @@ def rope_config_validation(config: PreTrainedConfig, ignore_keys: Optional[set] 
             logger.warning(
                 f"Missing validation function mapping in `ROPE_VALIDATION_FUNCTIONS` for 'rope_type'='{rope_type}'"
             )
-
-
-class RopeParameters(TypedDict):
-    """
-    Args:
-        rope_theta (`float`):
-            The base period of the RoPE embeddings.
-        rope_type (`str`, *optional*, defaults to "default"):
-            The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-            'llama3'], with 'default' being the original RoPE implementation.
-        factor (`float`, *optional*):
-            Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-            most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-            original maximum pre-trained length.
-        original_max_position_embeddings (`int`, *optional*):
-            Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-            pretraining.
-        attention_factor (`float`, *optional*):
-            Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-            computation. If unspecified, it defaults to value recommended by the implementation, using the
-            `factor` field to infer the suggested value.
-        beta_fast (`float`, *optional*):
-            Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-            ramp function. If unspecified, it defaults to 32.
-        beta_slow (`float`, *optional*):
-            Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-            ramp function. If unspecified, it defaults to 1.
-        short_factor (`list[float]`, *optional*):
-            Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-            `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-            size divided by the number of attention heads divided by 2
-        long_factor (`list[float]`, *optional*):
-            Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-            `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-            size divided by the number of attention heads divided by 2
-        low_freq_factor (`float`, *optional*):
-            Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-        high_freq_factor (`float`, *optional*):
-            Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-    """
-
-    rope_theta: float
-    rope_type: Optional[str]
-    factor: Optional[float]
-    original_max_position_embeddings: Optional[int]
-    attention_factor: Optional[float]
-    beta_fast: Optional[float]
-    beta_slow: Optional[float]
-    short_factor: Optional[list[float]]
-    long_factor: Optional[list[float]]
-    low_freq_factor: Optional[float]
-    high_freq_factor: Optional[float]

@@ -44,6 +44,7 @@ from transformers import (
     Gemma3TextModel,
     GemmaTokenizerFast,
     GenerationConfig,
+    RopeParameters,
     SiglipVisionConfig,
 )
 from transformers.image_utils import PILImageResampling
@@ -142,7 +143,10 @@ _VARIANTS = {
             max_position_embeddings=1024,
             query_pre_attn_scalar=256,
             sliding_window=512,
-            rope_parameters=None,
+            rope_parameters={
+                "full_attention": RopeParameters(rope_type="default", rope_theta=1_000_000.0),
+                "sliding_attention": RopeParameters(rope_type="default", rope_theta=10_000.0),
+            },
             use_bidirectional_attention=True,
         ),
         vision_config=None,
@@ -159,7 +163,10 @@ _VARIANTS = {
             max_position_embeddings=32768,
             query_pre_attn_scalar=256,
             sliding_window=512,
-            rope_parameters=None,
+            rope_parameters={
+                "full_attention": RopeParameters(rope_type="default", rope_theta=1_000_000.0),
+                "sliding_attention": RopeParameters(rope_type="default", rope_theta=10_000.0),
+            },
         ),
         vision_config=None,
     ),
@@ -173,8 +180,10 @@ _VARIANTS = {
             num_key_value_heads=1,
             head_dim=256,
             sliding_window=512,
-            rope_theta=1_000_000,  # used for global RoPE only
-            rope_local_base_freq=10_000,
+            rope_parameters={
+                "full_attention": RopeParameters(rope_type="default", rope_theta=1_000_000.0),
+                "sliding_attention": RopeParameters(rope_type="default", rope_theta=10_000.0),
+            },
             attn_logit_softcapping=None,
             query_pre_attn_scalar=256,
             max_position_embeddings=32_768,
@@ -192,11 +201,9 @@ _VARIANTS = {
             num_key_value_heads=4,
             sliding_window=1024,
             rope_parameters={
-                "full_attention": {"rope_type": "linear", "factor": 8.0},
-                "sliding_attention": {"rope_type": "default"},
+                "full_attention": RopeParameters(rope_type="linear", rope_theta=1_000_000.0, factor=8.0),
+                "sliding_attention": RopeParameters(rope_type="default", rope_theta=10_000.0),
             },
-            rope_theta=1_000_000,
-            rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
             query_pre_attn_scalar=256,
         ),
@@ -213,11 +220,9 @@ _VARIANTS = {
             num_key_value_heads=8,
             sliding_window=1024,
             rope_parameters={
-                "full_attention": {"rope_type": "linear", "factor": 8.0},
-                "sliding_attention": {"rope_type": "default"},
+                "full_attention": RopeParameters(rope_type="linear", rope_theta=1_000_000.0, factor=8.0),
+                "sliding_attention": RopeParameters(rope_type="default", rope_theta=10_000.0),
             },
-            rope_theta=1_000_000,
-            rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
             query_pre_attn_scalar=256,
         ),
@@ -234,11 +239,9 @@ _VARIANTS = {
             head_dim=128,
             sliding_window=1024,
             rope_parameters={
-                "full_attention": {"rope_type": "linear", "factor": 8.0},
-                "sliding_attention": {"rope_type": "default"},
+                "full_attention": RopeParameters(rope_type="linear", rope_theta=1_000_000.0, factor=8.0),
+                "sliding_attention": RopeParameters(rope_type="default", rope_theta=10_000.0),
             },
-            rope_theta=1_000_000,
-            rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
             query_pre_attn_scalar=(42 * 128 // 32),  # 1 / sqrt(hidden_size // num_attention_heads)
         ),
