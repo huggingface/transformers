@@ -94,7 +94,7 @@ def convert_tekken_tokenizer(tokenizer_file: str):
 
     # Convert
     tokenizer = LlamaTokenizerFast(
-        tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special).converted(),
+        tokenizer_object=MistralConverter(vocab=vocab, pattern=mistral_tokenizer.instruct_tokenizer.tokenizer._model._pat_str, additional_special_tokens=all_special).converted(),
     )
 
     # Post-process
