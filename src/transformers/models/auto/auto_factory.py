@@ -311,7 +311,7 @@ class _BaseAutoModelClass:
             if kwargs.get("dtype") == "auto":
                 _ = kwargs.pop("dtype")
             # to not overwrite the quantization_config if config has a quantization_config
-            if kwargs.get("quantization_config") is not None:
+            if "quantization_config" in kwargs:
                 _ = kwargs.pop("quantization_config")
 
             config, kwargs = AutoConfig.from_pretrained(
@@ -328,7 +328,7 @@ class _BaseAutoModelClass:
                 kwargs["torch_dtype"] = "auto"
             if kwargs_orig.get("dtype", None) == "auto":
                 kwargs["dtype"] = "auto"
-            if kwargs_orig.get("quantization_config", None) is not None:
+            if "quantization_config" in kwargs_orig:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
