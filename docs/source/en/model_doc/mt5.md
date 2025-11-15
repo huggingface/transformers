@@ -162,3 +162,8 @@ See [`T5TokenizerFast`] for all details.
 ## MT5ForQuestionAnswering
 
 [[autodoc]] MT5ForQuestionAnswering
+
+## MT5EncoderForSequenceClassification
+
+[[autodoc]] MT5EncoderForSequenceClassification
+    - forward
