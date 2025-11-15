@@ -402,6 +402,7 @@ class Phi3VIntegrationTest(unittest.TestCase):
             messages,
             add_generation_prompt=True,
             tokenize=True,
+            return_dict=True,
             return_tensors="pt",
         ).to(model.device, dtype=torch.bfloat16)
 

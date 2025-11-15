@@ -26,6 +26,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
@@ -122,8 +123,12 @@ class Phi3VPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
         super()._init_weights(module)
-        if isinstance(module, nn.Parameter):
-            module.data.normal_(mean=0.0, std=std)
+        if hasattr(module, "sub_newline"):
+            if isinstance(module.sub_newline, nn.Parameter):
+                init.normal_(module.sub_newline, mean=0.0, std=std)
+        if hasattr(module, "glb_newline"):
+            if isinstance(module.glb_newline, nn.Parameter):
+                init.normal_(module.glb_newline, mean=0.0, std=std)
 
 
 class Phi3VImageProjection(nn.Module):
@@ -322,7 +327,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
 
 
 class Phi3VForConditionalGeneration(Phi3VPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     output_modalities = "text"
     _can_compile_fullgraph = True
 
