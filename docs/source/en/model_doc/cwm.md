@@ -105,11 +105,16 @@ model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
 generated_ids = model.generate(
     **model_inputs,
-    max_new_tokens=1024
+    max_new_tokens=1024,
+    max_thinking_tokens=512,
 )
 output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
 print(tokenizer.decode(output_ids))
 ```
+
+Setting `max_thinking_tokens` ensures the model closes the `<think>` block once the given budget is reached while still
+leaving at least `max_new_tokens - max_thinking_tokens - 1` tokens for the final answer (one more token is consumed by
+the closing `</think>`). If you omit the argument the model is free to think for as long as `max_new_tokens` allows.
 
 <details>
 <summary>Produces the following output:</summary>
