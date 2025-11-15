@@ -421,13 +421,13 @@ class Phi3VForConditionalGeneration(Phi3VPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            image_sizes=image_sizes,
             **kwargs,
         )
 
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
 
-        model_inputs["image_sizes"] = image_sizes
         return model_inputs
 
 
