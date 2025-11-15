@@ -430,6 +430,7 @@ class BltCrossAttention(nn.Module):
 @auto_docstring
 class BltPreTrainedModel(PreTrainedModel):
     config: BltConfig
+    base_model_prefix = "model"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["BltTransformerLayer"]

@@ -1166,7 +1166,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
     _tp_plan = {}
-    base_model_prefix = ""
+    base_model_prefix = "model"
     config: Llama4Config
 
     def __init__(self, config: Llama4Config):
