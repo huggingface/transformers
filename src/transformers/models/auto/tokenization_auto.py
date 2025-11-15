@@ -100,6 +100,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("bigbird_pegasus", ("PegasusTokenizer", "PegasusTokenizerFast" if is_tokenizers_available() else None)),
         ("biogpt", ("BioGptTokenizer", None)),
         ("bitnet", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+        ("blueberry", ("BlueberryTokenizer", "BlueberryTokenizerFast" if is_tokenizers_available() else None)),
         ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
         ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
         ("blip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
