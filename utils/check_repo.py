@@ -193,6 +193,8 @@ IGNORE_NON_TESTED = (
         "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
+        "KeyeVL1_5TextModel",  # Building part of bigger (tested) model. Tested implicitly through KeyeVL1_5ForConditionalGeneration.
+        "KeyeVL1_5VisionModel",  # Building part of bigger (tested) model. Tested implicitly through KeyeVL1_5ForConditionalGeneration.
     ]
 )
 
@@ -397,6 +399,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
+    "KeyeVL1_5VisionModel",  # Building part of a bigger model
 ]
 
 
