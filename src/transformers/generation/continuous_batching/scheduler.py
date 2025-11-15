@@ -104,7 +104,7 @@ class Scheduler(ABC):
         )
 
     @traced
-    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int) -> bool:
+    def _allocate_blocks_if_needed(self, state: RequestState) -> bool:
         """Allocate additional cache blocks for a request if the currently allocated blocks are insufficient to
         accommodate the next tokens. It calculates how many blocks are needed based on the request's current
         cache occupancy and the number of tokens to be processed. The allocation itself is done by the CacheAllocator
@@ -113,10 +113,11 @@ class Scheduler(ABC):
         # 1. we check that the occupancy is less than the requested length
         # 2. we allocate enough blocks to cover the requested length
         current_len = state.current_len()
+        len_next_tokens = len(state.prompt_ids)
         occupancy = state.allocated_blocks * self.cache.block_size - current_len
         if occupancy < len_next_tokens or state.allocated_blocks == 0:
             blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
-            allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
+            allocated = self.cache.allocate_blocks(blocks_needed, state)
             if allocated is None:
                 return False
             state.allocated_blocks += allocated
@@ -125,11 +126,29 @@ class Scheduler(ABC):
     @traced(span_name="prepare_request")
     def _prepare_request_for_processing(
         self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: set[str]
-    ):
-        """Prepares a request for processing in the current batch."""
-        request_tokens = (
-            state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
-        )
+    ) -> None:
+        """Prepares a request for processing in the current batch. If prefix sharing is enabled, and the request was
+        pending, this is where we look for a prefix match and split the request if found."""
+        # If prefix sharing is enabled, we look for a prefix match and split the request if found
+        if self.cache.use_prefix_sharing and state.status == RequestStatus.PENDING:
+            prefill_length = self.cache.search_prefix_match(state.request_id, state.prompt_ids)
+            if prefill_length > 0:
+                self.active_requests[state.request_id] = state
+                request_ids_to_remove_from_waiting.add(state.request_id)
+                state.status = RequestStatus.SPLIT_PENDING_REMAINDER
+                # Even if we match the whole request, we keep at least 1 token to start decoding
+                prefill_length = min(prefill_length, len(state.prompt_ids) - 1)
+                state.remaining_prompt_ids = state.prompt_ids[prefill_length:]
+                state.prompt_ids = state.prompt_ids[prefill_length:]
+                state.position_offset += prefill_length
+
+        # If the request has a split prefill, the tokens to process are the remaining prompt ids
+        if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+            request_tokens = state.remaining_prompt_ids
+        # Otherwise, the tokens to process are the prompt ids, which are the full prompt or the last predicted tokens
+        else:
+            request_tokens = state.prompt_ids
+
         if len(request_tokens) < token_budget:
             # Can process the entire prompt/remainder
             if state.status == RequestStatus.PENDING:
@@ -152,6 +171,7 @@ class Scheduler(ABC):
             state.prompt_ids = request_tokens[:token_budget]
 
 
+# TODO: further common-ize the two classes
 @attach_tracer()
 class FIFOScheduler(Scheduler):
     """This scheduler processes requests in the order they arrive, meaning decoding requests has priority over
@@ -195,30 +215,31 @@ class FIFOScheduler(Scheduler):
 
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.prompt_ids)
-            if not self._allocate_blocks_if_needed(
-                state, len(state.prompt_ids)
-            ):  # don't schedule if we can't allocate blocks
-                if len(self.cache._free_blocks) == 0:
+            # If we can't allocate blocks, do not schedule the request and break if the cache is full
+            if not self._allocate_blocks_if_needed(state):
+                if self.cache.get_num_free_blocks() == 0:
                     break
                 continue
 
-            @traced
-            def _add_to_scheduled_requests(state: RequestState):
-                scheduled_requests.append(state)
+            # Add the request to the scheduled requests
+            scheduled_requests.append(state)
 
-            _add_to_scheduled_requests(state)
-
+            # Update the token budget
             token_budget -= request_len
+            # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
+            if self.cache.use_prefix_sharing:
+                tokens_in_current_block = state.current_len() % self.cache.block_size
+                tokens_after_forward = tokens_in_current_block + request_len
+                complete_blocks = tokens_after_forward // self.cache.block_size
+                self.cache.blocks_to_complete[state.request_id] = complete_blocks
 
-            @traced
-            def _remove_from_waiting_requests(state: RequestState):
-                req_id = state.request_id
-                if req_id in self.waiting_requests:
-                    del self.waiting_requests[req_id]
-                    request_ids_to_remove_from_waiting.add(req_id)
+            # Remove the request from the waiting queue and mark it as removed
+            req_id = state.request_id
+            was_waiting = self.waiting_requests.pop(req_id, None) is not None
+            if was_waiting:
+                request_ids_to_remove_from_waiting.add(req_id)
 
-            _remove_from_waiting_requests(state)
-
+            # Early exit of the loop if we have no token budget left
             if token_budget == 0:
                 break
 
@@ -249,6 +270,7 @@ class PrefillFirstScheduler(Scheduler):
             elif state.status == RequestStatus.DECODING:
                 second_priority_states.append(state)
 
+        # Add waiting requests to second priority
         for req_id in self.waiting_requests_order:
             second_priority_states.append(self.waiting_requests[req_id])
 
@@ -259,30 +281,31 @@ class PrefillFirstScheduler(Scheduler):
         for state in candidates:
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.prompt_ids)
-            if not self._allocate_blocks_if_needed(
-                state, len(state.prompt_ids)
-            ):  # don't schedule if we can't allocate blocks
-                if len(self.cache._free_blocks) == 0:
+            # If we can't allocate blocks, do not schedule the request and break if the cache is full
+            if not self._allocate_blocks_if_needed(state):
+                if self.cache.get_num_free_blocks() == 0:
                     break
                 continue
 
-            @traced
-            def _add_to_scheduled_requests(state: RequestState):
-                scheduled_requests.append(state)
+            # Add the request to the scheduled requests
+            scheduled_requests.append(state)
 
-            _add_to_scheduled_requests(state)
-
+            # Update the token budget
             token_budget -= request_len
+            # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
+            if self.cache.use_prefix_sharing:
+                tokens_in_current_block = state.current_len() % self.cache.block_size
+                tokens_after_forward = tokens_in_current_block + request_len
+                complete_blocks = tokens_after_forward // self.cache.block_size
+                self.cache.blocks_to_complete[state.request_id] = complete_blocks
 
-            @traced
-            def _remove_from_waiting_requests(state: RequestState):
-                req_id = state.request_id
-                if req_id in self.waiting_requests:
-                    del self.waiting_requests[req_id]
-                    request_ids_to_remove_from_waiting.add(req_id)
+            # Remove the request from the waiting queue and mark it as removed
+            req_id = state.request_id
+            if req_id in self.waiting_requests:
+                del self.waiting_requests[req_id]
+                request_ids_to_remove_from_waiting.add(req_id)
 
-            _remove_from_waiting_requests(state)
-
+            # Early exit of the loop if we have no token budget left
             if token_budget == 0:
                 break
 
