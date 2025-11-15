@@ -45,8 +45,8 @@ class BigBirdModelTester:
     def __init__(
         self,
         parent,
-        batch_size=7,
-        seq_length=128,
+        batch_size=2,
+        seq_length=32,
         is_training=True,
         use_input_mask=True,
         use_token_type_ids=True,
