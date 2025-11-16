@@ -104,9 +104,9 @@ class NewTaskModelPreTrainedModel(PreTrainedModel):
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
 
 
 def token_type_ids_mask_function(
@@ -428,7 +428,7 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     main_input_name: ClassVar[str] = "doc_input_ids"  # transformers-related
 
     def __init__(self, config):
@@ -440,7 +440,15 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
 
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.language_model._tied_weights_keys]
+            prefix = "model.language_model."
+            prefixed_mapping = {
+                f"{prefix}{target}": f"{prefix}{source}"
+                for target, source in self.language_model._tied_weights_keys.items()
+            }
+            if isinstance(self._tied_weights_keys, dict):
+                self._tied_weights_keys.update(prefixed_mapping)
+            else:
+                self._tied_weights_keys = prefixed_mapping
         self.post_init()
 
     def get_input_embeddings(self):

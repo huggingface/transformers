@@ -65,9 +65,6 @@ class ColQwen2Processor(ColPaliProcessor):
         query_prefix (`str`, *optional*): A prefix to be used for the query.
     """
 
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
-
     def __init__(
         self,
         image_processor=None,
@@ -307,7 +304,6 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         del self._tied_weights_keys
-        self._tied_weights_keys = [f"vlm.{k}" for k in (self.vlm._tied_weights_keys or [])]
 
     @can_return_tuple
     @auto_docstring

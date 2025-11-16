@@ -19,6 +19,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
@@ -169,6 +170,15 @@ class AriaTextConfig(LlamaConfig):
 
     model_type = "aria_text"
     base_config_key = "text_config"
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+    }
 
     def __init__(
         self,
@@ -906,10 +916,6 @@ class AriaProcessor(ProcessorMixin):
             A dictionary indicating size conversions for images.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AriaImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor=None,
@@ -1191,10 +1197,11 @@ class AriaTextPreTrainedModel(PreTrainedModel):
         "attentions": AriaTextAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, AriaGroupedExpertsGemm):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
@@ -1203,10 +1210,11 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, AriaProjector):
-            nn.init.trunc_normal_(module.query, std=self.config.initializer_range)
+            init.trunc_normal_(module.query, std=self.config.initializer_range)
 
 
 class AriaTextModel(LlamaModel):
@@ -1220,7 +1228,7 @@ class AriaTextModel(LlamaModel):
 
 
 class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
@@ -1359,6 +1367,8 @@ class AriaModel(LlavaModel):
     """
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

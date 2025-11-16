@@ -130,9 +130,6 @@ class GroundingDinoProcessor(ProcessorMixin):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "GroundingDinoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
     valid_processor_kwargs = GroundingDinoProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):

@@ -22,6 +22,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from .... import initialization as init
 from ....activations import ACT2FN
 from ....cache_utils import Cache
 from ....modeling_outputs import (
@@ -1332,49 +1333,55 @@ class MegaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["MegaMovingAverageGatedAttention"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, MegaMultiDimensionDampedEma):
             with torch.no_grad():
                 # delta & alpha
-                nn.init.normal_(module.damping_factor, mean=0.0, std=self.config.ema_delta_alpha_range)
-                nn.init.normal_(module.decay_factor, mean=0.0, std=self.config.ema_delta_alpha_range)
+                init.normal_(module.damping_factor, mean=0.0, std=self.config.ema_delta_alpha_range)
+                init.normal_(module.decay_factor, mean=0.0, std=self.config.ema_delta_alpha_range)
                 # beta [1, -1, 1, -1, ...] seems more stable.
                 val = torch.ones(self.config.ema_projection_size, 1)
                 if self.config.ema_projection_size > 1:
                     idx = torch.tensor(list(range(1, self.config.ema_projection_size, 2)))
                     val.index_fill_(0, idx, -1.0)
-                module.ema_expansion_matrix.normal_(mean=0.0, std=self.config.ema_beta_range).add_(val)
+                init.copy_(
+                    module.ema_expansion_matrix,
+                    torch.normal(mean=0.0, std=self.config.ema_beta_range, size=module.ema_expansion_matrix.shape)
+                    + val,
+                )
                 # gamma & omega
-                nn.init.normal_(module.kernel_projection_matrix, mean=0.0, std=self.config.ema_gamma_omega_range)
-                nn.init.normal_(module.residual_weight, mean=0.0, std=self.config.ema_gamma_omega_range)
+                init.normal_(module.kernel_projection_matrix, mean=0.0, std=self.config.ema_gamma_omega_range)
+                init.normal_(module.residual_weight, mean=0.0, std=self.config.ema_gamma_omega_range)
         elif isinstance(module, MegaSimpleRelativePositionalBias):
-            nn.init.normal_(module.rel_pos_bias, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.rel_pos_bias, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, MegaRotaryRelativePositionalBias):
-            nn.init.normal_(module.alpha, mean=0.0, std=self.config.initializer_range)
-            nn.init.normal_(module.b_param, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.alpha, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.b_param, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, MegaScaleNorm):
             if self.config.norm_affine:
-                nn.init.constant_(module.scalar, 1.0)
+                init.constant_(module.scalar, 1.0)
         elif isinstance(module, MegaRMSNorm):
             if self.config.norm_affine:
-                nn.init.constant_(module.weight, 1.0)
+                init.constant_(module.weight, 1.0)
         elif isinstance(module, MegaMovingAverageGatedAttention):
             # linear layers covered separately by the generic nn.Linear init below
-            nn.init.normal_(module.qk_weight, mean=0.0, std=self.config.initializer_range)
-            nn.init.constant_(module.qk_bias, 0.0)
+            init.normal_(module.qk_weight, mean=0.0, std=self.config.initializer_range)
+            init.constant_(module.qk_bias, 0.0)
         elif isinstance(module, nn.Linear):
             # initializes all linear layers in the entire network
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 MEGA_START_DOCSTRING = r"""
@@ -1638,7 +1645,7 @@ class MegaModel(MegaPreTrainedModel):
     """MEGA Model with a `language modeling` head on top for CLM fine-tuning.""", MEGA_START_DOCSTRING
 )
 class MegaForCausalLM(MegaPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "mega.embedding_layer.word_embeddings.weight"}
 
     def __init__(self, config: MegaConfig):
         super().__init__(config)
@@ -1785,7 +1792,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
 
 @add_start_docstrings("""MEGA Model with a `language modeling` head on top.""", MEGA_START_DOCSTRING)
 class MegaForMaskedLM(MegaPreTrainedModel):
-    _tied_weights_keys = ["mlm_head.weight"]
+    _tied_weights_keys = {"mlm_head.weight": "mega.embedding_layer.word_embeddings.weight"}
 
     def __init__(self, config: MegaConfig):
         super().__init__(config)
