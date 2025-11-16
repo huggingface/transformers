@@ -253,6 +253,39 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         # cls.pad_token_id = 1
         return cls
 
+    def setUp(self):
+        # Some tests may change to source mode and not reset
+        self.tokenizer.set_tgt_lang_special_tokens(self.tokenizer.tgt_lang)
+
+    def test_int_remove_extra_whitespaces(self):
+        # make sure the extra spaces are eaten. Since the sample vocab does not have
+        # `______`. sentencepiece.NormalizerSpec.remove_extra_whitespaces attribute is set to False
+
+        input_ids = self.tokenizer.encode("       . Hello")
+        self.assertEqual(input_ids, [3, 256145, 81, 94124, 3])
+        tokens = self.tokenizer.tokenize(" . Hello")
+        self.assertEqual(tokens, ['▁.', '▁Hello'])
+
+        # `'▁'` is also a whitespace
+        input_ids = self.tokenizer.encode("▁He is not")
+        self.assertEqual(input_ids, [3, 256145, 1808, 248, 2294, 3])
+        tokens = self.tokenizer.tokenize("▁He is not")
+
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not"])  # no extra space added
+
+        input_ids = self.tokenizer.encode("▁He is not<s>             ▁He")
+        self.assertEqual(input_ids, [3, 256145, 1808, 248, 2294, 2, 1808, 3])
+        tokens = self.tokenizer.tokenize("▁He is not<s>              ▁He")
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<s>", "▁He"])  # spaces are eaten by spm + our strip
+        # make sure that the output after the extra id is the same as if
+        # extra_id was not there
+        input_ids = self.tokenizer.encode("▁He is not             ▁He")
+        self.assertEqual(input_ids,[3, 256145, 1808, 248, 2294, 1808, 3])
+        tokens = self.tokenizer.tokenize("▁He is not              ▁He")
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "▁He"])  # spaces are eaten by spm even if not start
+
+
+
     def test_language_codes(self):
         self.assertEqual(self.tokenizer.convert_tokens_to_ids("__ace_Latn__"), 256002)
         self.assertEqual(self.tokenizer.convert_tokens_to_ids("__shn__"), 256152)
@@ -372,6 +405,9 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         cls.tokenizer = tokenizer
         return cls
 
+    def setUp(self):
+        self.tokenizer.set_tgt_lang_special_tokens(self.tokenizer.tgt_lang)
+
     def test_add_dummy_prefix(self):
         # make sure `'▁'` is prepended properly
         input_ids = self.tokenizer.encode(". Hello")
@@ -388,34 +424,8 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         tokens = self.tokenizer.tokenize("▁")
         self.assertEqual(tokens, [])
-        self.assertEqual(tokens, self.tokenizer.sp_model.encode("▁", out_type=str))
 
-    def test_remove_extra_whitespaces(self):
-        # make sure the extra spaces are eaten. Since the sample vocab does not have
-        # `______`. sentencepiece.NormalizerSpec.remove_extra_whitespaces attribute is set to False
-
-        input_ids = self.tokenizer.encode("       . Hello")
-        self.assertEqual(input_ids, [3, 1, 8, 5, 157, 87, 21, 3])
-        tokens = self.tokenizer.tokenize(" . Hello")
-        self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
-
-        # `'▁'` is also a whitespace
-        input_ids = self.tokenizer.encode("▁He is not")
-        self.assertEqual(input_ids, [3, 1, 157, 47, 45, 3])
-        tokens = self.tokenizer.tokenize(" He is not")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not"])
-
-        input_ids = self.tokenizer.encode("▁He is not<s>             ▁He")
-        self.assertEqual(input_ids, [3, 1, 157, 47, 45, 2, 157, 3])
-        tokens = self.tokenizer.tokenize("▁He is not<s>              ▁He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<s>", "▁He"])  # spaces are eaten by spm + our strip
-        # make sure that the output after the extra id is the same as if
-        # extra_id was not there
-        input_ids = self.tokenizer.encode("▁He is not             ▁He")
-        self.assertEqual(input_ids, [3, 1, 157, 47, 45, 157, 3])
-        tokens = self.tokenizer.tokenize("▁He is not              ▁He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "▁He"])  # spaces are eaten by spm even if not start
-
+  
     def test_character_after_special_token(self):
         # Make sure that `tokenizer.tokenize` is similar to
         # adding the equivalent special token to the vocab

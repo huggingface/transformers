@@ -193,14 +193,15 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             )
         )
 
+
         self._tokenizer.normalizer = normalizers.Sequence(
             [
-                normalizers.Replace("\n", " "),
-                normalizers.Replace("\r", " "),
-                normalizers.Replace("\t", " "),
-                normalizers.Replace(Regex(r" {2,}"), "▁"),
-                normalizers.NFC(),
-                normalizers.Strip(left=False, right=True),
+                normalizers.Replace(Regex(r"[\n\r\t]"), " "),  
+                normalizers.NFKC(), 
+                normalizers.Strip(left=False, right=True), 
+                normalizers.Replace(Regex(r" +▁"), "▁"), 
+                normalizers.Replace(Regex(r"^▁+$"), ""),  
+                normalizers.Replace(Regex(r" {2,}"), "▁"), 
             ]
         )
 
@@ -232,22 +233,8 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             vocab_file=vocab_file,
             **kwargs,
         )
-        
-        # Re-apply normalizer after super().__init__() to ensure it matches expected
-        # The expected normalizer should replace multiple spaces with "▁" (not " ")
-        if hasattr(self, "_tokenizer") and self._tokenizer is not None:
-            self._tokenizer.normalizer = normalizers.Sequence(
-                [
-                    normalizers.Replace("\n", " "),
-                    normalizers.Replace("\r", " "),
-                    normalizers.Replace("\t", " "),
-                    normalizers.Replace(Regex(r" {2,}"), "▁"),
-                    normalizers.NFC(),
-                    normalizers.Strip(left=False, right=True),
-                ]
-            )
 
-        # Build fairseq mappings for backward compatibility
+        # Build fairseq mappings
         self.fairseq_offset = 1
         self.fairseq_tokens_to_ids = {
             "<pad>": 0,
@@ -260,8 +247,6 @@ class SeamlessM4TTokenizer(TokenizersBackend):
         self._src_lang = src_lang
         self._tgt_lang = tgt_lang
 
-        # Default to target mode to match expected tokenizer (which shows __fra__ in post_processor)
-        # This matches the expected tokenizer object that has target mode post_processor
         self.set_tgt_lang_special_tokens(self._tgt_lang)
 
     @property
@@ -338,7 +323,6 @@ class SeamlessM4TTokenizer(TokenizersBackend):
         if max_target_length is None:
             max_target_length = max_length
             
-        # Switch to target mode to set the right special tokens
         self._switch_to_target_mode()
         labels = self(
             tgt_texts,
@@ -351,7 +335,6 @@ class SeamlessM4TTokenizer(TokenizersBackend):
         )
         model_inputs["labels"] = labels["input_ids"]
         
-        # Switch back to input mode
         self._switch_to_input_mode()
         
         return model_inputs
