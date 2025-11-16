@@ -433,7 +433,7 @@ class BitNetModel(BitNetPreTrainedModel):
 
 @auto_docstring
 class BitNetForCausalLM(BitNetPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = None
     _pp_plan = None
 

@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_timm_available, requires_backends
@@ -79,6 +80,7 @@ def _create_timm_model_with_error_handling(config: "TimmWrapperConfig", **model_
 
 @auto_docstring
 class TimmWrapperPreTrainedModel(PreTrainedModel):
+    base_model_prefix = "timm_model"
     main_input_name = "pixel_values"
     input_modalities = "image"
     config: TimmWrapperConfig
@@ -122,6 +124,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         state_dict = {self._fix_state_dict_key_on_load(k)[0]: v for k, v in state_dict.items()}
         return super().load_state_dict(state_dict, *args, **kwargs)
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize weights function to properly initialize Linear layer weights.
@@ -129,9 +132,9 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         initialization, while all other weights should be loaded from the checkpoint.
         """
         if isinstance(module, (nn.Linear)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """

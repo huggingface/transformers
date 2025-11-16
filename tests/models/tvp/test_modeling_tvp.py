@@ -237,10 +237,10 @@ def prepare_img():
 class TvpModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return TvpImageProcessor.from_pretrained("Jiqing/tiny-random-tvp")
+        return TvpImageProcessor.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1")
 
     def test_inference_no_head(self):
-        model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+        model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -261,7 +261,7 @@ class TvpModelIntegrationTests(unittest.TestCase):
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_with_head(self):
-        model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+        model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -280,7 +280,7 @@ class TvpModelIntegrationTests(unittest.TestCase):
         torch.testing.assert_close(outputs.logits, expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_interpolate_inference_no_head(self):
-        model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+        model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()  # 480X640
@@ -299,7 +299,7 @@ class TvpModelIntegrationTests(unittest.TestCase):
         assert outputs.last_hidden_state.shape == expected_shape
 
     def test_interpolate_inference_with_head(self):
-        model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+        model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()  # 480X640

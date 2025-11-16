@@ -15,7 +15,6 @@
 """AutoFeatureExtractor class."""
 
 import importlib
-import json
 import os
 from collections import OrderedDict
 from typing import Optional, Union
@@ -24,7 +23,7 @@ from typing import Optional, Union
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, cached_file, logging
+from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging, safe_load_json_file
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -175,9 +174,10 @@ def get_feature_extractor_config(
     feature_extractor.save_pretrained("feature-extractor-test")
     feature_extractor_config = get_feature_extractor_config("feature-extractor-test")
     ```"""
-    resolved_config_file = cached_file(
+    # Load with a priority given to the nested processor config, if available in repo
+    resolved_processor_file = cached_file(
         pretrained_model_name_or_path,
-        FEATURE_EXTRACTOR_NAME,
+        filename=PROCESSOR_NAME,
         cache_dir=cache_dir,
         force_download=force_download,
         proxies=proxies,
@@ -186,16 +186,37 @@ def get_feature_extractor_config(
         local_files_only=local_files_only,
         _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
-        _raise_exceptions_for_connection_errors=False,
     )
-    if resolved_config_file is None:
-        logger.info(
-            "Could not locate the feature extractor configuration file, will try to use the model config instead."
-        )
+    resolved_feature_extractor_file = cached_file(
+        pretrained_model_name_or_path,
+        filename=FEATURE_EXTRACTOR_NAME,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        proxies=proxies,
+        token=token,
+        revision=revision,
+        local_files_only=local_files_only,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
+    )
+
+    # An empty list if none of the possible files is found in the repo
+    if not resolved_feature_extractor_file and not resolved_processor_file:
+        logger.info("Could not locate the feature extractor configuration file.")
         return {}
 
-    with open(resolved_config_file, encoding="utf-8") as reader:
-        return json.load(reader)
+    # Load feature_extractor dict. Priority goes as (nested config if found -> feature extractor config)
+    # We are downloading both configs because almost all models have a `processor_config.json` but
+    # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
+    feature_extractor_dict = {}
+    if resolved_processor_file is not None:
+        processor_dict = safe_load_json_file(resolved_processor_file)
+        if "feature_extractor" in processor_dict:
+            feature_extractor_dict = processor_dict["feature_extractor"]
+
+    if resolved_feature_extractor_file is not None and feature_extractor_dict is None:
+        feature_extractor_dict = safe_load_json_file(resolved_feature_extractor_file)
+    return feature_extractor_dict
 
 
 class AutoFeatureExtractor:

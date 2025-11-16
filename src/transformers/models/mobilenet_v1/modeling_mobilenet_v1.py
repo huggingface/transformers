@@ -132,16 +132,6 @@ class MobileNetV1PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]) -> None:
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.BatchNorm2d):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
 
 @auto_docstring
 class MobileNetV1Model(MobileNetV1PreTrainedModel):
