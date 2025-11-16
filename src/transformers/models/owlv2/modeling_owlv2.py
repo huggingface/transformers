@@ -501,6 +501,7 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
         """
         Args:
@@ -518,6 +519,7 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
