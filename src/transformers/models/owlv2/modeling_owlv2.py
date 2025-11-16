@@ -413,7 +413,7 @@ def eager_attention_forward(
 class Owlv2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Union[Owlv2VisionConfig, Owlv2TextConfig]):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -501,7 +501,8 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        **kwargs,
+        causal_attention_mask: torch.Tensor,
+        output_attentions: Optional[bool] = False,
     ) -> tuple[torch.FloatTensor]:
         """
         Args:
@@ -519,6 +520,8 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            causal_attention_mask=causal_attention_mask,
+            output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
 
@@ -528,6 +531,9 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
 
         return outputs
 
@@ -854,18 +860,6 @@ class Owlv2Model(Owlv2PreTrainedModel):
 
     def __init__(self, config: Owlv2Config):
         super().__init__(config)
-
-        if not isinstance(config.text_config, Owlv2TextConfig):
-            raise TypeError(
-                "config.text_config is expected to be of type Owlv2TextConfig but is of type"
-                f" {type(config.text_config)}."
-            )
-
-        if not isinstance(config.vision_config, Owlv2VisionConfig):
-            raise TypeError(
-                "config.vision_config is expected to be of type Owlv2VisionConfig but is of type"
-                f" {type(config.vision_config)}."
-            )
 
         text_config = config.text_config
         vision_config = config.vision_config
@@ -1252,6 +1246,21 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
+
+        if outputs is None:
+            raise ValueError("image_text_embedder: OwlViTModel returned None. Ensure inputs are valid.")
+
+        if getattr(outputs, "vision_model_output", None) is None:
+            raise ValueError(
+                "image_text_embedder: outputs.vision_model_output is None. "
+                "Make sure pixel_values were passed to the inner OwlViTModel."
+            )
+
+        if (
+            getattr(outputs, "vision_model_output", None) is not None
+            and getattr(outputs.vision_model_output, "last_hidden_state", None) is None
+        ):
+            raise ValueError("image_text_embedder: vision_model_output.last_hidden_state is None.")
 
         if interpolate_pos_encoding:
             _, _, height, width = pixel_values.shape
