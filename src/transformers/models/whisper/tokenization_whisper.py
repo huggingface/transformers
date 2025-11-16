@@ -937,7 +937,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
             token_timestamps = output["token_timestamps"][0].tolist()
 
         if return_language:
-            last_language = tokenizer.decode(output["language"])[2:-2]
+            last_language = LANGUAGES.get(tokenizer.decode(output["language"])[2:-2])
 
         # Those keep track of timestamps within strides
         # Which need to be skipped and resolve all tokens in a single
