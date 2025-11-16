@@ -660,7 +660,7 @@ class OwlViTTextTransformer(nn.Module):
             **kwargs,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
         # take features from the end of tokens embedding (end of token is the highest number in each sequence)
@@ -759,7 +759,7 @@ class OwlViTVisionTransformer(nn.Module):
             **kwargs,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         pooled_output = last_hidden_state[:, 0, :]
 
         pooled_output = self.post_layernorm(pooled_output)
@@ -825,18 +825,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
     def __init__(self, config: OwlViTConfig):
         super().__init__(config)
-
-        if not isinstance(config.text_config, OwlViTTextConfig):
-            raise TypeError(
-                "config.text_config is expected to be of type OwlViTTextConfig but is of type"
-                f" {type(config.text_config)}."
-            )
-
-        if not isinstance(config.vision_config, OwlViTVisionConfig):
-            raise TypeError(
-                "config.vision_config is expected to be of type OwlViTVisionConfig but is of type"
-                f" {type(config.vision_config)}."
-            )
 
         text_config = config.text_config
         vision_config = config.vision_config
@@ -974,9 +962,9 @@ class OwlViTModel(OwlViTPreTrainedModel):
             **kwargs,
         )
 
-        text_embeds = text_outputs[1]
+        text_embeds = text_outputs.pooler_output
         text_embeds = self.text_projection(text_embeds)
-        image_embeds = vision_outputs[1]
+        image_embeds = vision_outputs.pooler_output
         image_embeds = self.visual_projection(image_embeds)
 
         # normalized features
@@ -1201,6 +1189,17 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             **kwargs,
         )
 
+        if outputs is None:
+            raise ValueError("image_text_embedder: OwlViTModel returned None. Ensure inputs are valid.")
+
+        if getattr(outputs, "vision_model_output", None) is None:
+            raise ValueError("image_text_embedder: outputs.vision_model_output is None. "
+                             "Make sure pixel_values were passed to the inner OwlViTModel.")
+
+        if getattr(outputs, "vision_model_output", None) is not None and getattr(outputs.vision_model_output, "last_hidden_state", None) is None:
+            raise ValueError("image_text_embedder: vision_model_output.last_hidden_state is None.")
+
+
         if interpolate_pos_encoding:
             _, _, height, width = pixel_values.shape
             num_patches_height = height // self.config.vision_config.patch_size
@@ -1210,7 +1209,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             num_patches_width = self.num_patches_width
 
         # Get image embeddings
-        last_hidden_state = outputs.vision_model_output[0]
+        last_hidden_state = outputs.vision_model_output.last_hidden_state
         image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
@@ -1254,7 +1253,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             num_patches_width = self.num_patches_width
 
         # Apply post_layernorm to last_hidden_state, return non-projected output
-        last_hidden_state = vision_outputs[0]
+        last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
@@ -1405,6 +1404,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
+        input_ids: torch.Tensor,
         pixel_values: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
@@ -1451,6 +1451,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         Detected a photo of a cat with confidence 0.707 at location [324.97, 20.44, 640.58, 373.29]
         Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
         ```"""
+
+        if pixel_values is None:
+            raise ValueError("OwlViTForObjectDetection.forward: `pixel_values` is None. Must provide image tensor.")
+        if input_ids is None:
+            raise ValueError("OwlViTForObjectDetection.forward: `input_ids` is None. Must provide text queries.")
 
         # Embed images and text queries
         query_embeds, feature_map, outputs = self.image_text_embedder(

@@ -685,7 +685,7 @@ class Owlv2TextTransformer(nn.Module):
             **kwargs,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
         # take features from the end of tokens embedding (end of token is the highest number in each sequence)
@@ -786,7 +786,7 @@ class Owlv2VisionTransformer(nn.Module):
             **kwargs,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         pooled_output = last_hidden_state[:, 0, :]
 
         pooled_output = self.post_layernorm(pooled_output)
@@ -1003,9 +1003,9 @@ class Owlv2Model(Owlv2PreTrainedModel):
             **kwargs,
         )
 
-        text_embeds = text_outputs[1]
+        text_embeds = text_outputs.pooler_output
         text_embeds = self.text_projection(text_embeds)
-        image_embeds = vision_outputs[1]
+        image_embeds = vision_outputs.pooler_output
         image_embeds = self.visual_projection(image_embeds)
 
         # normalized features
@@ -1262,7 +1262,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             num_patches_width = self.num_patches_width
 
         # Get image embeddings
-        last_hidden_state = outputs.vision_model_output[0]
+        last_hidden_state = outputs.vision_model_output.last_hidden_state
         image_embeds = self.owlv2.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
@@ -1307,7 +1307,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             num_patches_width = self.num_patches_width
 
         # Apply post_layernorm to last_hidden_state, return non-projected output
-        last_hidden_state = vision_outputs[0]
+        last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.owlv2.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
@@ -1473,6 +1473,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
+        input_ids: torch.Tensor,
         pixel_values: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
