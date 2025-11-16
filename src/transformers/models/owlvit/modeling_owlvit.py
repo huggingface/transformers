@@ -1193,12 +1193,16 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             raise ValueError("image_text_embedder: OwlViTModel returned None. Ensure inputs are valid.")
 
         if getattr(outputs, "vision_model_output", None) is None:
-            raise ValueError("image_text_embedder: outputs.vision_model_output is None. "
-                             "Make sure pixel_values were passed to the inner OwlViTModel.")
+            raise ValueError(
+                "image_text_embedder: outputs.vision_model_output is None. "
+                "Make sure pixel_values were passed to the inner OwlViTModel."
+            )
 
-        if getattr(outputs, "vision_model_output", None) is not None and getattr(outputs.vision_model_output, "last_hidden_state", None) is None:
+        if (
+            getattr(outputs, "vision_model_output", None) is not None
+            and getattr(outputs.vision_model_output, "last_hidden_state", None) is None
+        ):
             raise ValueError("image_text_embedder: vision_model_output.last_hidden_state is None.")
-
 
         if interpolate_pos_encoding:
             _, _, height, width = pixel_values.shape
