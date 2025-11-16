@@ -548,11 +548,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     ]
                     out = {"tokens": tokens["sequences"], "token_timestamps": token_timestamps}
                     if return_language:
-                        out["language"] = tokens['segments'][0][0]['result']['sequences'][1]
+                        out["language"] = tokens["segments"][0][0]["result"]["sequences"][1]
                 else:
                     out = {"tokens": tokens["sequences"]}
                     if return_language:
-                        out["language"] = tokens['segments'][0][0]['result'][1]
+                        out["language"] = tokens["segments"][0][0]["result"][1]
             else:
                 out = {"tokens": tokens}
             if self.type == "seq2seq_whisper":
