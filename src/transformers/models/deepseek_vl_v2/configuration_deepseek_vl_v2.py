@@ -96,16 +96,26 @@ class DeepseekVLV2Config(PretrainedConfig):
             projector_config = MlpProjectorConfig(**projector_config)
 
         self.language_config = language_config
-        
-        if self.language_config.kv_lora_rank is None:
-            self.language_config.kv_rank_lora = 512
-            logger.info("`kv_rank_lora` is `None`. Setting `kv_rank_lora` to 512.")
-        
-        if self.language_config.qk_rope_head_dim is None:
-            self.language_config.qk_rope_head_dim = 64
-            logger.info("`qk_rope_head_dim` is `None`. Setting `qk_rope_head_dim` to 64.")
-        
         self.vision_config = vision_config
         self.projector_config = projector_config
+        
+        if getattr(self.language_config, "kv_lora_rank", None) is None:
+            self.language_config.kv_lora_rank = 512
+            logger.info("`kv_lora_rank` is `None`. Setting `kv_lora_rank` to 512.")
+            
+        if getattr(self.language_config, "qk_rope_head_dim", None) is None:
+            self.language_config.qk_rope_head_dim = 64
+            logger.info("`qk_rope_head_dim` is `None`. Setting `qk_rope_head_dim` to 64.")
+
+        if getattr(self.language_config, "qk_nope_head_dim", None) is None or self.language_config.qk_nope_head_dim <= 0:
+            self.language_config.qk_nope_head_dim = 128
+            logger.info("`qk_nope_head_dim` missing or <=0. Setting to 128 for safety.")
+
+        if getattr(self.language_config, "v_head_dim", None) is None or self.language_config.v_head_dim <= 0:
+            self.language_config.v_head_dim = 128
+            logger.info("`v_head_dim` missing or <=0. Setting to 128 for safety.")
+
+        self.language_config.head_dim = self.language_config.qk_rope_head_dim
+
         
 __all__ = ["DeepseekVLV2Config", "MlpProjectorConfig"]

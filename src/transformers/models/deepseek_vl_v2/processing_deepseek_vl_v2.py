@@ -11,7 +11,7 @@ from ...processing_utils import ProcessorMixin
 
 chat_template = """
 {%- set sep = "\n\n" -%}
-{%- set sep2 = "<｜end▁of▁sentence｜>" -%}
+{%- set sep2 = "<|end▁of▁sentence|>" -%}
 
 {%- if messages[0].role == "system" %}
 {{ messages[0].content + sep }}
