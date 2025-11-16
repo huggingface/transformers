@@ -450,8 +450,9 @@ class Owlv2Attention(nn.Module):
         values = values.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attn_impl = getattr(self.config, "_attn_implementation", None)
+        if attn_impl and attn_impl != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[attn_impl]
 
         attn_output, attn_weights = attention_interface(
             self,
