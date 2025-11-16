@@ -501,8 +501,6 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
     ) -> tuple[torch.FloatTensor]:
         """
         Args:
@@ -520,8 +518,6 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
-            output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
 
@@ -531,9 +527,6 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
 
         return outputs
 
