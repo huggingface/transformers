@@ -264,6 +264,14 @@ _import_structure = {
     "utils.kernel_config": ["KernelConfig"],
 }
 
+_import_structure["models.evo2"] = [
+    "Evo2Config",
+    "Evo2ForCausalLM",
+    "Evo2Model",
+    "Evo2PreTrainedModel",
+    "Evo2Tokenizer",
+]
+
 # tokenizers-backed objects
 try:
     if not is_tokenizers_available():
