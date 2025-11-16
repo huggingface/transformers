@@ -16,7 +16,6 @@
 Image/Text processor class for OWL-ViT
 """
 
-import warnings
 from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
@@ -66,22 +65,7 @@ class OwlViTProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "OwlViTImageProcessor"
-    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        feature_extractor = None
-        if "feature_extractor" in kwargs:
-            warnings.warn(
-                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
-                " instead.",
-                FutureWarning,
-            )
-            feature_extractor = kwargs.pop("feature_extractor")
-
-        image_processor = image_processor if image_processor is not None else feature_extractor
-
         super().__init__(image_processor, tokenizer)
 
     def __call__(
@@ -190,18 +174,6 @@ class OwlViTProcessor(ProcessorMixin):
         """
         return self.image_processor.post_process(*args, **kwargs)
 
-    def post_process_object_detection(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to [`OwlViTImageProcessor.post_process_object_detection`]. Please refer
-        to the docstring of this method for more information.
-        """
-        warnings.warn(
-            "`post_process_object_detection` method is deprecated for OwlVitProcessor and will be removed in v5. "
-            "Use `post_process_grounded_object_detection` instead.",
-            FutureWarning,
-        )
-        return self.image_processor.post_process_object_detection(*args, **kwargs)
-
     def post_process_grounded_object_detection(
         self,
         outputs: "OwlViTObjectDetectionOutput",
@@ -282,22 +254,6 @@ class OwlViTProcessor(ProcessorMixin):
         return self.image_processor.post_process_image_guided_detection(
             outputs=outputs, threshold=threshold, nms_threshold=nms_threshold, target_sizes=target_sizes
         )
-
-    @property
-    def feature_extractor_class(self):
-        warnings.warn(
-            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
-            FutureWarning,
-        )
-        return self.image_processor_class
-
-    @property
-    def feature_extractor(self):
-        warnings.warn(
-            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
-            FutureWarning,
-        )
-        return self.image_processor
 
 
 __all__ = ["OwlViTProcessor"]

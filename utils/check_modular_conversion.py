@@ -179,7 +179,7 @@ if __name__ == "__main__":
     # we start applying modular conversion to each list in parallel, starting from the first list
 
     console.print(f"[bold yellow]Number of dependency levels: {len(ordered_files)}[/bold yellow]")
-    console.print(f"[bold yellow]Files per level: {tuple([len(x) for x in ordered_files])}[/bold yellow]")
+    console.print(f"[bold yellow]Files per level: {tuple(len(x) for x in ordered_files)}[/bold yellow]")
 
     try:
         for dependency_level_files in ordered_files:

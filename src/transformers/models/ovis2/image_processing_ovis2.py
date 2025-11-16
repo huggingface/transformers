@@ -44,7 +44,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class Ovis2ImageProcessorKwargs(ImagesKwargs):
+class Ovis2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
@@ -61,10 +61,10 @@ class Ovis2ImageProcessorKwargs(ImagesKwargs):
         `preprocess` method.
     """
 
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
-    use_covering_area_grid: Optional[bool]
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
+    use_covering_area_grid: bool
 
 
 # Similar to image_processing_mllama.get_all_supported_aspect_ratios
@@ -184,7 +184,7 @@ def get_min_tile_covering_grid(
     for tile_grid in candidate_tile_grids:
         tile_regions = split_image_into_grid(image_height, image_width, tile_grid)
         tile_covering_ratio = (
-            sum([compute_patch_covering_area(*region, target_patch_size) for region in tile_regions]) / image_area
+            sum(compute_patch_covering_area(*region, target_patch_size) for region in tile_regions) / image_area
         )
 
         evaluated_grids.append((tile_grid, tile_covering_ratio))

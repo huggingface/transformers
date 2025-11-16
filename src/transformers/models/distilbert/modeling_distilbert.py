@@ -18,17 +18,19 @@ PyTorch DistilBERT model adapted in part from Facebook, Inc XLM model (https://g
 part from HuggingFace PyTorch version of Google AI Bert model (https://github.com/google-research/bert)
 """
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import numpy as np
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import get_activation
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -42,21 +44,14 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import (
     apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
 )
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
-    is_torch_flex_attn_available,
     logging,
 )
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_distilbert import DistilBertConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -71,9 +66,9 @@ def create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
 
         with deepspeed.zero.GatheredParameters(out, modifier_rank=0):
             if torch.distributed.get_rank() == 0:
-                _create_sinusoidal_embeddings(n_pos=n_pos, dim=dim, out=out)
+                return _create_sinusoidal_embeddings(n_pos=n_pos, dim=dim, out=out)
     else:
-        _create_sinusoidal_embeddings(n_pos=n_pos, dim=dim, out=out)
+        return _create_sinusoidal_embeddings(n_pos=n_pos, dim=dim, out=out)
 
 
 def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
@@ -82,10 +77,11 @@ def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
     out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
     out.detach_()
+    return out
 
 
 class Embeddings(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
@@ -125,7 +121,7 @@ class Embeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -134,18 +130,21 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
     if attention_mask is not None:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -153,7 +152,7 @@ def eager_attention_forward(
 
 
 class DistilBertSelfAttention(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
         self.config = config
 
@@ -174,24 +173,6 @@ class DistilBertSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(p=config.attention_dropout)
         self.is_causal = False
-
-        self.pruned_heads: set[int] = set()
-
-    def prune_heads(self, heads: list[int]):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.n_heads, self.attention_head_size, self.pruned_heads
-        )
-        # Prune linear layers
-        self.q_lin = prune_linear_layer(self.q_lin, index)
-        self.k_lin = prune_linear_layer(self.k_lin, index)
-        self.v_lin = prune_linear_layer(self.v_lin, index)
-        self.out_lin = prune_linear_layer(self.out_lin, index, dim=1)
-        # Update hyper params
-        self.n_heads = self.n_heads - len(heads)
-        self.dim = self.attention_head_size * self.n_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -227,7 +208,7 @@ class DistilBertSelfAttention(nn.Module):
 
 
 class FFN(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
         self.dropout = nn.Dropout(p=config.dropout)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -248,7 +229,7 @@ class FFN(nn.Module):
 
 
 class TransformerBlock(GradientCheckpointingLayer):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
 
         # Have an even number of Configure multi-heads
@@ -283,7 +264,7 @@ class TransformerBlock(GradientCheckpointingLayer):
 
 
 class Transformer(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
         self.n_layers = config.n_layers
         self.layer = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
@@ -320,28 +301,24 @@ class DistilBertPreTrainedModel(PreTrainedModel):
         "attentions": DistilBertSelfAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, Embeddings) and self.config.sinusoidal_pos_embds:
-            create_sinusoidal_embeddings(
-                self.config.max_position_embeddings, self.config.dim, module.position_embeddings.weight
+        super()._init_weights(module)
+        if isinstance(module, Embeddings) and self.config.sinusoidal_pos_embds:
+            init.copy_(
+                module.position_embeddings.weight,
+                create_sinusoidal_embeddings(
+                    self.config.max_position_embeddings,
+                    self.config.dim,
+                    torch.empty_like(module.position_embeddings.weight),
+                ),
             )
 
 
 @auto_docstring
 class DistilBertModel(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
 
         self.embeddings = Embeddings(config)  # Embeddings
@@ -404,15 +381,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings: nn.Embedding):
         self.embeddings.word_embeddings = new_embeddings
 
-    def _prune_heads(self, heads_to_prune: dict[int, list[list[int]]]):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.transformer.layer[layer].attention.prune_heads(heads)
-
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -440,9 +409,10 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         embeddings = self.embeddings(input_ids, inputs_embeds, position_ids)
 
-        attention_mask = self._update_full_mask(
-            attention_mask,
-            embeddings,
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=embeddings,
+            attention_mask=attention_mask,
         )
 
         return self.transformer(
@@ -451,27 +421,6 @@ class DistilBertModel(DistilBertPreTrainedModel):
             **kwargs,
         )
 
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
-
 
 @auto_docstring(
     custom_intro="""
@@ -479,9 +428,9 @@ class DistilBertModel(DistilBertPreTrainedModel):
     """
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
-    _tied_weights_keys = ["vocab_projector.weight"]
+    _tied_weights_keys = {"vocab_projector.weight": "distilbert.embeddings.word_embeddings.weight"}
 
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
 
         self.activation = get_activation(config.activation)
@@ -583,7 +532,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     """
 )
 class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -681,7 +630,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
 @auto_docstring
 class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
 
         self.distilbert = DistilBertModel(config)
@@ -783,7 +732,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
 @auto_docstring
 class DistilBertForTokenClassification(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -858,7 +807,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
 
 @auto_docstring
 class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
 
         self.distilbert = DistilBertModel(config)

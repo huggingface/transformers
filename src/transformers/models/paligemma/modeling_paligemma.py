@@ -14,14 +14,15 @@
 # limitations under the License.
 """PyTorch PaliGemmamodel."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
 
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -115,15 +116,23 @@ def token_type_ids_mask_function(
         # If it's 1 for both query and key/value, we are in an image block
         # NOTE: static cache shape goes beyond input seq length, while token_type_ids.shape[1] == input seq length
         # Since vmap doesn't support `if statement` we workaround it with `torch.where`
-        safe_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
-        token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_idx]
+        safe_q_idx = torch.where(q_idx < token_type_ids.shape[1], q_idx, 0)
+        safe_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
+
+        token_type_ids_at_q_idx = token_type_ids[batch_idx, safe_q_idx]
+        token_type_ids_at_q_idx = torch.where(q_idx < token_type_ids.shape[1], token_type_ids_at_q_idx, 0)
+
+        token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_kv_idx]
         token_type_ids_at_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], token_type_ids_at_kv_idx, 0)
 
-        image_group_ids_at_kv_idx = image_group_ids[batch_idx, safe_idx]
+        image_group_ids_at_q_idx = image_group_ids[batch_idx, safe_q_idx]
+        image_group_ids_at_q_idx = torch.where(q_idx < image_group_ids.shape[1], image_group_ids_at_q_idx, -1)
+
+        image_group_ids_at_kv_idx = image_group_ids[batch_idx, safe_kv_idx]
         image_group_ids_at_kv_idx = torch.where(kv_idx < image_group_ids.shape[1], image_group_ids_at_kv_idx, -1)
 
-        is_image_block = (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids_at_kv_idx == 1)
-        same_image_block = image_group_ids[batch_idx, q_idx] == image_group_ids_at_kv_idx
+        is_image_block = (token_type_ids_at_q_idx == 1) & (token_type_ids_at_kv_idx == 1)
+        same_image_block = image_group_ids_at_q_idx == image_group_ids_at_kv_idx
 
         # This is bidirectional attention whenever we are dealing with image tokens
         return is_image_block & same_image_block
@@ -132,7 +141,7 @@ def token_type_ids_mask_function(
 
 
 def create_causal_mask_mapping(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
@@ -206,25 +215,15 @@ def create_causal_mask_mapping(
 class PaliGemmaPreTrainedModel(PreTrainedModel):
     config: PaliGemmaConfig
     base_model_prefix = ""
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
-
     _can_compile_fullgraph = False
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        # important: this ported version of PaliGemmaisn't meant for training from scratch - only
-        # inference and fine-tuning
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
 
 
 @auto_docstring(
@@ -437,7 +436,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
@@ -605,7 +604,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
     @staticmethod
     def create_masks_for_generate(
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         input_embeds: torch.Tensor,
         attention_mask: Optional[torch.Tensor],
         cache_position: torch.Tensor,

@@ -13,7 +13,7 @@
 # limitations under the License.
 """VipLlava model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class VipLlavaConfig(PretrainedConfig):
+class VipLlavaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VipLlavaForConditionalGeneration`]. It is used to instantiate an
     VipLlava model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -29,8 +29,8 @@ class VipLlavaConfig(PretrainedConfig):
 
     e.g. [ybelkada/vip-llava-7b-hf](https://huggingface.co/ybelkada/vip-llava-7b-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`VipLlavaVisionConfig`,  *optional*):

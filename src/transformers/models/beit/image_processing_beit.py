@@ -55,7 +55,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class BeitImageProcessorKwargs(ImagesKwargs):
+class BeitImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
         Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
@@ -63,7 +63,7 @@ class BeitImageProcessorKwargs(ImagesKwargs):
         ADE20k). The background label will be replaced by 255.
     """
 
-    do_reduce_labels: Optional[bool]
+    do_reduce_labels: bool
 
 
 @requires(backends=("vision",))

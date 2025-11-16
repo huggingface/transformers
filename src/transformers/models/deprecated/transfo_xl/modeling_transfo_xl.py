@@ -26,6 +26,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from .... import initialization as init
 from ....modeling_utils import PreTrainedModel
 from ....utils import (
     ModelOutput,
@@ -331,12 +332,12 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
 
     def _init_weight(self, weight):
         if self.config.init == "uniform":
-            nn.init.uniform_(weight, -self.config.init_range, self.config.init_range)
+            init.uniform_(weight, -self.config.init_range, self.config.init_range)
         elif self.config.init == "normal":
-            nn.init.normal_(weight, 0.0, self.config.init_std)
+            init.normal_(weight, 0.0, self.config.init_std)
 
     def _init_bias(self, bias):
-        nn.init.constant_(bias, 0.0)
+        init.constant_(bias, 0.0)
 
     def _init_weights(self, m):
         """Initialize the weights."""
@@ -350,7 +351,7 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
             if hasattr(m, "emb_projs"):
                 for i in range(len(m.emb_projs)):
                     if m.emb_projs[i] is not None:
-                        nn.init.normal_(m.emb_projs[i], 0.0, self.config.proj_init_std)
+                        init.normal_(m.emb_projs[i], 0.0, self.config.proj_init_std)
         elif classname.find("Embedding") != -1:
             if hasattr(m, "weight"):
                 self._init_weight(m.weight)
@@ -362,10 +363,10 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
             if hasattr(m, "out_projs"):
                 for i in range(len(m.out_projs)):
                     if m.out_projs[i] is not None:
-                        nn.init.normal_(m.out_projs[i], 0.0, self.config.proj_init_std)
+                        init.normal_(m.out_projs[i], 0.0, self.config.proj_init_std)
         elif classname.find("LayerNorm") != -1:
             if hasattr(m, "weight"):
-                nn.init.normal_(m.weight, 1.0, self.config.init_std)
+                init.normal_(m.weight, 1.0, self.config.init_std)
             if hasattr(m, "bias") and m.bias is not None:
                 self._init_bias(m.bias)
         else:
@@ -688,7 +689,6 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
     def _prune_heads(self, heads):
         logger.info("Head pruning is not implemented for Transformer-XL model")
-        pass
 
     def init_mems(self, bsz):
         if self.mem_len > 0:
@@ -842,7 +842,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     TRANSFO_XL_START_DOCSTRING,
 )
 class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
-    _tied_weights_keys = [r"crit\.out_projs\.\d+", r"crit\.out_layers\.\d+\.weight"]
+    _tied_weights_keys = {r"crit\.out_projs\.\d+": r"crit\.out_layers\.\d+\.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -875,21 +875,12 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         Run this to be sure output and input (adaptive) softmax weights are tied
         """
 
-        if self.config.tie_word_embeddings:
-            for i in range(len(self.crit.out_layers)):
-                self._tie_or_clone_weights(self.crit.out_layers[i], self.transformer.word_emb.emb_layers[i])
         if self.config.tie_projs:
             for i, tie_proj in enumerate(self.config.tie_projs):
                 if tie_proj and self.config.div_val == 1 and self.config.d_model != self.config.d_embed:
-                    if self.config.torchscript:
-                        self.crit.out_projs[i] = nn.Parameter(self.transformer.word_emb.emb_projs[0].clone())
-                    else:
-                        self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[0]
+                    self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[0]
                 elif tie_proj and self.config.div_val != 1:
-                    if self.config.torchscript:
-                        self.crit.out_projs[i] = nn.Parameter(self.transformer.word_emb.emb_projs[i].clone())
-                    else:
-                        self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[i]
+                    self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[i]
 
     def reset_memory_length(self, mem_len):
         self.transformer.reset_memory_length(mem_len)

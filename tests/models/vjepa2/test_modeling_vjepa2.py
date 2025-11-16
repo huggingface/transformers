@@ -155,11 +155,8 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (VJEPA2Model, VJEPA2ForVideoClassification) if is_torch_available() else ()
 
-    fx_compatible = False
-
     pipeline_model_mapping = {}
 
-    test_pruning = False
     test_resize_embeddings = False
 
     def setUp(self):

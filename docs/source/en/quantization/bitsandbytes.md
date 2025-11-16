@@ -41,6 +41,7 @@ pip install --upgrade transformers accelerate bitsandbytes
 To compile from source, follow the instructions in the [bitsandbytes installation guide](https://huggingface.co/docs/bitsandbytes/main/en/installation).
 
 ## Hardware Compatibility
+
 bitsandbytes is supported on NVIDIA GPUs for CUDA versions 11.8 - 13.0, Intel XPU, Intel Gaudi (HPU), and CPU. There is an ongoing effort to support additional platforms. If you're interested in providing feedback or testing, check out the [bitsandbytes repository](https://github.com/bitsandbytes-foundation/bitsandbytes) for more information.
 
 ### NVIDIA GPUs (CUDA)

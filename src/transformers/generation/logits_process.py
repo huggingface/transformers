@@ -15,8 +15,8 @@
 
 import inspect
 import math
-from collections.abc import Iterable
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from collections.abc import Callable, Iterable
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 import torch
@@ -578,6 +578,112 @@ class TopKLogitsWarper(LogitsProcessor):
         # Remove all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < torch.topk(scores, top_k)[0][..., -1, None]
         scores_processed = scores.masked_fill(indices_to_remove, self.filter_value)
+        return scores_processed
+
+
+class TopHLogitsWarper(LogitsProcessor):
+    """
+    [`LogitsProcessor`] that implements Top-H sampling, a decoding method which adaptively selects a subset of
+    high-probability tokens based on entropy and cumulative probability constraints.
+
+    This method dynamically determines how many tokens to keep by analyzing the entropy difference of the selected
+    distribution, thereby balancing exploration and exploitation. It ensures that generated text maintains both
+    diversity and coherence.
+
+    Reference:
+    For details, see *Top-H Decoding: Adapting the Creativity and Coherence with Bounded Entropy in Text Generation*
+    (NeurIPS 2025): https://arxiv.org/abs/2509.02510
+
+    Args:
+        top_h (`float`):
+            Scaling coefficient for the entropy-based threshold (`tau`). Must be in the range `(0, 1]`.
+
+        filter_value (`float`, *optional*, defaults to -inf):
+            All filtered values will be set to this float value.
+
+    Example:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B")
+    >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
+
+    >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
+
+    >>> outputs = model.generate(**inputs, do_sample=True, top_h=0.4)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
+    ```
+    """
+
+    def __init__(self, top_h: float, filter_value: float = -float("Inf")):
+        super().__init__()
+
+        # input checks
+        if not (0 < top_h <= 1):
+            raise ValueError("`top_h` must be in the range (0, 1].")
+
+        # Maximum number of top tokens to consider before applying the entropy-based filter.
+        # Acts as a cap for efficiency and numerical stability — increasing this allows more
+        # tokens to be evaluated but may slow down generation. Default is 100.
+        self.top_n = 100
+
+        self.top_h = top_h
+        self.filter_value = filter_value
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        """
+        Filters logits using Top-H sampling.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Input token IDs.
+            scores (`torch.FloatTensor` of shape `(batch_size, vocab_size)`):
+                Raw logits from the model.
+
+        Return:
+            `torch.FloatTensor` of shape `(batch_size, vocab_size)`:
+                Processed logits where invalid tokens are masked with `-inf`.
+        """
+        batch_size, vocab_size = scores.shape
+        device = scores.device
+        keep_mask = torch.zeros((batch_size, vocab_size), dtype=torch.bool, device=device)
+        top_n = min(self.top_n, vocab_size)
+
+        # 1. Get top-k logits and indices for the whole batch
+        top_logits, top_idx = torch.topk(scores, top_n, dim=-1, largest=True, sorted=True)
+
+        # 2. Create a batch of categorical distributions
+        dist = torch.distributions.Categorical(logits=top_logits)
+        probs = dist.probs
+        log_probs = torch.log(probs)  # dist.log_prob(idx)
+
+        # 3. Calculate the entropy-based threshold tau for the whole batch
+        # We unsqueeze tau to enable broadcasting against the cumulative entropy tensor.
+        tau = (dist.entropy() * self.top_h).unsqueeze(-1)
+
+        # 4. Calculate cumulative entropy using torch.cumsum
+        # The individual entropy terms (-p * log(p)) are calculated for all top_n tokens at once.
+        entropy_terms = -probs * log_probs
+        cumulative_entropy = torch.cumsum(entropy_terms, dim=-1)
+
+        # 5. Determine which tokens to keep based on the stopping condition
+        # Create a boolean mask for the top_n tokens.
+        # Stopping rule: keep adding tokens in order of probability until the cumulative entropy
+        # exceeds the threshold τ = H(p) * top_h. This ensures diversity (via entropy) while
+        # guaranteeing at least the most probable token is always included.
+        selection_mask = cumulative_entropy <= tau
+        selection_mask[:, 0] = True
+
+        # 6. Update the final keep_mask for the entire batch in one operation
+        # The scatter_ operation efficiently updates the keep_mask at the indices
+        # specified by top_idx with the boolean values from selection_mask.
+        keep_mask.scatter_(dim=1, index=top_idx, src=selection_mask)
+
+        # apply filtering
+        scores_processed = scores.clone()
+        scores_processed[~keep_mask] = self.filter_value
         return scores_processed
 
 
@@ -1915,7 +2021,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens)
+        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens.to(scores.device))
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
         return scores
 
@@ -2061,7 +2167,10 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
 
 class WhisperNoSpeechDetection(LogitsProcessor):
-    r"""This processor can be used to detect silence when using Whisper. It should take as input unprocessed logits to follow the original implementation"""
+    """
+    This processor can be used to detect silence when using Whisper. It should take as input unprocessed logits
+    to follow the original implementation
+    """
 
     def __init__(self, no_speech_token: int, begin_index: int, scores_is_logprobs: bool = False):
         self.no_speech_token = no_speech_token
@@ -2082,6 +2191,10 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self.model = model
 
     def set_inputs(self, inputs):
+        # build `cache_position` on the fly
+        seq_length = inputs["input_ids"].shape[1]
+        inputs = self.model._get_initial_cache_position(seq_length, self.model.device, inputs)
+        # prepare other inputs
         self.inputs = {**self.model.prepare_inputs_for_generation(**inputs), **inputs}
         self.inputs["input_features"] = self.inputs.pop("inputs")
 

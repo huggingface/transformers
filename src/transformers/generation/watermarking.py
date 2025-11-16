@@ -23,9 +23,10 @@ import torch
 from torch import nn
 from torch.nn import BCELoss
 
+from .. import initialization as init
 from ..modeling_utils import PreTrainedModel
 from ..utils import ModelOutput, logging
-from .configuration_utils import PretrainedConfig, WatermarkingConfig
+from .configuration_utils import PreTrainedConfig, WatermarkingConfig
 from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
@@ -75,7 +76,7 @@ class WatermarkDetector:
     See [the paper](https://huggingface.co/papers/2306.04634) for more information.
 
     Args:
-        model_config (`PretrainedConfig`):
+        model_config (`PreTrainedConfig`):
             The model config that will be used to get model specific arguments used when generating.
         device (`str`):
             The device which was used during watermarked text generation.
@@ -119,7 +120,7 @@ class WatermarkDetector:
 
     def __init__(
         self,
-        model_config: PretrainedConfig,
+        model_config: PreTrainedConfig,
         device: str,
         watermarking_config: Union[WatermarkingConfig, dict],
         ignore_repeated_ngrams: bool = False,
@@ -237,13 +238,13 @@ class WatermarkDetector:
         return prediction
 
 
-class BayesianDetectorConfig(PretrainedConfig):
+class BayesianDetectorConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BayesianDetectorModel`]. It is used to
     instantiate a Bayesian Detector model according to the specified arguments.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         watermarking_depth (`int`, *optional*):
@@ -383,10 +384,11 @@ class BayesianDetectorModel(PreTrainedModel):
         )
         self.prior = torch.nn.Parameter(torch.tensor([self.base_rate]))
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Parameter):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            init.normal_(module.weight, mean=0.0, std=0.02)
 
     def _compute_posterior(
         self,

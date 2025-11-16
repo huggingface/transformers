@@ -36,13 +36,13 @@ class GotOcr2TextKwargs(TextKwargs, total=False):
 
 
 class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
     box: Optional[Union[list, tuple[float, float], tuple[float, float, float, float]]]
     color: Optional[str]
-    num_image_tokens: Optional[int]
-    multi_page: Optional[bool]
+    num_image_tokens: int
+    multi_page: bool
 
 
 class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -92,10 +92,6 @@ class GotOcr2Processor(ProcessorMixin):
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "PreTrainedTokenizerFast"
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)

@@ -51,7 +51,7 @@ if is_vision_available():
     import PIL
 
 
-class Gemma3ImageProcessorKwargs(ImagesKwargs):
+class Gemma3ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_pan_and_scan (`bool`, *optional*):
         Whether to apply `pan_and_scan` to images.
@@ -63,10 +63,10 @@ class Gemma3ImageProcessorKwargs(ImagesKwargs):
         Minimum aspect ratio to activate pan and scan.
     """
 
-    do_pan_and_scan: Optional[bool]
-    pan_and_scan_min_crop_size: Optional[int]
-    pan_and_scan_max_num_crops: Optional[int]
-    pan_and_scan_min_ratio_to_activate: Optional[float]
+    do_pan_and_scan: bool
+    pan_and_scan_min_crop_size: int
+    pan_and_scan_max_num_crops: int
+    pan_and_scan_min_ratio_to_activate: float
 
 
 class Gemma3ImageProcessor(BaseImageProcessor):

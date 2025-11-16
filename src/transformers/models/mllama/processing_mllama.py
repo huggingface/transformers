@@ -198,10 +198,6 @@ class MllamaProcessor(ProcessorMixin):
 
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "MllamaImageProcessor"
-    tokenizer_class = "PreTrainedTokenizerFast"
-
     def __init__(self, image_processor, tokenizer, chat_template=None):
         if not hasattr(tokenizer, "image_token"):
             self.image_token = "<|image|>"
@@ -258,9 +254,7 @@ class MllamaProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        images_kwargs = output_kwargs["images_kwargs"]
 
         data = {}
         if text is not None:
@@ -306,7 +300,7 @@ class MllamaProcessor(ProcessorMixin):
                     )
 
         if images is not None:
-            image_features = self.image_processor(images, **images_kwargs)
+            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
             num_tiles = image_features.pop("num_tiles")
             data.update(image_features)
 

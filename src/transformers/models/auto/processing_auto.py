@@ -17,11 +17,10 @@
 import importlib
 import inspect
 import json
-import warnings
 from collections import OrderedDict
 
 # Build the list of all feature extractors
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
@@ -49,6 +48,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("align", "AlignProcessor"),
         ("altclip", "AltCLIPProcessor"),
         ("aria", "AriaProcessor"),
+        ("audioflamingo3", "AudioFlamingo3Processor"),
         ("aya_vision", "AyaVisionProcessor"),
         ("bark", "BarkProcessor"),
         ("blip", "BlipProcessor"),
@@ -76,6 +76,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("gemma3", "Gemma3Processor"),
         ("gemma3n", "Gemma3nProcessor"),
         ("git", "GitProcessor"),
+        ("glm46v", "Glm46VProcessor"),
         ("glm4v", "Glm4vProcessor"),
         ("glm4v_moe", "Glm4vProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
@@ -109,6 +110,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mllama", "MllamaProcessor"),
         ("mm-grounding-dino", "GroundingDinoProcessor"),
         ("moonshine", "Wav2Vec2Processor"),
+        ("omdet-turbo", "OmDetTurboProcessor"),
         ("oneformer", "OneFormerProcessor"),
         ("ovis2", "Ovis2Processor"),
         ("owlv2", "Owlv2Processor"),
@@ -177,7 +179,7 @@ def processor_class_from_name(class_name: str):
         if getattr(processor, "__name__", None) == class_name:
             return processor
 
-    # We did not fine the class, but maybe it's because a dep is missing. In that case, the class will be in the main
+    # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # init and we return the proper dummy to get an appropriate error message.
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
@@ -266,18 +268,6 @@ class AutoProcessor:
         >>> # If processor files are in a directory (e.g. processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # processor = AutoProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
@@ -301,7 +291,7 @@ class AutoProcessor:
         processor_config_file = cached_file(pretrained_model_name_or_path, PROCESSOR_NAME, **cached_file_kwargs)
         if processor_config_file is not None:
             config_dict, _ = ProcessorMixin.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-            processor_class = config_dict.get("processor_class", None)
+            processor_class = config_dict.get("processor_class")
             if "AutoProcessor" in config_dict.get("auto_map", {}):
                 processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
@@ -357,7 +347,7 @@ class AutoProcessor:
 
         if processor_class is None:
             # Otherwise, load config, if it can be loaded.
-            if not isinstance(config, PretrainedConfig):
+            if not isinstance(config, PreTrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
@@ -431,7 +421,7 @@ class AutoProcessor:
         Register a new processor for this class.
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             processor_class ([`ProcessorMixin`]): The processor to register.
         """

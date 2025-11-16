@@ -41,7 +41,7 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import torch
 from transformers import pipeline
 pipeline = pipeline(task="text-generation", 
@@ -52,7 +52,7 @@ pipeline("人とAIが協調するためには、")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -112,6 +112,7 @@ visualizer("<img>What is shown in this image?")
 </div>
 
 ## Resources
+
 Refer to the [Training a better GPT model: Learnings from PaLM](https://medium.com/ml-abeja/training-a-better-gpt-2-93b157662ae4) blog post for more details about how ABEJA trained GPT-NeoX-Japanese.
 
 ## GPTNeoXJapaneseConfig

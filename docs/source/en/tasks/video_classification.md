@@ -378,7 +378,7 @@ Most of the training arguments are self-explanatory, but one that is quite impor
 ...     learning_rate=5e-5,
 ...     per_device_train_batch_size=batch_size,
 ...     per_device_eval_batch_size=batch_size,
-...     warmup_ratio=0.1,
+...     warmup_steps=0.1,
 ...     logging_steps=10,
 ...     load_best_model_at_end=True,
 ...     metric_for_best_model="accuracy",
@@ -463,7 +463,8 @@ Load a video for inference:
 The simplest way to try out your fine-tuned model for inference is to use it in a [`pipeline`](https://huggingface.co/docs/transformers/main/en/main_classes/pipelines#transformers.VideoClassificationPipeline). Instantiate a `pipeline` for video classification with your model, and pass your video to it:
 
 ```py
->>> from transformers import pipeline, infer_device
+>>> from transformers import pipeline
+from accelerate import Accelerator
 
 >>> video_cls = pipeline(model="my_awesome_video_cls_model")
 >>> video_cls("https://huggingface.co/datasets/sayakpaul/ucf101-subset/resolve/main/v_BasketballDunk_g14_c06.avi")
@@ -487,7 +488,7 @@ You can also manually replicate the results of the `pipeline` if you'd like.
 ...         ),  # this can be skipped if you don't have labels available.
 ...     }
 
-...     device = torch.device(infer_device())
+...     device = Accelerator().device
 ...     inputs = {k: v.to(device) for k, v in inputs.items()}
 ...     model = model.to(device)
 

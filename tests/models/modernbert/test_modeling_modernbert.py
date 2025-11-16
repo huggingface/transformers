@@ -236,8 +236,6 @@ class ModernBertModelTester:
 
 @require_torch
 class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_torchscript = False
-
     all_model_classes = (
         (
             ModernBertModel,
@@ -262,8 +260,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_pruning = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model
@@ -293,12 +290,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

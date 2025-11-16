@@ -265,8 +265,6 @@ class LayoutLMv2ModelTester:
 @require_torch
 @require_detectron2
 class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_pruning = False
-    test_torchscript = True
     test_mismatched_shapes = False
 
     all_model_classes = (
@@ -305,12 +303,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -480,7 +472,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
                 elif hasattr(value, "tensor"):
-                    # layoutlmv2uses ImageList instead of pixel values (needs for torchscript)
+                    # layoutlmv2uses ImageList instead of pixel values
                     single_row_input[key] = value.tensor[:single_batch_shape]
 
             with torch.no_grad():

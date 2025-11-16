@@ -14,7 +14,8 @@
 # limitations under the License.
 
 import math
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -28,7 +29,7 @@ from transformers.models.sam2.modeling_sam2 import (
 from transformers.utils.generic import OutputRecorder
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -75,8 +76,8 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
     configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
     [facebook/EdgeTAM](https://huggingface.co/facebook/EdgeTAM) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (Union[`dict`, `EdgeTamVideoVisionConfig`], *optional*):
@@ -274,7 +275,7 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         memory_fuser_hidden_act="gelu",
         **kwargs,
     ):
-        PretrainedConfig.__init__(**kwargs)
+        PreTrainedConfig.__init__(**kwargs)
         vision_config = vision_config if vision_config is not None else {}
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
@@ -1024,7 +1025,9 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
 
 @auto_docstring
 class EdgeTamVideoModel(Sam2VideoModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _keys_to_ignore_on_load_unexpected = []

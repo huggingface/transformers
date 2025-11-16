@@ -197,7 +197,6 @@ PyTorch는 `torch.nn.functional`의 일부로 스케일된 점곱 어텐션(SDPA
 ## SiglipConfig
 
 [[autodoc]] SiglipConfig
-    - from_text_vision_configs
 
 ## SiglipTextConfig
 

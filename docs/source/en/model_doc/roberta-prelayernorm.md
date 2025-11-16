@@ -35,7 +35,7 @@ The original code can be found [here](https://github.com/princeton-nlp/DinkyTrai
 
 ## Usage tips
 
-- The implementation is the same as [Roberta](roberta) except instead of using _Add and Norm_ it does _Norm and Add_. _Add_ and _Norm_ refers to the Addition and LayerNormalization as described in [Attention Is All You Need](https://huggingface.co/papers/1706.03762).
+- The implementation is the same as [Roberta](roberta) except instead of using *Add and Norm* it does *Norm and Add*. *Add* and *Norm* refers to the Addition and LayerNormalization as described in [Attention Is All You Need](https://huggingface.co/papers/1706.03762).
 - This is identical to using the `--encoder-normalize-before` flag in [fairseq](https://fairseq.readthedocs.io/).
 
 ## Resources

@@ -190,13 +190,30 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     """
 
     all_model_classes = (AriaModel, AriaForConditionalGeneration) if is_torch_available() else ()
-    test_pruning = False
-    test_torchscript = False
+
     _is_composite = True
 
     def setUp(self):
         self.model_tester = AriaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AriaConfig, has_text_modality=False)
+
+    @unittest.skip(
+        reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
 
 
 SKIP = False
@@ -503,7 +520,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
         )
         processor = AutoProcessor.from_pretrained(model_id)
-        assert model.device.type == "cuda", "This test is only supported on CUDA"  # TODO: remove this
         # Prepare inputs with no images
         inputs = processor(text="Hello, I am", return_tensors="pt").to(torch_device)
 

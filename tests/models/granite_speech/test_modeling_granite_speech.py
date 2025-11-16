@@ -107,7 +107,6 @@ class GraniteSpeechForConditionalGenerationModelTester:
             "model_type": "blip_2_qformer",
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
-            "position_embedding_type": "absolute",
             "use_qformer_text_input": False,
             "vocab_size": 30522,
         },
@@ -218,7 +217,7 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
     """
 
     all_model_classes = (GraniteSpeechForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False
+
     _is_composite = True
 
     def setUp(self):

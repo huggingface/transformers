@@ -18,12 +18,12 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from .... import initialization as init
 from ....activations import ACT2FN
 from ....cache_utils import Cache
 from ....modeling_outputs import MoECausalLMOutputWithPast, MoEModelOutputWithPastAndCrossAttentions
 from ....modeling_utils import PreTrainedModel
-from ....utils import DUMMY_INPUTS, DUMMY_MASK, auto_docstring, is_torch_fx_proxy
-from ....utils.deprecation import deprecate_kwarg
+from ....utils import DUMMY_INPUTS, DUMMY_MASK
 from .configuration_gptsan_japanese import GPTSanJapaneseConfig
 
 
@@ -244,7 +244,6 @@ class GPTSanJapaneseAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -371,7 +370,6 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
         )
         self.norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],
@@ -410,11 +408,11 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
         """
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
+        self_attn_past_key_values = past_key_values[:2] if past_key_values is not None else None
         # add present self-attn cache to positions 1,2 of present_key_value tuple
         atten_out = self.self_attn(
             hidden_states=hidden_states,
-            past_key_values=self_attn_past_key_value,
+            past_key_values=self_attn_past_key_values,
             attention_mask=(1 - attention_mask) * torch.finfo(hidden_states.dtype).min,
             output_attentions=output_attentions,
         )
@@ -445,7 +443,6 @@ class GPTSanJapaneseBlock(nn.Module):
         self.self_attn = GPTSanJapaneseLayerSelfAttention(config)
         self.feed_forward = GPTSanJapaneseLayerDenseFF(config) if ext_layer else GPTSanJapaneseLayerSparseFF(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],
@@ -532,60 +529,61 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(factor * 1.0)
-            module.bias.data.zero_()
+            init.constant_(module.weight, factor * 1.0)
+            init.zeros_(module.bias)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            init.normal_(module.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            init.normal_(module.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, GPTSanJapaneseModel):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.embed_tokens.weight.data.normal_(mean=0.0, std=factor * 1.0)
-            module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            init.normal_(module.embed_tokens.weight, mean=0.0, std=factor * 1.0)
+            init.normal_(module.position_embeddings.weight, mean=0.0, std=factor * 1.0)
             if hasattr(module, "extra_position_embeddings") and module.extra_position_embeddings is not None:
-                module.extra_position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
+                init.normal_(module.extra_position_embeddings.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, (GPTSanJapaneseModel, GPTSanJapaneseForConditionalGeneration)):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.final_logits_bias.data.normal_(mean=0.0, std=factor * 1.0)
+            init.normal_(module.final_logits_bias, mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+                init.normal_(module.lm_head.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, GPTSanJapaneseDenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
             # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            init.normal_(module.wi.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                init.zeros_(module.wi.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+                init.zeros_(module.wo.bias)
         elif isinstance(module, GPTSanJapaneseAttention):
             # Multi-headed attention
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_model
             n_heads = self.config.num_heads
-            module.k_proj.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.v_proj.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.q_proj.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.out_proj.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            init.normal_(module.k_proj.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.v_proj.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.q_proj.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.out_proj.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
         elif isinstance(module, GPTSanJapaneseSparseMLP):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_model
             n_heads = self.config.num_heads
-            module.router.classifier.weight.data.normal_(mean=0.0, std=factor * 1)
+            init.normal_(module.router.classifier.weight, mean=0.0, std=factor * 1)
             for idx in range(self.config.num_experts):
-                module.experts[f"expert_{idx}"].wi.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-                module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+                init.normal_(module.experts[f"expert_{idx}"].wi.weight, mean=0.0, std=factor * (d_model**-0.5))
+                init.normal_(module.experts[f"expert_{idx}"].wo.weight, mean=0.0, std=factor * (d_model**-0.5))
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -597,15 +595,9 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
                 "See T5 docs for more information."
             )
 
-        # shift inputs to the right
-        if is_torch_fx_proxy(input_ids):
-            # Item assignment is not supported natively for proxies.
-            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
-        else:
-            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-            shifted_input_ids[..., 0] = decoder_start_token_id
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = decoder_start_token_id
 
         if pad_token_id is None:
             raise ValueError("self.model.config.pad_token_id has to be defined.")
@@ -645,7 +637,6 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -863,15 +854,14 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
 
 
 class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)
         self.model = GPTSanJapaneseModel(config)
         self.register_buffer("final_logits_bias", torch.zeros([1, config.vocab_size]))
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
-        if not self.config.torchscript:
-            self.lm_head.weight = self.model.embed_tokens.weight
+        self.lm_head.weight = self.model.embed_tokens.weight
 
     def forward(
         self,

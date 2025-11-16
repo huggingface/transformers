@@ -52,7 +52,7 @@ if is_vision_available():
     import PIL
 
 
-class DonutImageProcessorKwargs(ImagesKwargs):
+class DonutImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):
         Whether to resize the image using thumbnail method.
@@ -60,8 +60,8 @@ class DonutImageProcessorKwargs(ImagesKwargs):
         Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
     """
 
-    do_thumbnail: Optional[bool]
-    do_align_long_axis: Optional[bool]
+    do_thumbnail: bool
+    do_align_long_axis: bool
 
 
 @requires(backends=("vision",))

@@ -284,7 +284,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
 
     text_config = Emu3TextConfig(
         max_position_embeddings=model_llm.config.max_position_embeddings,
-        rope_scaling={"rope_type": "default"},
+        rope_parameters={"rope_type": "default"},
     )
     config = Emu3Config(text_config=text_config, vocabulary_map=vocabulary_map)
 

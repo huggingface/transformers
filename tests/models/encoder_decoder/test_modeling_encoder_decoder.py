@@ -552,8 +552,6 @@ class EncoderDecoderMixin:
             decoder_attention_mask=decoder_attention_mask,
         )
 
-        # check that models has less parameters
-        self.assertLess(sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters()))
         random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
         # check that outputs are equal
@@ -570,10 +568,6 @@ class EncoderDecoderMixin:
             tied_model.to(torch_device)
             tied_model.eval()
 
-            # check that models has less parameters
-            self.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             tied_model_result = tied_model(
@@ -634,6 +628,7 @@ class EncoderDecoderMixin:
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_generate(**input_ids_dict)
 
+    @unittest.skip("This is no longer FORCED, it was just not working before.")
     def test_encoder_decoder_model_shared_weights(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.create_and_check_encoder_decoder_shared_weights(**input_ids_dict)
@@ -800,27 +795,6 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             "encoder_hidden_states": encoder_hidden_states,
             "labels": decoder_token_labels,
         }
-
-    def test_relative_position_embeds(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-
-        encoder_config = config_and_inputs["config"]
-        decoder_config = config_and_inputs["decoder_config"]
-
-        encoder_config._attn_implementation = "eager"
-        decoder_config._attn_implementation = "eager"
-        encoder_config.position_embedding_type = "relative_key_query"
-        decoder_config.position_embedding_type = "relative_key_query"
-
-        encoder_model, decoder_model = self.get_encoder_decoder_model(encoder_config, decoder_config)
-        model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model).eval().to(torch_device)
-        model.config._attn_implementation = "eager"  # model config -> won't work
-
-        logits = model(
-            input_ids=config_and_inputs["input_ids"], decoder_input_ids=config_and_inputs["decoder_input_ids"]
-        ).logits
-
-        self.assertTrue(logits.shape, (13, 7))
 
     @slow
     def test_bert2bert_summarization(self):

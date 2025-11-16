@@ -16,10 +16,11 @@
 
 import argparse
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 import timm
 import torch

@@ -50,7 +50,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class TvpImageProcessorKwargs(ImagesKwargs):
+class TvpImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_flip_channel_order (`bool`, *optional*):
         Whether to flip the channel order of the image from RGB to BGR.
@@ -60,7 +60,7 @@ class TvpImageProcessorKwargs(ImagesKwargs):
         Padding mode to use — `'constant'`, `'edge'`, `'reflect'`, or `'symmetric'`.
     """
 
-    do_flip_channel_order: Optional[bool]
+    do_flip_channel_order: bool
     constant_values: Optional[Union[float, list[float]]]
     pad_mode: Optional[str]
 

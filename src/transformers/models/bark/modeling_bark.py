@@ -57,6 +57,7 @@ from .generation_configuration_bark import (
 
 
 if is_flash_attn_available():
+    from ...integrations.flash_attention import get_target_dtype
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -78,6 +79,7 @@ class BarkSelfAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_heads
         self.head_dim = self.embed_dim // self.num_heads
+        self.config = config
 
         if config.hidden_size % config.num_heads != 0:
             raise ValueError(
@@ -228,6 +230,8 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
 
+        target_dtype = get_target_dtype(query, self)  # if the query is in float32, this is the dtype to cast to for FA
+
         attn_output = _flash_attention_forward(
             query,
             key,
@@ -237,6 +241,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
             dropout=self.dropout if self.training else 0.0,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
+            target_dtype=target_dtype,
         )
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
@@ -324,23 +329,6 @@ class BarkPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _supports_flash_attn = True
 
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear,)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
     @property
     def device(self) -> torch.device:
         """
@@ -365,6 +353,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 # GPT2-like autoregressive model
 class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkSubModelConfig
+    output_modalities = "audio"
 
     def __init__(self, config):
         super().__init__(config)
@@ -488,13 +477,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `DynamicCache` instead, e.g. "
-                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
@@ -911,6 +893,9 @@ class BarkFineModel(BarkPreTrainedModel):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
         super().__init__(config)
         self.config = config
+        self._tied_weights_keys = {}
+        for i in range(self.config.n_codes_total - self.config.n_codes_given):
+            self._tied_weights_keys[f"lm_heads.{i}.weight"] = f"input_embeds_layers.{i + 1}.weight"
 
         # initialize a modified non causal GPT-like model
         # note that for there is one embedding layer and one lm_head for each codebook of Encodec
@@ -1025,28 +1010,6 @@ class BarkFineModel(BarkPreTrainedModel):
         self.tie_weights()
 
         return model_embeds
-
-    def _tie_weights(self):
-        if getattr(self.config, "tie_word_embeddings", True):
-            self._tied_weights_keys = []
-            output_embeddings = self.get_output_embeddings()
-            input_embeddings = self.get_input_embeddings()
-
-            for i in range(self.config.n_codes_total - self.config.n_codes_given):
-                # self.input_embeds_layers[i + 1].weight = self.lm_heads[i].weight
-                self._tie_or_clone_weights(output_embeddings[i], input_embeddings[i + 1])
-                self._tied_weights_keys.append(f"lm_heads.{i}.weight")
-
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings list and the output embeddings list.
-
-        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
-        weights instead.
-        """
-        for module in self.modules():
-            if hasattr(module, "_tie_weights"):
-                module._tie_weights()
 
     @auto_docstring
     def forward(
@@ -1322,7 +1285,7 @@ class BarkFineModel(BarkPreTrainedModel):
     output sound according to specific predefined voice.
     """
 )
-class BarkModel(BarkPreTrainedModel):
+class BarkModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkConfig
 
     def __init__(self, config):
@@ -1335,6 +1298,8 @@ class BarkModel(BarkPreTrainedModel):
         self.codec_model = AutoModel.from_config(config.codec_config)
 
         self.config = config
+
+        self.post_init()
 
     @classmethod
     def can_generate(cls) -> bool:
@@ -1583,17 +1548,6 @@ class BarkModel(BarkPreTrainedModel):
             return audio, output_lengths
 
         return audio
-
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings list and the output embeddings list.
-
-        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
-        weights instead.
-        """
-        for module in self.modules():
-            if hasattr(module, "_tie_weights"):
-                module._tie_weights()
 
 
 __all__ = [

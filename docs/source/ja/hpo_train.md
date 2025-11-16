@@ -20,30 +20,16 @@ rendered properly in your Markdown viewer.
 ## Hyperparameter Search backend
 
 [`Trainer`]は現在、4つのハイパーパラメーター検索バックエンドをサポートしています：
-[optuna](https://optuna.org/)、[sigopt](https://sigopt.com/)、[raytune](https://docs.ray.io/en/latest/tune/index.html)、および[wandb](https://wandb.ai/site/sweeps)。
+[optuna](https://optuna.org/)、[raytune](https://docs.ray.io/en/latest/tune/index.html)、および[wandb](https://wandb.ai/site/sweeps)。
 
 これらを使用する前に、ハイパーパラメーター検索バックエンドをインストールする必要があります。
 ```bash
-pip install optuna/sigopt/wandb/ray[tune]
+pip install optuna/wandb/ray[tune]
 ```
 
 ## How to enable Hyperparameter search in example
 
 ハイパーパラメータの検索スペースを定義し、異なるバックエンドには異なるフォーマットが必要です。
-
-Sigoptの場合、sigopt [object_parameter](https://docs.sigopt.com/ai-module-api-references/api_reference/objects/object_parameter) を参照してください。それは以下のようなものです：
-```py
->>> def sigopt_hp_space(trial):
-...     return [
-...         {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double"},
-...         {
-...             "categorical_values": ["16", "32", "64", "128"],
-...             "name": "per_device_train_batch_size",
-...             "type": "categorical",
-...         },
-...     ]
-```
-
 
 Optunaに関しては、[object_parameter](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html#sphx-glr-tutorial-10-key-features-002-configurations-py)をご覧ください。以下のようになります：
 
@@ -105,7 +91,6 @@ Wandbについては、[object_parameter](https://docs.wandb.ai/guides/sweeps/co
 ...         config=config,
 ...         cache_dir=model_args.cache_dir,
 ...         revision=model_args.model_revision,
-...         token=True if model_args.use_auth_token else None,
 ...     )
 ```
 
@@ -125,7 +110,7 @@ Wandbについては、[object_parameter](https://docs.wandb.ai/guides/sweeps/co
 ... )
 ```
 
-ハイパーパラメーターの探索を呼び出し、最良のトライアル パラメーターを取得します。バックエンドは `"optuna"` / `"sigopt"` / `"wandb"` / `"ray"` である可能性があります。方向は `"minimize"` または `"maximize"` であり、目標をより大きくするか小さくするかを示します。
+ハイパーパラメーターの探索を呼び出し、最良のトライアル パラメーターを取得します。バックエンドは `"optuna"` / `"wandb"` / `"ray"` である可能性があります。方向は `"minimize"` または `"maximize"` であり、目標をより大きくするか小さくするかを示します。
 
 `compute_objective` 関数を独自に定義することもできます。定義されていない場合、デフォルトの `compute_objective` が呼び出され、F1などの評価メトリックの合計が目標値として返されます。
 
@@ -141,4 +126,4 @@ Wandbについては、[object_parameter](https://docs.wandb.ai/guides/sweeps/co
 ```
 
 ## Hyperparameter search For DDP finetune
-現在、DDP（Distributed Data Parallel）のためのハイパーパラメーター検索は、Optuna と SigOpt に対して有効になっています。ランクゼロプロセスのみが検索トライアルを生成し、他のランクに引数を渡します。
+現在、DDP（Distributed Data Parallel）のためのハイパーパラメーター検索は、Optuna に対して有効になっています。ランクゼロプロセスのみが検索トライアルを生成し、他のランクに引数を渡します。

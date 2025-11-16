@@ -129,7 +129,7 @@ class Cohere2VisionCausalLMOutputWithPast(ModelOutput):
 @auto_docstring
 class Cohere2VisionPreTrainedModel(PreTrainedModel):
     config: Cohere2VisionConfig
-    base_model_prefix = ""
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -142,6 +142,7 @@ class Cohere2VisionPreTrainedModel(PreTrainedModel):
         "hidden_states": "DecoderLayer",
         "attentions": "Attention",
     }
+    base_model_prefix = "model"
 
 
 @auto_docstring(
@@ -213,7 +214,7 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
             )
         return special_image_mask
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -267,7 +268,7 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
 )
 class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Cohere2VisionConfig):
         super().__init__(config)
@@ -306,7 +307,7 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
     def multi_modal_projector(self):
         return self.model.multi_modal_projector
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

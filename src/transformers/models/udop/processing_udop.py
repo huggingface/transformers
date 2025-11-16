@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 class UdopTextKwargs(TextKwargs, total=False):
     word_labels: Optional[Union[list[int], list[list[int]]]]
-    boxes: Union[list[list[int]], list[list[list[int]]]]
+    boxes: Optional[Union[list[list[int]], list[list[list[int]]]]]
 
 
 class UdopProcessorKwargs(ProcessingKwargs, total=False):
@@ -72,10 +72,6 @@ class UdopProcessor(ProcessorMixin):
         tokenizer (`UdopTokenizer` or `UdopTokenizerFast`):
             An instance of [`UdopTokenizer`] or [`UdopTokenizerFast`]. The tokenizer is a required input.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "LayoutLMv3ImageProcessor"
-    tokenizer_class = ("UdopTokenizer", "UdopTokenizerFast")
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)

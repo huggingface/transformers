@@ -1413,7 +1413,7 @@ class MarkupLMConverter(Converter):
 class MoshiConverter(SpmConverter):
     handle_byte_fallback = True
 
-    def __init__(self, vocab_file, model_max_length=None, **kwargs):
+    def __init__(self, vocab_file, **kwargs):
         requires_backends(self, "protobuf")
 
         Converter.__init__(self, vocab_file)

@@ -502,25 +502,6 @@ class AutoModelTest(unittest.TestCase):
         ):
             _ = AutoModel.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
-    def test_model_file_not_found(self):
-        with self.assertRaisesRegex(
-            EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named pytorch_model.bin",
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/config-no-model")
-
-    def test_model_from_tf_error(self):
-        with self.assertRaisesRegex(
-            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
-
-    def test_model_from_flax_error(self):
-        with self.assertRaisesRegex(
-            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
-
     @unittest.skip("Failing on main")
     def test_cached_model_has_minimum_calls_to_head(self):
         # Make sure we have cached the model.
@@ -574,14 +555,16 @@ class AutoModelTest(unittest.TestCase):
         # patching was added in v4.45)
         self.assertTrue("GenerationMixin" in str(model.__class__.__bases__))
 
+    @unittest.skip("@Cyril: add the post_init() on the hub repo")
     def test_model_with_dotted_name_and_relative_imports(self):
         """
         Test for issue #40496: AutoModel.from_pretrained() doesn't work for models with '.' in their name
         when there's a relative import.
 
-        Without the fix, this raises: ModuleNotFoundError: No module named 'transformers_modules.test-model_v1'
+        Without the fix, this raises: ModuleNotFoundError:
+        No module named 'transformers_modules.hf-internal-testing.remote_code_model_with_dots_v1'
         """
-        model_id = "hf-internal-testing/remote_code_model_with_dots"
+        model_id = "hf-internal-testing/remote_code_model_with_dots_v1.0"
 
         model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
         self.assertIsNotNone(model)

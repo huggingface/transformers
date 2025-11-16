@@ -347,10 +347,6 @@ class FuyuProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "FuyuImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor=image_processor, tokenizer=tokenizer)
         self.image_processor = image_processor
@@ -531,7 +527,6 @@ class FuyuProcessor(ProcessorMixin):
 
         if text is not None and images is None:
             logger.warning("You are processing a text with no associated image. Make sure it is intended.")
-            self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
             return text_encoding
 

@@ -51,11 +51,6 @@ class Gemma3nProcessor(ProcessorMixin):
             The number of image soft tokens that should be added to
     """
 
-    attributes = ["feature_extractor", "image_processor", "tokenizer"]
-    feature_extractor_class = "AutoFeatureExtractor"
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         feature_extractor,
@@ -107,7 +102,7 @@ class Gemma3nProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         if audio is not None:
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])

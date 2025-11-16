@@ -17,7 +17,7 @@ import inspect
 import os
 import re
 
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import direct_transformers_import
 
 
@@ -36,6 +36,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Ernie4_5Config": ["tie_word_embeddings"],
     "Ernie4_5_MoeConfig": ["tie_word_embeddings"],
     "Lfm2Config": ["full_attn_idxs", "tie_word_embeddings"],
+    "Lfm2MoeConfig": ["tie_word_embeddings"],
     # used internally during generation to provide the custom logit processors with their necessary information
     "DiaConfig": [
         "delay_pattern",
@@ -309,6 +310,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
     "VaultGemmaConfig": ["tie_word_embeddings"],
     "GemmaConfig": ["tie_word_embeddings"],
+    "CsmConfig": ["tie_codebooks_embeddings"],
 }
 
 
@@ -399,6 +401,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     # common and important attributes, even if they do not always appear in the modeling files
     attributes_to_allow = [
         "initializer_range",
+        "init_std",
+        "initializer_factor",
         "bos_index",
         "eos_index",
         "pad_index",
@@ -434,7 +438,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     if not attribute_used:
         case_allowed = False
         for attribute in attributes:
-            # Allow if the default value in the configuration class is different from the one in `PretrainedConfig`
+            # Allow if the default value in the configuration class is different from the one in `PreTrainedConfig`
             if attribute == "is_encoder_decoder" and default_value is True:
                 case_allowed = True
             elif attribute == "tie_word_embeddings" and default_value is False:
@@ -512,7 +516,7 @@ def check_config_attributes():
             for name, cls in inspect.getmembers(
                 inspect.getmodule(_config_class),
                 lambda x: inspect.isclass(x)
-                and issubclass(x, PretrainedConfig)
+                and issubclass(x, PreTrainedConfig)
                 and inspect.getmodule(x) == inspect.getmodule(_config_class),
             )
         ]
