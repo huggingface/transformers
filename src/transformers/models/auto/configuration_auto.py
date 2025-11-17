@@ -1021,6 +1021,12 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
         ("parakeet_ctc", "parakeet"),
+        # hacky hacky again. These mappings need to exist somewhere else
+        # also this exposes us more to supply chain attacks 
+        # it blurs a bit the line between remote code and distant
+        # (also we always use the code in transformers)
+        # ideas welcome
+        ("deepseek_vl_v2", "deepseek_ocr"),
     ]
 )
 

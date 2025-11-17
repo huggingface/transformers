@@ -1293,10 +1293,10 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
         pixel_values=None,
         pixel_values_local=None,
         num_local_crops=None,
-        image_sizes=None,
         image_attention_mask=None,
         image_spatial_crop=None,
         num_img_tokens=None,
+        image_sizes=None,
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
@@ -1312,20 +1312,15 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
             **kwargs,
         )
 
-        if cache_position[0] == 0:
-            if pixel_values is not None:
-                model_inputs["pixel_values"] = pixel_values
-            if pixel_values_local is not None:
-                model_inputs["pixel_values_local"] = pixel_values_local
-            if num_local_crops is not None:
-                model_inputs["num_local_crops"] = num_local_crops
+        current_cache_position = model_inputs.get("cache_position", cache_position)
+        if current_cache_position is None or current_cache_position[0] == 0:
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["pixel_values_local"] = pixel_values_local
+            model_inputs["num_local_crops"] = num_local_crops
+            model_inputs["image_attention_mask"] = image_attention_mask
+            model_inputs["image_spatial_crop"] = image_spatial_crop
+            model_inputs["num_img_tokens"] = num_img_tokens
             model_inputs["image_sizes"] = image_sizes
-            if image_attention_mask is not None:
-                model_inputs["image_attention_mask"] = image_attention_mask
-            if image_spatial_crop is not None:
-                model_inputs["image_spatial_crop"] = image_spatial_crop
-            if num_img_tokens is not None:
-                model_inputs["num_img_tokens"] = num_img_tokens
 
         return model_inputs
 
