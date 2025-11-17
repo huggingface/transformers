@@ -15,7 +15,7 @@
 
 from copy import deepcopy
 
-from .core_model_loading import Concatenate, MergeModulelist, WeightConverter
+from .core_model_loading import Chunk, Concatenate, MergeModulelist, WeightConverter
 from .utils import is_torch_available
 
 
@@ -122,6 +122,26 @@ def _build_checkpoint_conversion_mapping():
     mapping["qwen3_vl_moe"] = mapping["qwen2_moe"].copy()
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["minimax"] = mapping["mixtral"].copy()
+    mapping["deepseek_ocr"] = [
+        WeightConverter(
+            source_keys="model.vision_model.transformer.layers.*.self_attn.qkv_proj.weight",
+            target_keys=[
+                "model.clip_model.vision_model.encoder.layers.*.self_attn.q_proj.weight",
+                "model.clip_model.vision_model.encoder.layers.*.self_attn.k_proj.weight",
+                "model.clip_model.vision_model.encoder.layers.*.self_attn.v_proj.weight",
+            ],
+            operations=[Chunk(dim=0, chunks=3)],
+        ),
+        WeightConverter(
+            source_keys="model.vision_model.transformer.layers.*.self_attn.qkv_proj.bias",
+            target_keys=[
+                "model.clip_model.vision_model.encoder.layers.*.self_attn.q_proj.bias",
+                "model.clip_model.vision_model.encoder.layers.*.self_attn.k_proj.bias",
+                "model.clip_model.vision_model.encoder.layers.*.self_attn.v_proj.bias",
+            ],
+            operations=[Chunk(dim=0, chunks=3)],
+        ),
+    ]
 
     return mapping
 

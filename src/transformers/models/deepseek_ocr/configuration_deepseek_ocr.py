@@ -50,6 +50,7 @@ class DeepseekOcrSamConfig(PreTrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.model_type = "deepseek_ocr"
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -329,6 +330,9 @@ class DeepseekOcrTextConfig(PreTrainedConfig):
         )
 
 
+DEEPSEEK_OCR_DEFAULT_IMAGE_TOKEN_ID = 128815
+
+
 class DeepseekOcrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekOcrForConditionalGeneration`]. It is used to instantiate a
@@ -376,10 +380,18 @@ class DeepseekOcrConfig(PreTrainedConfig):
         text_config=None,
         vision_config=None,
         projector_config=None,
-        image_token_id=100015,
+        image_token_id=DEEPSEEK_OCR_DEFAULT_IMAGE_TOKEN_ID,
+        image_token_index=None,
         **kwargs,
     ):
+        # another hack - we directly override the model_type as hub repo isn't aligned
+        language_config = kwargs.pop("language_config", None)
+        original_model_type = kwargs.pop("model_type", None)
+        if text_config is None and language_config is not None:
+            text_config = language_config
+
         self.image_token_id = image_token_id
+        self.image_token_index = image_token_id if image_token_index is None else image_token_index
 
         if text_config is None:
             self.text_config = DeepseekOcrTextConfig(
@@ -397,9 +409,13 @@ class DeepseekOcrConfig(PreTrainedConfig):
                 max_position_embeddings=8192,
             )
         elif isinstance(text_config, dict):
+            if "head_dim" not in text_config and "hidden_size" in text_config and "num_attention_heads" in text_config:
+                text_config["head_dim"] = text_config["hidden_size"] // text_config["num_attention_heads"]
             self.text_config = DeepseekOcrTextConfig(**text_config)
         else:
             self.text_config = text_config
+        if getattr(self.text_config, "image_token_id", None) is None:
+            self.text_config.image_token_id = self.image_token_id
 
         if vision_config is None:
             self.vision_config = DeepseekOcrVisionConfig()
@@ -420,6 +436,8 @@ class DeepseekOcrConfig(PreTrainedConfig):
         self.ignore_index = kwargs.pop("ignore_index", -100)
 
         super().__init__(**kwargs)
+        self.original_model_type = original_model_type
+        self.model_type = "deepseek_ocr"
 
 
 __all__ = [

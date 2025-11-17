@@ -14,6 +14,7 @@
 
 import json
 import re
+from textwrap import dedent
 from typing import Optional, Union
 
 import numpy as np
@@ -23,6 +24,8 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import is_torch_available, is_vision_available, logging
+from ..auto.tokenization_auto import AutoTokenizer
+from .image_processing_deepseek_ocr_fast import DeepseekOcrImageProcessorFast
 
 
 if is_torch_available():
@@ -34,6 +37,31 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+DEEPSEEK_OCR_DEFAULT_CHAT_TEMPLATE = dedent(
+    """
+    {%- for message in messages %}
+        {%- if message['content'] is string %}
+{{ message['content'].rstrip() }}
+        {%- else %}
+            {%- set ns = namespace(previous_was_image=False) %}
+            {%- for content in message['content'] %}
+                {%- if content['type'] == 'image' %}
+<image>
+                    {%- set ns.previous_was_image = True %}
+                {%- elif content['type'] == 'text' %}
+{{- ('\n' if ns.previous_was_image else '') + content['text'].rstrip() }}
+                    {%- set ns.previous_was_image = False %}
+                {%- endif %}
+            {%- endfor %}
+        {%- endif %}
+        {%- if not loop.last %}
+
+        {%- endif %}
+    {%- endfor %}
+    """
+).strip()
 
 
 class DeepseekOcrProcessorKwargs(ProcessingKwargs, total=False):
@@ -82,10 +110,31 @@ class DeepseekOcrProcessor(ProcessorMixin):
                 f"The tokenizer does not contain the special image token `{self.image_token}`. "
                 "Please make sure it is added to the vocabulary before instantiating the processor."
             )
-        if "chat_template" not in kwargs and getattr(tokenizer, "chat_template", None) is not None:
-            kwargs["chat_template"] = tokenizer.chat_template
+        tokenizer_chat_template = getattr(tokenizer, "chat_template", None)
+        if "chat_template" not in kwargs:
+            if tokenizer_chat_template is not None:
+                kwargs["chat_template"] = tokenizer_chat_template
+            else:
+                kwargs["chat_template"] = DEEPSEEK_OCR_DEFAULT_CHAT_TEMPLATE
+                tokenizer.chat_template = kwargs["chat_template"]
 
         super().__init__(image_processor, tokenizer, **kwargs)
+
+    # hacky hacky, so that from_pretrained does not yell because there is no processor config in the hub repo
+    @classmethod
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        try:
+            return super()._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
+        except OSError as error:
+            if "preprocessor_config" not in str(error):
+                raise
+            logger.warning_once(
+                "Deepseek OCR repository does not provide a preprocessor_config.json file. "
+                "Falling back to default DeepseekOcrImageProcessorFast settings."
+            )
+            image_processor = DeepseekOcrImageProcessorFast()
+            tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            return [image_processor, tokenizer]
 
     def __call__(
         self,
@@ -321,4 +370,7 @@ class DeepseekOcrProcessor(ProcessorMixin):
         return md, crops
 
 
-__all__ = ["DeepseekOcrProcessor"]
+DeepseekVLV2Processor = DeepseekOcrProcessor
+
+
+__all__ = ["DeepseekOcrProcessor", "DeepseekVLV2Processor"]

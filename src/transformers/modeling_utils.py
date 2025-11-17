@@ -204,6 +204,7 @@ VLMS = [
     "qwen2_5_vl",
     "videollava",
     "vipllava",
+    "deepseekocr",
 ]
 
 

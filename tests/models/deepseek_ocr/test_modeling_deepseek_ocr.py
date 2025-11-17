@@ -282,10 +282,10 @@ class DeepseekOcrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
 
 @require_torch
-@slow
-class DeepseekOcrIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.model_id = "deepseek_ocr_converted"
+    @slow
+    class DeepseekOcrIntegrationTest(unittest.TestCase):
+        def setUp(self):
+            self.model_id = "deepseek-ai/DeepSeek-OCR"
 
     def test_model_text_generation(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
