@@ -124,6 +124,8 @@ class Bnb8bitQuantize(ConversionOps):
                 new_value = bnb.nn.Int8Params(weight.to("cpu"), requires_grad=False, **kwargs).to(weight_device)
                 setattr(new_value, "SCB", self.hf_quantizer.param_quant_stats[module_name][f"{module_name}.SCB"])
                 del self.hf_quantizer.param_quant_stats[module_name]
+                # sometimes, weight_format is not saved so we need to remove it from missing keys ...
+                missing_keys.discard(f"{module_name}.weight_format")
                 return {f"{module_name}.weight": new_value}
             return {}
 
