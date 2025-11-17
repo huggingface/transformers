@@ -159,15 +159,15 @@ class Sam3VideoConfig(PreTrainedConfig):
 
         # Initialize tracker config (Sam2Video)
         if tracker_config is None:
-            tracker_config = {"remove_vision_encoder": True}
-            logger.info("tracker_config is None. Initializing the Sam2VideoConfig with default values.")
+            tracker_config = {}
+            logger.info("tracker_config is None. Initializing the Sam3TrackerVideoConfig with default values.")
         if isinstance(tracker_config, dict):
             tracker_config["model_type"] = tracker_config.get("model_type", "sam3_tracker_video")
             self.tracker_config = CONFIG_MAPPING[tracker_config["model_type"]](**tracker_config)
         elif isinstance(tracker_config, PreTrainedConfig):
             self.tracker_config = tracker_config
         else:
-            raise ValueError(f"tracker_config must be a dict or Sam2VideoConfig, got {type(tracker_config)}")
+            raise ValueError(f"tracker_config must be a dict or Sam3TrackerVideoConfig, got {type(tracker_config)}")
 
         # Model initialization
         self.initializer_range = initializer_range

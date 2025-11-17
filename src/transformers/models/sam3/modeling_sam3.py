@@ -1050,7 +1050,6 @@ class Sam3VisionModel(Sam3PreTrainedModel):
         height = pixel_values.shape[-2] // self.config.backbone_config.patch_size
         width = pixel_values.shape[-1] // self.config.backbone_config.patch_size
         hidden_states_spatial = hidden_states.view(batch_size, height, width, -1).permute(0, 3, 1, 2)
-
         fpn_hidden_states, fpn_position_encoding = self.neck(hidden_states_spatial)
 
         return Sam3VisionEncoderOutput(
@@ -2140,8 +2139,19 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
 
 class Sam3Model(Sam3PreTrainedModel):
     input_modalities = ["image", "text"]
+    _checkpoint_conversion_mapping = {"detector_model.": ""}
+    _keys_to_ignore_on_load_unexpected = [
+        r"^tracker_model.",
+        r"^tracker_neck.",
+    ]
 
     def __init__(self, config: Sam3Config):
+        # loading from a sam3_video config
+        if hasattr(config, "detector_config") and config.detector_config is not None:
+            detector_config = config.detector_config
+            if isinstance(detector_config, dict):
+                detector_config = Sam3Config(**detector_config)
+            config = detector_config
         super().__init__(config)
         self.vision_encoder = Sam3VisionModel(config.vision_config)
         self.text_encoder = CLIPTextModelWithProjection(config.text_config)

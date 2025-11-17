@@ -8,7 +8,6 @@ from kernels import get_kernel
 from torch import Tensor, nn
 from tqdm.auto import tqdm
 
-from transformers import Sam3Model
 from transformers.models.sam3.modeling_sam3 import Sam3VisionNeck
 
 from ...modeling_utils import PreTrainedModel
@@ -436,8 +435,8 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
     def __init__(self, config: Sam3VideoConfig):
         super().__init__(config)
         self.config = config
-        self.detector_model = Sam3Model(config.detector_config)
-        self.tracker_model = AutoModel.from_config(config.tracker_config)
+        self.detector_model = AutoModel.from_config(config.detector_config)
+        self.tracker_model = AutoModel.from_config(config.tracker_config, remove_vision_encoder=True)
         self.low_res_mask_size = config.low_res_mask_size
         self.score_threshold_detection = config.score_threshold_detection
         self.det_nms_thresh = config.det_nms_thresh

@@ -14,7 +14,9 @@
 # limitations under the License.
 from typing import Optional, Union
 
+import numpy as np
 import torch
+import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -394,6 +396,79 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
             results.append({"scores": scores, "boxes": boxes, "masks": masks})
 
         return results
+
+    def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
+        """
+        Apply non-overlapping constraints to the object scores in pred_masks. Here we
+        keep only the highest scoring object at each spatial location in pred_masks.
+        """
+        batch_size = pred_masks.size(0)
+        if batch_size == 1:
+            return pred_masks
+
+        device = pred_masks.device
+        # "max_obj_inds": object index of the object with the highest score at each location
+        max_obj_inds = torch.argmax(pred_masks, dim=0, keepdim=True)
+        # "batch_obj_inds": object index of each object slice (along dim 0) in `pred_masks`
+        batch_obj_inds = torch.arange(batch_size, device=device)[:, None, None, None]
+        keep = max_obj_inds == batch_obj_inds
+        # suppress overlapping regions' scores below -10.0 so that the foreground regions
+        # don't overlap (here sigmoid(-10.0)=4.5398e-05)
+        pred_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
+        return pred_masks
+
+    def post_process_masks(
+        self,
+        masks,
+        original_sizes,
+        mask_threshold=0.0,
+        binarize=True,
+        max_hole_area=0.0,
+        max_sprinkle_area=0.0,
+        apply_non_overlapping_constraints=False,
+        **kwargs,
+    ):
+        """
+        Remove padding and upscale masks to the original image size.
+
+        Args:
+            masks (`Union[torch.Tensor, List[torch.Tensor], np.ndarray, List[np.ndarray]]`):
+                Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
+            original_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
+                The original sizes of each image before it was resized to the model's expected input shape, in (height,
+                width) format.
+            mask_threshold (`float`, *optional*, defaults to 0.0):
+                Threshold for binarization and post-processing operations.
+            binarize (`bool`, *optional*, defaults to `True`):
+                Whether to binarize the masks.
+            max_hole_area (`float`, *optional*, defaults to 0.0):
+                The maximum area of a hole to fill.
+            max_sprinkle_area (`float`, *optional*, defaults to 0.0):
+                The maximum area of a sprinkle to fill.
+            apply_non_overlapping_constraints (`bool`, *optional*, defaults to `False`):
+                Whether to apply non-overlapping constraints to the masks.
+
+        Returns:
+            (`torch.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
+            is given by original_size.
+        """
+        if isinstance(original_sizes, (torch.Tensor, np.ndarray)):
+            original_sizes = original_sizes.tolist()
+        # TODO: add connected components kernel for postprocessing
+        output_masks = []
+        for i, original_size in enumerate(original_sizes):
+            if isinstance(masks[i], np.ndarray):
+                masks[i] = torch.from_numpy(masks[i])
+            elif not isinstance(masks[i], torch.Tensor):
+                raise TypeError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+            interpolated_mask = F.interpolate(masks[i], original_size, mode="bilinear", align_corners=False)
+            if apply_non_overlapping_constraints:
+                interpolated_mask = self._apply_non_overlapping_constraints(interpolated_mask)
+            if binarize:
+                interpolated_mask = interpolated_mask > mask_threshold
+            output_masks.append(interpolated_mask)
+
+        return output_masks
 
 
 __all__ = ["Sam3ImageProcessorFast"]

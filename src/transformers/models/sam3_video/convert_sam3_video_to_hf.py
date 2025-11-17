@@ -28,6 +28,9 @@ import torch
 from transformers import CLIPTokenizerFast
 from transformers.models.sam2_video.video_processing_sam2_video import Sam2VideoVideoProcessor
 from transformers.models.sam3.image_processing_sam3_fast import Sam3ImageProcessorFast
+from transformers.models.sam3.modeling_sam3 import Sam3Model
+from transformers.models.sam3_tracker.modeling_sam3_tracker import Sam3TrackerModel
+from transformers.models.sam3_tracker_video.modeling_sam3_tracker_video import Sam3TrackerVideoModel
 from transformers.models.sam3_video.configuration_sam3_video import Sam3VideoConfig
 from transformers.models.sam3_video.modeling_sam3_video import Sam3VideoModel
 from transformers.models.sam3_video.processing_sam3_video import Sam3VideoProcessor
@@ -635,8 +638,8 @@ def convert_sam3_checkpoint(
             "detector_model.text_encoder.text_projection.weight"
         ].T
 
-    # Load into HF model
-    print("Loading weights into Sam3Model...")
+    # Load into HF models
+    print("Loading weights into Sam3VideoModel...")
     model = Sam3VideoModel(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict_new, strict=False)
 
@@ -680,8 +683,8 @@ def convert_sam3_checkpoint(
         if repo_id is None:
             raise ValueError("repo_id must be provided when push_to_hub=True")
         print(f"Pushing model to Hub: {repo_id}")
-        model.push_to_hub(repo_id, use_temp_dir=True)
-        processor.push_to_hub(repo_id, use_temp_dir=True)
+        model.push_to_hub(repo_id, use_temp_dir=True, private=True)
+        processor.push_to_hub(repo_id, use_temp_dir=True, private=True)
 
     print("Conversion complete!")
     print(f"Model saved successfully to: {output_path}")
@@ -691,6 +694,37 @@ def convert_sam3_checkpoint(
     gc.collect()
 
     # Verify the conversion by reloading
+    print("Loading saved weights into Sam3TrackerVideoModel...")
+    try:
+        model = Sam3TrackerVideoModel.from_pretrained(output_path)
+        param_count = sum(p.numel() for p in model.parameters())
+        print(f"✓ Successfully loaded model with {param_count:,} parameters")
+        del model
+        gc.collect()
+    except Exception as e:
+        print(f"✗ Failed to reload model: {e}")
+        raise e
+    print("Loading saved weights into Sam3TrackerModel...")
+    try:
+        model = Sam3TrackerModel.from_pretrained(output_path)
+        param_count = sum(p.numel() for p in model.parameters())
+        print(f"✓ Successfully loaded model with {param_count:,} parameters")
+        del model
+        gc.collect()
+    except Exception as e:
+        print(f"✗ Failed to reload model: {e}")
+        raise e
+    print("Loading saved weights into Sam3Model...")
+    try:
+        model = Sam3Model.from_pretrained(output_path)
+        param_count = sum(p.numel() for p in model.parameters())
+        print(f"✓ Successfully loaded model with {param_count:,} parameters")
+        del model
+        gc.collect()
+    except Exception as e:
+        print(f"✗ Failed to reload model: {e}")
+        raise e
+
     print("\nVerifying converted checkpoint can be loaded...")
     try:
         model = Sam3VideoModel.from_pretrained(output_path)

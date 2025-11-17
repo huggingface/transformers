@@ -352,6 +352,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("sam2_hiera_det_model", "Sam2HieraDetModel"),
         ("sam2_video", "Sam2VideoModel"),
         ("sam2_vision_model", "Sam2VisionModel"),
+        ("sam3", "Sam3Model"),
         ("sam3_tracker", "Sam3TrackerModel"),
         ("sam3_tracker", "Sam3TrackerModel"),
         ("sam3_tracker_video", "Sam3TrackerVideoModel"),

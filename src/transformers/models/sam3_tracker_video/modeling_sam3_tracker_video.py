@@ -1578,12 +1578,27 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerVideoTwoWayAttentionBlock, index=2)}
-    _keys_to_ignore_on_load_unexpected = []
+    _checkpoint_conversion_mapping = {
+        "tracker_model.": "",
+        "detector_model.vision_encoder.": "vision_encoder.",
+        "tracker_neck.": "vision_encoder.neck.",
+    }
+    _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
 
-    def __init__(self, config: Sam3TrackerVideoConfig):
+    def __init__(self, config: Sam3TrackerVideoConfig, remove_vision_encoder: bool = False):
+        r"""
+        remove_vision_encoder (`bool`, *optional*, defaults to `False`):
+            Whether to remove the vision encoder. If True, the vision encoder will be set to None.
+        """
+        # loading from a sam3_video config
+        if hasattr(config, "tracker_config") and config.tracker_config is not None:
+            tracker_config = config.tracker_config
+            if isinstance(tracker_config, dict):
+                tracker_config = Sam3TrackerVideoConfig(**tracker_config)
+            config = tracker_config
         super().__init__(config)
         self.shared_image_embedding = Sam3TrackerVideoPositionalEmbedding(config.prompt_encoder_config)
-        self.vision_encoder = AutoModel.from_config(config.vision_config) if not config.remove_vision_encoder else None
+        self.vision_encoder = AutoModel.from_config(config.vision_config) if not remove_vision_encoder else None
         self.prompt_encoder = Sam3TrackerVideoPromptEncoder(config.prompt_encoder_config)
         # The module using it is not a PreTrainedModel subclass so we need this
         config.mask_decoder_config._attn_implementation = config._attn_implementation
@@ -1926,7 +1941,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
 
         # precompute projected level 0 and level 1 features in SAM decoder
         # to avoid running it again on every SAM click
-        feature_maps = list(feature_maps)
+        feature_maps = list(feature_maps[:-1])
         feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
         feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
 
@@ -1934,7 +1949,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
         feature_maps_position_embeddings = [
             feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
+            for feature_map_position_embedding in feature_maps_position_embeddings[:-1]
         ]
 
         return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
