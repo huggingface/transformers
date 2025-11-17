@@ -23,6 +23,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
@@ -931,10 +932,10 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
         std = self.config.init_std
 
         if isinstance(module, DeformableDetrLearnedPositionEmbedding):
-            nn.init.uniform_(module.row_embeddings.weight)
-            nn.init.uniform_(module.column_embeddings.weight)
+            init.uniform_(module.row_embeddings.weight)
+            init.uniform_(module.column_embeddings.weight)
         elif isinstance(module, DeformableDetrMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight, 0.0)
+            init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
                 2.0 * math.pi / module.n_heads
@@ -947,27 +948,28 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            nn.init.constant_(module.attention_weights.weight, 0.0)
-            nn.init.constant_(module.attention_weights.bias, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight)
-            nn.init.constant_(module.value_proj.bias, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight)
-            nn.init.constant_(module.output_proj.bias, 0.0)
+
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         if hasattr(module, "reference_points") and not self.config.two_stage:
-            nn.init.xavier_uniform_(module.reference_points.weight, gain=1.0)
-            nn.init.constant_(module.reference_points.bias, 0.0)
+            init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            init.constant_(module.reference_points.bias, 0.0)
         if hasattr(module, "level_embed"):
-            nn.init.normal_(module.level_embed)
+            init.normal_(module.level_embed)
 
 
 class DeformableDetrEncoder(DeformableDetrPreTrainedModel):

@@ -22,6 +22,7 @@ from typing import Any, Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -327,22 +328,13 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_range
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=factor)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=factor)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, InstructBlipVisionEmbeddings):
-            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
-            nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
+        if isinstance(module, InstructBlipVisionEmbeddings):
+            init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
+            init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
         elif isinstance(module, (InstructBlipForConditionalGeneration, InstructBlipModel)):
-            module.query_tokens.zero_()
+            init.zeros_(module.query_tokens)
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->InstructBlip

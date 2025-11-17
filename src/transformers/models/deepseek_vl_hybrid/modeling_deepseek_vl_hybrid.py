@@ -24,6 +24,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
@@ -218,18 +219,18 @@ class DeepseekVLHybridPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.text_config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.text_config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, DeepseekVLHybridLayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
         elif isinstance(module, DeepseekVLHybridModel):
-            module.high_res_vision_alpha.zero_()
+            init.zeros_(module.high_res_vision_alpha)
 
 
 DEEPSEEK_VL_COMMON_CUSTOM_ARGS = r"""

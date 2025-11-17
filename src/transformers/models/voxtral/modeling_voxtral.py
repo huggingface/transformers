@@ -231,28 +231,6 @@ class VoxtralPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_compile_fullgraph = True
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        # important: this ported version of Voxtral isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.audio_config.initializer_range
-        )
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-
 
 @auto_docstring(
     custom_intro="""
