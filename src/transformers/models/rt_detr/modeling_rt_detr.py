@@ -23,6 +23,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
@@ -1017,16 +1018,16 @@ class RTDetrPreTrainedModel(PreTrainedModel):
                 for layer in module.model.decoder.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
                     bias = float(-math.log((1 - prior_prob) / prior_prob))
-                    nn.init.xavier_uniform_(layer.weight)
-                    nn.init.constant_(layer.bias, bias)
+                    init.xavier_uniform_(layer.weight)
+                    init.constant_(layer.bias, bias)
 
             if module.model.decoder.bbox_embed is not None:
                 for layer in module.model.decoder.bbox_embed:
-                    nn.init.constant_(layer.layers[-1].weight, 0)
-                    nn.init.constant_(layer.layers[-1].bias, 0)
+                    init.constant_(layer.layers[-1].weight, 0)
+                    init.constant_(layer.layers[-1].bias, 0)
 
         elif isinstance(module, RTDetrMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight, 0.0)
+            init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
                 2.0 * math.pi / module.n_heads
@@ -1040,34 +1041,33 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
 
-            if not getattr(module.sampling_offsets.bias, "_is_hf_initialized", False):
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            nn.init.constant_(module.attention_weights.weight, 0.0)
-            nn.init.constant_(module.attention_weights.bias, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight)
-            nn.init.constant_(module.value_proj.bias, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight)
-            nn.init.constant_(module.output_proj.bias, 0.0)
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
 
         elif isinstance(module, RTDetrModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
-            nn.init.xavier_uniform_(module.enc_score_head.weight)
-            nn.init.constant_(module.enc_score_head.bias, bias)
+            init.xavier_uniform_(module.enc_score_head.weight)
+            init.constant_(module.enc_score_head.bias, bias)
 
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
 
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
-            nn.init.xavier_uniform_(module.weight_embedding.weight)
+            init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
-            nn.init.xavier_uniform_(module.denoising_class_embed.weight)
+            init.xavier_uniform_(module.denoising_class_embed.weight)
 
 
 class RTDetrEncoder(nn.Module):
