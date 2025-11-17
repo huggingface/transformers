@@ -126,8 +126,6 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "rescale_factor"))
             self.assertTrue(hasattr(image_processing, "do_pad"))
             self.assertTrue(hasattr(image_processing, "size_divisor"))
-            # Check size_divisibility for BC, the image proccessor has to have an atribute
-            self.assertTrue(hasattr(image_processing, "size_divisibility"))
 
     def test_call_numpy(self):
         # create random numpy tensors
