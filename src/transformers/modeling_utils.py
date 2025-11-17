@@ -4104,7 +4104,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
             hf_quantizer.preprocess_model(
-                model=m,
+                model=model,
                 device_map=device_map,
                 keep_in_fp32_modules=model._keep_in_fp32_modules,  # TODO prob no longer needed?
                 config=config,
