@@ -64,6 +64,7 @@ from .integrations.accelerate import (
     check_and_set_device_map,
     expand_device_map,
     init_empty_weights,
+    offload_weight,
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
@@ -132,7 +133,7 @@ from .utils.quantization_config import QuantizationMethod
 
 if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
-    from accelerate.utils import extract_model_from_parallel, offload_weight
+    from accelerate.utils import extract_model_from_parallel
     from accelerate.utils.modeling import get_state_dict_from_offload
 
 

@@ -23,6 +23,8 @@ from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Optional, Union
 
+from safetensors.torch import save_file
+
 from ..utils import (
     is_accelerate_available,
     is_torch_available,
@@ -468,12 +470,9 @@ def accelerate_disk_offload(
     if disk_offload_folder is not None:
         os.makedirs(disk_offload_folder, exist_ok=True)
     is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
-    if disk_offload_folder is None and not is_offloaded_safetensors:
-        raise ValueError(
-            "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder`"
-            " for them. Alternatively, make sure you have `safetensors` installed if the model you are using"
-            " offers the weights in this format."
-        )
+
+    # In this cause, the offload index is simply the existing safetensors (except if using custom weight loading
+    # Operation, e.g. the MoE models, where we need to resave the weights that were changed at loading time)
     if is_offloaded_safetensors:
         param_device_map = expand_device_map(device_map, expected_keys)
         str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
@@ -491,10 +490,30 @@ def accelerate_disk_offload(
             for name, file in weight_map.items()
             if param_device_map[name] == "disk"
         }
+    # In this case we will resave every offloaded weight
     else:
         disk_offload_index = {}
 
     return disk_offload_index
+
+
+def offload_weight(weight: torch.Tensor, weight_name: str, offload_folder: str | None, offload_index: dict) -> dict:
+    """Write `weight` to disk inside `offload_folder`, and update `offload_index` accordingly. Everything is
+    saved in `safetensors` format."""
+
+    if offload_folder is None:
+        raise ValueError(
+            "The current `device_map` had weights offloaded to the disk, which needed to be re-saved. This is likely "
+            "because the model uses an internal weight format different than the one saved (i.e. most MoE models). "
+            "Please provide an `offload_folder`for them in `from_pretrained`."
+        )
+    # Write the weight to disk
+    safetensor_file = os.path.join(offload_folder, f"{weight_name}.safetensors")
+    save_file({weight_name: weight}, safetensor_file)
+    # Update the offloading index
+    str_dtype = str(weight.dtype).replace("torch.", "")
+    offload_index[weight_name] = {"safetensors_file": safetensor_file, "weight_name": weight_name, "dtype": str_dtype}
+    return offload_index
 
 
 def _init_infer_auto_device_map(
@@ -879,4 +898,3 @@ def check_tied_parameters_on_same_device(tied_params, device_map):
                 f"Tied parameters are on different devices: {tie_param_devices}. "
                 "Please modify your custom device map or set `device_map='auto'`. "
             )
-
