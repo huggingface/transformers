@@ -472,7 +472,7 @@ if __name__ == "__main__":
     # convert_weights(args.checkpoint_path, args.pytorch_dump_folder_path)
     convert_config(args.checkpoint_path, args.pytorch_dump_folder_path)
 
-    #if args.convert_preprocessor:
+    # if args.convert_preprocessor:
     #    convert_processor(args.checkpoint_path, args.pytorch_dump_folder_path)
 
     print(f"Saved converted checkpoint to {args.pytorch_dump_folder_path}")

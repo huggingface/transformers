@@ -42,7 +42,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_flash_attn_2_available, logging
+from ...utils import auto_docstring, logging
 from ...utils.import_utils import is_triton_available
 from .configuration_modernbert import ModernBertConfig
 
@@ -74,8 +74,8 @@ class ApplyRotaryEmbUnpad(torch.autograd.Function):
         # We need qkv to be contiguous so that when we reshape to combine (3, nheads) dimensions,
         # we get the same tensor
         # qk = rearrange(qkv[:, :2], "b_s t h d -> b_s (t h) d")
-        qk = qkv[:, :2].view(total_nnz, -1, headdim)
-        apply_rotary(
+        # qk = qkv[:, :2].view(total_nnz, -1, headdim)
+        """apply_rotary(
             qk,
             cos,
             sin,
@@ -84,7 +84,7 @@ class ApplyRotaryEmbUnpad(torch.autograd.Function):
             max_seqlen=max_seqlen,
             interleaved=False,
             inplace=True,
-        )
+        )"""
 
         ctx.save_for_backward(cos, sin, cu_seqlens)
         ctx.max_seqlen = max_seqlen
@@ -97,8 +97,8 @@ class ApplyRotaryEmbUnpad(torch.autograd.Function):
         total_nnz, _three, _nheads, headdim = do.shape
         # We need dqkv to be contiguous so that when we reshape to combine (3, nheads) dimensions,
         # we get the same tensor
-        dqk = do[:, :2].view(total_nnz, -1, headdim)
-        apply_rotary(
+        # dqk = do[:, :2].view(total_nnz, -1, headdim)
+        """apply_rotary(
             dqk,
             cos,
             sin,
@@ -108,7 +108,7 @@ class ApplyRotaryEmbUnpad(torch.autograd.Function):
             interleaved=False,
             inplace=True,
             conjugate=True,
-        )
+        )"""
 
         return do, None, None, None, None, None, None
 
@@ -410,8 +410,8 @@ def flash_attention_forward(
     # (total_seqlen, 3, nheads, headdim)
     qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
 
-    convert_dtype = qkv.dtype not in (torch.float16, torch.bfloat16)
-    if convert_dtype:
+    # convert_dtype = qkv.dtype not in (torch.float16, torch.bfloat16)
+    """if convert_dtype:
         # FA2 implementation only supports fp16 and bf16. If FA2 is supported,
         # bfloat16 must be supported as of FA2 2.5.7. (Turing GPUs not supported)
         orig_dtype = qkv.dtype
@@ -435,7 +435,7 @@ def flash_attention_forward(
             deterministic=module.deterministic_flash_attn,
             window_size=local_attention,
         )
-    return (attn.view(bs, dim),)
+    return (attn.view(bs, dim),)"""
 
 
 def sdpa_attention_forward(

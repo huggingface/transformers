@@ -111,7 +111,9 @@ class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
 
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
 
         # Special to ernie, we prerotate on the hw dim
         mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])
