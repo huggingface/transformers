@@ -4196,7 +4196,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             misc=misc,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
         )
-        disk_offload_index = None
+
         return model, missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, error_msgs
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
