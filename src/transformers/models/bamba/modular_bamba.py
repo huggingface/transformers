@@ -42,6 +42,7 @@ from transformers.models.mamba2.modeling_mamba2 import (
     segment_sum,
 )
 
+from ... import initialization as init
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -800,12 +801,13 @@ class BambaPreTrainedModel(PreTrainedModel):
     # Note: only supports HybridMambaAttentionDynamicCache
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, BambaMixer):
-            module.dt_bias.data.fill_(1.0)
-            module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
-            module.D.data.fill_(1.0)
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
 
 
 @auto_docstring

@@ -55,8 +55,11 @@ ALL_FILE_TYPES = (
 )
 
 
-def is_model_import(module: str) -> bool:
+def is_model_import(module: str | None) -> bool:
     """Check whether `module` is a model import or not."""
+    # Happens for fully relative import, i.e. `from ... import initialization as init`
+    if module is None:
+        return False
     patterns = "|".join(ALL_FILE_TYPES)
     regex = rf"(\w+)\.(?:{patterns})_(\w+)"
     match_object = re.search(regex, module)

@@ -221,6 +221,17 @@ def to_numpy(obj):
     return obj
 
 
+def safe_load_json_file(json_file: str):
+    "A helper to load safe config files and raise a proper error message if it wasn't serialized correctly"
+    try:
+        with open(json_file, encoding="utf-8") as reader:
+            text = reader.read()
+        config_dict = json.loads(text)
+    except json.JSONDecodeError:
+        raise OSError(f"It looks like the config file at '{json_file}' is not a valid JSON file.")
+    return config_dict
+
+
 class ModelOutput(OrderedDict):
     """
     Base class for all model outputs as dataclass. Has a `__getitem__` that allows indexing by integer or slice (like a
@@ -859,7 +870,7 @@ def check_model_inputs(tie_last_hidden_states=True):
 
             # Check attention implementation is properly set for capturing attention outputs
             if recordable_keys.get("output_attentions", False):
-                supported_attn = ["eager", "eager_paged", "flex_attention"]
+                supported_attn = ["eager", "eager_paged", "flex_attention", "sdpa"]
                 config_attn = getattr(self.config, "_attn_implementation", None)
                 sub_configs = [getattr(self.config, key, None) for key in self.config.sub_configs]
                 sub_configs_attn = [
@@ -877,13 +888,7 @@ def check_model_inputs(tie_last_hidden_states=True):
                 def wrapped_forward(*args, **kwargs):
                     if key == "hidden_states" and len(collected_outputs[key]) == 0:
                         collected_outputs[key] += (args[0],)
-                    if kwargs.get("debug_io", False):
-                        with model_addition_debugger_context(
-                            module, kwargs.get("debug_io_dir", "~/model_debug"), kwargs.get("prune_layers")
-                        ):
-                            output = orig_forward(*args, **kwargs)
-                    else:
-                        output = orig_forward(*args, **kwargs)
+                    output = orig_forward(*args, **kwargs)
                     if not isinstance(output, tuple):
                         collected_outputs[key] += (output,)
                     elif output[index] is not None:
@@ -924,7 +929,13 @@ def check_model_inputs(tie_last_hidden_states=True):
                             monkey_patched_layers.append((module, original_forward))
 
             try:
-                outputs = func(self, *args, **kwargs)
+                if kwargs.get("debug_io", False):
+                    with model_addition_debugger_context(
+                        self, kwargs.get("debug_io_dir", "model_debug"), kwargs.get("prune_layers")
+                    ):
+                        outputs = func(self, *args, **kwargs)
+                else:
+                    outputs = func(self, *args, **kwargs)
             except TypeError as original_exception:
                 # If we get a TypeError, it's possible that the model is not receiving the recordable kwargs correctly.
                 # Get a TypeError even after removing the recordable kwargs -> re-raise the original exception

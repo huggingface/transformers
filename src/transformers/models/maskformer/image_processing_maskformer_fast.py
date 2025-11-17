@@ -15,7 +15,6 @@
 """Fast Image processor class for MaskFormer."""
 
 import math
-import warnings
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
@@ -58,7 +57,7 @@ logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
-    from transformers import MaskFormerForInstanceSegmentationOutput
+    pass
 
 
 def convert_segmentation_map_to_binary_masks_fast(
@@ -114,9 +113,6 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = MaskFormerImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[MaskFormerImageProcessorKwargs]) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
-
         size = kwargs.pop("size", None)
         max_size = kwargs.pop("max_size", None)
 
@@ -229,7 +225,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             padding = [0, 0, padding_right, padding_bottom]
             images = F.pad(images, padding, fill=fill)
             if segmentation_maps is not None:
-                segmentation_maps = F.pad(segmentation_maps, padding, fill=ignore_index)
+                segmentation_maps = [F.pad(mask, padding, fill=ignore_index) for mask in segmentation_maps]
 
         # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
         pixel_mask = torch.zeros((images.shape[0], *padded_size), dtype=torch.int64, device=images.device)
@@ -323,9 +319,11 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
                 stacked_images = self.resize(
                     image=stacked_images, size=size, size_divisor=size_divisor, interpolation=interpolation
                 )
-                if segmentation_maps is not None:
+            if segmentation_maps is not None:
+                stacked_segmentation_maps = grouped_segmentation_maps[shape]
+                if do_resize:
                     stacked_segmentation_maps = self.resize(
-                        image=grouped_segmentation_maps[shape],
+                        image=stacked_segmentation_maps,
                         size=size,
                         size_divisor=size_divisor,
                         interpolation=F.InterpolationMode.NEAREST_EXACT,
@@ -362,14 +360,18 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
                 mask_labels.append(masks)
                 class_labels.append(classes)
 
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        processed_pixel_masks_grouped = {}
         if segmentation_maps is not None:
-            grouped_segmentation_maps, grouped_segmentation_maps_index = group_images_by_shape(
-                mask_labels, disable_grouping=disable_grouping
+            # group mask_labels as paired inputs and not images so as not to stack them
+            grouped_images, grouped_segmentation_maps, grouped_images_index = group_images_by_shape(
+                resized_images, mask_labels, disable_grouping=disable_grouping
             )
             processed_segmentation_maps_grouped = {}
+        else:
+            grouped_images, grouped_images_index = group_images_by_shape(
+                resized_images, disable_grouping=disable_grouping
+            )
+        processed_images_grouped = {}
+        processed_pixel_masks_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
@@ -384,7 +386,8 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = padded_images
             processed_pixel_masks_grouped[shape] = pixel_masks
             if segmentation_maps is not None:
-                processed_segmentation_maps_grouped[shape] = padded_segmentation_maps.squeeze(1)
+                processed_segmentation_maps_grouped[shape] = padded_segmentation_maps
+
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_pixel_masks = reorder_images(processed_pixel_masks_grouped, grouped_images_index)
         encoded_inputs = BatchFeature(
@@ -395,61 +398,12 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             tensor_type=return_tensors,
         )
         if segmentation_maps is not None:
-            mask_labels = reorder_images(processed_segmentation_maps_grouped, grouped_segmentation_maps_index)
+            mask_labels = reorder_images(processed_segmentation_maps_grouped, grouped_images_index)
             # we cannot batch them since they don't share a common class size
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels
 
         return encoded_inputs
-
-    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_segmentation
-    def post_process_segmentation(
-        self, outputs: "MaskFormerForInstanceSegmentationOutput", target_size: Optional[tuple[int, int]] = None
-    ) -> "torch.Tensor":
-        """
-        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image segmentation predictions. Only
-        supports PyTorch.
-
-        Args:
-            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
-                The outputs from [`MaskFormerForInstanceSegmentation`].
-
-            target_size (`tuple[int, int]`, *optional*):
-                If set, the `masks_queries_logits` will be resized to `target_size`.
-
-        Returns:
-            `torch.Tensor`:
-                A tensor of shape (`batch_size, num_class_labels, height, width`).
-        """
-        warnings.warn(
-            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_instance_segmentation`",
-            FutureWarning,
-        )
-
-        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
-        class_queries_logits = outputs.class_queries_logits
-        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_queries_logits = outputs.masks_queries_logits
-        if target_size is not None:
-            masks_queries_logits = torch.nn.functional.interpolate(
-                masks_queries_logits,
-                size=target_size,
-                mode="bilinear",
-                align_corners=False,
-            )
-        # remove the null class `[..., :-1]`
-        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_probs = masks_queries_logits.sigmoid()
-        # now we want to sum over the queries,
-        # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
-        # where $ softmax(p) \in R^{q, c} $ is the mask classes
-        # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
-        # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
-        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
-
-        return segmentation
 
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_semantic_segmentation
     def post_process_semantic_segmentation(
