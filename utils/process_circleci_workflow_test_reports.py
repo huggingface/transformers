@@ -83,11 +83,15 @@ def _aggregate_failures(failure_entries: list[dict]) -> tuple[dict, dict]:
         test_name = entry["test_name"]
         model_name = entry["model_name"]
         error_message = entry["error"]
+        normalized_test_name = _normalize_test_nodeid(test_name)
 
-        test_info = by_test.setdefault(test_name, {"count": 0, "errors": Counter(), "jobs": set()})
+        test_info = by_test.setdefault(
+            normalized_test_name, {"count": 0, "errors": Counter(), "jobs": set(), "variants": set()}
+        )
         test_info["count"] += 1
         test_info["errors"][error_message] += 1
         test_info["jobs"].add(entry["job_name"])
+        test_info["variants"].add(test_name)
 
         if model_name:
             model_info = by_model.setdefault(model_name, {"count": 0, "errors": Counter(), "tests": set()})
@@ -107,6 +111,7 @@ def _aggregate_failures(failure_entries: list[dict]) -> tuple[dict, dict]:
                 prepared[key]["tests"] = sorted(value["tests"])
             else:
                 prepared[key]["jobs"] = sorted(value["jobs"])
+                prepared[key]["variants"] = sorted(value["variants"])
         return prepared
 
     return _prepare(by_test), _prepare(by_model, include_tests=True)
@@ -125,6 +130,21 @@ def _format_markdown_table(rows: list[list[str]], headers: list[str]) -> str:
     table_lines = [header_line, separator]
     table_lines.extend("| " + " | ".join(row) + " |" for row in rows)
     return "\n".join(table_lines) + "\n"
+
+
+def _normalize_test_nodeid(nodeid: str) -> str:
+    """
+    Normalizes a pytest node id by removing bracketed parametrization info
+    and collapsing suffixes such as `_05_fp16_pad_left` that come from parameter ids.
+    """
+    base_nodeid = nodeid.split("[", 1)[0]
+    parts = base_nodeid.split("::")
+    if not parts:
+        return base_nodeid
+    test_name = parts[-1]
+    test_name = re.sub(r"_\d{2,}.*$", "", test_name)
+    normalized = "::".join(parts[:-1] + [test_name])
+    return normalized
 
 
 def _get_repo_owner_defaults() -> tuple[str, str]:
@@ -225,11 +245,13 @@ def process_circleci_workflow(
     request_get: Callable = requests.get,
     request_post: Callable = requests.post,
 ):
+    print(f"[collection_job] Processing CircleCI workflow {workflow_id}")
     response = request_get(
         f"https://circleci.com/api/v2/workflow/{workflow_id}/job",
         headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")},
     )
     jobs = response.json()["items"]
+    print(f"[collection_job] Found {len(jobs)} jobs in workflow.")
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -239,9 +261,11 @@ def process_circleci_workflow(
     for job in jobs:
         project_slug = job["project_slug"]
         if job["name"].startswith(("tests_", "examples_", "pipelines_")):
+            print(f"[collection_job] Fetching artifacts for job {job['name']} (#{job['job_number']})")
             url = f"https://circleci.com/api/v2/project/{project_slug}/{job['job_number']}/artifacts"
             r = request_get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
             job_artifacts = r.json()["items"]
+            print(f"[collection_job] Retrieved {len(job_artifacts)} artifacts for {job['name']}.")
 
             job_output_dir = os.path.join(output_dir, job["name"])
             os.makedirs(job_output_dir, exist_ok=True)
@@ -273,6 +297,7 @@ def process_circleci_workflow(
             # failed before passed
             summary = dict(sorted(summary.items(), key=lambda x: (x[1], x[0])))
             workflow_summary[job["name"]] = summary
+            print(f"[collection_job] Recorded {len(summary)} test rows for {job['name']}.")
 
             # collected version
             with open(os.path.join(job_output_dir, "test_summary.json"), "w") as fp:
@@ -294,6 +319,9 @@ def process_circleci_workflow(
                             "model_name": _derive_model_name(test_name),
                         }
                     )
+            if job_test_summaries:
+                failures_in_job = sum(1 for status in summary.values() if status == "failed")
+                print(f"[collection_job] Aggregated {failures_in_job} failures for {job['name']}.")
 
     new_workflow_summary = {}
     for job_name, job_summary in workflow_summary.items():
@@ -315,6 +343,7 @@ def process_circleci_workflow(
         "by_test": failures_by_test,
         "by_model": failures_by_model,
     }
+    print(f"[collection_job] Total failing entries collected: {len(failure_entries)}.")
 
     with open(os.path.join(output_dir, "failure_summary.json"), "w") as fp:
         json.dump(failure_summary, fp, indent=4)

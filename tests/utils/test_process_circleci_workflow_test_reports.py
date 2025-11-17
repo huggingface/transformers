@@ -109,6 +109,7 @@ def test_failure_summary_generated_from_junit_fixture(tmp_path, monkeypatch):
     assert failure_summary["by_test"][sample_test]["count"] == 1
     error_key = f"{sample_test}: {junit_failures[0][1]}"
     assert error_key in failure_summary["by_test"][sample_test]["errors"]
+    assert sample_test in failure_summary["by_test"][sample_test]["variants"]
 
     assert "bert" in failure_summary["by_model"]
     assert failure_summary["by_model"]["bert"]["count"] == 1
