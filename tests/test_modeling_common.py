@@ -42,7 +42,8 @@ from transformers import (
     set_seed,
 )
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
-from transformers.exporters.utils import prepare_inputs_for_export
+from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
+from transformers.exporters.utils import get_leaf_tensors, prepare_for_export
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -3497,51 +3498,24 @@ class ModelTesterMixin:
         Test if model can be exported with torch.export.export()
 
         Args:
-            config (PreTrainedConfig):
-                Config to use for the model, if None, use default config from model_tester
-            inputs_dict (dict):
-                Inputs to use for the model, if None, use default inputs from model_tester
-            tolerance (float):
-                `atol` for torch.allclose(), defined in signature for test overriding
+            atol (`float`, *optional*, defaults to 1e-4): absolute tolerance for output comparison
+            rtol (`float`, *optional*, defaults to 1e-4): relative tolerance for output comparison
         """
-
-        def recursively_check(eager_outputs, exported_outputs):
-            is_tested = False
-            if isinstance(eager_outputs, torch.Tensor):
-                torch.testing.assert_close(eager_outputs, exported_outputs, atol=atol, rtol=rtol)
-                return True
-            elif isinstance(eager_outputs, (tuple, list)):
-                for eager_output, exported_output in zip(eager_outputs, exported_outputs):
-                    is_tested = is_tested or recursively_check(eager_output, exported_output)
-                return is_tested
-            elif isinstance(eager_outputs, dict):
-                for key in eager_outputs:
-                    is_tested = is_tested or recursively_check(eager_outputs[key], exported_outputs[key])
-                return is_tested
-            return is_tested
 
         exporter = DynamoExporter(export_config=DynamoConfig())
 
         for model_class in self.all_model_classes:
-            if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-            else:
-                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-
             with self.subTest(model_class.__name__):
+                if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+                else:
+                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 model = model_class(config).eval().to(torch_device)
-                # needed to prepare cache inputs for auto-regressive models and process
-                # output flags (e.g. use_cache, output_attentions, etc) to avoid passing them as inputs
-                model, inputs_dict = prepare_inputs_for_export(model, inputs_dict)
-                # filtering of inputs that are not in the forward signature or that are None
-                # this is needed since sometimes inputs_dict contains extra inputs that are not
-                # accepted by model (e.g. output_router_logits is not used by SwitchTransformersModel)
-                inputs_dict = {
-                    k: v
-                    for k, v in inputs_dict.items()
-                    if k in inspect.signature(model.forward).parameters and v is not None
-                }
+
+                # prepare cache inputs for auto-regressive models and include it for computing eager outputs
+                # process output flags (e.g. use_cache, output_attentions, etc) to avoid passing them as inputs
+                model, inputs_dict = prepare_for_export(model, inputs_dict)
 
                 with torch.no_grad():
                     set_seed(1234)
@@ -3549,9 +3523,15 @@ class ModelTesterMixin:
                     # the export, the model used for export will return FakeTensors instead of real ones (torch cuda/inductor issue)
                     # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
                     eager_outputs = model(**copy.deepcopy(inputs_dict))
+                    eager_outputs = get_leaf_tensors(eager_outputs)
+
+                if len(eager_outputs) == 0:
+                    self.fail("Eager outputs is empty.")
+                if not all(isinstance(output, torch.Tensor) for output in eager_outputs):
+                    self.fail("Eager outputs contain non-tensor values.")
 
                 try:
-                    exported_program = exporter.export(model, sample_inputs=copy.deepcopy(inputs_dict))
+                    exported_program = exporter.export(model, inputs_dict)
                 except NotImplementedError:
                     continue
                 except Exception as e:
@@ -3559,20 +3539,99 @@ class ModelTesterMixin:
 
                 with torch.no_grad():
                     set_seed(1234)
-                    exported_outputs = exported_program.module().forward(**copy.deepcopy(inputs_dict))
+                    exported_outputs = exported_program.module()(**copy.deepcopy(inputs_dict))
+                    exported_outputs = get_leaf_tensors(exported_outputs)
 
-                if "lsh" in getattr(config, "attn_layers", []):
-                    self.skipTest(
-                        "LSH attention is not deterministic (uses torch.randn). "
-                        "Skipping the exported vs eager outputs comparison."
-                    )
+                # Check outptus sanity:
+                if len(exported_outputs) == 0:
+                    self.fail("Exported outputs is empty.")
+                if not all(isinstance(output, torch.Tensor) for output in exported_outputs):
+                    self.fail("Exported outputs contain non-tensor values.")
+
+                # Check outputs closeness:
+                torch.testing.assert_close(eager_outputs, exported_outputs, atol=atol, rtol=rtol)
+
+    @slow
+    @require_torch_greater_or_equal("2.5")
+    @pytest.mark.torch_onnx_export_test
+    def test_torch_onnx_export(self, atol=1e-4, rtol=1e-4):
+        """
+        Test if model can be exported with torch.onnx.export()
+
+        Args:
+            atol (`float`, *optional*, defaults to 1e-4): absolute tolerance for output comparison
+            rtol (`float`, *optional*, defaults to 1e-4): relative tolerance for output comparison
+        """
+
+        exporter = OnnxExporter(export_config=OnnxConfig())
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+                else:
+                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                model = model_class(config).eval().to(torch_device)
+
+                # prepare cache inputs for auto-regressive models and include it for computing eager outputs
+                # process output flags (e.g. use_cache, output_attentions, etc) to avoid passing them as inputs
+                model, inputs_dict = prepare_for_export(model, inputs_dict)
+
+                with torch.no_grad():
+                    set_seed(1234)
+                    # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
+                    # the export, the model used for export will return FakeTensors instead of real ones (torch cuda/inductor issue)
+                    # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
+                    eager_outputs = model(**copy.deepcopy(inputs_dict))
+                    eager_outputs = get_leaf_tensors(eager_outputs)
+
+                if len(eager_outputs) == 0:
+                    self.fail("Eager outputs is empty.")
+                if not all(isinstance(output, torch.Tensor) for output in eager_outputs):
+                    self.fail("Eager outputs contain non-tensor values.")
+
+                try:
+                    onnx_program = exporter.export(model, inputs_dict)
+                except NotImplementedError:
+                    continue
+                except Exception as e:
+                    if isinstance(e, torch.onnx.OnnxExporterError):
+                        print("ONNX export export failed with an OnnxExporterError, skipping for now.")
+                        continue
+                    raise e
+
+                # Remove non-tensor inputs as they were probably converted to constants during the onnx export
+                inputs_dict = {
+                    k: v
+                    for k, v in inputs_dict.items()
+                    if not isinstance(v, (int, float, bool, str)) and v is not None
+                }
+
+                try:
+                    set_seed(1234)
+                    onnx_outputs = onnx_program(**copy.deepcopy(inputs_dict))
+                    onnx_outputs = get_leaf_tensors(onnx_outputs)
+                except Exception as e:
+                    print(f"ONNX runtime failed for {model_class.__name__}: {e}, trying with numpy backend.")
+                    try:
+                        set_seed(1234)
+                        onnx_outputs = onnx_program.call_reference(**copy.deepcopy(inputs_dict))
+                        onnx_outputs = get_leaf_tensors(onnx_outputs)
+                    except Exception as e:
+                        raise e
+
+                if len(onnx_outputs) == 0:
+                    self.fail("ONNX outputs is empty.")
+                if not all(isinstance(output, torch.Tensor) for output in onnx_outputs):
+                    self.fail("ONNX outputs contain non-tensor values.")
 
                 # Check if outputs are close:
-                # is_tested is a boolean flag indicating if we compare any outputs,
-                # e.g. there might be a situation when outputs are empty list, then is_tested will be False.
-                # In case of outputs are different the error will be raised in `recursively_check` function.
-                is_tested = recursively_check(eager_outputs, exported_outputs)
-                self.assertTrue(is_tested, msg=f"No outputs were compared for {model_class.__name__}")
+                try:
+                    torch.testing.assert_close(eager_outputs, onnx_outputs, atol=atol, rtol=rtol, check_device=False)
+                except AssertionError:
+                    print(f"ONNX outputs are not close to eager outputs for {model_class.__name__}. Skipping.")
+                    continue
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):

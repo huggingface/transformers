@@ -12,13 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import importlib
 import inspect
 from collections.abc import Callable
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from ..cache_utils import Cache, DynamicCache, DynamicLayer, DynamicSlidingWindowLayer, EncoderDecoderCache
+from ..cache_utils import Cache, DynamicCache, DynamicLayer, EncoderDecoderCache
 from ..utils.import_utils import is_torch_available
 from ..utils.logging import get_logger
 
@@ -33,32 +34,73 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 
+def _is_pure_python_object(obj: Any) -> bool:
+    if isinstance(obj, (int, float, bool, str)) or obj is None:
+        return True
+    elif isinstance(obj, (list, tuple, set)):
+        return all(_is_pure_python_object(o) for o in obj)
+    elif isinstance(obj, dict):
+        return all(_is_pure_python_object(v) for v in obj.values())
+    else:
+        return False
+
+
+def get_leaf_tensors(obj: Any) -> tuple[torch.Tensor]:
+    """
+    Recursively retrieves all leaf tensors from a potentially nested structure.
+    Args:
+        obj (`Any`):
+            A potentially nested structure containing tensors, dictionaries, lists, tuples, sets, and other objects.
+    Returns:
+        `tuple[torch.Tensor]`: A tuple of all leaf tensors found in the structure.
+    """
+    if _is_pure_python_object(obj):
+        return ()
+    elif isinstance(obj, torch.Tensor):
+        return (obj,)
+    elif isinstance(obj, (list, tuple, set)):
+        return get_leaf_tensors(dict(enumerate(obj)))
+    elif isinstance(obj, DynamicCache):
+        return get_leaf_tensors(_dict_from_dynamic_cache(obj))
+    elif isinstance(obj, EncoderDecoderCache):
+        return get_leaf_tensors(_dict_from_encoder_decoder_cache(obj))
+    elif isinstance(obj, dict):
+        return sum((get_leaf_tensors(v) for v in obj.values()), ())
+    else:
+        raise ValueError(f"Unexpected object type: {type(obj)}")
+
+
+def _get_leaf_tensor_names(obj: Any, prefix: str = "") -> list[str]:
+    if _is_pure_python_object(obj):
+        return []
+    elif isinstance(obj, torch.Tensor):
+        return [prefix]
+    elif isinstance(obj, (list, tuple, set)):
+        return _get_leaf_tensor_names(dict(enumerate(obj)), prefix=prefix)
+    elif isinstance(obj, DynamicCache):
+        return _get_leaf_tensor_names(_dict_from_dynamic_cache(obj), prefix=prefix)
+    elif isinstance(obj, EncoderDecoderCache):
+        return _get_leaf_tensor_names(_dict_from_encoder_decoder_cache(obj), prefix=prefix)
+    elif isinstance(obj, dict):
+        return sum((_get_leaf_tensor_names(v, prefix=f"{prefix}.{k}") for k, v in obj.items()), [])
+    else:
+        raise ValueError(f"Unexpected object type: {type(obj)}")
+
+
+def get_inputs_outputs_names(inputs: dict[str, Any], outputs: dict[str, Any]) -> tuple[list[str], list[str]]:
+    inputs_names = _get_leaf_tensor_names(inputs)
+    outputs_names = _get_leaf_tensor_names(outputs)
+    for name in set(inputs_names).intersection(set(outputs_names)):
+        inputs_names[inputs_names.index(name)] = f"input.{name}"
+        outputs_names[outputs_names.index(name)] = f"output.{name}"
+    return inputs_names, outputs_names
+
+
 # Pytree registration utilities
-def _get_dynamic_cache_dict(cache: DynamicCache):
-    """Converts DynamicCache to dictionary format for pytree operations."""
-    if any(not isinstance(layer, DynamicLayer | DynamicSlidingWindowLayer) for layer in cache.layers):
-        raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
-
-    return {
-        "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
-        "value_cache": [layer.values for layer in cache.layers if layer.values is not None],
-    }
-
-
-def get_encoder_decoder_cache_dict(cache: EncoderDecoderCache):
-    """Converts EncoderDecoderCache to dictionary format for pytree operations."""
-    return {
-        "self_attention_cache": _get_dynamic_cache_dict(cache.self_attention_cache),
-        "cross_attention_cache": _get_dynamic_cache_dict(cache.cross_attention_cache),
-    }
-
-
-def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
-    dictionary = torch.utils._pytree._dict_unflatten(values, context)
+def _dynamic_cache_from_dict(dictionary):
     cache = DynamicCache()
-    # Reconstruct layers from keys and values lists
-    key_list = dictionary.get("key_cache", [])
-    value_list = dictionary.get("value_cache", [])
+    key_list = dictionary["keys"]
+    value_list = dictionary["values"]
     for idx in range(max(len(key_list), len(value_list))):
         key = key_list[idx] if idx < len(key_list) else None
         value = value_list[idx] if idx < len(value_list) else None
@@ -70,40 +112,44 @@ def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
     return cache
 
 
+def _dict_from_dynamic_cache(cache: DynamicCache):
+    return {
+        "keys": [layer.keys for layer in cache.layers if layer.keys is not None],
+        "values": [layer.values for layer in cache.layers if layer.values is not None],
+    }
+
+
+def _dict_from_encoder_decoder_cache(cache: EncoderDecoderCache):
+    return {
+        "self_attention_cache": _dict_from_dynamic_cache(cache.self_attention_cache),
+        "cross_attention_cache": _dict_from_dynamic_cache(cache.cross_attention_cache),
+    }
+
+
+def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
+    dictionary = torch.utils._pytree._dict_unflatten(values, context)
+    cache = _dynamic_cache_from_dict(dictionary)
+    return cache
+
+
 def _unflatten_encoder_decoder_cache(values, context: torch.utils._pytree.Context):
     dictionary = torch.utils._pytree._dict_unflatten(values, context)
-    self_attention_cache = _unflatten_dynamic_cache(
-        [
-            dictionary.get("self_attention_cache", {}).get("key_cache", []),
-            dictionary.get("self_attention_cache", {}).get("value_cache", []),
-        ],
-        context,
-    )
-    cross_attention_cache = _unflatten_dynamic_cache(
-        [
-            dictionary.get("cross_attention_cache", {}).get("key_cache", []),
-            dictionary.get("cross_attention_cache", {}).get("value_cache", []),
-        ],
-        context,
-    )
-    return EncoderDecoderCache(self_attention_cache, cross_attention_cache)
+    self_attention_cache = _dynamic_cache_from_dict(dictionary["self_attention_cache"])
+    cross_attention_cache = _dynamic_cache_from_dict(dictionary["cross_attention_cache"])
+    enocder_decoder_cache = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
+    return enocder_decoder_cache
 
 
 def register_dynamic_cache_for_export():
     try:
         torch.utils._pytree.register_pytree_node(
             DynamicCache,
-            lambda dynamic_cache: torch.utils._pytree._dict_flatten(_get_dynamic_cache_dict(dynamic_cache)),
+            lambda dynamic_cache: torch.utils._pytree._dict_flatten(_dict_from_dynamic_cache(dynamic_cache)),
             _unflatten_dynamic_cache,
             serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
             flatten_with_keys_fn=lambda dynamic_cache: torch.utils._pytree._dict_flatten_with_keys(
-                _get_dynamic_cache_dict(dynamic_cache)
+                _dict_from_dynamic_cache(dynamic_cache)
             ),
-        )
-        # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
-        torch.fx._pytree.register_pytree_flatten_spec(
-            DynamicCache,
-            lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_dynamic_cache_dict(cache), spec),
         )
     # Catching this in case there are multiple runs for some test runs
     except ValueError as e:
@@ -115,17 +161,12 @@ def register_encoder_decoder_cache_for_export():
     try:
         torch.utils._pytree.register_pytree_node(
             EncoderDecoderCache,
-            lambda cache: torch.utils._pytree._dict_flatten(get_encoder_decoder_cache_dict(cache)),
+            lambda cache: torch.utils._pytree._dict_flatten(_dict_from_encoder_decoder_cache(cache)),
             _unflatten_encoder_decoder_cache,
             serialized_type_name=f"{EncoderDecoderCache.__module__}.{EncoderDecoderCache.__name__}",
             flatten_with_keys_fn=lambda cache: torch.utils._pytree._dict_flatten_with_keys(
-                get_encoder_decoder_cache_dict(cache)
+                _dict_from_encoder_decoder_cache(cache)
             ),
-        )
-        # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
-        torch.fx._pytree.register_pytree_flatten_spec(
-            EncoderDecoderCache,
-            lambda cache, spec: torch.fx._pytree._dict_flatten_spec(get_encoder_decoder_cache_dict(cache), spec),
         )
     # Catching this in case there are multiple runs for some test runs
     except ValueError as e:
@@ -139,6 +180,7 @@ MODEL_TYPES_WITH_UNSUPPORTED_CACHE_CLASS: set[str] = {
     "jamba",
     "lfm2",
     "lfm2_moe",
+    "lfm2_vl",
     "mamba",
     "mamba2",
     "minimax",
@@ -149,51 +191,47 @@ MODEL_TYPES_WITH_UNSUPPORTED_CACHE_CLASS: set[str] = {
 }
 
 
-def prepare_inputs_for_export(
-    model: "PreTrainedModel", sample_inputs: dict[str, torch.Tensor | Cache]
+def prepare_for_export(
+    model: "PreTrainedModel",
+    inputs: dict[str, torch.Tensor | Cache],
+    outputs: dict[str, torch.Tensor | Cache] | None = None,
 ) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache]]:
-    for output_flag in ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss"):
-        if output_flag in sample_inputs:
-            logger.info(
-                f"Found an output flag '{output_flag}' in sample_inputs. Setting model.config.{output_flag} instead."
-            )
-            setattr(model.config, output_flag, sample_inputs.pop(output_flag))
+    # filter out None inputs
+    inputs = {k: v for k, v in inputs.items() if v is not None}
 
+    # handle output flags passed in inputs
+    for output_flag in ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss"):
+        if output_flag in inputs:
+            logger.info(f"Found an output flag '{output_flag}' in inputs. Setting model.config.{output_flag} instead.")
+            setattr(model.config, output_flag, inputs.pop(output_flag))
+
+    # handle models with unsupported cache classes
     if model.config.model_type in MODEL_TYPES_WITH_UNSUPPORTED_CACHE_CLASS:
-        if getattr(model.config, "use_cache", False):
-            logger.warning(
-                f"Model type '{model.config.model_type}' is known to use a cache class that is not supported for export. "
-                "We will set 'use_cache=False' for the export but the exported model won't support kv caching functionalities."
-            )
-            setattr(model.config, "use_cache", False)
+        for submodule in model.modules():
+            if hasattr(submodule, "config") and getattr(submodule.config, "use_cache", False):
+                setattr(submodule.config, "use_cache", False)
 
     if (
         getattr(model.config, "use_cache", False)
         and not getattr(model.config, "is_encoder_decoder", False)
         and "past_key_values" in inspect.signature(model.forward).parameters
-        and "past_key_values" not in sample_inputs
+        and "past_key_values" not in inputs
     ):
-        logger.info(
-            "Detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
-            "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
-            "You can also provide past_key_values in sample_inputs to skip this step."
-        )
-        with torch.no_grad():
-            dummy_outputs = model(**sample_inputs)
+        if outputs is None:
+            with torch.no_grad():
+                outputs = model(**copy.deepcopy(inputs))
 
-        if hasattr(dummy_outputs, "past_key_values"):
-            if isinstance(dummy_outputs.past_key_values, DynamicCache):
-                sample_inputs["past_key_values"] = dummy_outputs.past_key_values
+        if hasattr(outputs, "past_key_values"):
+            if isinstance(outputs.past_key_values, DynamicCache):
+                inputs["past_key_values"] = outputs.past_key_values
                 if model.config.model_type not in {"qwen2_vl", "qwen2_5_vl"}:
-                    seq_length = sample_inputs["input_ids"].shape[1]
-                    past_length = sample_inputs["past_key_values"].get_seq_length()
-                    sample_inputs["attention_mask"] = torch.ones(
-                        (sample_inputs["input_ids"].shape[0], past_length + seq_length),
-                        device=model.device,
-                        dtype=torch.long,
-                    )
+                    dtype = inputs["input_ids"].dtype
+                    device = inputs["input_ids"].device
+                    batch_size, seq_len = inputs["input_ids"].shape[:2]
+                    pkv_len = inputs["past_key_values"].get_seq_length()
+                    inputs["attention_mask"] = torch.ones((batch_size, seq_len + pkv_len), device=device, dtype=dtype)
 
-    return model, sample_inputs
+    return model, inputs
 
 
 # Dynamic shapes utilities
@@ -620,7 +658,6 @@ def patch_model_for_export(model: "PreTrainedModel"):
         module_class_name = module.__class__.__name__
         if module_class_name in MODULES_TO_EXPORTABLE_FORWARD:
             original_forwards[module_class_name] = module.forward
-            # patch forward method with an exportable version (non data-dependent)
             module.forward = MODULES_TO_EXPORTABLE_FORWARD[module_class_name].__get__(module)
 
     original_functions = {}
@@ -628,7 +665,6 @@ def patch_model_for_export(model: "PreTrainedModel"):
     for function_name, exportable_function in FUNCTIONS_TO_EXPORTABLE_IMPLEMENTATION.items():
         if hasattr(modeling_module, function_name):
             original_functions[function_name] = getattr(modeling_module, function_name)
-            # patch function with an exportable version (non data-dependent)
             setattr(modeling_module, function_name, exportable_function)
 
     try:
@@ -637,58 +673,7 @@ def patch_model_for_export(model: "PreTrainedModel"):
         for module in model.modules():
             module_class_name = module.__class__.__name__
             if module_class_name in MODULES_TO_EXPORTABLE_FORWARD:
-                # restore original forward method
                 module.forward = original_forwards[module_class_name]
 
         for function_name, original_function in original_functions.items():
-            # restore original function
             setattr(modeling_module, function_name, original_function)
-
-
-UNSUPPORTED_MODEL_TYPES: set[str] = {
-    "clvp",  # many data-dependent branches that add bos/eos tokens
-    "colqwen2",  # Uses Qwen2VLModel which uses get_rope_index that is data-dependent
-    "emu3",  # Emu3VQVAE.encode is data-dependent
-    "encodec",  # torch.export struggles with torch.nn.functional.pad with "reflect" mode
-    "esm",  # uses compute_tm function which data-dependent
-    "fastspeech2_conformer",  # Even after making parts of it exportable, dynamo still struggle with the convolutions in FastSpeech2ConformerMultiLayeredConv1d
-    "fastspeech2_conformer_with_hifigan",  # Even after making parts of it exportable, dynamo still struggle with the convolutions in FastSpeech2ConformerMultiLayeredConv1d
-    "funnel",  # torch.export struggles with torch.einsum in FunnelRelMultiheadAttention
-    "glm4v",  # Glm4vVisionAttention implementation is highly data-dependent
-    "glm4v_moe",  # Glm4vMoeVisionAttention implementation is highly data-dependent
-    "hiera",  # torch.export struggles with a reshape operation in HieraEncoder.reroll
-    "ibert",  # Uses numpy arrays and decimal.Decimal in batch_frexp
-    "lfm2_vl",  # Uses siglip2 which is not exportable
-    "lightglue",  # torch.export struggles with sigmoid_log_double_softmax
-    "llava_next",  # All three have the same unexplicable error during export
-    "llava_next_video",  # All three have the same unexplicable error during export
-    "llava_onevision",  # All three have the same unexplicable error during export
-    "longformer",  # torch.export is struggling with the global attention implementation
-    "mistral3",  # PixtralVisionModel uses some data-dependent truncation
-    "modernbert",  # Uses torch.compile directly on some module forward methods
-    "nllb-moe",  # TODO: Moe implementation needs to be patched for export
-    "omdet-turbo",  # cryptic error AssertionError: assert len(kp) > 0
-    "oneformer",  # torch.export is failing on multiple torch methods like torch.linspace and torch.meshgrid
-    "pixtral",  # PixtralModel.forward does some data-dependent truncation
-    "phi4_multimodal",  # I guess the model is just broken in its current state
-    "qwen2_5_omni_thinker",  # already made many parts exportable but still has some non-exportable ops
-    "qwen2_5_vl",  # Qwen2_5_VisionTransformerPretrainedModel.get_window_index is data-dependent
-    "qwen2_vl",  # Qwen2VLModel.get_rope_index is data-dependent
-    "qwen3_omni_moe_thinker",  # Qwen3OmniMoeAudioEncoder.forward does data-dependent chunking
-    "qwen3_vl",  # fast_pos_embed_interpolate is data-dependent
-    "qwen3_vl_moe",  # fast_pos_embed_interpolate is highly data-dependent
-    "siglip2",  # torch.export is failing on torch.nn.functional.interpolate
-    "siglip2_vision_model",  # torch.export is failing on torch.nn.functional.interpolate
-    "superpoint",  # torch.export is failing on torch.nn.functional.grid_sample
-    "video_llama_3",  # VideoLlama3VisionAttention implementation is highly data-dependent
-    "video_llama_3_vision",  # VideoLlama3VisionAttention implementation is highly data-dependent
-    "vilt",  # torch.export is failing on torch.nn.functional.interpolate
-    "xmod",  # XmodOutput.lang_adapter is data-dependent
-}
-
-
-def raise_on_unsupported_model(model: "PreTrainedModel"):
-    if model.config.model_type in UNSUPPORTED_MODEL_TYPES:
-        raise NotImplementedError(
-            f"Dynamo export is not supported for model class '{model.__class__.__name__}' with model_type '{model.config.model_type}'."
-        )

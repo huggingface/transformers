@@ -89,6 +89,7 @@ class DynamoConfig(ExportConfigMixin):
 
     strict: bool = False
     dynamic_shapes: dict[str, Any] | None = None
+    prefer_deferred_runtime_asserts_over_guards: bool = False
 
 
 @dataclass
@@ -125,4 +126,3 @@ class OnnxConfig(DynamoConfig):
     optimize: bool = True
     export_params: bool = True
     keep_initializers_as_inputs: bool = False
-    do_constant_folding: bool = True
