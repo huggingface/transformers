@@ -16,6 +16,7 @@
 import argparse
 import gc
 import json
+import os
 
 import torch
 from safetensors.torch import load_file
@@ -42,71 +43,51 @@ def update_state_dict_for_hf_model(state_dict):
     for key, value in state_dict.items():
         new_key = key
 
-        # Handle conv.conv -> conv mapping for semantic tokenizer SConv1d layers
-        # This removes one level of .conv nesting
+        # Remove 'model.' prefix if present (7B model has this extra prefix)
+        if new_key.startswith("model."):
+            new_key = new_key[6:]  # Remove "model." prefix
+
+        # Handle semantic tokenizer transformations
         if "semantic_tokenizer" in key:
-            # Handle downsample_layers Sequential removal: .X.0.conv -> .X.conv
             if "downsample_layers." in key and ".0.conv." in key:
                 new_key = new_key.replace(".0.conv.", ".conv.")
-            # Handle ConvNext1DLayer mixer simplification: mixer.conv.conv.conv.* -> mixer.conv.*
             if "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
-            # Handle general conv.conv -> conv mapping (after mixer handling to avoid conflicts)
             elif ".conv.conv." in key:
                 new_key = new_key.replace(".conv.conv.", ".conv.")
 
-        # Handle conv.conv -> conv mapping for acoustic tokenizer encoder layers
-        # This removes one level of .conv nesting for the updated TokenizerEncoder
+        # Handle acoustic tokenizer transformations
         if "acoustic_tokenizer.encoder" in key:
-            # Handle downsample_layers Sequential removal: .X.0.conv -> .X.conv
             if "downsample_layers." in key and ".0.conv." in key:
                 new_key = new_key.replace(".0.conv.", ".conv.")
-            # Handle ConvNext1DLayer mixer simplification: mixer.conv.conv.conv.* -> mixer.conv.*
             if "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
-            # Handle general conv.conv -> conv mapping (after mixer handling to avoid conflicts)
             elif ".conv.conv." in key:
                 new_key = new_key.replace(".conv.conv.", ".conv.")
-
-        # Handle conv.conv -> conv mapping for acoustic tokenizer decoder layers
-        # This removes one level of .conv nesting for the updated TokenizerDecoder
         if "acoustic_tokenizer.decoder" in key:
-            # Handle stem layer (upsample_layers.0) conv.conv -> conv mapping
             if "upsample_layers.0.0.conv.conv." in key:
                 new_key = new_key.replace("upsample_layers.0.0.conv.conv.", "upsample_layers.0.conv.")
-            # Handle transpose conv layers: convtr.convtr.* -> convtr.*
             elif "0.convtr.convtr." in key:
                 new_key = new_key.replace("0.convtr.convtr.", "convtr.")
-            # Handle head layer conv.conv -> conv mapping
             elif "head.conv." in key:
                 new_key = new_key.replace("head.conv.", "head.")
-            # Handle stages (changed from Block1D to VibeVoiceAcousticTokenizerConvNext1dLayer)
-            # Original Block1D had: mixer.conv.conv.conv.* -> VibeVoiceAcousticTokenizerConvNext1dLayer has: mixer.conv.*
             elif "stages." in key and "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
 
-        # Handle prediction_head -> diffusion_head mapping
+        # Handle main model
         if "prediction_head." in key:
             key = key.replace("prediction_head.", "diffusion_head.")
             new_key = new_key.replace("prediction_head.", "diffusion_head.")
-
-        # Handle TimestepEmbedder MLP Sequential -> individual layers mapping
         if "diffusion_head.t_embedder.mlp." in key:
             if "diffusion_head.t_embedder.mlp.0." in key:
                 new_key = new_key.replace("diffusion_head.t_embedder.mlp.0.", "diffusion_head.timestep_embedder.layer_1.")
             elif "diffusion_head.t_embedder.mlp.2." in key:
                 new_key = new_key.replace("diffusion_head.t_embedder.mlp.2.", "diffusion_head.timestep_embedder.layer_2.")
-
-        # Handle FinalLayer linear -> linear_2 mapping
         if "diffusion_head.final_layer.linear." in key and "adaLN_modulation" not in key:
             new_key = new_key.replace("diffusion_head.final_layer.linear.", "diffusion_head.final_layer.linear_2.")
-
-        # Handle FinalLayer adaLN_modulation Sequential -> individual layers mapping
         if "diffusion_head.final_layer.adaLN_modulation." in key:
             if ".adaLN_modulation.1." in key:
                 new_key = new_key.replace(".adaLN_modulation.1.", ".linear_1.")
-
-        # Handle HeadLayer adaLN_modulation Sequential -> individual layers mapping
         if "diffusion_head.layers." in key and ".adaLN_modulation." in key:
             if ".adaLN_modulation.1." in key:
                 new_key = new_key.replace(".adaLN_modulation.1.", ".linear.")
@@ -116,7 +97,7 @@ def update_state_dict_for_hf_model(state_dict):
     return updated_state_dict
 
 
-def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None):
+def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None, push_tokenizers=False):
 
     if bfloat16:
         dtype = torch.bfloat16
@@ -238,6 +219,8 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         del model_config["semantic_vae_dim"]
     if "num_hidden_layers" in model_config:
         del model_config["num_hidden_layers"]
+    if "tie_word_embeddings" in model_config:
+        del model_config["tie_word_embeddings"]
     model_config["dtype"] = model_config.pop("torch_dtype")
 
     # 3) Update state dict to match HF model structure
@@ -260,10 +243,10 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         raise ValueError(f"Unexpected keys: {unexpected}")
     if len(missing) != 0:
         raise ValueError(f"missing keys found: {missing}")
-    # -- push to hub
-    if push_to_hub is not None:
-        print(f"------ Pushing to hub as {push_to_hub + '-SemanticTokenizer'} ------")
-        semantic_model.push_to_hub(push_to_hub + "-SemanticTokenizer")
+    if push_to_hub is not None and push_tokenizers:
+        hub_repo = push_to_hub.split("/")[0] + "/VibeVoice-SemanticTokenizer"
+        print(f"------ Pushing to hub as {hub_repo} ------")
+        semantic_model.push_to_hub(hub_repo)
 
     # 5) Create and save acoustic tokenizer
     print("\n=== Creating acoustic tokenizer ===")
@@ -282,10 +265,10 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         raise ValueError(f"Unexpected keys: {unexpected}")
     if len(missing) != 0:
         raise ValueError(f"missing keys found: {missing}")
-    # -- push to hub
-    if push_to_hub is not None:
-        print(f"------ Pushing to hub as {push_to_hub + '-AcousticTokenizer'} ------")
-        acoustic_model.push_to_hub(push_to_hub + "-AcousticTokenizer")
+    if push_to_hub is not None and push_tokenizers:
+        hub_repo = push_to_hub.split("/")[0] + "/VibeVoice-AcousticTokenizer"
+        print(f"------ Pushing to hub as {hub_repo} ------")
+        acoustic_model.push_to_hub(hub_repo)
 
     # 6) Create VibeVoice processor
     # -- load processor config
@@ -295,8 +278,6 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
             processor_config = json.load(f)
         audio_config = processor_config.get("audio_processor", {})
         language_model_pretrained_name = processor_config.get("language_model_pretrained_name", None)
-
-    # Default to 1.5B model: https://huggingface.co/microsoft/VibeVoice-1.5B/blob/main/preprocessor_config.json
     if "sampling_rate" not in audio_config:
         audio_config["sampling_rate"] = 24000
     if "normalize_audio" not in audio_config:
@@ -306,9 +287,11 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     if "eps" not in audio_config:
         audio_config["eps"] = 1e-6
     if language_model_pretrained_name is None:
-        language_model_pretrained_name = "Qwen/Qwen2.5-1.5B"
+        if "1.5B" in checkpoint:
+            language_model_pretrained_name = "Qwen/Qwen2.5-1.5B"
+        else:
+            language_model_pretrained_name = "Qwen/Qwen2.5-7B"
 
-    
     # Define a chat template adapted for VibeVoice's speech use case
     chat_template = """{%- set system_prompt = system_prompt | default(" Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n") -%}
 {{ system_prompt -}}
@@ -346,17 +329,14 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         
     # Explicitly use Qwen2TokenizerFast to ensure proper class name in config
     tokenizer = Qwen2TokenizerFast.from_pretrained(language_model_pretrained_name)
-    
     processor = VibeVoiceProcessor(
         feature_extractor=VibeVoiceFeatureExtractor(**audio_config),
         tokenizer=tokenizer,
         chat_template=chat_template,
-        # audio_tokenizer=VibeVoiceAcousticTokenizerModel.from_pretrained(push_to_hub + "-AcousticTokenizer"),
     )
     processor.save_pretrained(output_dir)
     
-    # Manually ensure tokenizer_config.json has the correct tokenizer_class
-    import os
+    # Ensure tokenizer_config.json has the correct tokenizer_class
     tokenizer_config_path = os.path.join(output_dir, "tokenizer_config.json")
     if os.path.exists(tokenizer_config_path):
         with open(tokenizer_config_path, "r") as f:
@@ -376,7 +356,6 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     model_config["semantic_tokenizer_config"] = semantic_config.to_dict()
     vibevoice_config = VibeVoiceConfig(**model_config)
     vibevoice_model = VibeVoiceForConditionalGeneration(vibevoice_config).to(dtype)
-
     # -- print dtypes of key components for verification
     print("Acoustic connector dtype : ", vibevoice_model.acoustic_connector.fc1.weight.dtype)
     print("Semantic connector dtype : ", vibevoice_model.semantic_connector.fc1.weight.dtype)
@@ -386,9 +365,14 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     print("Diffusion head dtype : ", vibevoice_model.diffusion_head.noisy_images_proj.weight.dtype)
 
     # -- load into HF model
-    # add lm_head weights
-    # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L123
-    updated_state_dict["lm_head.weight"] = updated_state_dict["language_model.embed_tokens.weight"]
+    if model_config["text_config"].get("tie_word_embeddings", False):
+    # if model_config["text_config"]["tie_word_embeddings"]:
+        # 1.5B ties weights: https://huggingface.co/microsoft/VibeVoice-1.5B/blob/main/config.json#L61
+        # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L123
+        updated_state_dict["lm_head.weight"] = updated_state_dict["language_model.embed_tokens.weight"]
+    else:
+        # 7B does not tie weights: https://huggingface.co/vibevoice/VibeVoice-7B/blob/main/config.json#L113
+        pass
 
     missing, unexpected = vibevoice_model.load_state_dict(updated_state_dict, strict=False)
     if len(unexpected) != 0:
@@ -443,6 +427,8 @@ Conversion script to convert original VibeVoice model into three HF checkpoints 
 - VibeVoiceAcousticTokenizerModel
 - VibeVoiceSemanticTokenizerModel
 
+# 1.5 Model: https://huggingface.co/microsoft/VibeVoice-1.5B
+
 ```bash
 # -- download checkpoint and configs
 # -- download script here: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-download_vibevoice_checkpoint-py
@@ -456,12 +442,33 @@ python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
     --output_dir /raid/eric/vibevoice/hf_vibevoice \
     --config_path /raid/eric/vibevoice/config.json \
     --processor_config /raid/eric/vibevoice/preprocessor_config.json \
-    --push_to_hub bezzam/VibeVoice-1.5B
+    --push_to_hub bezzam/VibeVoice-1.5B --push_tokenizers
 ```
 Models will be pushed to:
 - bezzam/VibeVoice-1.5B
-- bezzam/VibeVoice-1.5B-AcousticTokenizer
-- bezzam/VibeVoice-1.5B-SemanticTokenizer
+- bezzam/VibeVoice-AcousticTokenizer
+- bezzam/VibeVoice-SemanticTokenizer
+
+
+# 7B Model: https://huggingface.co/aoi-ot/VibeVoice-Large
+
+```bash
+# -- download checkpoint and configs
+# -- download script here: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-download_vibevoice_7b_checkpoint-py
+python src/transformers/models/vibevoice/download_vibevoice_7b_checkpoint.py
+wget https://huggingface.co/aoi-ot/VibeVoice-Large/resolve/main/config.json -P /raid/eric/vibevoice_7b
+wget https://huggingface.co/aoi-ot/VibeVoice-Large/resolve/main/preprocessor_config.json -P /raid/eric/vibevoice_7b
+
+# -- run conversion
+python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
+    --checkpoint /raid/eric/vibevoice_7b/VibeVoice-7B-combined.safetensors \
+    --output_dir /raid/eric/vibevoice/hf_vibevoice_7b \
+    --config_path /raid/eric/vibevoice_7b/config.json \
+    --processor_config /raid/eric/vibevoice_7b/preprocessor_config.json \
+    --push_to_hub bezzam/VibeVoice-7B
+```
+Models will be pushed to:
+- bezzam/VibeVoice-7B
 
 """
 if __name__ == "__main__":
@@ -480,6 +487,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--float32", action="store_true", help="Whether to use float32 precision. Default is bfloat16."
     )
+    parser.add_argument(
+        "--push_tokenizers", action="store_true", help="Whether to push the tokenizers to the hub."
+    )
 
     args = parser.parse_args()
     convert_checkpoint(
@@ -488,5 +498,6 @@ if __name__ == "__main__":
         args.config_path,
         args.push_to_hub,
         bfloat16=not args.float32,
-        processor_config=args.processor_config
+        processor_config=args.processor_config,
+        push_tokenizers=args.push_tokenizers
     )
