@@ -310,6 +310,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
     "VaultGemmaConfig": ["tie_word_embeddings"],
     "GemmaConfig": ["tie_word_embeddings"],
+    "CsmConfig": ["tie_codebooks_embeddings"],
 }
 
 
@@ -400,6 +401,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     # common and important attributes, even if they do not always appear in the modeling files
     attributes_to_allow = [
         "initializer_range",
+        "init_std",
+        "initializer_factor",
         "bos_index",
         "eos_index",
         "pad_index",

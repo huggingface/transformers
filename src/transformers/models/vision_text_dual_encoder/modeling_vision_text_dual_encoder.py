@@ -102,6 +102,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
 
+        self.post_init()
+
     @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(

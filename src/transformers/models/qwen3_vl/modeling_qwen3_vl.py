@@ -349,7 +349,7 @@ class Qwen3VLTextRotaryEmbedding(nn.Module):
     def apply_interleaved_mrope(self, freqs, mrope_section):
         """Apply interleaved MRoPE to 3D rotary embeddings.
         Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
-        interleaved [THTHWHTHW...TT], preserving frequency continuity.
+        interleaved [THWTHWTHW...TT], preserving frequency continuity.
         args:
             x: (3, bs, seq_len, head_dim // 2)
             mrope_section: (3,)
@@ -1300,7 +1300,7 @@ class Qwen3VLCausalLMOutputWithPast(ModelOutput):
 
 class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Qwen3VLConfig
