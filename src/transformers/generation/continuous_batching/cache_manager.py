@@ -84,7 +84,7 @@ class BlockManager:
         """Returns the number of free blocks left. Both initialized and uninitialized blocks are considered free."""
         return len(self._uninit_block_ids) + len(self._init_block_ids)
 
-    def is_enough_free_blocks(self, n_blocks: int) -> bool:
+    def has_enough_free_blocks(self, n_blocks: int) -> bool:
         """Checks if there are enough free blocks to allocate the requested number of blocks (n_blocks). If there are
         not enough uninitialized blocks, we uninitialize the required number of initialized blocks."""
         # Exit early if there are enough uninitialized blocks
@@ -106,7 +106,7 @@ class BlockManager:
         """Returns a list of (n_blocks) free block and mark them as no longuer free in the internal data structures. One
         can also pass a (last_block_id) to indicate the last block id in the sequence, which is used to keep track of
         the parent block. If the manager cannot find enough free blocks, it returns None."""
-        if not self.is_enough_free_blocks(n_blocks):
+        if not self.has_enough_free_blocks(n_blocks):
             return None
         allocated_block_ids = [self._uninit_block_ids.popleft() for _ in range(n_blocks)]
         # If we use prefix caching, we keep track of the allocated blocks as partial blocks
