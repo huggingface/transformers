@@ -160,8 +160,10 @@ class HiggsAudioV2Processor(ProcessorMixin):
             # expand audio tokens in text
             num_audio_tokens_iter = iter(len(audio_input_ids) for audio_input_ids in audio_input_ids_list)
             for i in range(len(text)):
+                num_codebooks = self.audio_tokenizer.config.num_quantizers
+                audio_tokens = lambda num_audio_tokens: self.audio_token * (num_audio_tokens - (num_codebooks - 1)) + "<|reserved_special_token_6|>" * (num_codebooks - 1)
                 expanded = re.sub(
-                    re.escape(self.audio_token), lambda _: self.audio_token * next(num_audio_tokens_iter), text[i]
+                    re.escape(self.audio_token), lambda _: audio_tokens(next(num_audio_tokens_iter)), text[i]
                 )
                 text[i] = expanded
 
@@ -217,6 +219,8 @@ class HiggsAudioV2Processor(ProcessorMixin):
         audio_eos_token_idxs = (decoder_input_ids == self.audio_stream_eos_id).all(-1).nonzero()
         end_of_generation_idxs = [
             audio_eos_token_idxs[audio_eos_token_idxs[:, 0] == batch_idx, 1].min().item()
+            if len(audio_eos_token_idxs[audio_eos_token_idxs[:, 0] == batch_idx]) > 0
+            else decoder_input_ids.shape[1]
             for batch_idx in range(decoder_input_ids.shape[0])
         ]
 
