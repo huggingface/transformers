@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..sam2_video.configuration_sam2_video import Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 from ..sam2_video.modeling_sam2_video import (
     Sam2VideoAttention,
@@ -271,6 +271,8 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
         memory_fuser_padding=3,
         memory_fuser_layer_scale_init_value=1e-6,
         memory_fuser_hidden_act="gelu",
+        # add option to remove the vision encoder as it is not used in sam3_video
+        remove_vision_encoder=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -341,6 +343,9 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
         self.memory_fuser_padding = memory_fuser_padding
         self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
         self.memory_fuser_hidden_act = memory_fuser_hidden_act
+
+        # Whether to remove the vision encoder. If True, the vision encoder will not be instantiated.
+        self.remove_vision_encoder = remove_vision_encoder
 
 
 class Sam3TrackerVideoInferenceCache(Sam2VideoInferenceCache):
@@ -444,7 +449,9 @@ class Sam3TrackerVideoMaskDecoder(Sam2VideoMaskDecoder):
 
 
 class Sam3TrackerVideoModel(Sam2VideoModel):
-    pass
+    def __init__(self, config: Sam3TrackerVideoConfig):
+        super().__init__(config)
+        self.vision_encoder = AutoModel.from_config(config.vision_config) if not config.remove_vision_encoder else None
 
 
 __all__ = [

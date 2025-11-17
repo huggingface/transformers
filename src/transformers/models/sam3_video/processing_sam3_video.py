@@ -234,7 +234,7 @@ class Sam3VideoProcessor(ProcessorMixin):
         removed_obj_ids=None,
         suppressed_obj_ids=None,
     ):
-        obj_id_to_mask = out["obj_id_to_mask"]  # low res masks
+        obj_id_to_mask = out["obj_id_to_mask"]  # low res masks (1, H_low, W_low)
         curr_obj_ids = sorted(obj_id_to_mask.keys())
         H_video, W_video = inference_session.video_height, inference_session.video_width
         if len(curr_obj_ids) == 0:
@@ -251,7 +251,17 @@ class Sam3VideoProcessor(ProcessorMixin):
                     for obj_id in curr_obj_ids
                 ]
             )
-            out_binary_masks = torch.cat([obj_id_to_mask[obj_id] for obj_id in curr_obj_ids], dim=0)
+
+            # Interpolate low-res masks to video resolution
+            low_res_masks = torch.cat([obj_id_to_mask[obj_id] for obj_id in curr_obj_ids], dim=0)  # (N, H_low, W_low)
+            # Add channel dimension for interpolation: (N, H, W) -> (N, 1, H, W)
+            out_binary_masks = torch.nn.functional.interpolate(
+                low_res_masks.unsqueeze(1),
+                size=(H_video, W_video),
+                mode="bilinear",
+                align_corners=False,
+            ).squeeze(1)  # (N, H_video, W_video)
+            out_binary_masks = out_binary_masks > 0
 
             assert out_binary_masks.dtype == torch.bool
             keep = out_binary_masks.any(dim=(1, 2)).cpu()  # remove masks with 0 areas

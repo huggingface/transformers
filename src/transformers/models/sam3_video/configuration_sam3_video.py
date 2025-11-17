@@ -155,7 +155,7 @@ class Sam3VideoConfig(PreTrainedConfig):
 
         # Initialize tracker config (Sam2Video)
         if tracker_config is None:
-            tracker_config = {}
+            tracker_config = {"remove_vision_encoder": True}
             logger.info("tracker_config is None. Initializing the Sam2VideoConfig with default values.")
         if isinstance(tracker_config, dict):
             tracker_config["model_type"] = tracker_config.get("model_type", "sam3_tracker_video")

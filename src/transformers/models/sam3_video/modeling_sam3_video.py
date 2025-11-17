@@ -152,7 +152,7 @@ class Sam3VideoInferenceSession:
         self.obj_id_to_score = {}  # Detection scores per object
         self.obj_id_to_tracker_score_frame_wise = defaultdict(dict)  # Frame-wise tracker scores
         self.obj_id_to_last_occluded = {}  # Last occlusion frame per object
-        self.max_obj_id = 0  # Maximum object ID assigned so far
+        self.max_obj_id = -1  # Maximum object ID assigned so far (-1 means no object has been assigned yet)
 
         # Hotstart metadata
         self.obj_first_frame_idx = {}  # First frame index per object
@@ -496,8 +496,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         self,
         inference_session: Sam3VideoInferenceSession,
         vision_embeds: torch.Tensor,
-        frame_idx: int,
-        reverse: bool,
     ):
         if inference_session.has_new_text_input:
             text_embeds = self.detector_model.get_text_features(
@@ -553,6 +551,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 inference_session=inference_session,
                 frame_idx=frame_idx,
                 reverse=reverse,
+                run_mem_encoder=False,
             )
             out_low_res_masks = out.pred_masks
             out_obj_scores = out.object_score_logits
@@ -652,24 +651,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 empty_trk_obj_ids,
             )
 
-        if det_masks.shape[-2:] != trk_masks.shape[-2:]:
-            # resize to the smaller size to save GPU memory
-            if (det_masks.shape[-2] * det_masks.shape[-1]) < (trk_masks.shape[-2] * trk_masks.shape[-1]):
-                trk_masks = F.interpolate(
-                    trk_masks.unsqueeze(1),
-                    size=det_masks.shape[-2:],
-                    mode="bilinear",
-                    align_corners=False,
-                ).squeeze(1)
-            else:
-                # resize detections to track size
-                det_masks = F.interpolate(
-                    det_masks.unsqueeze(1),
-                    size=trk_masks.shape[-2:],
-                    mode="bilinear",
-                    align_corners=False,
-                ).squeeze(1)
-
         det_masks_binary = det_masks > 0
         trk_masks_binary = trk_masks > 0
         ious = mask_iou(det_masks_binary, trk_masks_binary)  # (N, M) tensor
@@ -699,15 +680,15 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         det_is_high_conf_and_iou = det_is_high_conf & det_is_high_iou  # (N,)
         high_conf_and_iou_mask = det_is_high_conf_and_iou  # Keep as tensor
 
-        for d in range(det_masks.size(0)):
+        for det_idx in range(det_masks.size(0)):
             # Find which tracks match this detection using tensor boolean indexing
-            matched_trk_mask = ious[d] >= iou_threshold  # (M,)
-            det_to_matched_trk_obj_ids[d] = trk_obj_ids_tensor[matched_trk_mask].tolist()
+            matched_trk_mask = ious[det_idx] >= iou_threshold  # (M,)
+            det_to_matched_trk_obj_ids[det_idx] = trk_obj_ids_tensor[matched_trk_mask].tolist()
 
-            if high_conf_and_iou_mask[d].item():
-                trk_idx = det_to_max_iou_trk_idx[d].item()
+            if high_conf_and_iou_mask[det_idx].item():
+                trk_idx = det_to_max_iou_trk_idx[det_idx].item()
                 trk_obj_id = trk_obj_ids_tensor[trk_idx].item()
-                trk_id_to_max_iou_high_conf_det[trk_obj_id] = d
+                trk_id_to_max_iou_high_conf_det[trk_obj_id] = det_idx
 
         return (
             new_det_out_inds,
@@ -834,7 +815,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         self,
         inference_session: Sam3VideoInferenceSession,
         frame_idx: int,
-        batch_size: int,
         high_res_masks: torch.Tensor,
         object_score_logits: torch.Tensor,
     ):
@@ -854,68 +834,40 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         )
         return maskmem_features, maskmem_pos_enc
 
-    def _add_new_mask(self, inference_session: Sam3VideoInferenceSession, frame_idx: int, obj_idx: int, mask: Tensor):
-        high_res_masks = F.interpolate(
-            mask.float(),
-            size=self.tracker_model.prompt_encoder.mask_input_size,
-            mode="bilinear",
-            align_corners=False,
-        )
-        object_score_logits = torch.where((high_res_masks > 0).any(dim=(-1, -2)), 10.0, -10.0)
-
-        # Run the memory encoder on local slices for each GPU
-        output_dict = inference_session.output_dict_per_obj[obj_idx]
-        local_batch_size = 1
-        encoded_mem = self.run_memory_encoder(
-            inference_session,
-            frame_idx,
-            local_batch_size,
-            high_res_masks,
-            object_score_logits.unsqueeze(-1),
-        )
-        maskmem_features, maskmem_pos_enc = encoded_mem
-        if frame_idx in output_dict["non_cond_frame_outputs"]:
-            current_out = output_dict["non_cond_frame_outputs"].pop(frame_idx)
-            output_dict["cond_frame_outputs"][frame_idx] = current_out
-        current_out = output_dict["cond_frame_outputs"][frame_idx]
-        current_out["maskmem_features"] = maskmem_features
-        current_out["maskmem_pos_enc"] = maskmem_pos_enc
-
-    def _recondition_masklets(
+    def _prepare_recondition_masks(
         self,
         inference_session: Sam3VideoInferenceSession,
-        frame_idx,
+        frame_idx: int,
         det_out: dict[str, Tensor],
         trk_id_to_max_iou_high_conf_det: dict[int, int],
         tracker_obj_scores_global: Tensor,
-    ):
-        # Recondition the masklets based on the new detections
+    ) -> dict[int, Tensor]:
+        """
+        Prepare high-resolution detection masks for reconditioned objects.
+        Returns a dict of obj_idx -> high_res_mask for objects that should be reconditioned.
+        """
+        reconditioned_masks = {}
+        reconditioned_obj_ids = set()
+
         for trk_obj_id, det_idx in trk_id_to_max_iou_high_conf_det.items():
-            new_mask = det_out["mask"][det_idx : det_idx + 1]
-            new_mask = F.interpolate(
-                new_mask.unsqueeze(1),
-                size=self.tracker_model.prompt_encoder.mask_input_size,
-                mode="bilinear",
-                align_corners=False,
-            )
-            new_mask_binary = new_mask > 0
             obj_idx = inference_session.obj_id_to_idx(trk_obj_id)
             obj_score = tracker_obj_scores_global[obj_idx]
             if obj_score <= self.high_conf_thresh:
                 continue
-            self._add_new_mask(
-                inference_session=inference_session,
-                frame_idx=frame_idx,
-                obj_idx=obj_idx,
-                mask=new_mask_binary,
-            )
+
+            # Prepare detection mask at high resolution
+            new_mask = det_out["mask"][det_idx : det_idx + 1].unsqueeze(1)
+            reconditioned_masks[obj_idx] = new_mask >= 0.5
+            reconditioned_obj_ids.add(trk_obj_id)
+            print(f"reconditioning masklet {trk_obj_id} at frame {frame_idx} with det_idx {det_idx}")
+
+        return reconditioned_masks, reconditioned_obj_ids
 
     def _get_objects_to_suppress_based_on_most_recently_occluded(
         self,
         binary_low_res_masks: Tensor,
         last_occluded: list[int],
         obj_ids: list[int],
-        frame_idx: Optional[int] = None,
         reverse: bool = False,
     ):
         # Suppress overlapping masks for objects that were most recently occluded
@@ -1001,7 +953,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 binary_tracker_low_res_masks_global,
                 last_occluded_prev,
                 obj_ids_global,
-                frame_idx,
                 reverse,
             )
 
@@ -1068,40 +1019,61 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         inference_session: Sam3VideoInferenceSession,
         frame_idx: int,
         low_res_masks: Tensor,
+        reconditioned_masks: Optional[dict[int, Tensor]] = None,
     ):
         """
         Run Sam3Tracker memory encoder, enforcing non-overlapping constraints globally.
+        Now with batched memory encoding for better performance.
+
+        Args:
+            inference_session: The inference session state
+            frame_idx: Current frame index
+            low_res_masks: Low-resolution tracker masks for all objects
+            reconditioned_masks: Optional dict of obj_idx -> high_res_mask for objects that
+                                should use detection masks instead of tracker masks
         """
         if len(inference_session.obj_ids) == 0:
             return
-        # Avoid an extra interpolation step by directly interpolating to `interpol_size`
-        high_res_masks = F.interpolate(
-            low_res_masks.unsqueeze(1),
-            size=self.tracker_model.prompt_encoder.mask_input_size,
-            mode="bilinear",
-            align_corners=False,
-        )
-        # We first apply non-overlapping constraints before memory encoding. This may include some suppression heuristics.
+
+        if reconditioned_masks is None:
+            reconditioned_masks = {}
+        print(f"low_res_masks shape: {low_res_masks.shape}")
+        # Interpolate tracker masks to high resolution
+        high_res_masks = low_res_masks.unsqueeze(1)
+
+        # Override with detection masks for reconditioned objects
+        for obj_idx, recond_mask in reconditioned_masks.items():
+            high_res_masks[obj_idx] = recond_mask.float()
+            # Mark as conditioning frame for reconditioned objects
+            output_dict = inference_session.output_dict_per_obj[obj_idx]
+            if frame_idx in output_dict["non_cond_frame_outputs"]:
+                current_out = output_dict["non_cond_frame_outputs"].pop(frame_idx)
+                output_dict["cond_frame_outputs"][frame_idx] = current_out
+
+        # Apply non-overlapping constraints before memory encoding
         high_res_masks = self._suppress_object_pw_area_shrinkage(high_res_masks)
-        # Instead of gathering the predicted object scores, we use mask areas as a proxy.
+        # Use mask areas as a proxy for object scores
         object_score_logits = torch.where((high_res_masks > 0).any(dim=(-1, -2)), 10.0, -10.0)
 
-        # Run the memory encoder on local slices for each GPU
-        # Get the local high-res masks and object score logits for this inference state
+        # Run memory encoder in batch for all objects at once
+        num_objects = len(inference_session.obj_ids)
+        object_score_logits_batched = object_score_logits.unsqueeze(-1)  # Shape: (num_objects, 1)
 
-        # Run Sam3Tracker memory encoder
-        # Store encoded memories in the local inference state
-        for obj_idx in range(len(inference_session.obj_ids)):
+        # Encode memories for all objects in one batch call
+        maskmem_features_batched, maskmem_pos_enc_batched = self.run_memory_encoder(
+            inference_session,
+            frame_idx,
+            high_res_masks,  # Shape: (num_objects, 1, H, W)
+            object_score_logits_batched,  # Shape: (num_objects, 1)
+        )
+
+        # Split and store encoded memories per object
+        for obj_idx in range(num_objects):
             output_dict = inference_session.output_dict_per_obj[obj_idx]
-            local_batch_size = 1
-            encoded_mem = self.run_memory_encoder(
-                inference_session,
-                frame_idx,
-                local_batch_size,
-                high_res_masks[obj_idx : obj_idx + 1],
-                object_score_logits[obj_idx : obj_idx + 1].unsqueeze(-1),
-            )
-            maskmem_features, maskmem_pos_enc = encoded_mem
+            # Extract per-object memory from batched result
+            maskmem_features = maskmem_features_batched[:, obj_idx : obj_idx + 1]
+            maskmem_pos_enc = maskmem_pos_enc_batched[:, obj_idx : obj_idx + 1]
+
             for storage_key in ["cond_frame_outputs", "non_cond_frame_outputs"]:
                 if frame_idx not in output_dict[storage_key]:
                     continue
@@ -1130,7 +1102,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         # Initialize reconditioned_obj_ids early to avoid UnboundLocalError
         reconditioned_obj_ids = set()
 
-        # Step 1: make the update plan and resolve heuristics on GPU 0
+        # Step 1: make the update plan and resolve heuristics
         det_mask_preds: Tensor = det_out["mask"]  # low-res mask logits
         det_scores: Tensor = det_out["scores"].float()  # Keep as tensor!
         # a) match FA and SAM2 masks and find new objects
@@ -1163,12 +1135,12 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             assert len(new_det_out_inds) == new_det_num_to_keep
             new_det_num = len(new_det_out_inds)
 
-        # assign object IDs to new detections and decide which GPU to place them
+        # assign object IDs to new detections
         new_det_start_obj_id = inference_session.max_obj_id + 1
         new_det_obj_ids = list(range(new_det_start_obj_id, new_det_start_obj_id + new_det_num))
 
         # b) handle hotstart heuristics to remove objects
-        # here `extra_metadata` contains metadata stored on (and only accessible to) GPU 0;
+        print(f"inference_session.trk_keep_alive: {inference_session.trk_keep_alive} at frame {frame_idx}")
         extra_metadata_new = deepcopy(
             {
                 "obj_first_frame_idx": inference_session.obj_first_frame_idx,
@@ -1192,7 +1164,31 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         )
         tracker_metadata_new["extra_metadata"] = extra_metadata_new
 
-        # `tracker_update_plan` should be identical on all GPUs after broadcasting
+        # Step 3 (optional): prepare reconditioned masks based on high-confidence detections
+        reconditioned_masks = {}
+        reconditioned_obj_ids = set()
+        should_recondition_periodic = (
+            self.recondition_every_nth_frame > 0
+            and frame_idx % self.recondition_every_nth_frame == 0
+            and len(trk_id_to_max_iou_high_conf_det) > 0
+        )
+
+        if should_recondition_periodic:
+            reconditioned_masks, reconditioned_obj_ids = self._prepare_recondition_masks(
+                inference_session=inference_session,
+                frame_idx=frame_idx,
+                det_out=det_out,
+                trk_id_to_max_iou_high_conf_det=trk_id_to_max_iou_high_conf_det,
+                tracker_obj_scores_global=tracker_obj_scores_global,
+            )
+
+        if len(reconditioned_obj_ids) > 0:
+            print(f"reconditioned obj ids: {reconditioned_obj_ids} at frame {frame_idx}")
+        if len(unmatched_trk_obj_ids) > 0:
+            print(f"unmatched trk obj ids: {unmatched_trk_obj_ids} at frame {frame_idx}")
+        if len(obj_ids_newly_removed) > 0:
+            print(f"obj ids newly removed: {obj_ids_newly_removed} at frame {frame_idx}")
+
         tracker_update_plan = {
             "new_det_out_inds": new_det_out_inds,  # List[int]
             "new_det_obj_ids": new_det_obj_ids,  # List[int]
@@ -1204,26 +1200,8 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             "reconditioned_obj_ids": reconditioned_obj_ids,  # set
         }
 
-        # Step 3 (optional): recondition masklets based on high-confidence detections before memory encoding
-        # NOTE: Running this in execution phase (after memory encoding) can lead to suboptimal results
-        should_recondition_periodic = (
-            self.recondition_every_nth_frame > 0
-            and frame_idx % self.recondition_every_nth_frame == 0
-            and len(trk_id_to_max_iou_high_conf_det) > 0
-        )
-
-        # Recondition if periodic or IoU condition met
-        if should_recondition_periodic:
-            self._recondition_masklets(
-                inference_session=inference_session,
-                frame_idx=frame_idx,
-                det_out=det_out,
-                trk_id_to_max_iou_high_conf_det=trk_id_to_max_iou_high_conf_det,
-                tracker_obj_scores_global=tracker_obj_scores_global,
-            )
-
         # Step 4: Run SAM2 memory encoder on the current frame's prediction masks
-        # This is done on all GPUs
+        # This uses tracker masks for most objects, but detection masks for reconditioned objects
         batch_size = tracker_low_res_masks_global.size(0)
         if batch_size > 0:
             if self.suppress_overlapping_based_on_recent_occlusion_threshold > 0.0:
@@ -1237,15 +1215,15 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                     reverse=reverse,
                 )
 
+            # Unified memory encoding: uses detection masks for reconditioned objects
             self._tracker_update_memories(
                 inference_session=inference_session,
                 frame_idx=frame_idx,
                 low_res_masks=tracker_low_res_masks_global,
+                reconditioned_masks=reconditioned_masks,
             )
 
-        # Step 4: update the SAM2 metadata based on the update plan
-        # note: except for "extra_metadata" (that is only available on GPU 0),
-        # the updated `tracker_metadata_new` should be identical on all GPUs
+        # Step 5: update the SAM2 metadata based on the update plan
         updated_obj_ids = tracker_metadata_new["obj_ids"]
         if len(new_det_obj_ids) > 0:
             updated_obj_ids = updated_obj_ids + new_det_obj_ids
@@ -1288,17 +1266,12 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         """Add a new object to SAM2 inference states."""
         assert len(new_obj_ids) == new_obj_masks.size(0)
         assert new_obj_masks.is_floating_point()
-        new_obj_masks = F.interpolate(
-            new_obj_masks.unsqueeze(1),
-            size=self.tracker_model.prompt_encoder.mask_input_size,
-            mode="bilinear",
-            align_corners=False,
-        )
-        new_obj_masks = new_obj_masks > 0
+        print(f"new_obj_masks shape: {new_obj_masks.shape}")
+
+        new_obj_masks = new_obj_masks >= 0.5
         for obj_id, mask in zip(new_obj_ids, new_obj_masks):
             obj_idx = inference_session.obj_id_to_idx(obj_id)
-            mask_input = (mask >= 0.5).float()  # todo see if necessary?
-            inference_session.add_mask_inputs(obj_idx, frame_idx, mask_input.unsqueeze(1))
+            inference_session.add_mask_inputs(obj_idx, frame_idx, mask.unsqueeze(0).unsqueeze(0))
 
         inference_session.obj_with_new_inputs = list(new_obj_ids)
 
@@ -1306,6 +1279,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             inference_session=inference_session,
             frame_idx=frame_idx,
             reverse=reverse,
+            run_mem_encoder=True,
         )
 
     def run_tracker_update_execution_phase(
@@ -1341,52 +1315,41 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
     def build_outputs(
         self,
         inference_session: Sam3VideoInferenceSession,
-        frame_idx: int,
         det_out: dict[str, Tensor],
         tracker_low_res_masks_global: Tensor,
-        tracker_obj_scores_global: Tensor,
         tracker_update_plan: dict,
         reconditioned_obj_ids: Optional[set] = None,
-        det_to_matched_trk_obj_ids: Optional[dict] = None,
     ):
+        """
+        Build output dictionary with low-resolution masks.
+        Interpolation to video resolution is handled by the processor.
+
+        Returns:
+            obj_id_to_mask: dict mapping obj_id to low-res mask tensor (1, H_low, W_low)
+        """
         new_det_out_inds: list[int] = tracker_update_plan["new_det_out_inds"]
         new_det_obj_ids: list[int] = tracker_update_plan["new_det_obj_ids"]
-        obj_id_to_mask = {}  # obj_id --> output mask tensor
+        obj_id_to_mask = {}  # obj_id --> low-res mask tensor
 
-        # Part 1: masks from previous SAM2 propagation
+        # Part 1: masks from tracker propagation (existing objects)
         existing_masklet_obj_ids = inference_session.obj_ids
-        existing_masklet_video_res_masks = F.interpolate(
-            tracker_low_res_masks_global.unsqueeze(1),
-            size=(inference_session.video_height, inference_session.video_width),
-            mode="bilinear",
-            align_corners=False,
-        )  # (num_obj, 1, H_video, W_video)
-        existing_masklet_binary = existing_masklet_video_res_masks > 0
-        # assert len(existing_masklet_obj_ids) == len(existing_masklet_binary)
-        for obj_id, mask in zip(existing_masklet_obj_ids, existing_masklet_binary):
-            obj_id_to_mask[int(obj_id)] = mask  # (1, H_video, W_video)
+        for obj_id, mask in zip(existing_masklet_obj_ids, tracker_low_res_masks_global):
+            obj_id_to_mask[int(obj_id)] = mask.unsqueeze(0)  # (1, H_low, W_low)
 
         # Part 2: masks from new detections
         if len(new_det_out_inds) > 0:
-            new_det_out_inds_t = torch.tensor(new_det_out_inds, dtype=torch.long)
-            new_det_low_res_masks = det_out["mask"][new_det_out_inds_t].unsqueeze(1)
+            new_det_out_inds_t = torch.tensor(new_det_out_inds, dtype=torch.long, device=det_out["mask"].device)
+            new_det_low_res_masks = det_out["mask"][new_det_out_inds_t]
+            # Apply hole filling to new detection masks
             new_det_low_res_masks = fill_holes_in_mask_scores(
-                new_det_low_res_masks,
+                new_det_low_res_masks.unsqueeze(1),
                 max_area=self.fill_hole_area,
                 fill_holes=True,
                 remove_sprinkles=True,
-            )
-            new_masklet_video_res_masks = F.interpolate(
-                new_det_low_res_masks,
-                size=(inference_session.video_height, inference_session.video_width),
-                mode="bilinear",
-                align_corners=False,
-            )  # (num_obj, 1, H_video, W_video)
+            ).squeeze(1)
 
-            new_masklet_binary = new_masklet_video_res_masks > 0
-            assert len(new_det_obj_ids) == len(new_masklet_video_res_masks)
-            for obj_id, mask in zip(new_det_obj_ids, new_masklet_binary):
-                obj_id_to_mask[int(obj_id)] = mask  # (1, H_video, W_video)
+            for obj_id, mask in zip(new_det_obj_ids, new_det_low_res_masks):
+                obj_id_to_mask[int(obj_id)] = mask.unsqueeze(0)  # (1, H_low, W_low)
 
         # Part 3: Override masks for reconditioned objects using detection masks
         if reconditioned_obj_ids is not None and len(reconditioned_obj_ids) > 0:
@@ -1394,22 +1357,9 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
             for obj_id in reconditioned_obj_ids:
                 det_idx = trk_id_to_max_iou_high_conf_det.get(obj_id)
-
                 if det_idx is not None:
-                    det_mask = det_out["mask"][det_idx]
-                    det_mask = det_mask.unsqueeze(0).unsqueeze(0)
-                    det_mask_resized = (
-                        F.interpolate(
-                            det_mask.float(),
-                            size=(inference_session.video_height, inference_session.video_width),
-                            mode="bilinear",
-                            align_corners=False,
-                        )
-                        > 0
-                    )
-
-                    det_mask_final = det_mask_resized.squeeze(0)
-                    obj_id_to_mask[int(obj_id)] = det_mask_final
+                    det_mask = det_out["mask"][det_idx].unsqueeze(0)  # (1, H_low, W_low)
+                    obj_id_to_mask[int(obj_id)] = det_mask
 
         return obj_id_to_mask
 
@@ -1420,30 +1370,21 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         reverse: bool,
     ):
         """
-        This function handles one-step inference for the DenseTracking model in an SPMD manner.
-        At a high-level, all GPUs execute the same function calls as if it's done on a single GPU,
-        while under the hood, some function calls involve distributed computation based on sharded
-        SAM2 states.
+        This function handles one-step inference for the DenseTracking model.
 
-        - `inference_state` contains all the information needed for inference, including the input video frames, text prompts, and any other relevant metadata
-        - `tracker_states` holds the local masklet information in this GPU shard
-        - `tracker_metadata_prev` manages the metadata for SAM2 objects, such as which masklet is hold on which GPUs
-          it contains both global and local masklet information
+        - `inference_session` contains all the information needed for inference, including the input video frames, text prompts, and any other relevant metadata
+        - The function processes detection and tracking for a single frame
         """
 
         pixel_values = inference_session.get_frame(frame_idx).unsqueeze(0)
         vision_embeds = self.detector_model.get_vision_features(pixel_values=pixel_values)
 
-        # Step 1: run backbone and FA in a distributed manner -- this is done via Sam3ImageOnVideoMultiGPU,
-        # a MultiGPU FA model (assigned to `self.detector`) that shards frames in a round-robin manner.
-        # It returns a "det_out" dict for `frame_idx` and fills SAM2 backbone features for `frame_idx`
-        # into `feature_cache`. Despite its distributed inference under the hood, the results would be
-        # the same as if it is running backbone and FA for every frame on a single GPU.
+        # Step 1: run detection
+        # It returns a "det_out" dict for `frame_idx`
+        # into `feature_cache`.
         det_out = self.run_detection(
             inference_session=inference_session,
             vision_embeds=vision_embeds,
-            frame_idx=frame_idx,
-            reverse=reverse,
         )
 
         # share the vision encoder outputs from the detector to the tracker
@@ -1454,22 +1395,19 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
         )
 
-        # Step 2: each GPU propagates its local SAM2 states to get the SAM2 prediction masks.
-        # the returned `tracker_low_res_masks_global` contains the concatenated masklet predictions
-        # gathered from all GPUs (as if they are propagated on a single GPU). Note that this step only
-        # runs the SAM2 propagation step, but doesn't encode new memory for the predicted masks;
+        # Step 2: propagate SAM2 states to get the SAM2 prediction masks.
+        # The returned `tracker_low_res_masks_global` contains the masklet predictions.
+        # Note that this step only runs the SAM2 propagation step, but doesn't encode new memory for the predicted masks;
         # we defer memory encoding to `run_tracker_update_execution_phase` after resolving all heuristics.
         tracker_low_res_masks_global, tracker_obj_scores_global = self.run_tracker_propagation(
             inference_session=inference_session, frame_idx=frame_idx, reverse=reverse
         )
 
         # Step 3: based on detection outputs and the propagated SAM2 prediction masks, we make plans
-        # for SAM2 masklet updates (i.e. which objects to add and remove, how to load-balance them, etc).
-        # We also run SAM2 memory encoder globally in this step to resolve non-overlapping constraints.
-        # **This step should involve all the heuristics needed for any updates.** Most of the update
-        # planning will be done on the master rank (GPU 0) and the resulting plan `tracker_update_plan` is
-        # broadcasted to other GPUs (to be executed in a distributed manner). This step also generates the
-        # new masklet metadata `tracker_metadata_new` (based on its previous version `tracker_metadata_prev`).
+        # for SAM2 masklet updates (i.e. which objects to add and remove, etc).
+        # We also run SAM2 memory encoder in this step to resolve non-overlapping constraints.
+        # **This step should involve all the heuristics needed for any updates.**
+        # This step also generates the new masklet metadata `tracker_metadata_new` (based on its previous version).
         tracker_update_plan, tracker_metadata_new = self.run_tracker_update_planning_phase(
             inference_session=inference_session,
             frame_idx=frame_idx,
@@ -1479,7 +1417,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             tracker_obj_scores_global=tracker_obj_scores_global,
         )
 
-        # Step 4: based on `tracker_update_plan`, each GPU executes the update w.r.t. its local tracker states
+        # Step 4: based on `tracker_update_plan`, execute the update w.r.t. the tracker states
         self.run_tracker_update_execution_phase(
             inference_session=inference_session,
             frame_idx=frame_idx,
@@ -1490,16 +1428,12 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
         # Step 5: finally, build the outputs for this frame
         reconditioned_obj_ids = tracker_update_plan["reconditioned_obj_ids"]
-        det_to_matched_trk_obj_ids = tracker_update_plan["det_to_matched_trk_obj_ids"]
         obj_id_to_mask = self.build_outputs(
             inference_session=inference_session,
-            frame_idx=frame_idx,
             det_out=det_out,
             tracker_low_res_masks_global=tracker_low_res_masks_global,
-            tracker_obj_scores_global=tracker_obj_scores_global,
             tracker_update_plan=tracker_update_plan,
             reconditioned_obj_ids=reconditioned_obj_ids,
-            det_to_matched_trk_obj_ids=det_to_matched_trk_obj_ids,
         )
         obj_id_to_score = tracker_metadata_new["obj_id_to_score"]
         # a few statistics for the current frame as a part of the output

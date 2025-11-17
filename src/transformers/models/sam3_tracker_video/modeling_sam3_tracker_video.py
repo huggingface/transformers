@@ -1583,7 +1583,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     def __init__(self, config: Sam3TrackerVideoConfig):
         super().__init__(config)
         self.shared_image_embedding = Sam3TrackerVideoPositionalEmbedding(config.prompt_encoder_config)
-        self.vision_encoder = AutoModel.from_config(config.vision_config)
+        self.vision_encoder = AutoModel.from_config(config.vision_config) if not config.remove_vision_encoder else None
         self.prompt_encoder = Sam3TrackerVideoPromptEncoder(config.prompt_encoder_config)
         # The module using it is not a PreTrainedModel subclass so we need this
         config.mask_decoder_config._attn_implementation = config._attn_implementation
@@ -1719,6 +1719,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         frame_idx: Optional[int] = None,
         frame: Optional[torch.Tensor] = None,
         reverse: bool = False,
+        run_mem_encoder: bool = True,
     ) -> Sam3TrackerVideoSegmentationOutput:
         r"""
         inference_session (`Sam3TrackerVideoInferenceSession`):
@@ -1730,6 +1731,8 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             The frame to process. Provide when streaming.
         reverse (`bool`, *optional*, defaults to `False`):
             Whether to propagate in reverse.
+        run_mem_encoder (`bool`, *optional*, defaults to `True`):
+            Whether to run the memory encoder on predicted masks. The memory encoder is batched across all objects for efficiency.
         """
         if frame is not None:
             frame_idx = inference_session.add_new_frame(frame, frame_idx)
@@ -1740,6 +1743,13 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         num_objects = inference_session.get_obj_num()
         pred_masks_per_obj = [None] * num_objects
         object_score_logits_per_obj = [None] * num_objects
+
+        # Collect data for batched memory encoding
+        objects_needing_memory_encoding = []
+        high_res_masks_for_memory = []
+        object_score_logits_for_memory = []
+        is_mask_from_pts_per_obj = []
+
         # Note: We avoid batched inference here because per-object inputs (clicks/masks)
         # can differ across objects.
         for obj_idx in range(num_objects):
@@ -1778,7 +1788,6 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
                     point_inputs=point_inputs,
                     mask_inputs=mask_inputs,
                     reverse=reverse,
-                    run_mem_encoder=True,
                     streaming=frame is not None,
                 )
                 inference_session.store_output(
@@ -1787,11 +1796,28 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
                 pred_masks = current_out["pred_masks"]
                 object_score_logits = current_out["object_score_logits"]
 
+                # Collect data for batched memory encoding
+                if run_mem_encoder and self.num_maskmem > 0:
+                    objects_needing_memory_encoding.append(obj_idx)
+                    high_res_masks_for_memory.append(current_out["high_res_masks"])
+                    object_score_logits_for_memory.append(object_score_logits)
+                    is_mask_from_pts_per_obj.append(point_inputs is not None or mask_inputs is not None)
+
             pred_masks_per_obj[obj_idx] = pred_masks
             object_score_logits_per_obj[obj_idx] = object_score_logits.squeeze(-1)
             if not is_init_cond_frame:
                 # only for tracked frames, not for initial conditioning frames
                 inference_session.frames_tracked_per_obj[obj_idx][frame_idx] = {"reverse": reverse}
+
+        # Batch encode memories for all objects at once
+        self._batch_encode_memories(
+            inference_session=inference_session,
+            frame_idx=frame_idx,
+            objects_needing_memory_encoding=objects_needing_memory_encoding,
+            high_res_masks_for_memory=high_res_masks_for_memory,
+            object_score_logits_for_memory=object_score_logits_for_memory,
+            is_mask_from_pts_per_obj=is_mask_from_pts_per_obj,
+        )
 
         # Resize the output mask to the original video resolution (we directly use
         # the mask scores on GPU for output to avoid any CPU conversion in between)
@@ -1808,6 +1834,63 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             object_score_logits=all_object_score_logits,
             frame_idx=frame_idx,
         )
+
+    def _batch_encode_memories(
+        self,
+        inference_session: Sam3TrackerVideoInferenceSession,
+        frame_idx: int,
+        objects_needing_memory_encoding: list[int],
+        high_res_masks_for_memory: list[torch.Tensor],
+        object_score_logits_for_memory: list[torch.Tensor],
+        is_mask_from_pts_per_obj: list[bool],
+    ):
+        """
+        Batch encode memories for multiple objects at once.
+
+        Args:
+            inference_session: The video inference session object
+            frame_idx: Index of the current frame
+            objects_needing_memory_encoding: List of object indices that need memory encoding
+            high_res_masks_for_memory: List of high-resolution masks for each object
+            object_score_logits_for_memory: List of object score logits for each object
+            is_mask_from_pts_per_obj: List of booleans indicating if mask is from points for each object
+        """
+        if not objects_needing_memory_encoding:
+            return
+
+        # Get vision features once for all objects
+        current_vision_feats, _ = self._prepare_vision_features(inference_session, frame_idx, batch_size=1)
+
+        # Stack all high-res masks and object scores
+        high_res_masks_batched = torch.cat(high_res_masks_for_memory, dim=0)
+        object_score_logits_batched = torch.cat(object_score_logits_for_memory, dim=0)
+
+        # Expand vision features to match batch size
+        expanded_vision_feats = current_vision_feats[-1].expand(-1, len(objects_needing_memory_encoding), -1)
+
+        # Encode all memories in one batch call
+        maskmem_features_batched, maskmem_pos_enc_batched = self._encode_new_memory(
+            current_vision_feats=expanded_vision_feats,
+            pred_masks_high_res=high_res_masks_batched,
+            object_score_logits=object_score_logits_batched,
+            is_mask_from_pts=any(is_mask_from_pts_per_obj),
+        )
+
+        # Split and store encoded memories per object
+        for i, obj_idx in enumerate(objects_needing_memory_encoding):
+            # Extract per-object memory from batched result
+            maskmem_features = maskmem_features_batched[:, i : i + 1]
+            maskmem_pos_enc = maskmem_pos_enc_batched[:, i : i + 1]
+
+            # Update the stored output with memory features
+            output_dict = inference_session.output_dict_per_obj[obj_idx]
+            # Determine if this was a conditioning frame
+            storage_key = (
+                "cond_frame_outputs" if frame_idx in output_dict["cond_frame_outputs"] else "non_cond_frame_outputs"
+            )
+            if frame_idx in output_dict[storage_key]:
+                output_dict[storage_key][frame_idx]["maskmem_features"] = maskmem_features
+                output_dict[storage_key][frame_idx]["maskmem_pos_enc"] = maskmem_pos_enc
 
     def get_image_features(
         self,
@@ -2095,6 +2178,17 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         # Use -10/+20 as logits for neg/pos pixels (very close to 0/1 in prob after sigmoid).
         out_scale, out_bias = 20.0, -10.0  # sigmoid(-10.0)=4.5398e-05
         mask_inputs_float = mask_inputs.to(backbone_features[0].dtype)
+
+        # Ensure mask is at self.image_size resolution for consistency
+        if mask_inputs_float.shape[-2:] != (self.image_size, self.image_size):
+            mask_inputs_float = F.interpolate(
+                mask_inputs_float.float(),
+                size=(self.image_size, self.image_size),
+                align_corners=False,
+                mode="bilinear",
+                antialias=True,
+            ).to(mask_inputs.dtype)
+
         high_res_masks = mask_inputs_float * out_scale + out_bias
         low_res_masks = F.interpolate(
             high_res_masks.float(),
@@ -2496,7 +2590,6 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         point_inputs: Optional[torch.Tensor],
         mask_inputs: Optional[torch.Tensor],
         reverse: bool,
-        run_mem_encoder: bool,
         prev_sam_mask_logits: Optional[torch.Tensor] = None,
         streaming: bool = False,
     ) -> dict[str, Any]:
@@ -2520,8 +2613,6 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
                 Mask prompt inputs for the current frame.
             reverse (`bool`, *optional*, defaults to `False`):
                 Whether to track in reverse time order.
-            run_mem_encoder (`bool`, *optional*, defaults to `True`):
-                Whether to run the memory encoder on predicted masks.
             prev_sam_mask_logits (`torch.Tensor`, *optional*):
                 Previously predicted SAM mask logits that can be fed with new clicks.
             streaming (`bool`, *optional*, defaults to `False`):
@@ -2531,9 +2622,8 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             `dict`: Dictionary containing the tracking results for the current frame, including:
                 - pred_masks: Predicted low-resolution masks.
                 - object_pointer: Object pointer for memory.
+                - high_res_masks: High-resolution masks for batched memory encoding.
                 - object_score_logits: Object score logits (inference only).
-                - maskmem_features: Memory features for future frames.
-                - maskmem_pos_enc: Memory positional encodings.
         """
         # Retrieve correct image features
         current_vision_feats, current_vision_pos_embeds = self._prepare_vision_features(
@@ -2586,23 +2676,11 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
                 multimask_output=multimask_output,
             )
 
-        # Finally run the memory encoder on the predicted mask to encode
-        # it into a new memory feature (which will be used to condition vision features in future frames)
-        maskmem_features = None
-        maskmem_pos_enc = None
-        if run_mem_encoder and self.num_maskmem > 0:
-            maskmem_features, maskmem_pos_enc = self._encode_new_memory(
-                current_vision_feats=current_vision_feats[-1],
-                pred_masks_high_res=sam_outputs.high_res_masks,
-                object_score_logits=sam_outputs.object_score_logits,
-                is_mask_from_pts=(point_inputs is not None or mask_inputs is not None),
-            )
-
+        # Memory encoding is now handled in batch by the caller (forward method)
         current_out = {
             "pred_masks": sam_outputs.pred_masks,
             "object_pointer": sam_outputs.object_pointer,
-            "maskmem_features": maskmem_features if maskmem_features is not None else None,
-            "maskmem_pos_enc": maskmem_pos_enc,
+            "high_res_masks": sam_outputs.high_res_masks,  # Needed for batched memory encoding
         }
         if not self.training:
             current_out["object_score_logits"] = sam_outputs.object_score_logits
@@ -2724,56 +2802,6 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         for frame_idx in tqdm(processing_order, desc="propagate in video", disable=not show_progress_bar):
             sam3_tracker_video_output = self(inference_session, frame_idx=frame_idx, reverse=reverse)
             yield sam3_tracker_video_output
-
-    def remove_object(self, obj_id: int, strict: bool = False):
-        """
-        Remove an object from the inference session. This would remove the object from
-        all frames in the video.
-
-        Args:
-            obj_id (`int`): The object ID to remove.
-        """
-        old_obj_idx_to_rm = self._obj_id_to_idx.get(obj_id, None)
-        # Check whether this object_id to remove actually exists and possibly raise an error.
-        if old_obj_idx_to_rm is None:
-            if not strict:
-                return
-            raise RuntimeError(
-                f"Cannot remove object id {obj_id} as it doesn't exist. All existing object ids: {self.obj_ids}."
-            )
-
-        # If this is the only remaining object id, we simply reset the state.
-        if len(self._obj_id_to_idx) == 1:
-            self.reset_inference_session()
-            return
-
-        # Step 1: Update the object id mapping (note that it must be done after Step 0,
-        # since Step 0 still requires the old object id mappings in inference_state)
-        old_obj_ids = self.obj_ids
-        old_obj_inds = list(range(len(old_obj_ids)))
-        remain_old_obj_inds = old_obj_inds.copy()
-        remain_old_obj_inds.remove(old_obj_idx_to_rm)
-        new_obj_ids = [old_obj_ids[old_idx] for old_idx in remain_old_obj_inds]
-        new_obj_inds = list(range(len(new_obj_ids)))
-        # build new mappings
-        old_idx_to_new_idx = dict(zip(remain_old_obj_inds, new_obj_inds))
-        self._obj_id_to_idx = dict(zip(new_obj_ids, new_obj_inds))
-        self._obj_idx_to_id = dict(zip(new_obj_inds, new_obj_ids))
-        self.obj_ids = new_obj_ids
-
-        # Step 2: For per-object tensor storage, we shift their obj_idx in the dict keys.
-        def _map_keys(container):
-            new_kvs = []
-            for k in old_obj_inds:
-                v = container.pop(k)
-                if k in old_idx_to_new_idx:
-                    new_kvs.append((old_idx_to_new_idx[k], v))
-            container.update(new_kvs)
-
-        _map_keys(self.point_inputs_per_obj)
-        _map_keys(self.mask_inputs_per_obj)
-        _map_keys(self.output_dict_per_obj)
-        _map_keys(self.frames_tracked_per_obj)
 
 
 __all__ = ["Sam3TrackerVideoModel", "Sam3TrackerVideoInferenceSession", "Sam3TrackerVideoPreTrainedModel"]
