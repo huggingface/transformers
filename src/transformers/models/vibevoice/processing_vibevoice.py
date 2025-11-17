@@ -162,7 +162,6 @@ class VibeVoiceProcessor(ProcessorMixin):
         if audio is not None:
             audio = make_list_of_audio(audio)
             data = self.feature_extractor(audio, **audio_kwargs)
-            data["input_features"] = data["input_features"].unsqueeze(1)
 
             # Create mask for audio tokenizer based on compression ratio
             padding_masks = data["input_features_mask"]

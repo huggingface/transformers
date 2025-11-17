@@ -133,7 +133,12 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_attention_mask=return_attention_mask
             )
-            output_values["input_features_mask"] = output_values.pop("attention_mask")
+            if return_attention_mask:
+                output_values["input_features_mask"] = output_values.pop("attention_mask")
+
+        # add channel dimension if missing
+        if output_values["input_features"].ndim == 2:
+            output_values["input_features"] = output_values["input_features"].unsqueeze(1)
 
         return output_values
 
