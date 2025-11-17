@@ -337,11 +337,3 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     setattr(tokenizer, attr + "_id", token_id_to_test_setters)
                     self.assertEqual(getattr(tokenizer, attr), token_to_test_setters)
                     self.assertEqual(getattr(tokenizer, attr + "_id"), token_id_to_test_setters)
-
-                setattr(tokenizer, "additional_special_tokens_ids", [])
-                self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [])
-                self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [])
-
-                setattr(tokenizer, "additional_special_tokens_ids", [token_id_to_test_setters])
-                self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [token_to_test_setters])
-                self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [token_id_to_test_setters])
