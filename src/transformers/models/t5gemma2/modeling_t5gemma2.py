@@ -26,6 +26,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...generation import GenerationConfig, GenerationMixin, GenerationMode
@@ -675,17 +676,17 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, T5Gemma2MultiModalProjector):
-            module.mm_input_projection_weight.zero_()
+            init.zeros_(module.mm_input_projection_weight)
         elif isinstance(module, T5Gemma2TextScaledWordEmbedding):
-            module.eoi_embedding.zero_()
+            init.zeros_(module.eoi_embedding)
         elif isinstance(module, T5Gemma2ClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5
-            module.out_proj.weight.normal_(mean=0.0, std=self.config.initializer_range * scale)
+            init.normal_(module.out_proj.weight, mean=0.0, std=self.config.initializer_range * scale)
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
-                module.out_proj.bias.zero_()
+                init.zeros_(module.out_proj.bias)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.zero_()
+            init.zeros_(module.weight)
 
     def prepare_decoder_input_ids_from_labels(self, input_ids):
         """
