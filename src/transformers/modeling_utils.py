@@ -4115,18 +4115,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
 
-            missing_keys, unexpected_keys, mismatched_keys, misc = convert_and_load_state_dict_in_model(
-                model,
-                merged_state_dict,
-                weight_mapping,
-                tp_plan,
-                hf_quantizer,
-                dtype,
-                device_map,
-                model.dtype_plan,
-                device_mesh,
-                disk_offload_index,
-                disk_offload_folder,
+            missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, misc = (
+                convert_and_load_state_dict_in_model(
+                    model,
+                    merged_state_dict,
+                    weight_mapping,
+                    tp_plan,
+                    hf_quantizer,
+                    dtype,
+                    device_map,
+                    model.dtype_plan,
+                    device_mesh,
+                    disk_offload_index,
+                    disk_offload_folder,
+                )
             )
 
             # finally close all opened file pointers

@@ -756,7 +756,7 @@ def convert_and_load_state_dict_in_model(
             except SkipLayer:
                 continue
     thread_pool.shutdown(wait=False)
-    return missing_keys, unexpected_keys, mismatch_keys, misc
+    return missing_keys, unexpected_keys, mismatch_keys, disk_offload_index, misc
 
 
 # TODO this is not done yet!
