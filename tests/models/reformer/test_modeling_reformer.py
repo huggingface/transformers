@@ -912,6 +912,16 @@ class ReformerLSHAttnModelTest(
     def test_left_padding_compatibility(self):
         pass
 
+    def test_torch_export(self, atol=1, rtol=1):
+        # the LSH attention uses random hashing which makes the outputs
+        # non-deterministic. Therefore, we need to set high tolerances here.
+        super().test_torch_export(atol=atol, rtol=rtol)
+
+    def test_torch_onnx_export(self, atol=1, rtol=1):
+        # the LSH attention uses random hashing which makes the outputs
+        # non-deterministic. Therefore, we need to set high tolerances here.
+        super().test_torch_onnx_export(atol=atol, rtol=rtol)
+
 
 @require_torch
 @require_sentencepiece
