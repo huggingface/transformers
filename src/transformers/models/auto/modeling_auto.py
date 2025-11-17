@@ -53,6 +53,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("aria", "AriaModel"),
         ("aria_text", "AriaTextModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
+        ("audioflamingo3", "AudioFlamingo3ForConditionalGeneration"),
+        ("audioflamingo3_encoder", "AudioFlamingo3Encoder"),
         ("autoformer", "AutoformerModel"),
         ("aya_vision", "AyaVisionModel"),
         ("bamba", "BambaModel"),
@@ -173,11 +175,14 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("git", "GitModel"),
         ("glm", "GlmModel"),
         ("glm4", "Glm4Model"),
+        ("glm46v", "Glm46VModel"),
         ("glm4_moe", "Glm4MoeModel"),
         ("glm4v", "Glm4vModel"),
         ("glm4v_moe", "Glm4vMoeModel"),
         ("glm4v_moe_text", "Glm4vMoeTextModel"),
+        ("glm4v_moe_vision", "Glm4vMoeVisionModel"),
         ("glm4v_text", "Glm4vTextModel"),
+        ("glm4v_vision", "Glm4vVisionModel"),
         ("glpn", "GLPNModel"),
         ("got_ocr2", "GotOcr2Model"),
         ("gpt-sw3", "GPT2Model"),
@@ -452,6 +457,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
         ("albert", "AlbertForPreTraining"),
+        ("audioflamingo3", "AudioFlamingo3ForConditionalGeneration"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForPreTraining"),
         ("big_bird", "BigBirdForPreTraining"),
@@ -1036,6 +1042,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("gemma3", "Gemma3ForConditionalGeneration"),
         ("gemma3n", "Gemma3nForConditionalGeneration"),
         ("git", "GitForCausalLM"),
+        ("glm46v", "Glm46VForConditionalGeneration"),
         ("glm4v", "Glm4vForConditionalGeneration"),
         ("glm4v_moe", "Glm4vMoeForConditionalGeneration"),
         ("got_ocr2", "GotOcr2ForConditionalGeneration"),
@@ -1166,6 +1173,7 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("audioflamingo3", "AudioFlamingo3ForConditionalGeneration"),
         ("bart", "BartForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("blenderbot", "BlenderbotForConditionalGeneration"),
@@ -1707,6 +1715,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("dinov2", "Dinov2Backbone"),
         ("dinov2_with_registers", "Dinov2WithRegistersBackbone"),
         ("dinov3_convnext", "DINOv3ConvNextBackbone"),
+        ("dinov3_vit", "DINOv3ViTBackbone"),
         ("focalnet", "FocalNetBackbone"),
         ("hgnet_v2", "HGNetV2Backbone"),
         ("hiera", "HieraBackbone"),

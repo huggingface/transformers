@@ -61,7 +61,6 @@ from .utils import (
     logging,
 )
 from .utils.chat_template_utils import render_jinja_template
-from .utils.deprecation import deprecate_kwarg
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -630,6 +629,9 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] object with processed inputs in a dict format.
         """
+        if "audios" in kwargs and audio is None:
+            raise ValueError("You passed keyword argument `audios` which is deprecated. Please use `audio` instead.")
+
         if images is None and text is None and videos is None and audio is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
 
@@ -1534,12 +1536,6 @@ class ProcessorMixin(PushToHubMixin):
 
         return unused_kwargs, valid_kwargs
 
-    @deprecate_kwarg("video_fps", version="4.58", new_name="fps")
-    @deprecate_kwarg(
-        "video_load_backend",
-        version="4.59",
-        additional_message=". This function will use `torchcodec` by default, or `torchvision` if `torchcodec` is not installed.",
-    )
     def apply_chat_template(
         self,
         conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
@@ -1626,9 +1622,6 @@ class ProcessorMixin(PushToHubMixin):
                 value = kwargs.pop(key, default_value)
                 if value is not None and not isinstance(value, dict):
                     processed_kwargs[kwarg_type][key] = value
-
-        # pop unused and deprecated kwarg
-        kwargs.pop("video_load_backend", None)
 
         # Pass unprocessed custom kwargs
         processed_kwargs["template_kwargs"].update(kwargs)
