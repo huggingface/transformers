@@ -280,6 +280,10 @@ class SimpleIsaacTokenizer(PreTrainedTokenizer):
     def _convert_id_to_token(self, index):
         return self._ids_to_tokens.get(index, self.unk_token)
 
+    @property
+    def vocab_size(self) -> int:
+        return len(self._vocab)
+
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         if token_ids_1 is not None:
             token_ids_0 = token_ids_0 + token_ids_1
