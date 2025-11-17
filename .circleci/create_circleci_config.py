@@ -61,9 +61,15 @@ class EmptyJob:
     def to_dict(self):
         steps = [{"run": 'ls -la'}]
         if self.job_name == "collection_job":
+            # Export the PR number once (if we have one) so the failure summary can post a GitHub comment.
             steps.extend(
                 [
                     "checkout",
+                    {
+                        "run": (
+                            'echo "export PR_NUMBER=$(python utils/extract_pr_number_from_circleci.py)" >> $BASH_ENV'
+                        )
+                    },
                     {"run": "pip install requests || true"},
                     {"run": """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "collection_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done || true"""},
                     {"run": 'python utils/process_circleci_workflow_test_reports.py --workflow_id $CIRCLE_WORKFLOW_ID || true'},
