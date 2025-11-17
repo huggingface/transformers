@@ -147,103 +147,10 @@ def _normalize_test_nodeid(nodeid: str) -> str:
     return normalized
 
 
-def _get_repo_owner_defaults() -> tuple[str, str]:
-    repo = os.environ.get("GITHUB_REPOSITORY")
-    if repo and "/" in repo:
-        owner, repo_name = repo.split("/", 1)
-        print(f"Detected repository from GITHUB_REPOSITORY: {owner}/{repo_name}")
-        return owner, repo_name
-    # CircleCI does not always set GITHUB_REPOSITORY; we fall back to the canonical repository.
-    print("GITHUB_REPOSITORY not set; defaulting to huggingface/transformers.")
-    return "huggingface", "transformers"
-
-
-def _get_pr_details_from_env() -> tuple[str, str, str] | None:
-    """
-    Returns (owner, repo, pr_number) if we can infer them from the environment.
-
-    CircleCI does not always expose `CIRCLE_PULL_REQUEST`, so the collection job exports `PR_NUMBER`
-    beforehand via `utils/extract_pr_number_from_circleci.py`. We try every known source before giving up, falling
-    back to CircleCI specific environment variables when needed.
-    """
-    owner, repo_name = _get_repo_owner_defaults()
-    pr_url_candidates = [
-        os.environ.get("CIRCLE_PULL_REQUEST"),
-        os.environ.get("GITHUB_PULL_REQUEST_URL"),
-    ]
-    for pr_url in pr_url_candidates:
-        if not pr_url:
-            continue
-        match = re.match(
-            r"https://github.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pull/(?P<number>\d+)", pr_url
-        )
-        if match:
-            owner = match.group("owner")
-            repo_name = match.group("repo")
-            pr_number = match.group("number")
-            print(f"Detected PR info from PR URL: {owner}/{repo_name}#{pr_number}")
-            return owner, repo_name, pr_number
-
-    pr_number = os.environ.get("PR_NUMBER") or os.environ.get("CIRCLE_PR_NUMBER")
-    if not pr_number:
-        github_ref = os.environ.get("GITHUB_REF", "")
-        match = re.search(r"refs/pull/(\d+)/", github_ref)
-        if match:
-            pr_number = match.group(1)
-    if pr_number:
-        print(f"Detected PR info from environment variables: {owner}/{repo_name}#{pr_number}")
-        return owner, repo_name, pr_number
-    circle_owner = os.environ.get("CIRCLE_PROJECT_USERNAME") or owner
-    circle_repo = os.environ.get("CIRCLE_PROJECT_REPONAME") or repo_name
-    circle_pr = os.environ.get("PR_NUMBER") or os.environ.get("CIRCLE_PR_NUMBER")
-    if circle_pr:
-        print(f"Detected PR info from CircleCI variables: {circle_owner}/{circle_repo}#{circle_pr}")
-        return circle_owner, circle_repo, circle_pr
-    return None
-
-
-def _get_github_token() -> str | None:
-    for env_var in ("GITHUB_TOKEN", "GH_TOKEN", "GITHUB_ACCESS_TOKEN"):
-        token = os.environ.get(env_var)
-        if token:
-            print(f"Using GitHub token from {env_var}.")
-            return token
-    print("GitHub token not found in environment (GITHUB_TOKEN / GH_TOKEN / GITHUB_ACCESS_TOKEN).")
-    return None
-
-
-def _post_failure_summary_comment(markdown_text: str, request_post: Callable = requests.post) -> bool:
-    pr_details = _get_pr_details_from_env()
-    token = _get_github_token()
-    if not pr_details or not token:
-        if not pr_details:
-            print("Skipping PR comment: PR metadata not available in the environment.")
-        if not token:
-            print("Skipping PR comment: missing GitHub token (GITHUB_TOKEN / GH_TOKEN / GITHUB_ACCESS_TOKEN).")
-        return False
-    owner, repo, pr_number = pr_details
-    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-    }
-    print(f"Posting failure summary comment to {owner}/{repo}#{pr_number}.")
-    response = request_post(url, headers=headers, json={"body": markdown_text})
-    if not (200 <= getattr(response, "status_code", 0) < 300):
-        print(
-            f"Failed to post PR comment: {getattr(response, 'status_code', 'unknown')} "
-            f"{getattr(response, 'text', '')}"
-        )
-        return False
-    print("Posted failure summary comment on the pull request.")
-    return True
-
-
 def process_circleci_workflow(
     workflow_id: str,
     output_dir: str = "outputs",
     request_get: Callable = requests.get,
-    request_post: Callable = requests.post,
 ):
     print(f"[collection_job] Processing CircleCI workflow {workflow_id}")
     response = request_get(
@@ -379,8 +286,6 @@ def process_circleci_workflow(
     markdown_text = "\n".join(markdown_buffer)
     with open(os.path.join(output_dir, "failure_summary.md"), "w") as fp:
         fp.write(markdown_text)
-
-    _post_failure_summary_comment(markdown_text, request_post=request_post)
 
 
 def main():

@@ -77,23 +77,12 @@ def test_failure_summary_generated_from_junit_fixture(tmp_path, monkeypatch):
             return _FakeResponse(text=failures_line_text)
         raise AssertionError(f"Unexpected URL requested: {url}")
 
-    captured_post = {}
-
-    def fake_post(url, headers=None, json=None):
-        captured_post["url"] = url
-        captured_post["headers"] = headers
-        captured_post["json"] = json
-        return _FakeResponse(text="ok", status_code=201)
-
-    monkeypatch.setenv("CIRCLE_PULL_REQUEST", "https://github.com/huggingface/transformers/pull/456")
-    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
     monkeypatch.chdir(tmp_path)
     output_dir = tmp_path / "outputs"
     process_circleci_workflow(
         "test-workflow",
         output_dir=str(output_dir),
         request_get=fake_get,
-        request_post=fake_post,
     )
 
     failure_summary_path = output_dir / "failure_summary.json"
@@ -121,6 +110,3 @@ def test_failure_summary_generated_from_junit_fixture(tmp_path, monkeypatch):
     md_contents = failure_summary_md.read_text()
     assert "Failure summary" in md_contents
     assert "tests/models/bert/test_modeling_bert.py" in md_contents
-
-    assert captured_post["url"].endswith("/issues/456/comments")
-    assert captured_post["json"]["body"] == md_contents
