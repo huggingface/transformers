@@ -503,9 +503,10 @@ def offload_weight(weight: torch.Tensor, weight_name: str, offload_folder: str |
 
     if offload_folder is None:
         raise ValueError(
-            "The current `device_map` had weights offloaded to the disk, which needed to be re-saved. This is likely "
-            "because the model uses an internal weight format different than the one saved (i.e. most MoE models). "
-            "Please provide an `offload_folder`for them in `from_pretrained`."
+            "The current `device_map` had weights offloaded to the disk, which needed to be re-saved. This is either "
+            "because the weights are not in `safetensors` format, or because the model uses an internal weight format "
+            "different than the one saved (i.e. most MoE models). Please provide an `offload_folder`for them in "
+            "`from_pretrained`."
         )
     # Write the weight to disk
     safetensor_file = os.path.join(offload_folder, f"{weight_name}.safetensors")
