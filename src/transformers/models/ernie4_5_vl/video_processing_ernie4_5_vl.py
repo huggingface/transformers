@@ -109,7 +109,6 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    fps = 2
     min_frames = 16
     max_frames = 180
     do_sample_frames = True
@@ -307,6 +306,11 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         if self.font is None:
             raise AttributeError("To draw on frames with Ernie 4.5 VL, you need an associated font; found nothing")
 
+        # FIXME: conversion `torch->PIL->torch` is inefficient ~6ms per frame
+        # Left for optimization if anyone want to pick it up
+        #
+        # This can take up to ~1s in preprocessing (if default sampling is used):
+        #   180 (frames) x 6ms = 1080ms = ~1,1s
         image = to_pil_image(image)
 
         font_size = int(min(*image.size) * size_factor)
@@ -339,14 +343,15 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         processed_videos = []
         for video, metadata in zip(videos, video_metadata):
             # Check for attributes that are necessary to draw timestamps on frames
-            if metadata is None:
-                raise ValueError("Need video metadata to process videos in Ernie 4.5 VL")
-            elif metadata.fps is None:
-                metadata.fps = self.fps
-                logger.warning_once(
-                    f"Could not infer the fps of a video, defaulting to {self.fps}. "
-                    "This likely leads to unexpected behavior, so make sure to properly load videos."
-                )
+            if draw_on_frames:
+                if metadata is None:
+                    raise ValueError("Need video metadata to process videos in Ernie 4.5 VL using `draw_on_frames`")
+                elif metadata.fps is None:
+                    metadata.fps = 24
+                    logger.warning_once(
+                        "Could not infer the fps of a video due to the metadata not being available, "
+                        "defaulting to `24`. Please provide `video_metadata` for more accurate results."
+                    )
 
             # `make_batched_videos` always returns a 4D array per video
             if isinstance(video, np.ndarray):
@@ -495,9 +500,6 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self.valid_kwargs.__annotations__:
-            if "fps" in kwarg_name:  # we ignore fps from self
-                kwargs.setdefault(kwarg_name, None)
-                continue
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
         input_data_format = kwargs.pop("input_data_format")
