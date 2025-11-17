@@ -495,17 +495,6 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
 
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
         Computes the output length of the convolutional layers
@@ -543,6 +532,8 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         config: Speech2TextConfig
         embed_tokens (nn.Embedding): output embedding
     """
+
+    _no_split_modules = ["Speech2TextEncoderLayer"]
 
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
@@ -1021,7 +1012,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
 class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, GenerationMixin):
     input_modalities = ["audio", "text"]
     base_model_prefix = "model"
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
