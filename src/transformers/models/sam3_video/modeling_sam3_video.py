@@ -161,6 +161,7 @@ class Sam3VideoInferenceSession:
         self.trk_keep_alive = {}  # Keep-alive counters per object
         self.removed_obj_ids = set()  # Set of removed object IDs
         self.suppressed_obj_ids = defaultdict(set)  # Suppressed object IDs per frame
+        self.hotstart_removed_obj_ids = set()  # Set of removed object IDs during hotstart
 
         # Output buffering for hotstart delay
         self.output_buffer = []
@@ -443,7 +444,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         self.assoc_iou_thresh = config.assoc_iou_thresh
         self.trk_assoc_iou_thresh = config.trk_assoc_iou_thresh
         self.new_det_thresh = config.new_det_thresh
-
+        self.recondition_on_trk_masks = config.recondition_on_trk_masks
         # hotstart parameters
         if config.hotstart_delay > 0:
             assert config.hotstart_unmatch_thresh <= config.hotstart_delay
@@ -839,12 +840,16 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         inference_session: Sam3VideoInferenceSession,
         frame_idx: int,
         det_out: dict[str, Tensor],
+        trk_masks: Tensor,
         trk_id_to_max_iou_high_conf_det: dict[int, int],
         tracker_obj_scores_global: Tensor,
     ) -> dict[int, Tensor]:
         """
-        Prepare high-resolution detection masks for reconditioned objects.
+        Prepare high-resolution masks for reconditioned objects.
         Returns a dict of obj_idx -> high_res_mask for objects that should be reconditioned.
+
+        When recondition_on_trk_masks=True, uses detector as validation signal to strengthen tracker memory.
+        When False, uses detector to correct tracker drift by replacing with detection masks.
         """
         reconditioned_masks = {}
         reconditioned_obj_ids = set()
@@ -855,11 +860,16 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             if obj_score <= self.high_conf_thresh:
                 continue
 
-            # Prepare detection mask at high resolution
-            new_mask = det_out["mask"][det_idx : det_idx + 1].unsqueeze(1)
-            reconditioned_masks[obj_idx] = new_mask >= 0.5
-            reconditioned_obj_ids.add(trk_obj_id)
-            print(f"reconditioning masklet {trk_obj_id} at frame {frame_idx} with det_idx {det_idx}")
+            if self.recondition_on_trk_masks:
+                # Validation mode: detector confirms tracker quality, strengthen memory with tracked mask
+                new_mask = trk_masks[obj_idx : obj_idx + 1].unsqueeze(1)
+                reconditioned_masks[obj_idx] = new_mask
+                reconditioned_obj_ids.add(trk_obj_id)
+            else:
+                # Correction mode: detector corrects drift, replace tracker mask with detection mask
+                new_mask = det_out["mask"][det_idx : det_idx + 1].unsqueeze(1)
+                reconditioned_masks[obj_idx] = new_mask >= 0.5
+                reconditioned_obj_ids.add(trk_obj_id)
 
         return reconditioned_masks, reconditioned_obj_ids
 
@@ -1037,7 +1047,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
         if reconditioned_masks is None:
             reconditioned_masks = {}
-        print(f"low_res_masks shape: {low_res_masks.shape}")
         # Interpolate tracker masks to high resolution
         high_res_masks = low_res_masks.unsqueeze(1)
 
@@ -1140,7 +1149,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         new_det_obj_ids = list(range(new_det_start_obj_id, new_det_start_obj_id + new_det_num))
 
         # b) handle hotstart heuristics to remove objects
-        print(f"inference_session.trk_keep_alive: {inference_session.trk_keep_alive} at frame {frame_idx}")
         extra_metadata_new = deepcopy(
             {
                 "obj_first_frame_idx": inference_session.obj_first_frame_idx,
@@ -1178,16 +1186,10 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 inference_session=inference_session,
                 frame_idx=frame_idx,
                 det_out=det_out,
+                trk_masks=tracker_low_res_masks_global,
                 trk_id_to_max_iou_high_conf_det=trk_id_to_max_iou_high_conf_det,
                 tracker_obj_scores_global=tracker_obj_scores_global,
             )
-
-        if len(reconditioned_obj_ids) > 0:
-            print(f"reconditioned obj ids: {reconditioned_obj_ids} at frame {frame_idx}")
-        if len(unmatched_trk_obj_ids) > 0:
-            print(f"unmatched trk obj ids: {unmatched_trk_obj_ids} at frame {frame_idx}")
-        if len(obj_ids_newly_removed) > 0:
-            print(f"obj ids newly removed: {obj_ids_newly_removed} at frame {frame_idx}")
 
         tracker_update_plan = {
             "new_det_out_inds": new_det_out_inds,  # List[int]
@@ -1266,7 +1268,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         """Add a new object to SAM2 inference states."""
         assert len(new_obj_ids) == new_obj_masks.size(0)
         assert new_obj_masks.is_floating_point()
-        print(f"new_obj_masks shape: {new_obj_masks.shape}")
 
         new_obj_masks = new_obj_masks >= 0.5
         for obj_id, mask in zip(new_obj_ids, new_obj_masks):
@@ -1543,7 +1544,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         )
 
         hotstart_buffer = []
-        hotstart_removed_obj_ids = set()
         for frame_idx in tqdm(processing_order):
             out = self(inference_session, frame_idx, reverse)
 
@@ -1551,7 +1551,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 # accumulate the outputs for the first `hotstart_delay` frames
                 hotstart_buffer.append([frame_idx, out])
                 # update the object IDs removed by hotstart so that we don't output them
-                hotstart_removed_obj_ids.update(out["removed_obj_ids"])
+                inference_session.hotstart_removed_obj_ids.update(out["removed_obj_ids"])
 
                 if frame_idx == end_frame_idx:
                     # we reached the end of propagation -- yield all frames in the buffer
@@ -1568,15 +1568,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 yield_list = [(frame_idx, out)]  # output the current frame
 
             for yield_frame_idx, yield_out in yield_list:
-                # post-process the output and yield it
-                # suppressed_obj_ids = yield_out["suppressed_obj_ids"]
-                # # todo: move postprocess to Sam3VideoProcessor
-                # postprocessed_out = self._postprocess_output(
-                #     inference_session,
-                #     yield_out,
-                #     hotstart_removed_obj_ids,
-                #     suppressed_obj_ids,
-                # )
                 yield yield_frame_idx, yield_out
 
 

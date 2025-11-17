@@ -231,8 +231,6 @@ class Sam3VideoProcessor(ProcessorMixin):
         self,
         inference_session,
         out,
-        removed_obj_ids=None,
-        suppressed_obj_ids=None,
     ):
         obj_id_to_mask = out["obj_id_to_mask"]  # low res masks (1, H_low, W_low)
         curr_obj_ids = sorted(obj_id_to_mask.keys())
@@ -267,10 +265,10 @@ class Sam3VideoProcessor(ProcessorMixin):
             keep = out_binary_masks.any(dim=(1, 2)).cpu()  # remove masks with 0 areas
             # hide outputs for those object IDs in `obj_ids_to_hide`
             obj_ids_to_hide = []
-            if suppressed_obj_ids is not None:
-                obj_ids_to_hide.extend(suppressed_obj_ids)
-            if removed_obj_ids is not None:
-                obj_ids_to_hide.extend(removed_obj_ids)
+            if out["suppressed_obj_ids"] is not None:
+                obj_ids_to_hide.extend(list(out["suppressed_obj_ids"]))
+            if len(inference_session.hotstart_removed_obj_ids) > 0:
+                obj_ids_to_hide.extend(list(inference_session.hotstart_removed_obj_ids))
             if len(obj_ids_to_hide) > 0:
                 obj_ids_to_hide_t = torch.tensor(obj_ids_to_hide, dtype=torch.int64)
                 keep &= ~torch.isin(out_obj_ids, obj_ids_to_hide_t)

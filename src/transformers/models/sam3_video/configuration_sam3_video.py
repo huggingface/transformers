@@ -80,6 +80,9 @@ class Sam3VideoConfig(PreTrainedConfig):
             High confidence threshold for reconditioning. Only detections above this threshold can recondition tracklets.
         high_iou_thresh (`float`, *optional*, defaults to 0.8):
             High IoU threshold for reconditioning. Only detections with IoU above this threshold can recondition tracklets.
+        recondition_on_trk_masks (`bool`, *optional*, defaults to `True`):
+            Whether to use tracked masks (True) or detection masks (False) for reconditioning. Use True when tracked
+            masks are higher quality and detector serves as validation signal to strengthen memory and prevent drift.
 
     Example:
     ```python
@@ -117,6 +120,7 @@ class Sam3VideoConfig(PreTrainedConfig):
         assoc_iou_thresh=0.1,
         trk_assoc_iou_thresh=0.5,
         new_det_thresh=0.7,
+        recondition_on_trk_masks=True,
         # Hotstart parameters
         hotstart_delay=15,
         hotstart_unmatch_thresh=8,
@@ -176,6 +180,8 @@ class Sam3VideoConfig(PreTrainedConfig):
         self.assoc_iou_thresh = assoc_iou_thresh
         self.trk_assoc_iou_thresh = trk_assoc_iou_thresh
         self.new_det_thresh = new_det_thresh
+
+        self.recondition_on_trk_masks = recondition_on_trk_masks
 
         # Hotstart parameters
         if hotstart_delay > 0:
