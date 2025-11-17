@@ -188,7 +188,6 @@ class Sam2VideoConfig(PreTrainedConfig):
             The maximum number of object pointers in the encoder.
         max_cond_frame_num (`int`, *optional*, defaults to -1):
             Maximum number of conditioning frames to use in memory attention. Set to -1 to use all conditioning frames.
-            SAM3 typically uses 4.
         enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
             Whether to enable temporal positional encoding for object pointers.
         memory_attention_hidden_size (`int`, *optional*, defaults to 256):

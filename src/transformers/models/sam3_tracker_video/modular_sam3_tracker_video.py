@@ -13,7 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
+import torch
+
 from ...configuration_utils import PreTrainedConfig
+from ...processing_utils import Unpack
+from ...utils.generic import TransformersKwargs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..sam2_video.configuration_sam2_video import Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 from ..sam2_video.modeling_sam2_video import (
@@ -271,12 +277,8 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
         memory_fuser_padding=3,
         memory_fuser_layer_scale_init_value=1e-6,
         memory_fuser_hidden_act="gelu",
-        # add option to remove the vision encoder as it is not used in sam3_video
-        remove_vision_encoder=False,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         vision_config = (
             vision_config
             if vision_config is not None
@@ -344,8 +346,7 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
         self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
         self.memory_fuser_hidden_act = memory_fuser_hidden_act
 
-        # Whether to remove the vision encoder. If True, the vision encoder will not be instantiated.
-        self.remove_vision_encoder = remove_vision_encoder
+        super().__init__(**kwargs)
 
 
 class Sam3TrackerVideoInferenceCache(Sam2VideoInferenceCache):
@@ -449,9 +450,119 @@ class Sam3TrackerVideoMaskDecoder(Sam2VideoMaskDecoder):
 
 
 class Sam3TrackerVideoModel(Sam2VideoModel):
-    def __init__(self, config: Sam3TrackerVideoConfig):
-        super().__init__(config)
-        self.vision_encoder = AutoModel.from_config(config.vision_config) if not config.remove_vision_encoder else None
+    _checkpoint_conversion_mapping = {
+        "tracker_model.": "",
+        "detector_model.vision_encoder.": "vision_encoder.",
+        "tracker_neck.": "vision_encoder.neck.",
+    }
+    _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
+
+    def __init__(self, config: Sam3TrackerVideoConfig, remove_vision_encoder: bool = False):
+        r"""
+        remove_vision_encoder (`bool`, *optional*, defaults to `False`):
+            Whether to remove the vision encoder. If True, the vision encoder will be set to None.
+        """
+        # loading from a sam3_video config
+        if hasattr(config, "tracker_config") and config.tracker_config is not None:
+            tracker_config = config.tracker_config
+            if isinstance(tracker_config, dict):
+                tracker_config = Sam3TrackerVideoConfig(**tracker_config)
+            config = tracker_config
+        Sam3TrackerVideoPreTrainedModel.__init__(config)
+        self.shared_image_embedding = Sam3TrackerVideoPositionalEmbedding(config.prompt_encoder_config)
+        self.vision_encoder = AutoModel.from_config(config.vision_config) if not remove_vision_encoder else None
+        self.prompt_encoder = Sam3TrackerVideoPromptEncoder(config.prompt_encoder_config)
+        # The module using it is not a PreTrainedModel subclass so we need this
+        config.mask_decoder_config._attn_implementation = config._attn_implementation
+        self.mask_decoder = Sam3TrackerVideoMaskDecoder(config.mask_decoder_config)
+
+        self.num_feature_levels = config.vision_config.num_feature_levels
+        self.backbone_feature_sizes = config.vision_config.backbone_feature_sizes
+        # a single token to indicate no memory embedding from previous frames
+        self.hidden_dim = config.vision_config.fpn_hidden_size
+        self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
+        self.config = config
+        # For video sequence inference
+        self.image_size = config.image_size
+        self.memory_attention = Sam3TrackerVideoMemoryAttention(config)
+        self.memory_encoder = Sam3TrackerVideoMemoryEncoder(config)
+        self.no_memory_positional_encoding = torch.nn.Parameter(
+            torch.zeros(1, 1, config.vision_config.fpn_hidden_size)
+        )
+        self.mem_dim = config.memory_encoder_output_channels
+        self.num_maskmem = config.num_maskmem  # Number of memories accessible
+        # Temporal encoding of the memories
+        self.memory_temporal_positional_encoding = torch.nn.Parameter(
+            torch.zeros(self.num_maskmem, 1, 1, self.mem_dim)
+        )
+
+        self.no_object_pointer = torch.nn.Parameter(torch.zeros(1, self.hidden_dim))
+        # A conv layer to downsample the mask prompt to stride 4 (the same stride as
+        # low-res SAM mask logits) and to change its scales from 0~1 to SAM logit scale,
+        # so that it can be fed into the SAM mask decoder to generate a pointer.
+        self.mask_downsample = torch.nn.Conv2d(1, 1, kernel_size=4, stride=4)
+        # a feedforward layer on SAM output tokens to turn them into object pointers
+        self.object_pointer_proj = Sam3TrackerVideoFeedForward(self.hidden_dim, self.hidden_dim, self.hidden_dim, 3)
+
+        if self.config.enable_temporal_pos_encoding_for_object_pointers:
+            # a linear projection on temporal positional encoding in object pointers to
+            # avoid potential interference with spatial positional encoding
+            self.temporal_positional_encoding_projection_layer = torch.nn.Linear(self.hidden_dim, self.mem_dim)
+        else:
+            self.temporal_positional_encoding_projection_layer = torch.nn.Identity()
+
+        self.occlusion_spatial_embedding_parameter = None  # compatibility with Sam2
+        if config.enable_occlusion_spatial_embedding:
+            self.occlusion_spatial_embedding_parameter = torch.nn.Parameter(torch.zeros(1, self.mem_dim))
+
+        self.post_init()
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[
+        list[torch.Tensor],
+        list[torch.Tensor],
+        Optional[tuple[torch.FloatTensor, ...]],
+        Optional[tuple[torch.FloatTensor, ...]],
+    ]:
+        r"""
+        Extract and preprocess image features using the vision encoder.
+
+        Args:
+            pixel_values (`torch.FloatTensor`):
+                Input pixel values of shape `(batch_size, num_channels, height, width)`.
+
+        Returns:
+            `tuple`: A tuple containing:
+                - feature_maps (`list[torch.Tensor]`): List of feature maps from different levels.
+                - feature_maps_position_embeddings (`list[torch.Tensor]`): List of positional embeddings for each feature level.
+                - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
+                - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
+        """
+        vision_outputs: Sam3TrackerVideoVisionEncoderOutput = self.vision_encoder(
+            pixel_values,
+            **kwargs,
+        )
+
+        feature_maps = vision_outputs.fpn_hidden_states
+        feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
+
+        # precompute projected level 0 and level 1 features in SAM decoder
+        # to avoid running it again on every SAM click
+        feature_maps = list(feature_maps[:-1])
+        feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
+        feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
+
+        # flatten NxCxHxW to HWxNxC
+        feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
+        feature_maps_position_embeddings = [
+            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
+            for feature_map_position_embedding in feature_maps_position_embeddings[:-1]
+        ]
+
+        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
 
 
 __all__ = [

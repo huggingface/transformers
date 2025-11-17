@@ -14,11 +14,12 @@
 # limitations under the License.
 
 
+import torch
 import torch.nn as nn
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoModel
 from ..sam2.configuration_sam2 import (
     Sam2Config,
     Sam2MaskDecoderConfig,
@@ -38,6 +39,7 @@ from ..sam2.modeling_sam2 import (
     Sam2TwoWayAttentionBlock,
     Sam2TwoWayTransformer,
 )
+from .configuration_sam3_tracker import Sam3TrackerConfig, Sam3TrackerMaskDecoderConfig, Sam3TrackerPromptEncoderConfig
 
 
 class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
@@ -182,7 +184,43 @@ class Sam3TrackerMaskDecoder(Sam2MaskDecoder):
 
 
 class Sam3TrackerModel(Sam2Model):
-    pass
+    _checkpoint_conversion_mapping = {
+        "tracker_model.": "",
+        "detector_model.vision_encoder.": "vision_encoder.",
+        "tracker_neck.": "vision_encoder.neck.",
+    }
+    _keys_to_ignore_on_load_unexpected = [
+        r"^detector_model.",
+        r"^memory_.*",
+        r"^mask_downsample.*",
+        r"^object_pointer_proj.*",
+        r"^temporal_positional_encoding_projection_layer.*",
+        "no_memory_positional_encoding",
+        "no_object_pointer",
+        "occlusion_spatial_embedding_parameter",
+    ]
+
+    def __init__(self, config: Sam3TrackerConfig):
+        # loading from a sam3_video config
+        if hasattr(config, "tracker_config") and config.tracker_config is not None:
+            if isinstance(config.tracker_config, dict):
+                config.tracker_config = Sam3TrackerConfig(**config.tracker_config)
+            config = config.tracker_config
+        Sam3TrackerPreTrainedModel.__init__(config)
+        self.shared_image_embedding = Sam3TrackerPositionalEmbedding(config.prompt_encoder_config)
+        self.vision_encoder = AutoModel.from_config(config.vision_config)
+        self.prompt_encoder = Sam3TrackerPromptEncoder(config.prompt_encoder_config)
+        # The module using it is not a PreTrainedModel subclass so we need this
+        config.mask_decoder_config._attn_implementation = config._attn_implementation
+        self.mask_decoder = Sam3TrackerMaskDecoder(config.mask_decoder_config)
+
+        self.num_feature_levels = config.vision_config.num_feature_levels
+        self.backbone_feature_sizes = config.vision_config.backbone_feature_sizes
+        # a single token to indicate no memory embedding from previous frames
+        self.hidden_dim = config.vision_config.fpn_hidden_size
+        self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
+
+        self.post_init()
 
 
 __all__ = [

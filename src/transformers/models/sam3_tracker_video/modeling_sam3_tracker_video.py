@@ -1578,12 +1578,12 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerVideoTwoWayAttentionBlock, index=2)}
+    _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
     _checkpoint_conversion_mapping = {
         "tracker_model.": "",
         "detector_model.vision_encoder.": "vision_encoder.",
         "tracker_neck.": "vision_encoder.neck.",
     }
-    _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
 
     def __init__(self, config: Sam3TrackerVideoConfig, remove_vision_encoder: bool = False):
         r"""
@@ -1849,63 +1849,6 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             object_score_logits=all_object_score_logits,
             frame_idx=frame_idx,
         )
-
-    def _batch_encode_memories(
-        self,
-        inference_session: Sam3TrackerVideoInferenceSession,
-        frame_idx: int,
-        objects_needing_memory_encoding: list[int],
-        high_res_masks_for_memory: list[torch.Tensor],
-        object_score_logits_for_memory: list[torch.Tensor],
-        is_mask_from_pts_per_obj: list[bool],
-    ):
-        """
-        Batch encode memories for multiple objects at once.
-
-        Args:
-            inference_session: The video inference session object
-            frame_idx: Index of the current frame
-            objects_needing_memory_encoding: List of object indices that need memory encoding
-            high_res_masks_for_memory: List of high-resolution masks for each object
-            object_score_logits_for_memory: List of object score logits for each object
-            is_mask_from_pts_per_obj: List of booleans indicating if mask is from points for each object
-        """
-        if not objects_needing_memory_encoding:
-            return
-
-        # Get vision features once for all objects
-        current_vision_feats, _ = self._prepare_vision_features(inference_session, frame_idx, batch_size=1)
-
-        # Stack all high-res masks and object scores
-        high_res_masks_batched = torch.cat(high_res_masks_for_memory, dim=0)
-        object_score_logits_batched = torch.cat(object_score_logits_for_memory, dim=0)
-
-        # Expand vision features to match batch size
-        expanded_vision_feats = current_vision_feats[-1].expand(-1, len(objects_needing_memory_encoding), -1)
-
-        # Encode all memories in one batch call
-        maskmem_features_batched, maskmem_pos_enc_batched = self._encode_new_memory(
-            current_vision_feats=expanded_vision_feats,
-            pred_masks_high_res=high_res_masks_batched,
-            object_score_logits=object_score_logits_batched,
-            is_mask_from_pts=any(is_mask_from_pts_per_obj),
-        )
-
-        # Split and store encoded memories per object
-        for i, obj_idx in enumerate(objects_needing_memory_encoding):
-            # Extract per-object memory from batched result
-            maskmem_features = maskmem_features_batched[:, i : i + 1]
-            maskmem_pos_enc = maskmem_pos_enc_batched[:, i : i + 1]
-
-            # Update the stored output with memory features
-            output_dict = inference_session.output_dict_per_obj[obj_idx]
-            # Determine if this was a conditioning frame
-            storage_key = (
-                "cond_frame_outputs" if frame_idx in output_dict["cond_frame_outputs"] else "non_cond_frame_outputs"
-            )
-            if frame_idx in output_dict[storage_key]:
-                output_dict[storage_key][frame_idx]["maskmem_features"] = maskmem_features
-                output_dict[storage_key][frame_idx]["maskmem_pos_enc"] = maskmem_pos_enc
 
     def get_image_features(
         self,
@@ -2193,17 +2136,6 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         # Use -10/+20 as logits for neg/pos pixels (very close to 0/1 in prob after sigmoid).
         out_scale, out_bias = 20.0, -10.0  # sigmoid(-10.0)=4.5398e-05
         mask_inputs_float = mask_inputs.to(backbone_features[0].dtype)
-
-        # Ensure mask is at self.image_size resolution for consistency
-        if mask_inputs_float.shape[-2:] != (self.image_size, self.image_size):
-            mask_inputs_float = F.interpolate(
-                mask_inputs_float.float(),
-                size=(self.image_size, self.image_size),
-                align_corners=False,
-                mode="bilinear",
-                antialias=True,
-            ).to(mask_inputs.dtype)
-
         high_res_masks = mask_inputs_float * out_scale + out_bias
         low_res_masks = F.interpolate(
             high_res_masks.float(),
@@ -2756,6 +2688,63 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         maskmem_pos_enc = maskmem_pos_enc.to(pred_masks_high_res.dtype).flatten(2).permute(2, 0, 1)
 
         return maskmem_features, maskmem_pos_enc
+
+    def _batch_encode_memories(
+        self,
+        inference_session: Sam3TrackerVideoInferenceSession,
+        frame_idx: int,
+        objects_needing_memory_encoding: list[int],
+        high_res_masks_for_memory: list[torch.Tensor],
+        object_score_logits_for_memory: list[torch.Tensor],
+        is_mask_from_pts_per_obj: list[bool],
+    ):
+        """
+        Batch encode memories for multiple objects at once.
+
+        Args:
+            inference_session: The video inference session object
+            frame_idx: Index of the current frame
+            objects_needing_memory_encoding: List of object indices that need memory encoding
+            high_res_masks_for_memory: List of high-resolution masks for each object
+            object_score_logits_for_memory: List of object score logits for each object
+            is_mask_from_pts_per_obj: List of booleans indicating if mask is from points for each object
+        """
+        if not objects_needing_memory_encoding:
+            return
+
+        # Get vision features once for all objects
+        current_vision_feats, _ = self._prepare_vision_features(inference_session, frame_idx, batch_size=1)
+
+        # Stack all high-res masks and object scores
+        high_res_masks_batched = torch.cat(high_res_masks_for_memory, dim=0)
+        object_score_logits_batched = torch.cat(object_score_logits_for_memory, dim=0)
+
+        # Expand vision features to match batch size
+        expanded_vision_feats = current_vision_feats[-1].expand(-1, len(objects_needing_memory_encoding), -1)
+
+        # Encode all memories in one batch call
+        maskmem_features_batched, maskmem_pos_enc_batched = self._encode_new_memory(
+            current_vision_feats=expanded_vision_feats,
+            pred_masks_high_res=high_res_masks_batched,
+            object_score_logits=object_score_logits_batched,
+            is_mask_from_pts=any(is_mask_from_pts_per_obj),
+        )
+
+        # Split and store encoded memories per object
+        for i, obj_idx in enumerate(objects_needing_memory_encoding):
+            # Extract per-object memory from batched result
+            maskmem_features = maskmem_features_batched[:, i : i + 1]
+            maskmem_pos_enc = maskmem_pos_enc_batched[:, i : i + 1]
+
+            # Update the stored output with memory features
+            output_dict = inference_session.output_dict_per_obj[obj_idx]
+            # Determine if this was a conditioning frame
+            storage_key = (
+                "cond_frame_outputs" if frame_idx in output_dict["cond_frame_outputs"] else "non_cond_frame_outputs"
+            )
+            if frame_idx in output_dict[storage_key]:
+                output_dict[storage_key][frame_idx]["maskmem_features"] = maskmem_features
+                output_dict[storage_key][frame_idx]["maskmem_pos_enc"] = maskmem_pos_enc
 
     @torch.inference_mode()
     @auto_docstring(

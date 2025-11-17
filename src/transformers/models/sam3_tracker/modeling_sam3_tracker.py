@@ -769,11 +769,6 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerTwoWayAttentionBlock, index=2)}
-    _checkpoint_conversion_mapping = {
-        "tracker_model.": "",
-        "detector_model.vision_encoder.": "vision_encoder.",
-        "tracker_neck.": "vision_encoder.neck.",
-    }
     _keys_to_ignore_on_load_unexpected = [
         r"^detector_model.",
         r"^memory_.*",
@@ -784,6 +779,11 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         "no_object_pointer",
         "occlusion_spatial_embedding_parameter",
     ]
+    _checkpoint_conversion_mapping = {
+        "tracker_model.": "",
+        "detector_model.vision_encoder.": "vision_encoder.",
+        "tracker_neck.": "vision_encoder.neck.",
+    }
 
     def __init__(self, config: Sam3TrackerConfig):
         # loading from a sam3_video config
