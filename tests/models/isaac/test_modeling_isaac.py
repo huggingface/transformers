@@ -58,6 +58,7 @@ HASH_FILTERS = {
 }
 RED_DOT_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="
 
+
 def tensor_stream_snapshot(ts: TensorStream) -> dict[str, object]:
     """Summarize TensorStream tokens/modalities using public utilities."""
 
@@ -78,6 +79,7 @@ def _assert_tensor_stream_snapshot_equal(actual: dict[str, object], expected: di
     assert actual["token_view"] == expected["token_view"], "TensorStream token view changed"
     assert actual["modality_mask"] == expected["modality_mask"], "TensorStream modality mask changed"
     assert actual["role_mask"] == expected["role_mask"], "TensorStream role mask changed"
+
 
 def _tensor_to_bytes(tensor):
     cpu_tensor = tensor.detach().cpu().contiguous()
@@ -104,6 +106,7 @@ def _hash_state_dict(state_dict, *, include=None, exclude=None):
         hasher.update(_tensor_to_bytes(tensor))
     return hasher.hexdigest()
 
+
 def compute_logits_statistics(tensor: torch.Tensor) -> dict[str, object]:
     """
     Summarize logits with simple statistics that are stable across minor
@@ -127,6 +130,7 @@ def compute_logits_statistics(tensor: torch.Tensor) -> dict[str, object]:
         "l2_norm": _rounded(torch.linalg.vector_norm(flat, ord=2)),
     }
 
+
 def _assert_logits_statistics_close(
     actual: dict[str, object],
     expected: dict[str, object],
@@ -136,7 +140,7 @@ def _assert_logits_statistics_close(
 ) -> None:
     assert actual["shape"] == expected["shape"], "Logits shape changed"
     assert actual["numel"] == expected["numel"], "Logits numel changed"
-    for key in ("mean", "std","min", "max", "sum", "l2_norm"):
+    for key in ("mean", "std", "min", "max", "sum", "l2_norm"):
         assert actual[key] == pytest.approx(
             expected[key],
             rel=rel,
@@ -148,6 +152,7 @@ def _assert_logits_statistics_close(
 def tokenizer(isaac_reference_checkpoint):
     """Load the tokenizer from the converted Perceptron HF checkpoint."""
     return AutoTokenizer.from_pretrained(isaac_reference_checkpoint, trust_remote_code=True, use_fast=False)
+
 
 @require_torch
 def test_isaac_sdpa_attention_backend():
@@ -330,6 +335,7 @@ def isaac_processor(isaac_tokenizer, isaac_tiny_config):
 def isaac_reference_checkpoint():
     return _reference_checkpoint_or_skip()
 
+
 @pytest.fixture(scope="session")
 def isaac_config(isaac_reference_checkpoint):
     """Load IsaacConfig from the converted checkpoint."""
@@ -338,6 +344,7 @@ def isaac_config(isaac_reference_checkpoint):
     # Most tests assume flash attention in vision unless they explicitly override it.
     config.vision_attn_implementation = "flash_attention_2"
     return config
+
 
 @pytest.fixture(scope="session")
 def isaac_reference_model(isaac_reference_checkpoint, isaac_config):
@@ -667,6 +674,7 @@ def test_isaac_checkpoint_hashes(isaac_reference_model):
         current_hash = _hash_state_dict(state_dict, include=filters["include"], exclude=filters["exclude"])
         assert current_hash == expected_hashes[subset], f"Hash mismatch for subset '{subset}'"
 
+
 def create_isaac_processor(
     tokenizer,
     isaac_config,
@@ -712,6 +720,7 @@ def create_isaac_processor(
         config=isaac_config,
         **processor_params,
     )
+
 
 @require_torch
 @require_vision
