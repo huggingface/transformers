@@ -4098,30 +4098,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
-            copy_model = cls(config, *model_args, **model_kwargs)
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
         if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
-            for m in [model, copy_model]:
-                hf_quantizer.preprocess_model(
-                    model=m,
-                    device_map=device_map,
-                    keep_in_fp32_modules=model._keep_in_fp32_modules,  # TODO prob no longer needed?
-                    config=config,
-                    checkpoint_files=checkpoint_files,
-                    use_kernels=use_kernels,
-                )
+            hf_quantizer.preprocess_model(
+                model=m,
+                device_map=device_map,
+                keep_in_fp32_modules=model._keep_in_fp32_modules,  # TODO prob no longer needed?
+                config=config,
+                checkpoint_files=checkpoint_files,
+                use_kernels=use_kernels,
+            )
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
             model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
 
         # Prepare the full device map
         if device_map is not None:
-            # simple solution as deepcopy don't work. We want to tie the weights afterwards.
-            copy_model.tie_weights()
-            device_map = _get_device_map(copy_model, device_map, max_memory, hf_quantizer, dtype)
+            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, dtype)
 
         # restore default dtype
         if dtype_orig is not None:
