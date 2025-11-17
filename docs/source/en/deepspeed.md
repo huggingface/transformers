@@ -408,9 +408,6 @@ machine_rank: 0
 num_machines: 1
 num_processes: 4  # Total number of processes
 parallelism_config:
-  parallelism_config_dp_replicate_size: 1
-  parallelism_config_dp_shard_size: 1
-  parallelism_config_tp_size: 1
   parallelism_config_sp_size: 4  # Sequence parallel size
   parallelism_config_sp_backend: deepspeed
   parallelism_config_sp_seq_length_is_variable: true
@@ -420,7 +417,7 @@ parallelism_config:
 Important configuration parameters include the following.
 
 * `sp_backend` must be set to `"deepspeed"` to use ALST/Ulysses sequence parallelism.
-* `sp_size` is the degree of sequence parallelism. For example, `sp_size=4` means 4 GPUs will process a single sequence in parallel. You need at least 2 GPUs to enable sequence parallelism.
+* `sp_size` is the degree of sequence parallelism. For example, `sp_size=4` means 4 GPUs will process a single sequence in parallel. You need at least 2 GPUs to enable sequence parallelism. Please note that SP and DP reuse the same GPU ranks, so with 4 GPUs by default you would have SP=4 and DP=4.
 * `sp_seq_length_is_variable` determines how sequence lengths are handled. When set to `True` (recommended), the implementation adapts to varying sequence lengths between batches. When `False`, all sequences must be padded to a fixed length specified by `sp_seq_length`.
 * `sp_attn_implementation` specifies the attention implementation to use. Supported values are `"sdpa"`, `"flash_attention_2"`, or `"flash_attention_3"`. Flash Attention is recommended for best performance, especially with multiple samples in a batch, because SDPA may incorrectly attend across sample boundaries.
 

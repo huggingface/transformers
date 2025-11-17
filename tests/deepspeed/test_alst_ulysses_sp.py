@@ -68,8 +68,6 @@ machine_rank: 0
 num_machines: 1
 num_processes: {world_size}
 parallelism_config:
-  parallelism_config_dp_replicate_size: 1
-  parallelism_config_dp_shard_size: 1
   parallelism_config_sp_size: {world_size}
   parallelism_config_sp_backend: deepspeed
   parallelism_config_sp_seq_length_is_variable: true
