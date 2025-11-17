@@ -449,10 +449,6 @@ def set_param_for_module(
     with log_to_misc(full_param_name, misc, full_param_name):
         module_path, _, param_name = full_param_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
-        if isinstance(param_value, list):
-            param_value = param_value[0]
-        elif not isinstance(param_value, torch.nn.Parameter):
-            param_value = param_value[...]
 
         ref = getattr(module_obj, param_name)
         if ref is None:
@@ -711,7 +707,7 @@ def convert_and_load_state_dict_in_model(
                         shard_index,
                     )
 
-            if future is None:  # TODO handle disk offload
+            if future is None:
                 device_match = device_map_regex.match(renamed_key)
                 param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
                 future = spawn_materialize(thread_pool, tensor, param_device, _dtype)
@@ -735,6 +731,7 @@ def convert_and_load_state_dict_in_model(
                     full_param_name, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys
                 )
                 for k, output_value in realized_value.items():
+                    output_value = output_value[0] if isinstance(output_value, list) else output_value
                     param_device = device_map[re.search(device_map_regex, k).group()]
                     # Offloading support
                     if param_device == "disk":
