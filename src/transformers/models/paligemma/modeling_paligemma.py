@@ -180,7 +180,7 @@ def create_causal_mask_mapping(
         else (past_key_values is None or not past_key_values.is_initialized or pixel_values is not None)
     )
 
-    if is_first_iteration or not use_cache:
+    if is_first_iteration or not kwargs.get("use_cache", True):
         if token_type_ids is not None:
             # The logic bellow was originally written for Gemma3, where `token_type_ids` is reversed. Let's reverse
             # it to then use exactly the same logic.

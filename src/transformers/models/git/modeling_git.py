@@ -1057,7 +1057,9 @@ class GitModel(GitPreTrainedModel):
 
         if cache_position is None:
             cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + embedding_output.shape[1], device=embedding_output.device
+                past_key_values_length,
+                past_key_values_length + embedding_output.shape[1],
+                device=embedding_output.device,
             )
 
         # Always create `token_type_ids` so we can re-use Gemma3 style mask preparation fn

@@ -1944,7 +1944,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         )
         # Decode stage
         # TODO(raushan, gante): Refactor this part to a utility function
-        if not is_first_iteration and use_cache:
+        if not is_first_iteration and kwargs.get("use_cache", True):
             input_ids = input_ids[:, -1:]
             generation_step = kwargs.get("generation_step")
             trailing_text_hidden = kwargs.get("trailing_text_hidden")

@@ -14,8 +14,8 @@
 
 import inspect
 import unittest
-import pytest
 
+import pytest
 from huggingface_hub import hf_hub_download
 
 from transformers import GitConfig, GitProcessor, GitVisionConfig, is_torch_available, is_vision_available
@@ -440,7 +440,7 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             # Check the format
             self._check_past_key_values_for_generate(batch_size, cache, seq_length + image_length, decoder_config)
-        
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):

@@ -274,7 +274,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if is_first_iteration or not use_cache:
+        if is_first_iteration or not kwargs.get("use_cache", True):
             # input_features should only be passed when we are not in cached decoding stage
             model_inputs["input_features"] = input_features
 
