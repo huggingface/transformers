@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections import deque
 from math import floor, gcd, sqrt
 from typing import Optional
 
@@ -21,8 +20,8 @@ import torch
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.metrics import attach_tracer, traced
-from .cache_manager import CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
-from .requests import get_device_and_memory_breakdown, logger
+from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
+from .requests import RequestState, get_device_and_memory_breakdown, logger
 
 
 def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str]]:
@@ -32,7 +31,7 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
         - All groups have the same number of layers
 
     For a model with the following layer types: ["sliding", "full", "full", "sliding", "full", "full", "full", "full"]
-    We would get two groups: [0, 3] and [1, 2], [4,5], [6,7].
+    We would get four groups: [0, 3], [1, 2], [4,5] and [6,7].
     """
     # If the config has no layer_type attribute, it means all layers are the same attention type
     layer_types = getattr(config, "layer_types", None)
@@ -116,7 +115,6 @@ class PagedAttentionCache:
     for the sliding-attention group, although it is not needed.
     """
 
-    # TODO: this init is quite long, maybe a refactor is in order
     def __init__(
         self,
         config: PreTrainedConfig,
@@ -124,8 +122,10 @@ class PagedAttentionCache:
         device: torch.device,
         dtype: torch.dtype = torch.float16,
         tp_size: Optional[int] = None,
+        allow_prefix_sharing: bool = True,
     ) -> None:
-        """Initialize a paged attention cache for efficient memory usage.
+        """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
+        only full attention layers.
 
         Args:
             config: Model configuration
@@ -133,6 +133,7 @@ class PagedAttentionCache:
             device: Device for the cache tensors
             dtype: Data type of the cache
             tp_size: Tensor parallelism size
+            allow_prefix_sharing: A flag to allow prefix sharing if the model has only full attention layers.
         """
         self.config = config
         self.dtype = dtype
@@ -173,10 +174,12 @@ class PagedAttentionCache:
         page_size = self.head_dim * self.num_key_value_heads
 
         if "flash" in self.config._attn_implementation:
-            num_attention_masks = 1  # only used to compute the default meme args
-        else:
+            num_attention_masks = 0  # only used to compute the default memory footprint args
+        elif "sliding_attention" in group_types:
             # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`
-            num_attention_masks = 2 if "sliding_attention" in group_types else 1
+            num_attention_masks = 2
+        else:
+            num_attention_masks = 1
 
         memory_handler = PagedAttentionMemoryHandler(
             block_size=self.block_size,
@@ -218,7 +221,6 @@ class PagedAttentionCache:
         logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
         # Block management data structures
-        self._free_blocks = deque(range(num_blocks))
         self.group_cache_managers: list[CacheAllocator] = []
         for i, group_type in enumerate(group_types):
             if group_type == "full_attention":
@@ -229,13 +231,19 @@ class PagedAttentionCache:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)
 
+        # We only use prefix sharing if the whole model has only full attention layers
+        self.use_prefix_sharing = allow_prefix_sharing and group_types == ["full_attention"]
+        self._block_manager = BlockManager(num_blocks, self.block_size, self.use_prefix_sharing)
+        self.blocks_to_complete: dict[str, int] = {}
+        self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
+
     @traced
-    def allocate_blocks(self, n_blocks: int, request_id: str) -> int:
+    def allocate_blocks(self, n_blocks: int, state: RequestState) -> int:
         """Allocate cache blocks across all layer groups for a given request. Actual allocation is done by the cache
         managers, and this method only returns the maximum number of blocks actually allocated across all managers."""
         max_allocated = 0
         for cm in self.group_cache_managers:
-            allocated = cm.allocate_blocks(n_blocks, request_id, self._free_blocks)
+            allocated = cm.allocate_blocks(n_blocks, state.request_id, self._block_manager)
             if allocated is None:
                 return None
             max_allocated = max(max_allocated, allocated)
@@ -246,11 +254,11 @@ class PagedAttentionCache:
         """Free all allocated cache blocks for a given request across all layer groups. Actual deallocation is done
         by the cache managers."""
         for cm in self.group_cache_managers:
-            cm.free_blocks(request_id, self._free_blocks)
+            cm.free_blocks(request_id, self._block_manager)
 
     def get_num_free_blocks(self) -> int:
         """Get the current number of unallocated blocks available for new requests."""
-        return len(self._free_blocks)
+        return self._block_manager.num_free_blocks
 
     @traced
     def extend_read_indices(
@@ -336,6 +344,44 @@ class PagedAttentionCache:
 
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
+
+    def search_prefix_match(self, request_id: str, prompt_ids: list[int]) -> int:
+        """Searches for a prefix match in the cache for the given (prompts_ids). If one is found, we reference the
+        matching blocks in the (request_id), increase the reference count of the blocks and return the number of blocks
+        that match. If no prefix match is found, we return 0."""
+        current_hash = None
+        allocated_blocks = []
+        for b in range(len(prompt_ids) // self.block_size):
+            tokens = prompt_ids[b * self.block_size : (b + 1) * self.block_size]
+            current_hash = self._block_manager.compute_hash(current_hash, tokens)
+            block_id = self._block_manager._hash_to_id.get(current_hash)
+            if block_id is not None:
+                allocated_blocks.append(block_id)
+                self._block_manager.increase_ref_count(block_id)
+            else:
+                break
+        # If we found a matching prefix, we reference the blocks in the request
+        if allocated_blocks:
+            logger.debug(f"Found prefix match for request {request_id} with {len(allocated_blocks)} blocks")
+            cm = self.group_cache_managers[0]
+            cm.block_table[request_id] = allocated_blocks
+
+        prefix_length = len(allocated_blocks) * self.block_size
+        self._total_prefix_length += prefix_length
+        return prefix_length
+
+    def mark_blocks_as_complete(self, state: RequestState) -> None:
+        """Marks the blocks that have been computed in the forward pass as complete. If prefix sharing is off, this is
+        a no-op."""
+        num_complete_blocks = 0 if not self.use_prefix_sharing else self.blocks_to_complete.pop(state.request_id)
+        if num_complete_blocks == 0:
+            return None
+        cm = self.group_cache_managers[0]  # if prefix sharing is on, there is only one group
+        self._block_manager.mark_blocks_as_complete(
+            num_complete_blocks=num_complete_blocks,
+            allocated_blocks=cm.block_table[state.request_id],
+            prompt_ids=(state.full_prompt_ids + state.static_outputs),
+        )
 
 
 # TODO: rework computation with the groups and their sizes
@@ -471,6 +517,8 @@ class PagedAttentionMemoryHandler:
             2N * (layer_group_size * page_size * cache_dtype + 2 * num_group),
             m * N * (peak_activation_per_token * activation_dtype + 28 + 4 * num_group),
         ])
+
+        If num_attention_masks is 0, the equation simplifies to a 1st degree polynomial.
         """
         cache_memory = self.get_available_memory(max_memory_percent)
         logger.info(f"Cache memory: {cache_memory}")
@@ -482,11 +530,16 @@ class PagedAttentionMemoryHandler:
         c = -cache_memory
         logger.debug(f"Coefficients of 2nd degree polynomial: {a = }, {b = }, {c = }")
 
-        # Compute discriminant and greatest solution
-        discriminant = b**2 - 4 * a * c
-        if discriminant < 0:
-            raise ValueError(f"Discriminant is negative: {discriminant = }")
-        greatest_solution = (-b + sqrt(discriminant)) / (2 * a)
+        # If num_attention_masks is 0, the equation simplifies to a 1st degree polynomial
+        if self.num_attention_masks == 0:
+            greatest_solution = -c / b
+        # Otherwise, we solve the quadratic equation
+        else:
+            discriminant = b**2 - 4 * a * c
+            if discriminant < 0:
+                raise ValueError(f"Discriminant is negative: {discriminant = }")
+            greatest_solution = (-b + sqrt(discriminant)) / (2 * a)
+
         if greatest_solution < 0:
             raise ValueError(f"Greatest solution is negative: {greatest_solution = }")
 
