@@ -117,10 +117,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         return CustomDtype.INT4
 
     def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
-        return [k for k in unexpected_keys if not self.is_valid_unexpected_keys(k)]
-
-    def is_valid_unexpected_keys(self, k):
-        return any(k.endswith(x) for x in self.bnb_keys)
+        return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.bnb_keys)]
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         import bitsandbytes as bnb
