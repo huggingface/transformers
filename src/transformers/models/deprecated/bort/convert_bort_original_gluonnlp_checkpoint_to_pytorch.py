@@ -299,9 +299,9 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
     success = np.allclose(gluon_layer, hf_layer, atol=1e-3)
 
     if success:
-        print("✔️ Both model do output the same tensors")
+        print("[SUCCESS] Both models do output the same tensors")
     else:
-        print("❌ Both model do **NOT** output the same tensors")
+        print("[FAIL] Both models do **NOT** output the same tensors")
         print("Absolute difference is:", max_absolute_diff)
 
 

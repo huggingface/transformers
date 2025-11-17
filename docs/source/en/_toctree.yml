@@ -118,7 +118,9 @@
   - local: tools
     title: Tools
   - local: transformers_as_backend
-    title: Inference server backends
+    title: Transformers as modeling backend
+  - local: continuous_batching
+    title: Continuous Batching
   title: Inference
 - isExpanded: false
   sections:
@@ -1006,6 +1008,8 @@
         title: AltCLIP
       - local: model_doc/aria
         title: Aria
+      - local: model_doc/audioflamingo3
+        title: AudioFlamingo3
       - local: model_doc/aya_vision
         title: AyaVision
       - local: model_doc/blip
@@ -1062,6 +1066,8 @@
         title: Gemma3n
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glm46v
+        title: Glm46V
       - local: model_doc/glm4v
         title: glm4v
       - local: model_doc/glm4v_moe

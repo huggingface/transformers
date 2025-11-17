@@ -19,6 +19,7 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
@@ -171,7 +172,7 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
         layer_types: Optional[list[str]] = None,
         final_logit_softcapping: Optional[float] = None,
         attn_logit_softcapping: Optional[float] = None,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         use_bidirectional_attention: Optional[bool] = False,
         **kwargs,
     ):
@@ -201,10 +202,16 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        if rope_scaling is not None:
-            rope_parameters = {"sliding_attention": {"rope_type": "default"}, "full_attention": rope_scaling}
+        if (rope_scaling := kwargs.pop("rope_scaling", None)) is not None:
+            if rope_parameters is None:
+                rope_parameters = {"sliding_attention": {"rope_type": "default"}, "full_attention": rope_scaling}
+            elif "full_attention" in rope_parameters:
+                rope_parameters["full_attention"].update(rope_scaling)
+            else:
+                rope_parameters.update(rope_scaling)
+
         self.rope_parameters = rope_parameters
         self.use_bidirectional_attention = use_bidirectional_attention
         if use_bidirectional_attention:
@@ -563,13 +570,14 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
         "SiglipMultiheadAttentionPoolingHead",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3MultiModalProjector):
-            module.mm_input_projection_weight.data.zero_()
+            init.zeros_(module.mm_input_projection_weight)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.data.zero_()
+            init.zeros_(module.weight)
 
 
 def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
@@ -709,7 +717,7 @@ class Gemma3TextModel(Gemma2Model):
 
 class Gemma3ForCausalLM(Gemma2ForCausalLM):
     config: Gemma3TextConfig
-    base_model_prefix = "language_model"
+    base_model_prefix = "model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
