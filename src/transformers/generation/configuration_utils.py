@@ -919,8 +919,7 @@ class GenerationConfig(PushToHubMixin):
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
         if kwargs.get("_from_model_config", False):
-            config = cls.from_model_config(config_dict)
-            return config
+            return cls.from_model_config(config_dict)
         elif kwargs.get("return_unused_kwargs") is True:
             config, unused_kwargs = cls.from_dict(config_dict, **kwargs)
             config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
