@@ -159,7 +159,7 @@ class Chunk(ConversionOps):
     def convert(self, value: torch.Tensor, concrete_target_keys=None, *args, **kwargs) -> list[torch.Tensor]:
         # chunk requires a single tensor input (maybe not when saving actually!)
         udpate_ = []
-        if len(value) != 1 or len(value[0]) != 1: # when saving we have multiple tensors
+        if concrete_target_keys is not None: # when saving we have multiple tensors
             for layer in value:
                 for tensors in layer:
                     chunk_size = len(concrete_target_keys)
