@@ -226,12 +226,10 @@ class SplitModulelist(ConversionOps):
     @torch.no_grad
     def convert(self, value: Sequence[torch.Tensor], concrete_target_keys=None, config=None, *args, **kwargs) -> list[list[torch.Tensor]]:
         result = []
-        for layers in value:
-            temp_dict = {}
+        for i, layers in enumerate(value):
             for k, v in layers.items():
                 splits = torch.chunk(v, config.num_experts, dim=self.dim)
-                temp_dict.update({f"{i}.{k}": v for i, v in enumerate(splits)})
-            result.append(temp_dict)
+                result.append({k.replace("*", str(i)): v for i, v in enumerate(splits)})
         return result
 
 
