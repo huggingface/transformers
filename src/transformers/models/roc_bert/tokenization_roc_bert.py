@@ -176,10 +176,12 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, list[TextInput]],
         text_pair: Optional[Union[TextInput, list[TextInput]]] = None,
+        text_target: Optional[Union[TextInput, list[TextInput]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
+        max_target_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
@@ -194,8 +196,60 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:
+        # Handle text_target for seq2seq tasks
+        if text_target is not None:
+            # Tokenize source text
+            encodings = self.__call__(
+                text=text,
+                text_pair=text_pair,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                is_split_into_words=is_split_into_words,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                **kwargs,
+            )
+            # Tokenize target text
+            target_length = max_target_length if max_target_length is not None else max_length
+            target_encodings = self.__call__(
+                text=text_target,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation if target_length is not None else False,
+                max_length=target_length,
+                stride=0,
+                is_split_into_words=is_split_into_words,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+                return_tensors=return_tensors,
+                return_token_type_ids=False,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=False,
+                return_special_tokens_mask=False,
+                return_offsets_mapping=False,
+                return_length=False,
+                verbose=verbose,
+                **kwargs,
+            )
+            # Add labels from target input_ids
+            encodings["labels"] = target_encodings["input_ids"]
+            return encodings
+
         # Detect batch vs single
-        is_batched = isinstance(text, (list, tuple))
+        is_batched = isinstance(text, (list, tuple)) and (
+            not is_split_into_words or (len(text) > 0 and isinstance(text[0], (list, tuple)))
+        )
 
         if is_batched:
             # Build batch tuples of (text, text_pair) if provided
@@ -601,9 +655,9 @@ class RoCBertTokenizer(PreTrainedTokenizer):
                 stride=stride,
             )
 
-        if return_overflowing_tokens:
+        if return_overflowing_tokens and not return_tensors and overflowing_tokens:
             encoded_inputs["overflowing_tokens"] = overflowing_tokens
-            encoded_inputs["num_truncated_tokens"] = total_len - max_length
+            encoded_inputs["num_truncated_tokens"] = total_len - max_length if max_length else 0
 
         # Add special tokens
         if add_special_tokens:
@@ -827,7 +881,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
             verbose=verbose,
         )
 
-        return BatchEncoding(batch_outputs)
+        return batch_outputs
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def _batch_prepare_for_model(
@@ -902,6 +956,12 @@ class RoCBertTokenizer(PreTrainedTokenizer):
             padding_side=padding_side,
             return_attention_mask=return_attention_mask,
         )
+
+        # Remove overflow-related keys before tensor conversion if return_tensors is set
+        # Slow tokenizers don't support returning these as tensors
+        if return_tensors and return_overflowing_tokens:
+            batch_outputs.pop("overflowing_tokens", None)
+            batch_outputs.pop("num_truncated_tokens", None)
 
         batch_outputs = BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
