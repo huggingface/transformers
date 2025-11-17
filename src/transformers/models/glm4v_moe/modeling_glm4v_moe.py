@@ -28,6 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import LayerNorm
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -351,37 +352,43 @@ class Glm4vMoeTextTopkRouter(nn.Module):
         return router_logits
 
 
-class Glm4vMoeTextNaiveMoe(nn.ModuleList):
-    """
-    ModuleList of experts.
-    """
+class Glm4vMoeTextNaiveMoe(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(Glm4vMoeTextMLP(config, intermediate_size=config.moe_intermediate_size))
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states: (batch_size * sequence_length, hidden_dim)
-            selected_experts: (batch_size * sequence_length, top_k)
-            routing_weights: (batch_size * sequence_length, top_k)
-        Returns:
-            (batch_size * sequence_length, hidden_dim)
-        """
         final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+        num_experts = top_k_weights.shape[1]
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+            expert_idx = expert_idx[0]
+            if expert_idx == num_experts:
+                continue
+            _, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, expert_idx, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
         return final_hidden_states
 
 
@@ -547,10 +554,11 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
     }
     input_modalities = ["text", "image", "video"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Glm4vMoeTextTopkRouter):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 @dataclass
@@ -581,115 +589,6 @@ class Glm4vMoeCausalLMOutputWithPast(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor]] = None
     rope_deltas: Optional[torch.LongTensor] = None
     aux_loss: Optional[torch.FloatTensor] = None
-
-
-@auto_docstring
-class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
-    config: Glm4vMoeTextConfig
-    input_modalities = "text"
-
-    def __init__(self, config: Glm4vMoeTextConfig):
-        super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [Glm4vMoeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Glm4vMoeTextRotaryEmbedding(config=config)
-
-        self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @auto_docstring
-    @check_model_inputs()
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> MoeModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        # torch.jit.trace() doesn't support cache objects in the output
-        if use_cache and past_key_values is None and not torch.jit.is_tracing():
-            past_key_values = DynamicCache(config=self.config)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
-        # the hard coded `3` is for temporal, height and width.
-        if position_ids is None:
-            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
-        elif position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
-
-        # NOTE: we need to pass text position ids for packing. Qwen2-VL uses 3D positions
-        # where each dim indicates visual spatial positions for temporal/height/width grids.
-        # There are two scenarios when FA2-like packed masking might be activated.
-        # 1. User specifically passed packed `position_ids` and no attention mask.
-        #    In this case we expect the useer to create correct position ids for all 3 grids
-        #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
-        # 2. User runs forward with no attention mask and no position ids. In this case, position ids
-        #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
-        #    prepended by us when creating positions so that the mask is constructed correctly. NOTE: failing to pass
-        #    text-only positions will cause incorrect mask construction, do not change `prepare_input_for_generation`
-        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
-            text_position_ids = position_ids[0]
-            position_ids = position_ids[1:]
-        else:
-            # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
-            text_position_ids = None
-
-        mask_kwargs = {
-            "config": self.config,
-            "input_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "cache_position": cache_position,
-            "past_key_values": past_key_values,
-            "position_ids": text_position_ids,
-        }
-        # Create the masks
-        causal_mask = create_causal_mask(**mask_kwargs)
-
-        hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_outputs = decoder_layer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                attention_mask=causal_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                cache_position=cache_position,
-                **kwargs,
-            )
-            hidden_states = layer_outputs
-
-        hidden_states = self.norm(hidden_states)
-
-        return MoeModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-        )
 
 
 class Glm4vMoeisionMlp(nn.Module):
@@ -968,6 +867,7 @@ class Glm4vMoeVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
     config: Glm4vMoeVisionConfig
     input_modalities = ["image", "video"]
@@ -1077,6 +977,115 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
 
         hidden_states = self.merger(hidden_states)
         return hidden_states
+
+
+@auto_docstring
+class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
+    config: Glm4vMoeTextConfig
+    input_modalities = "text"
+
+    def __init__(self, config: Glm4vMoeTextConfig):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [Glm4vMoeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Glm4vMoeTextRotaryEmbedding(config=config)
+
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @auto_docstring
+    @check_model_inputs()
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        # torch.jit.trace() doesn't support cache objects in the output
+        if use_cache and past_key_values is None and not torch.jit.is_tracing():
+            past_key_values = DynamicCache(config=self.config)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        # the hard coded `3` is for temporal, height and width.
+        if position_ids is None:
+            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
+        elif position_ids.ndim == 2:
+            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
+
+        # NOTE: we need to pass text position ids for packing. Qwen2-VL uses 3D positions
+        # where each dim indicates visual spatial positions for temporal/height/width grids.
+        # There are two scenarios when FA2-like packed masking might be activated.
+        # 1. User specifically passed packed `position_ids` and no attention mask.
+        #    In this case we expect the useer to create correct position ids for all 3 grids
+        #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
+        # 2. User runs forward with no attention mask and no position ids. In this case, position ids
+        #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
+        #    prepended by us when creating positions so that the mask is constructed correctly. NOTE: failing to pass
+        #    text-only positions will cause incorrect mask construction, do not change `prepare_input_for_generation`
+        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
+            text_position_ids = position_ids[0]
+            position_ids = position_ids[1:]
+        else:
+            # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
+            text_position_ids = None
+
+        mask_kwargs = {
+            "config": self.config,
+            "input_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "cache_position": cache_position,
+            "past_key_values": past_key_values,
+            "position_ids": text_position_ids,
+        }
+        # Create the masks
+        causal_mask = create_causal_mask(**mask_kwargs)
+
+        hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_outputs = decoder_layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                cache_position=cache_position,
+                **kwargs,
+            )
+            hidden_states = layer_outputs
+
+        hidden_states = self.norm(hidden_states)
+
+        return MoeModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
 @auto_docstring
@@ -1572,7 +1581,7 @@ def load_balancing_loss_func(
 
 class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
@@ -1631,8 +1640,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vMoeCausalLMOutputWithPast]:
         r"""
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1903,4 +1910,10 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         return input_ids, model_kwargs
 
 
-__all__ = ["Glm4vMoeForConditionalGeneration", "Glm4vMoeModel", "Glm4vMoePreTrainedModel", "Glm4vMoeTextModel"]
+__all__ = [
+    "Glm4vMoeForConditionalGeneration",
+    "Glm4vMoeModel",
+    "Glm4vMoePreTrainedModel",
+    "Glm4vMoeTextModel",
+    "Glm4vMoeVisionModel",
+]

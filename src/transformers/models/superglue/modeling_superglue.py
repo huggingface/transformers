@@ -23,6 +23,7 @@ from torch import nn
 from transformers import PreTrainedModel
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 
+from ... import initialization as init
 from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoModelForKeypointDetection
 
@@ -469,18 +470,12 @@ class SuperGluePreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "image"
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.BatchNorm1d):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
+        super()._init_weights(module)
         if hasattr(module, "bin_score"):
-            module.bin_score.data.fill_(1.0)
+            init.ones_(module.bin_score)
 
 
 @auto_docstring(

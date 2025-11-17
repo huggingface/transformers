@@ -19,6 +19,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -26,7 +27,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -69,10 +70,10 @@ class GptOssExperts(nn.Module):
         self.num_experts = config.num_local_experts
         self.hidden_size = config.hidden_size
         self.expert_dim = self.intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
-        self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.expert_dim))
+        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size, 2 * self.expert_dim))
+        self.gate_up_proj_bias = nn.Parameter(torch.zeros(self.num_experts, 2 * self.expert_dim))
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
-        self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.hidden_size))
+        self.down_proj_bias = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size))
         self.alpha = 1.702
         self.limit = 7.0
 
@@ -144,8 +145,8 @@ class GptOssTopKRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
-        self.bias = nn.Parameter(torch.empty(self.num_experts))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.bias = nn.Parameter(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
@@ -356,30 +357,20 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
         "attentions": GptOssAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Parameter):
-            module.data.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, GptOssRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, GptOssExperts):
-            module.gate_up_proj.data.normal_(mean=0.0, std=std)
-            module.gate_up_proj_bias.data.zero_()
-            module.down_proj.data.normal_(mean=0.0, std=std)
-            module.down_proj_bias.data.zero_()
+        if isinstance(module, GptOssExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.zeros_(module.gate_up_proj_bias)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+            init.zeros_(module.down_proj_bias)
         elif isinstance(module, GptOssAttention):
-            module.sinks.data.normal_(mean=0.0, std=std)
+            init.normal_(module.sinks, mean=0.0, std=std)
         elif isinstance(module, GptOssTopKRouter):
-            module.weight.data.normal_(mean=0.0, std=std)
-            module.bias.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.bias, mean=0.0, std=std)
 
 
 class GptOssModel(MixtralModel):

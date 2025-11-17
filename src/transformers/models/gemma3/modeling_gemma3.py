@@ -26,6 +26,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -466,13 +467,14 @@ class Gemma3PreTrainedModel(PreTrainedModel):
     }
     input_modalities = ["image", "text"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Gemma3MultiModalProjector):
-            module.mm_input_projection_weight.data.zero_()
+            init.zeros_(module.mm_input_projection_weight)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.data.zero_()
+            init.zeros_(module.weight)
 
 
 def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
@@ -626,11 +628,11 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
 
 @auto_docstring
 class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Gemma3TextConfig
-    base_model_prefix = "language_model"
+    base_model_prefix = "model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -768,15 +770,23 @@ def token_type_ids_mask_function(
         # If it's 1 for both query and key/value, we are in an image block
         # NOTE: static cache shape goes beyond input seq length, while token_type_ids.shape[1] == input seq length
         # Since vmap doesn't support `if statement` we workaround it with `torch.where`
-        safe_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
-        token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_idx]
+        safe_q_idx = torch.where(q_idx < token_type_ids.shape[1], q_idx, 0)
+        safe_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
+
+        token_type_ids_at_q_idx = token_type_ids[batch_idx, safe_q_idx]
+        token_type_ids_at_q_idx = torch.where(q_idx < token_type_ids.shape[1], token_type_ids_at_q_idx, 0)
+
+        token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_kv_idx]
         token_type_ids_at_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], token_type_ids_at_kv_idx, 0)
 
-        image_group_ids_at_kv_idx = image_group_ids[batch_idx, safe_idx]
+        image_group_ids_at_q_idx = image_group_ids[batch_idx, safe_q_idx]
+        image_group_ids_at_q_idx = torch.where(q_idx < image_group_ids.shape[1], image_group_ids_at_q_idx, -1)
+
+        image_group_ids_at_kv_idx = image_group_ids[batch_idx, safe_kv_idx]
         image_group_ids_at_kv_idx = torch.where(kv_idx < image_group_ids.shape[1], image_group_ids_at_kv_idx, -1)
 
-        is_image_block = (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids_at_kv_idx == 1)
-        same_image_block = image_group_ids[batch_idx, q_idx] == image_group_ids_at_kv_idx
+        is_image_block = (token_type_ids_at_q_idx == 1) & (token_type_ids_at_kv_idx == 1)
+        same_image_block = image_group_ids_at_q_idx == image_group_ids_at_kv_idx
 
         # This is bidirectional attention whenever we are dealing with image tokens
         return is_image_block & same_image_block
@@ -1036,7 +1046,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     # Fix: https://github.com/huggingface/transformers/issues/40564
     accepts_loss_kwargs = False

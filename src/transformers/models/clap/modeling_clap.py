@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -1308,28 +1309,29 @@ class ClapPreTrainedModel(PreTrainedModel):
     input_modalities = ["audio", "text"]
     supports_gradient_checkpointing = False
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
 
         if isinstance(module, ClapTextEmbeddings):
-            module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.token_type_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            init.normal_(module.position_embeddings.weight, mean=0.0, std=factor * 0.02)
+            init.normal_(module.token_type_embeddings.weight, mean=0.0, std=factor * 0.02)
         elif isinstance(module, ClapModel):
-            module.logit_scale_a.data.fill_(math.log(self.config.logit_scale_init_value))
-            module.logit_scale_t.data.fill_(math.log(self.config.logit_scale_init_value))
+            init.constant_(module.logit_scale_a, math.log(self.config.logit_scale_init_value))
+            init.constant_(module.logit_scale_t, math.log(self.config.logit_scale_init_value))
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            init.normal_(module.weight, mean=0.0, std=factor * 0.02)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, (nn.Conv2d, nn.Linear)):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
-            nn.init.normal_(module.weight, std=in_proj_std)
+            init.normal_(module.weight, std=in_proj_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, ClapAudioSelfAttention):
-            module.relative_position_bias_table.data.zero_()
+            init.zeros_(module.relative_position_bias_table)
 
 
 class ClapAudioModel(ClapPreTrainedModel):

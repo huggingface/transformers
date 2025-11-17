@@ -16,7 +16,6 @@
 Image/Text processor class for OWLv2
 """
 
-import warnings
 from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
@@ -65,10 +64,6 @@ class Owlv2Processor(ProcessorMixin):
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("Owlv2ImageProcessor", "Owlv2ImageProcessorFast")
-    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)
@@ -173,19 +168,6 @@ class Owlv2Processor(ProcessorMixin):
             data["pixel_values"] = image_features.pixel_values
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-
-    # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.post_process_object_detection with OwlViT->Owlv2
-    def post_process_object_detection(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to [`Owlv2ImageProcessor.post_process_object_detection`]. Please refer
-        to the docstring of this method for more information.
-        """
-        warnings.warn(
-            "`post_process_object_detection` method is deprecated for OwlVitProcessor and will be removed in v5. "
-            "Use `post_process_grounded_object_detection` instead.",
-            FutureWarning,
-        )
-        return self.image_processor.post_process_object_detection(*args, **kwargs)
 
     # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.post_process_grounded_object_detection with OwlViT->Owlv2
     def post_process_grounded_object_detection(

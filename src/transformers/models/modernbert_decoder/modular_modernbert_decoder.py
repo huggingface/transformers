@@ -21,6 +21,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
@@ -174,7 +175,7 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         local_attention: Optional[int] = 128,
         global_attn_every_n_layers: Optional[int] = 3,
         layer_types: Optional[list[str]] = None,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
         super().__init__(
@@ -420,13 +421,14 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
         "attentions": ModernBertDecoderAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
             cutoff_factor = 3
 
         def init_weight(module: nn.Module, std: float):
-            nn.init.trunc_normal_(
+            init.trunc_normal_(
                 module.weight,
                 mean=0.0,
                 std=std,
@@ -436,7 +438,7 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
 
             if isinstance(module, nn.Linear):
                 if module.bias is not None:
-                    nn.init.zeros_(module.bias)
+                    init.zeros_(module.bias)
 
         stds = {
             "in": self.config.initializer_range,
@@ -462,9 +464,9 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
         elif isinstance(module, ModernBertDecoderForCausalLM):
             init_weight(module.decoder, stds["out"])
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
+            init.ones_(module.weight)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
 
     def _check_and_adjust_attn_implementation(self, attn_implementation, is_init_check):
         raise AttributeError("No need to inherit!")
@@ -584,7 +586,7 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
     """
 )
 class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["decoder.weight"]
+    _tied_weights_keys = {"decoder.weight": "model.embeddings.tok_embeddings.weight"}
 
     def __init__(self, config: ModernBertDecoderConfig):
         super().__init__(config)

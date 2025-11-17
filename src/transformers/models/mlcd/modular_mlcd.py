@@ -18,12 +18,13 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import check_model_inputs
 from ..clip.modeling_clip import (
     CLIPMLP,
     CLIPAttention,
@@ -206,7 +207,7 @@ class MLCDAttention(CLIPAttention):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         batch_size, seq_length = hidden_states.shape[:-1]
 
@@ -258,7 +259,7 @@ class MLCDEncoderLayer(CLIPEncoderLayer):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
         """
         Args:
@@ -270,18 +271,15 @@ class MLCDEncoderLayer(CLIPEncoderLayer):
                 Represents absolute positional embeddings for the query and key in the attention mechanism.
             attention_mask (`torch.FloatTensor`):
                 Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -290,12 +288,7 @@ class MLCDEncoderLayer(CLIPEncoderLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class MLCDEncoder(CLIPEncoder):
@@ -316,9 +309,7 @@ class MLCDEncoder(CLIPEncoder):
         inputs_embeds: torch.FloatTensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
@@ -334,51 +325,67 @@ class MLCDEncoder(CLIPEncoder):
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
                 [What are attention masks?](../glossary#attention-mask)
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         hidden_states = inputs_embeds
-        for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            layer_outputs = encoder_layer(
-                hidden_states=hidden_states,
-                position_embeddings=position_embeddings,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
+                hidden_states,
+                position_embeddings,
+                attention_mask,
+                **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=encoder_states,
-            attentions=all_attentions,
         )
+
+
+@auto_docstring
+class MLCDPreTrainedModel(PreTrainedModel):
+    config: MLCDVisionConfig
+    base_model_prefix = "mlcd"
+    supports_gradient_checkpointing = True
+    accepts_loss_kwargs = False
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": MLCDEncoderLayer,
+        "attentions": MLCDAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        factor = self.config.initializer_factor
+        if isinstance(module, MLCDVisionEmbeddings):
+            factor = self.config.initializer_factor
+            init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
+            init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+        elif isinstance(module, MLCDAttention):
+            factor = self.config.initializer_factor
+            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.embed_dim**-0.5) * factor
+            init.normal_(module.q_proj.weight, std=in_proj_std)
+            init.normal_(module.k_proj.weight, std=in_proj_std)
+            init.normal_(module.v_proj.weight, std=in_proj_std)
+            init.normal_(module.out_proj.weight, std=out_proj_std)
+        elif isinstance(module, MLCDMLP):
+            factor = self.config.initializer_factor
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
+            init.normal_(module.fc1.weight, std=fc_std)
+            init.normal_(module.fc2.weight, std=in_proj_std)
+        elif isinstance(module, MLCDVisionTransformer):
+            factor = self.config.initializer_factor
+            pos_emb_std = (module.config.hidden_size // module.config.num_attention_heads // 2) ** -0.5 * factor
+            init.normal_(module.class_pos_emb, mean=0.0, std=pos_emb_std)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, nn.Linear) and module.bias is not None:
+            init.zeros_(module.bias)
 
 
 class MLCDVisionTransformer(CLIPVisionTransformer):
@@ -391,16 +398,8 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPooling]:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -418,74 +417,26 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
 
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
-
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
-@auto_docstring
-class MLCDPreTrainedModel(PreTrainedModel):
-    config: MLCDVisionConfig
-    base_model_prefix = "mlcd"
-    supports_gradient_checkpointing = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        factor = self.config.initializer_factor
-        if isinstance(module, MLCDVisionEmbeddings):
-            factor = self.config.initializer_factor
-            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, MLCDAttention):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, MLCDMLP):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, MLCDVisionTransformer):
-            factor = self.config.initializer_factor
-            pos_emb_std = (module.config.hidden_size // module.config.num_attention_heads // 2) ** -0.5 * factor
-            nn.init.normal_(module.class_pos_emb, mean=0.0, std=pos_emb_std)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
-
-
 class MLCDVisionModel(CLIPVisionModel):
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Example:
@@ -509,17 +460,9 @@ class MLCDVisionModel(CLIPVisionModel):
         >>> print(f"Number of attention layers: {len(outputs.attentions)}")
         >>> print(f"Attention shape: {outputs.attentions[0].shape}")
         ```"""
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
         return self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
 
