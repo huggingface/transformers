@@ -435,7 +435,7 @@ def _get_device_map(
             if max_memory is not None and device_name in max_memory:
                 inferred_max_memory[device_name] = min(inferred_max_memory[device_name], max_memory[device_name])
 
-        model.tie_weights() # TODO make sure to remove this later on if possible, does not make sense
+        model.tie_weights()  # TODO make sure to remove this later on if possible, does not make sense
         device_map = infer_auto_device_map(
             model,
             max_memory=inferred_max_memory,

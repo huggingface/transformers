@@ -570,6 +570,8 @@ def replace_with_fp8_linear(
         )
 
     return model
+
+
 class Fp8Quantize(ConversionOps):
     """
     A quantization operation that creates two tensors, weight and scale out of a weight.
@@ -648,6 +650,7 @@ class Fp8Quantize(ConversionOps):
             target_keys: quantized,
             scale_key: inv_scales,
         }
+
 
 class Fp8Dequantize(ConversionOps):
     """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""

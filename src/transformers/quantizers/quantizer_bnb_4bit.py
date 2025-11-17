@@ -177,7 +177,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                     quantized_stats=self.param_quant_stats[module_name],
                     requires_grad=False,
                     device=target_device,
-                    module=module
+                    module=module,
                 )
                 # Set it
                 module._parameters[tensor_name] = new_value
@@ -265,7 +265,10 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 )
             self.modules_to_not_convert.extend(keys_on_cpu)
         model = replace_with_bnb_linear(
-            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config, pre_quantized=self.pre_quantized
+            model,
+            modules_to_not_convert=self.modules_to_not_convert,
+            quantization_config=self.quantization_config,
+            pre_quantized=self.pre_quantized,
         )
 
         model.config.quantization_config = self.quantization_config
@@ -293,4 +296,5 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
     def get_quantize_ops(self):
         from ..integrations.bitsandbytes import Bnb4bitQuantize
+
         return Bnb4bitQuantize(self)

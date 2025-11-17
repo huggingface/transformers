@@ -672,15 +672,12 @@ class BaseSerializationTest(unittest.TestCase):
 
         # for now, we should be able to fetch those in from_pretrained directly
         if self.model_name == "facebook/opt-125m":
-            revision="refs/pr/49"
+            revision = "refs/pr/49"
         else:
-            revision="main"
+            revision = "main"
 
         model_0 = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            quantization_config=self.quantization_config,
-            device_map=torch_device,
-            revision=revision
+            self.model_name, quantization_config=self.quantization_config, device_map=torch_device, revision=revision
         )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -752,6 +749,7 @@ class ExtendedSerializationTest(BaseSerializationTest):
 
     def test_nf4_single_safe(self):
         self.test_serialization(quant_type="nf4", double_quant=False)
+
     # nf4 double safetensors quantization is tested in test_serialization() method from the parent class
 
     def test_fp4_single_safe(self):

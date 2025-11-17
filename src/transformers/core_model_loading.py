@@ -49,6 +49,7 @@ logger = logging.get_logger(__name__)
 
 logger = logging.get_logger(__name__)
 
+
 def _glob_to_regex_src(glob: str, *, digits_only: bool = True) -> str:
     """
     Convert a glob with '*' into a regex *source* string. We don't use `glob.translate`
@@ -487,7 +488,7 @@ def set_param_for_module(
     missing_keys: MutableSet[str],
     misc: MutableMapping[str, Any],
     distributed_operation: Optional[TensorParallelLayer],
-    hf_quantizer: HfQuantizer
+    hf_quantizer: HfQuantizer,
 ):
     with log_to_misc(layer_name, misc, layer_name):
         module_path, _, param_name = layer_name.rpartition(".")
@@ -681,7 +682,7 @@ def convert_and_load_state_dict_in_model(
                                 missing_keys,
                                 misc,
                                 converter.distributed_operation,
-                                hf_quantizer
+                                hf_quantizer,
                             )
 
                 except SkipLayer:

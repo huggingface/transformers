@@ -229,4 +229,5 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     def get_quantize_ops(self):
         from ..integrations.finegrained_fp8 import Fp8Quantize
+
         return Fp8Quantize(self)
