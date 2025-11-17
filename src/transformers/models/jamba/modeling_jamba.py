@@ -29,6 +29,7 @@ from typing import Any, Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
@@ -728,8 +729,8 @@ class JambaPreTrainedModel(PreTrainedModel):
         if isinstance(module, JambaMambaMixer):
             A = torch.arange(1, module.ssm_state_size + 1)[None, :]
             A = A.expand(module.intermediate_size, -1).contiguous()
-            module.A_log.copy_(torch.log(A))
-            module.D.fill_(1.0)
+            init.copy_(module.A_log, torch.log(A))
+            init.ones_(module.D)
 
 
 ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": JambaMambaDecoderLayer}

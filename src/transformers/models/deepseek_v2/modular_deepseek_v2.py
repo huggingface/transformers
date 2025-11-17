@@ -20,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -141,8 +142,9 @@ class DeepseekV2Config(LlamaConfig):
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "local_colwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
     }
 
     model_type = "deepseek_v2"
@@ -436,7 +438,7 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2Moe):
-            module.gate.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV2Model(LlamaModel):

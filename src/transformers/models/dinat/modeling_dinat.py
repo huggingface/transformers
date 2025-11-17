@@ -561,17 +561,6 @@ class DinatPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "image"
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-
 
 @auto_docstring
 class DinatModel(DinatPreTrainedModel):

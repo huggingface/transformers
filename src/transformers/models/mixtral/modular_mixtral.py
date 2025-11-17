@@ -25,6 +25,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -275,10 +276,10 @@ class MixtralPreTrainedModel(MistralPreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, MixtralExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
-            module.down_proj.normal_(mean=0.0, std=std)
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, MixtralTopKRouter):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
 
 
 class MixtralModel(MistralModel):

@@ -5,6 +5,7 @@ import torch.nn as nn
 
 from transformers.models.ijepa.configuration_ijepa import IJepaConfig
 
+from ... import initialization as init
 from ...modeling_outputs import BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
@@ -91,28 +92,16 @@ class IJepaPreTrainedModel(ViTPreTrainedModel):
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.copy_(
-                nn.init.trunc_normal_(module.weight.to(torch.float32), mean=0.0, std=self.config.initializer_range).to(
-                    module.weight.dtype
-                )
-            )
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, IJepaEmbeddings):
-            module.position_embeddings.copy_(
-                nn.init.trunc_normal_(
-                    module.position_embeddings.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                ).to(module.position_embeddings.dtype)
-            )
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             if module.mask_token is not None:
-                module.mask_token.zero_()
+                init.zeros_(module.mask_token)
 
 
 class IJepaModel(IJepaPreTrainedModel, ViTModel):

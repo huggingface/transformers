@@ -33,6 +33,7 @@ from torch import nn
 
 from transformers.utils.generic import check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -414,10 +415,10 @@ class MixtralPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, MixtralExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
-            module.down_proj.normal_(mean=0.0, std=std)
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, MixtralTopKRouter):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
 
 
 @auto_docstring

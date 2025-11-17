@@ -178,3 +178,6 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+
+del BambaModelTest, BambaModelTester  # So the parent tests don't run in this file too
