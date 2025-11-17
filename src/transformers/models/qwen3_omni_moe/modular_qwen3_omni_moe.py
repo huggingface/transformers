@@ -25,6 +25,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...audio_utils import AudioInput
 from ...cache_utils import Cache, DynamicCache
@@ -796,9 +797,9 @@ class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
-            module.experts.gate_up_proj.normal_(mean=0.0, std=std)
-            module.experts.down_proj.normal_(mean=0.0, std=std)
-            module.router.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.experts.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.experts.down_proj, mean=0.0, std=std)
+            init.normal_(module.router.weight, mean=0.0, std=std)
 
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration):

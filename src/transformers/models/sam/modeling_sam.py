@@ -26,16 +26,13 @@ from torch import Tensor, nn
 
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -848,16 +845,9 @@ class SamVisionSdpaAttention(SamVisionAttention):
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
         if output_attentions:
             logger.warning_once(
-                "`SamVisionSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
-                "`output_attentions=True`. Falling back to the manual attention implementation, but "
-                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
-                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
+                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
             )
-            return super().forward(
-                hidden_states=hidden_states,
-                output_attentions=output_attentions,
-            )
-
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = (
@@ -1019,11 +1009,11 @@ class SamPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, SamVisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.zero_()
-                module.rel_pos_w.zero_()
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, SamVisionEncoder):
             if self.config.use_abs_pos:
-                module.pos_embed.zero_()
+                init.zeros_(module.pos_embed)
 
 
 class SamVisionEncoder(SamPreTrainedModel):

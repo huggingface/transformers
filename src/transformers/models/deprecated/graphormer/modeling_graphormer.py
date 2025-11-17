@@ -22,6 +22,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from .... import initialization as init
 from ....activations import ACT2FN
 from ....modeling_outputs import (
     BaseModelOutputWithNoAttention,
@@ -346,17 +347,17 @@ class GraphormerMultiheadAttention(nn.Module):
         if self.qkv_same_dim:
             # Empirically observed the convergence to be much better with
             # the scaled initialization
-            nn.init.xavier_uniform_(self.k_proj.weight, gain=1 / math.sqrt(2))
-            nn.init.xavier_uniform_(self.v_proj.weight, gain=1 / math.sqrt(2))
-            nn.init.xavier_uniform_(self.q_proj.weight, gain=1 / math.sqrt(2))
+            init.xavier_uniform_(self.k_proj.weight, gain=1 / math.sqrt(2))
+            init.xavier_uniform_(self.v_proj.weight, gain=1 / math.sqrt(2))
+            init.xavier_uniform_(self.q_proj.weight, gain=1 / math.sqrt(2))
         else:
-            nn.init.xavier_uniform_(self.k_proj.weight)
-            nn.init.xavier_uniform_(self.v_proj.weight)
-            nn.init.xavier_uniform_(self.q_proj.weight)
+            init.xavier_uniform_(self.k_proj.weight)
+            init.xavier_uniform_(self.v_proj.weight)
+            init.xavier_uniform_(self.q_proj.weight)
 
-        nn.init.xavier_uniform_(self.out_proj.weight)
+        init.xavier_uniform_(self.out_proj.weight)
         if self.out_proj.bias is not None:
-            nn.init.constant_(self.out_proj.bias, 0.0)
+            init.constant_(self.out_proj.bias, 0.0)
 
     def forward(
         self,
@@ -709,27 +710,23 @@ class GraphormerPreTrainedModel(PreTrainedModel):
     main_input_name_nodes = "input_nodes"
     main_input_name_edges = "input_edges"
 
-    def normal_(self, data: torch.Tensor):
-        # with FSDP, module params will be on CUDA, so we cast them back to CPU
-        # so that the RNG is consistent with and without FSDP
-        data.copy_(data.cpu().normal_(mean=0.0, std=0.02).to(data.device))
-
     def init_graphormer_params(self, module: Union[nn.Linear, nn.Embedding, GraphormerMultiheadAttention]):
         """
         Initialize the weights specific to the Graphormer Model.
         """
         if isinstance(module, nn.Linear):
-            self.normal_(module.weight.data)
+            init.normal_(module.weight.data, mean=0.0, std=0.02)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         if isinstance(module, nn.Embedding):
-            self.normal_(module.weight.data)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight.data, mean=0.0, std=0.02)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         if isinstance(module, GraphormerMultiheadAttention):
-            self.normal_(module.q_proj.weight.data)
-            self.normal_(module.k_proj.weight.data)
-            self.normal_(module.v_proj.weight.data)
+            init.normal_(module.q_proj.weight.data, mean=0.0, std=0.02)
+            init.normal_(module.k_proj.weight.data, mean=0.0, std=0.02)
+            init.normal_(module.v_proj.weight.data, mean=0.0, std=0.02)
 
     @torch.no_grad()
     def _init_weights(
@@ -741,30 +738,15 @@ class GraphormerPreTrainedModel(PreTrainedModel):
         """
         Initialize the weights
         """
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # We might be missing part of the Linear init, dependent on the layer num
-            module.weight.normal_(mean=0.0, std=0.02)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=0.02)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, GraphormerMultiheadAttention):
-            module.q_proj.weight.normal_(mean=0.0, std=0.02)
-            module.k_proj.weight.normal_(mean=0.0, std=0.02)
-            module.v_proj.weight.normal_(mean=0.0, std=0.02)
+        super()._init_weights(module)
+        if isinstance(module, GraphormerMultiheadAttention):
+            init.normal_(module.q_proj.weight, mean=0.0, std=0.02)
+            init.normal_(module.k_proj.weight, mean=0.0, std=0.02)
+            init.normal_(module.v_proj.weight, mean=0.0, std=0.02)
             module.reset_parameters()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
         elif isinstance(module, GraphormerGraphEncoder):
             if module.apply_graphormer_init:
                 module.apply(self.init_graphormer_params)
-
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
 
 
 class GraphormerModel(GraphormerPreTrainedModel):

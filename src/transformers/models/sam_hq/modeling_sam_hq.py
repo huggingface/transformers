@@ -32,6 +32,7 @@ from torch import Tensor, nn
 from transformers.modeling_outputs import ModelOutput
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -283,16 +284,9 @@ class SamHQVisionSdpaAttention(SamHQVisionAttention):
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
         if output_attentions:
             logger.warning_once(
-                "`SamHQVisionSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
-                "`output_attentions=True`. Falling back to the manual attention implementation, but "
-                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
-                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
+                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
             )
-            return super().forward(
-                hidden_states=hidden_states,
-                output_attentions=output_attentions,
-            )
-
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = (
@@ -434,11 +428,11 @@ class SamHQPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, SamHQVisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.zero_()
-                module.rel_pos_w.zero_()
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, SamHQVisionEncoder):
             if self.config.use_abs_pos:
-                module.pos_embed.zero_()
+                init.zeros_(module.pos_embed)
 
 
 class SamHQPatchEmbeddings(nn.Module):

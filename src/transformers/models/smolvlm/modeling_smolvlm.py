@@ -49,26 +49,6 @@ from .configuration_smolvlm import SmolVLMConfig, SmolVLMVisionConfig
 logger = logging.get_logger(__name__)
 
 
-class SmolVLMRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        SmolVLMRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 @auto_docstring
 class SmolVLMPreTrainedModel(PreTrainedModel):
     config: SmolVLMConfig
@@ -80,26 +60,7 @@ class SmolVLMPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-
     _supports_attention_backend = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, SmolVLMRMSNorm):
-            module.weight.fill_(1.0)
 
 
 class SmolVLMVisionEmbeddings(nn.Module):
