@@ -18,7 +18,6 @@ import glob
 import os
 from typing import Optional
 
-import regex as re
 import torch
 from huggingface_hub import snapshot_download
 from safetensors import safe_open
@@ -33,6 +32,7 @@ from transformers import (
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.tokenization_utils import AddedToken
+from transformers.utils.safe import regex as re
 
 
 if is_vision_available():

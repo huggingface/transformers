@@ -18,7 +18,6 @@ import json
 import os
 from typing import Optional
 
-import regex as re
 import torch
 from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
@@ -33,6 +32,7 @@ from transformers import (
     DeepseekVLProcessor,
 )
 from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
+from transformers.utils.safe import regex as re
 
 
 # fmt: off

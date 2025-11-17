@@ -20,10 +20,10 @@ from functools import lru_cache
 from typing import Optional, Union
 
 import numpy as np
-import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.safe import regex as re
 from .english_normalizer import BasicTextNormalizer, EnglishTextNormalizer
 
 
