@@ -227,9 +227,11 @@ class SplitModulelist(ConversionOps):
     def convert(self, value: Sequence[torch.Tensor], concrete_target_keys=None, config=None, *args, **kwargs) -> list[list[torch.Tensor]]:
         result = []
         for i, layers in enumerate(value):
+            tmp = {}
             for k, v in layers.items():
                 splits = torch.chunk(v, config.num_experts, dim=self.dim)
-                result.append({k.replace("*", str(i)): v for i, v in enumerate(splits)})
+                tmp.update({k.replace("*", str(i)): v for i, v in enumerate(splits)})
+            result.append(tmp)
         return result
 
 
@@ -626,7 +628,7 @@ def revert_weight_conversion(model, state_dict, weight_mapping):
         if matched_pattern is not None:
             converter = target_to_source[matched_pattern]  # TODO make sure its the ref
             sub_with_extractor = partial(re.sub, matched_pattern.replace("*", r"(\d+)"), string=original_key)
-            entry_key = "|".join(converter.source_keys)
+            entry_key = sub_with_extractor("|".join(converter.source_keys))
             target_key = entry_key # at this point we don't know how many we'll collect :)
             entry: ConversionEntry = by_conversion_pattern.setdefault(entry_key, ConversionEntry(converter))
             converter_key = sub_with_extractor(matched_pattern)
@@ -689,6 +691,7 @@ def revert_weight_conversion(model, state_dict, weight_mapping):
 
                     values = [values] if not isinstance(values, list) else values
                     with log_to_misc(layer_name, misc, (values, concrete_target_keys), operations):
+                        # TODO @Cyrilvallez starting from here you just reconstruct for each layer
                         realized_value = dict(zip(concrete_target_keys, values))
 
                     for k in list(realized_value.keys()).copy():
