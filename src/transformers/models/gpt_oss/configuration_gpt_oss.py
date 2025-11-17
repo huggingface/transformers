@@ -77,6 +77,9 @@ class GptOssConfig(PreTrainedConfig):
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = True,
         layer_types: Optional[list[str]] = None,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -118,10 +121,11 @@ class GptOssConfig(PreTrainedConfig):
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["GptOssConfig"]

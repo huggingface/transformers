@@ -92,6 +92,8 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 48000):
             Beginning of stream token id for text tokens.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         codec_config (`PreTrainedConfig`, *optional*):
             Configuration for the codec.
         kwargs (*optional*):
@@ -144,6 +146,7 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         tie_word_embeddings: Optional[bool] = False,
         pad_token_id: Optional[int] = 3,
         bos_token_id: Optional[int] = 48000,
+        eos_token_id: Optional[int] = None,
         codec_config: Optional[dict] = None,
         **kwargs,
     ):
@@ -192,9 +195,11 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
-        super().__init__(
-            pad_token_id=pad_token_id, bos_token_id=bos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["KyutaiSpeechToTextConfig"]

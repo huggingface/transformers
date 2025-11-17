@@ -181,8 +181,9 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
+        self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 class Qwen3VLMoeVisionConfig(PreTrainedConfig):

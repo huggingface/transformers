@@ -117,10 +117,15 @@ class ViltConfig(PreTrainedConfig):
         max_image_length=-1,
         tie_word_embeddings=False,
         num_images=-1,
+        pad_token_id=None,
+        is_decoder=False,
         **kwargs,
     ):
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.type_vocab_size = type_vocab_size
         self.modality_type_vocab_size = modality_type_vocab_size
