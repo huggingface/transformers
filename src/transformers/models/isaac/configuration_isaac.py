@@ -167,6 +167,7 @@ class IsaacConfig(PretrainedConfig):
         **kwargs,
     ):
         self._rope_scaling: Optional[dict[str, Any]] = None
+        self._rope_parameters: Optional[dict[str, Any]] = None
         resolved_text_config = kwargs.pop("text_config", text_config)
         if isinstance(resolved_text_config, Qwen3Config):
             text_config_kwargs = copy.deepcopy(resolved_text_config.to_dict())
@@ -180,6 +181,11 @@ class IsaacConfig(PretrainedConfig):
         text_config_kwargs.update(kwargs)
 
         self.text_config = self.sub_configs["text_config"](**text_config_kwargs)
+        if not hasattr(self.text_config, "rope_theta"):
+            rope_theta_override = text_config_kwargs.get("rope_theta", kwargs.get("rope_theta"))
+            if rope_theta_override is None:
+                rope_theta_override = getattr(Qwen3Config(), "rope_theta", 10000.0)
+            self.text_config.rope_theta = rope_theta_override
 
         super().__init__(**kwargs)
 
@@ -187,6 +193,9 @@ class IsaacConfig(PretrainedConfig):
             self._rope_scaling = getattr(self.text_config, "rope_scaling", None)
         else:
             self.text_config.rope_scaling = self._rope_scaling
+
+        # Keep rope parameters alias in sync with upstream expectations
+        self._rope_parameters = self._rope_scaling
 
         # Mirror frequently accessed Qwen3 attributes at the composite config level for BC.
         self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", False)
@@ -259,6 +268,21 @@ class IsaacConfig(PretrainedConfig):
             self.text_config.rope_scaling = value
 
     @property
+    def rope_parameters(self) -> dict[str, Any] | None:
+        """Alias introduced upstream for rope scaling dictionaries."""
+        value = self._rope_parameters
+        if value is None:
+            value = self.rope_scaling
+        if value is None:
+            return {"rope_type": "default"}
+        return value
+
+    @rope_parameters.setter
+    def rope_parameters(self, value: dict[str, Any] | None) -> None:
+        self._rope_parameters = value
+        self.rope_scaling = value
+
+    @property
     def vision_attn_implementation(self) -> Optional[str]:
         value = getattr(self.vision_config, "_attn_implementation", None)
         if value is None:
@@ -272,6 +296,15 @@ class IsaacConfig(PretrainedConfig):
             self.vision_config.attn_implementation = value
         elif hasattr(self.vision_config, "attn_implementation"):
             delattr(self.vision_config, "attn_implementation")
+
+    def to_dict(self):
+        output = super().to_dict()
+        # Ensure nested configs round-trip through dict serialization
+        if hasattr(self, "text_config") and self.text_config is not None:
+            output["text_config"] = self.text_config.to_dict()
+        if hasattr(self, "vision_config") and self.vision_config is not None:
+            output["vision_config"] = self.vision_config.to_dict()
+        return output
 
 
 __all__ = ["IsaacConfig"]
