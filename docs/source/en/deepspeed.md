@@ -442,7 +442,7 @@ As mentioned earlier SP and DP by default use the same ranks, in which case you 
 parallelism_config = ParallelismConfig(
     sp_backend="deepspeed",
     sp_size=4,
-    dp_replicate_size: 2,
+    dp_replicate_size=2,
     sp_handler=DeepSpeedSequenceParallelConfig(
         sp_seq_length_is_variable=True,
         sp_attn_implementation="flash_attention_2",
