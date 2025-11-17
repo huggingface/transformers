@@ -49,8 +49,6 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
             intermediate_multiple_size.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
-        rotary_pct (`float`, *optional*, defaults to 1.00):
-            percentage of hidden dimensions to allocate to rotary embeddings
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -93,7 +91,6 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         num_attention_heads: Optional[int] = 32,
         intermediate_multiple_size: Optional[int] = 4,
         hidden_act: Optional[str] = "gelu",
-        rotary_pct: Optional[float] = 1.00,
         max_position_embeddings: Optional[int] = 2048,
         initializer_range: Optional[float] = 0.02,
         layer_norm_eps: Optional[int] = 1e-5,
@@ -113,19 +110,15 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.intermediate_multiple_size = intermediate_multiple_size
         self.hidden_act = hidden_act
-        self.rotary_pct = rotary_pct
-        self.partial_rotary_factor = rotary_pct
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 1.0)
         self.attention_dropout = attention_dropout
         self.hidden_dropout = hidden_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rotary_emb_base", 10000.0)

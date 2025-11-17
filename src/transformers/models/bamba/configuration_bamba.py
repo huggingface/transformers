@@ -171,10 +171,11 @@ class BambaConfig(PreTrainedConfig):
         self.num_logits_to_keep = num_logits_to_keep
 
         self.attn_layer_indices = attn_layer_indices
+
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        self.partial_rotary_factor = 0.5
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters["partial_rotary_factor"] = 0.5
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

@@ -79,8 +79,6 @@ class PhiConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5):
-            Percentage of the query and keys which will have rotary embedding.
         qk_layernorm (`bool`, *optional*, defaults to `False`):
             Whether or not to normalize the Queries and Keys after projecting the hidden states.
         bos_token_id (`int`, *optional*, defaults to 1):
@@ -138,7 +136,6 @@ class PhiConfig(PreTrainedConfig):
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        partial_rotary_factor: Optional[float] = 0.5,
         qk_layernorm: Optional[bool] = False,
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
@@ -162,11 +159,11 @@ class PhiConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.partial_rotary_factor = partial_rotary_factor
         self.qk_layernorm = qk_layernorm
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters["partial_rotary_factor"] = kwargs.get("partial_rotary_factor", 0.5)
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

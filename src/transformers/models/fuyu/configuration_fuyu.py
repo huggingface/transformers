@@ -77,9 +77,6 @@ class FuyuConfig(PreTrainedConfig):
             The dropout ratio after applying the MLP to the hidden states.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio after computing the attention scores.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5):
-            Percentage of the query and keys which will have rotary embedding.
-
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
         bos_token_id (`int`, *optional*, defaults to 1):
@@ -122,7 +119,6 @@ class FuyuConfig(PreTrainedConfig):
         qk_layernorm: Optional[bool] = True,
         hidden_dropout: Optional[float] = 0.0,
         attention_dropout: Optional[float] = 0.0,
-        partial_rotary_factor: Optional[float] = 0.5,
         pad_token_id: Optional[int] = None,
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
@@ -131,6 +127,8 @@ class FuyuConfig(PreTrainedConfig):
         **kwargs,
     ):
         if text_config is None:
+            rope_parameters = rope_parameters if rope_parameters is not None else {}
+            rope_parameters["partial_rotary_factor"] = kwargs.get("partial_rotary_factor", 0.5)
             text_config = {
                 "vocab_size": vocab_size,
                 "max_position_embeddings": max_position_embeddings,
@@ -146,7 +144,6 @@ class FuyuConfig(PreTrainedConfig):
                 "qk_layernorm": qk_layernorm,
                 "hidden_dropout": hidden_dropout,
                 "attention_dropout": attention_dropout,
-                "partial_rotary_factor": partial_rotary_factor,
                 "pad_token_id": pad_token_id,
                 "bos_token_id": bos_token_id,
                 "eos_token_id": eos_token_id,
@@ -172,11 +169,11 @@ class FuyuConfig(PreTrainedConfig):
         self.qk_layernorm = qk_layernorm
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
-        self.partial_rotary_factor = partial_rotary_factor
         self.image_token_id = image_token_id
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters["partial_rotary_factor"] = kwargs.get("partial_rotary_factor", 0.5)
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 25000.0)

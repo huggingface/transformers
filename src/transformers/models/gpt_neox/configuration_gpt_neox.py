@@ -50,8 +50,6 @@ class GPTNeoXConfig(PreTrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        rotary_pct (`float`, *optional*, defaults to 0.25):
-            percentage of hidden dimensions to allocate to rotary embeddings
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio probability of the attention score.
         hidden_dropout (`float`, *optional*, defaults to 0.0):
@@ -59,8 +57,7 @@ class GPTNeoXConfig(PreTrainedConfig):
             hidden states.
         classifier_dropout (`float`, *optional*, defaults to 0.1):
             Argument used when doing token classification, used in the model [`GPTNeoXForTokenClassification`].
-
-            The dropout ratio for the hidden layer.
+            The dropout ratio for the c;assifier head.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -119,7 +116,6 @@ class GPTNeoXConfig(PreTrainedConfig):
         num_attention_heads: Optional[int] = 64,
         intermediate_size: Optional[int] = 24576,
         hidden_act: Optional[str] = "gelu",
-        rotary_pct: Optional[float] = 0.25,
         attention_dropout: Optional[float] = 0.0,
         hidden_dropout: Optional[float] = 0.0,
         classifier_dropout: Optional[float] = 0.1,
@@ -143,8 +139,6 @@ class GPTNeoXConfig(PreTrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.rotary_pct = rotary_pct
-        self.partial_rotary_factor = rotary_pct
         self.attention_dropout = attention_dropout
         self.hidden_dropout = hidden_dropout
         self.classifier_dropout = classifier_dropout
@@ -156,10 +150,8 @@ class GPTNeoXConfig(PreTrainedConfig):
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
+        rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 0.25)
         self.attention_bias = attention_bias
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rotary_emb_base", 10000.0)

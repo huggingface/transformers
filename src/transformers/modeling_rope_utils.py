@@ -16,7 +16,7 @@ import math
 from functools import wraps
 from typing import Optional, TypedDict
 
-from .configuration_utils import PreTrainedConfig
+from .configuration_utils import ALLOWED_LAYER_TYPES, PreTrainedConfig
 from .utils import is_torch_available, logging
 
 
@@ -25,57 +25,6 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
-
-
-def standardize_rope_params(config, rope_theta: float | dict[str, float] | None = None):
-    """
-    Helper to standardize the config's rope params field by ensuring the params are defined for each
-    later type. For old model the fn will duplicate a single rope param in each layer type (backward compatibility)
-    """
-    rope_parameters = getattr(config, "rope_parameters", None)
-    layer_types = getattr(config, "layer_types", None)
-    if rope_theta is None:
-        rope_theta = getattr(config, "rope_theta", None)
-
-    # Case 1: one RoPE theat = one RoPE param per model without nesting
-    if not isinstance(rope_theta, dict):
-        if rope_parameters is None:
-            rope_parameters = {"rope_type": "default", "rope_theta": rope_theta}
-        else:
-            # BC: if there is a 'type' field, copy it it to 'rope_type'.
-            rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
-            rope_theta = rope_parameters.get("rope_theta") or rope_theta
-            rope_parameters.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        config.rope_parameters = rope_parameters
-
-    # Case 2: different RoPE for each layer as nested dict
-    else:
-        rope_parameters_per_layer_type = {}
-        for layer_type in layer_types:
-            if rope_parameters is None:
-                rope_parameters_per_layer_type[layer_type] = {
-                    "rope_type": "default",
-                    "rope_theta": rope_theta[layer_type],
-                }
-            else:
-                is_field_in_new_format = any(layer_type in rope_parameters for layer_type in layer_types)
-                if not is_field_in_new_format:
-                    curr_rope_type = rope_parameters.get("rope_type", rope_parameters.get("type"))
-                    rope_parameters_per_layer_type[layer_type] = {
-                        **rope_parameters,
-                        "rope_type": curr_rope_type,
-                        "rope_theta": rope_theta[layer_type],
-                    }
-                else:
-                    curr_rope_type = rope_parameters[layer_type].get(
-                        "rope_type", rope_parameters[layer_type].get("type")
-                    )
-                    rope_parameters_per_layer_type[layer_type] = {
-                        **rope_parameters[layer_type],
-                        "rope_type": curr_rope_type,
-                        "rope_theta": rope_theta[layer_type],
-                    }
-            config.rope_parameters = rope_parameters_per_layer_type
 
 
 def dynamic_rope_update(rope_forward):
@@ -214,7 +163,7 @@ def _compute_linear_scaling_rope_parameters(
 
     # Gets the default RoPE parameters
     base = rope_parameters_dict["rope_theta"]
-    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    partial_rotary_factor = rope_parameters_dict.get("partial_rotary_factor", 1.0)
     head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
     dim = int(head_dim * partial_rotary_factor)
     attention_factor = 1.0  # Unused in this type of RoPE
@@ -277,7 +226,7 @@ def _compute_dynamic_ntk_parameters(
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
     base = rope_parameters_dict["rope_theta"]
-    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+    partial_rotary_factor = rope_parameters_dict.get("partial_rotary_factor", 1.0)
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
     max_position_embeddings = config.max_position_embeddings
@@ -364,7 +313,7 @@ def _compute_yarn_parameters(
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
     base = rope_parameters_dict["rope_theta"]
-    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+    partial_rotary_factor = rope_parameters_dict.get("partial_rotary_factor", 1.0)
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
 
@@ -494,7 +443,7 @@ def _compute_longrope_parameters(
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
     base = rope_parameters_dict["rope_theta"]
-    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+    partial_rotary_factor = rope_parameters_dict.get("partial_rotary_factor", 1.0)
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
 
@@ -579,7 +528,7 @@ def _compute_llama3_parameters(
 
     # Gets the default RoPE parameters
     base = rope_parameters_dict["rope_theta"]
-    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    partial_rotary_factor = rope_parameters_dict.get("partial_rotary_factor", 1.0)
     head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
     dim = int(head_dim * partial_rotary_factor)
     attention_factor = 1.0  # Unused in this type of RoPE
@@ -760,7 +709,7 @@ def _validate_longrope_parameters(rope_parameters: dict, config: PreTrainedConfi
     rope_type = rope_parameters["rope_type"]
     _check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
 
-    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    partial_rotary_factor = rope_parameters.get("partial_rotary_factor", 1.0)
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
 
@@ -862,9 +811,7 @@ def rope_config_validation(config: PreTrainedConfig, ignore_keys: Optional[set] 
     if rope_parameters_dict is None:
         return
 
-    if getattr(config, "layer_types", None) is not None and all(
-        key in config.layer_types for key in rope_parameters_dict.keys()
-    ):
+    if set(rope_parameters_dict.keys()).issubset(ALLOWED_LAYER_TYPES):
         pass
     else:
         rope_parameters_dict = {"full_attention": rope_parameters_dict}
@@ -885,7 +832,7 @@ def rope_config_validation(config: PreTrainedConfig, ignore_keys: Optional[set] 
             )
 
 
-class RopeParameters(TypedDict):
+class RopeParameters(TypedDict, total=False):
     """
     Args:
         rope_theta (`float`):
@@ -893,6 +840,8 @@ class RopeParameters(TypedDict):
         rope_type (`str`, *optional*, defaults to "default"):
             The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
             'llama3'], with 'default' being the original RoPE implementation.
+        partial_rotary_factor (`float`, *optional*):
+            Percentage of the query and keys which will have rotary embedding.
         factor (`float`, *optional*):
             Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
             most scaling types, a `factor` of x will enable the model to handle sequences of length x *
@@ -926,6 +875,7 @@ class RopeParameters(TypedDict):
 
     rope_theta: float
     rope_type: Optional[str]
+    partial_rotary_factor: Optional[float]
     factor: Optional[float]
     original_max_position_embeddings: Optional[int]
     attention_factor: Optional[float]
@@ -935,3 +885,30 @@ class RopeParameters(TypedDict):
     long_factor: Optional[list[float]]
     low_freq_factor: Optional[float]
     high_freq_factor: Optional[float]
+
+
+def standardize_rope_params(config):
+    """
+    Helper to standardize the config's rope params field by ensuring the params are defined for each
+    later type. For old model the fn will duplicate a single rope param in each layer type (backward compatibility)
+    """
+    rope_parameters = getattr(config, "rope_parameters", {})
+
+    # Move `rope_theta` and `partial_rotary_factor` to the params dict, if not there yet
+    rope_theta = getattr(config, "rope_theta", None)
+    partial_rotary_factor = getattr(config, "partial_rotary_factor", None)
+
+    # Case 1: one RoPE theat = one RoPE param per model without nesting
+    if not set(rope_parameters.keys()).issubset(ALLOWED_LAYER_TYPES):
+        rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
+        rope_parameters.setdefault("rope_theta", rope_theta)
+        rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
+    # Case 2: different RoPE for each layer as nested dict
+    else:
+        for layer_type in config.layer_types:
+            rope_parameters[layer_type].setdefault("rope_type", rope_parameters[layer_type].get("type", "default"))
+            rope_parameters[layer_type].setdefault("rope_theta", rope_theta)
+            rope_parameters[layer_type].setdefault("partial_rotary_factor", partial_rotary_factor)
+
+    config.rope_parameters = rope_parameters
+    rope_config_validation(config)

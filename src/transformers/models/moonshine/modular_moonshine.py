@@ -110,8 +110,6 @@ class MoonshineConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.9):
-            Percentage of the query and keys which will have rotary embedding.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -165,7 +163,6 @@ class MoonshineConfig(PreTrainedConfig):
         decoder_start_token_id: Optional[int] = 1,
         use_cache: Optional[bool] = True,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        partial_rotary_factor: Optional[float] = 0.9,
         is_encoder_decoder: Optional[bool] = True,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
@@ -197,13 +194,13 @@ class MoonshineConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.decoder_start_token_id = decoder_start_token_id
         self.use_cache = use_cache
-        self.partial_rotary_factor = partial_rotary_factor
         self.is_encoder_decoder = is_encoder_decoder
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters["partial_rotary_factor"] = kwargs.get("partial_rotary_factor", 0.9)
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

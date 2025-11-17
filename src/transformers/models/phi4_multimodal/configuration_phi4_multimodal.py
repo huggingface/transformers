@@ -296,8 +296,6 @@ class Phi4MultimodalConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        partial_rotary_factor (`float`, *optional*, defaults to `1.0`):
-            Percentage of the query and keys which will have rotary embedding. Must be between 0.0 and 1.0.
         bos_token_id (`int`, *optional*, defaults to 199999):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int` or `list[int]`, *optional*, defaults to `[199999, 200020]`):
@@ -367,7 +365,6 @@ class Phi4MultimodalConfig(PreTrainedConfig):
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        partial_rotary_factor: Optional[int] = 1,
         bos_token_id: Optional[int] = 199999,
         eos_token_id: Optional[list[int]] = [199999, 200020],
         pad_token_id: Optional[int] = 199999,
@@ -407,10 +404,10 @@ class Phi4MultimodalConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.partial_rotary_factor = partial_rotary_factor
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters["partial_rotary_factor"] = kwargs.get("partial_rotary_factor", 1.0)
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

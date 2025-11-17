@@ -88,7 +88,6 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 96):
             Number of attention heads for each attention layer in the Transformer encoder.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor of the partial rotary position.
         num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
@@ -177,7 +176,6 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         intermediate_size: Optional[int] = 10944,
         num_hidden_layers: Optional[int] = 46,
         num_attention_heads: Optional[int] = 96,
-        partial_rotary_factor: Optional[float] = 0.5,
         num_key_value_heads: Optional[int] = 8,
         hidden_act: Optional[str] = "silu",
         max_position_embeddings: Optional[int] = 65536,
@@ -207,7 +205,6 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.partial_rotary_factor = partial_rotary_factor
 
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
@@ -219,6 +216,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters["partial_rotary_factor"] = kwargs.get("partial_rotary_factor", 0.5)
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
@@ -376,7 +374,7 @@ class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
