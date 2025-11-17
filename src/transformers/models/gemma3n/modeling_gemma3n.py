@@ -28,6 +28,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -1585,7 +1586,7 @@ class Gemma3nDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Gemma3nPreTrainedModel(PreTrainedModel):
     config: Gemma3nConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -1601,14 +1602,15 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     }
     input_modalities = ["image", "text", "audio"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
-            module.weight.data.fill_(1.0)
+            init.ones_(module.weight)
         elif isinstance(module, Gemma3nAudioAttention):
-            module.per_dim_scale.data.zero_()
+            init.zeros_(module.per_dim_scale)
         elif isinstance(module, Gemma3nTextAltUp):
-            module.correct_output_scale.data.zero_()
+            init.zeros_(module.correct_output_scale)
 
 
 class Gemma3nRotaryEmbedding(nn.Module):
@@ -1933,7 +1935,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Gemma3nTextConfig
@@ -2346,7 +2348,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 )
 class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     base_model_prefix = "model"
 
     def __init__(self, config: Gemma3nConfig):

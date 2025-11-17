@@ -316,7 +316,7 @@ def convert_esm_checkpoint_to_pytorch(
         hf_tokens = hf_tokenizer([row[1] for row in sample_data], return_tensors="pt", padding=True)
         success = torch.all(hf_tokens["input_ids"] == batch_tokens)
 
-    print("Do both models tokenizers output the same tokens?", "🔥" if success else "💩")
+    print("Do both models tokenizers output the same tokens?", "[PASS]" if success else "[FAIL]")
     if not success:
         raise Exception("Tokenization does not match!")
 
@@ -348,7 +348,7 @@ def convert_esm_checkpoint_to_pytorch(
             success = torch.allclose(our_output, their_output, atol=1e-5)
 
         print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
-        print("Do both models output the same tensors?", "🔥" if success else "💩")
+        print("Do both models output the same tensors?", "[PASS]" if success else "[FAIL]")
 
         if not success:
             raise Exception("Something went wRoNg")
@@ -362,7 +362,7 @@ def convert_esm_checkpoint_to_pytorch(
 
             print("Contact prediction testing:")
             print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
-            print("Do both models output the same tensors?", "🔥" if success else "💩")
+            print("Do both models output the same tensors?", "[PASS]" if success else "[FAIL]")
 
             if not success:
                 raise Exception("Something went wRoNg")
