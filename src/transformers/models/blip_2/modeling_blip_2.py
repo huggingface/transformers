@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
@@ -411,20 +412,11 @@ class Blip2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        factor = self.config.initializer_range
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=factor)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=factor)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, Blip2VisionEmbeddings):
-            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
-            nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, Blip2VisionEmbeddings):
+            init.trunc_normal_(module.position_embedding, mean=0.0, std=std)
+            init.trunc_normal_(module.class_embedding, mean=0.0, std=std)
         elif isinstance(
             module,
             (
@@ -435,7 +427,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
                 Blip2ForImageTextRetrieval,
             ),
         ):
-            module.query_tokens.zero_()
+            init.zeros_(module.query_tokens)
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->Blip2
