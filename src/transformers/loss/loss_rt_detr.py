@@ -447,7 +447,7 @@ def RTDetrForObjectDetectionLoss(
     outputs_loss = {}
     outputs_loss["logits"] = logits
     outputs_loss["pred_boxes"] = pred_boxes
-    auxiliary_outputs = None  # Initialize to prevent UnboundLocalError when auxiliary_loss is False
+    auxiliary_outputs = None
     if config.auxiliary_loss:
         if denoising_meta_values is not None:
             dn_out_coord, outputs_coord = torch.split(outputs_coord, denoising_meta_values["dn_num_split"], dim=2)
