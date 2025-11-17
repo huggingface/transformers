@@ -48,6 +48,7 @@ except Exception:
 tensorstream_required = pytest.mark.skipif(TensorStream is None, reason="TensorStream backend is not available")
 
 MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1-Base")
+MODEL_REVISION = os.environ.get("ISAAC_TEST_MODEL_REVISION", "refs/pr/3") or None
 LOCAL_CHECKPOINT = os.environ.get("ISAAC_TEST_MODEL_PATH")
 HASH_FILE = Path(__file__).with_name("isaac_checkpoint_hashes.json")
 GENERATION_GOLDEN_FILE = Path(__file__).with_name("isaac_generation_golden.json")
@@ -148,10 +149,25 @@ def _assert_logits_statistics_close(
         ), f"Logits statistic '{key}' drifted"
 
 
+def _hf_from_pretrained(cls, pretrained_id, **kwargs):
+    """
+    Wrapper around `cls.from_pretrained` that automatically injects
+    the test revision (if any) from MODEL_REVISION.
+    """
+    if MODEL_REVISION is not None:
+        kwargs.setdefault("revision", MODEL_REVISION)
+    return cls.from_pretrained(pretrained_id, **kwargs)
+
+
 @pytest.fixture(scope="session")
 def tokenizer(isaac_reference_checkpoint):
     """Load the tokenizer from the converted Perceptron HF checkpoint."""
-    return AutoTokenizer.from_pretrained(isaac_reference_checkpoint, trust_remote_code=True, use_fast=False)
+    return _hf_from_pretrained(
+        AutoTokenizer,
+        isaac_reference_checkpoint,
+        trust_remote_code=True,
+        use_fast=False,
+    )
 
 
 @require_torch
@@ -340,7 +356,7 @@ def isaac_reference_checkpoint():
 def isaac_config(isaac_reference_checkpoint):
     """Load IsaacConfig from the converted checkpoint."""
     # Load the config directly from the converted checkpoint
-    config = IsaacConfig.from_pretrained(isaac_reference_checkpoint)
+    config = _hf_from_pretrained(IsaacConfig, isaac_reference_checkpoint)
     # Most tests assume flash attention in vision unless they explicitly override it.
     config.vision_attn_implementation = "flash_attention_2"
     return config
@@ -350,7 +366,8 @@ def isaac_config(isaac_reference_checkpoint):
 def isaac_reference_model(isaac_reference_checkpoint, isaac_config):
     model_config = IsaacConfig.from_dict(isaac_config.to_dict())
     model_config.vision_attn_implementation = isaac_config.vision_attn_implementation
-    model = IsaacForConditionalGeneration.from_pretrained(
+    model = _hf_from_pretrained(
+        IsaacForConditionalGeneration,
         isaac_reference_checkpoint,
         config=model_config,
         attn_implementation="sdpa",
@@ -361,7 +378,7 @@ def isaac_reference_model(isaac_reference_checkpoint, isaac_config):
 @pytest.fixture(scope="session")
 def isaac_reference_processor(isaac_reference_checkpoint):
     try:
-        processor = AutoProcessor.from_pretrained(isaac_reference_checkpoint)
+        processor = _hf_from_pretrained(AutoProcessor, isaac_reference_checkpoint)
     except (OSError, ValueError) as error:
         raise RuntimeError(f"Unable to load reference Isaac processor from {isaac_reference_checkpoint}") from error
     print(f"[Isaac tests] Loaded processor type: {type(processor)} from {isaac_reference_checkpoint}")
