@@ -522,3 +522,27 @@ class NopConfig(PretrainedConfig):
                     pass
             finally:
                 os.chdir(prev_dir)
+
+    def test_voxtral_tokenizer_missing_mistral_common_error(self):
+        """Test that AutoTokenizer raises a clear error message when loading Voxtral without mistral-common."""
+        import unittest.mock as mock
+
+        try:
+            from transformers.models.voxtral.configuration_voxtral import VoxtralConfig
+        except ImportError:
+            self.skipTest("VoxtralConfig is not available")
+
+        # Create a VoxtralConfig instance
+        config = VoxtralConfig()
+
+        # Mock is_mistral_common_available to return False
+        with mock.patch(
+            "transformers.models.auto.tokenization_auto.is_mistral_common_available", return_value=False
+        ):
+            with self.assertRaises(ImportError) as cm:
+                AutoTokenizer.from_pretrained("mistralai/Voxtral-Mini-3B-2507", config=config)
+
+            error_message = str(cm.exception)
+            self.assertIn("mistral-common", error_message)
+            self.assertIn("pip install", error_message)
+            self.assertIn("Voxtral", error_message)
