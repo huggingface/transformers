@@ -841,7 +841,7 @@ class PLBartModel(PLBartPreTrainedModel):
         self.encoder = PLBartEncoder(config)
         self.decoder = PLBartDecoder(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.shared
@@ -970,7 +970,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
-        self.init_weights()
+        self.post_init()
 
     def get_encoder(self):
         return self.model.get_encoder()

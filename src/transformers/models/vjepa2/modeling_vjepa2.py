@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
@@ -946,34 +947,26 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
 
         init_std = self.config.initializer_range
-
-        # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-        # `trunc_normal_cpu` not implemented in `half` issues
-        def trunc_normal_f32_(weight, std):
-            data_float_32 = weight.to(torch.float32)
-            data_init = nn.init.trunc_normal_(data_float_32, mean=0.0, std=std)
-            weight.copy_(data_init.to(weight.dtype))
-
         if isinstance(module, VJEPA2AttentivePooler):
-            trunc_normal_f32_(module.query_tokens, std=init_std)
+            init.trunc_normal_(module.query_tokens, std=init_std)
             for i, layer in enumerate(module.self_attention_layers, 1):
                 std = init_std / (i**0.5)
-                trunc_normal_f32_(layer.self_attn.out_proj.weight, std=std)
-                trunc_normal_f32_(layer.mlp.fc2.weight, std=std)
+                init.trunc_normal_(layer.self_attn.out_proj.weight, std=std)
+                init.trunc_normal_(layer.mlp.fc2.weight, std=std)
             std = init_std / (len(module.self_attention_layers) + 1) ** 0.5
-            trunc_normal_f32_(module.cross_attention_layer.mlp.fc2.weight, std=std)
+            init.trunc_normal_(module.cross_attention_layer.mlp.fc2.weight, std=std)
         elif isinstance(module, VJEPA2PredictorEmbeddings):
             if module.zero_init_mask_tokens:
-                module.mask_tokens.zero_()
+                init.zeros_(module.mask_tokens)
             else:
-                trunc_normal_f32_(module.mask_tokens, std=init_std)
+                init.trunc_normal_(module.mask_tokens, std=init_std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
-            trunc_normal_f32_(module.weight, std=init_std)
+            init.trunc_normal_(module.weight, std=init_std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 @auto_docstring

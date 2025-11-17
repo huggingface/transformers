@@ -942,7 +942,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         model = Blip2Model(config).to(torch_device)
         model.eval()
         text_features = model.get_text_features(**inputs_dict)
-        self.assertEqual(text_features[0].shape, (1, 10, config.text_config.vocab_size))
+        self.assertEqual(text_features[0].shape, (10, config.text_config.vocab_size))
 
     def test_get_image_features(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -957,11 +957,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         image_features = model.get_image_features(**inputs_dict)
         self.assertEqual(
             image_features[0].shape,
-            (
-                self.model_tester.vision_model_tester.batch_size,
-                self.model_tester.vision_model_tester.seq_length,
-                config.vision_config.hidden_size,
-            ),
+            (config.vision_config.hidden_size,),
         )
 
     def test_get_qformer_features(self):
@@ -977,7 +973,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         qformer_features = model.get_qformer_features(**inputs_dict)
         self.assertEqual(
             qformer_features[0].shape,
-            (self.model_tester.vision_model_tester.batch_size, 10, config.vision_config.hidden_size),
+            (10, config.vision_config.hidden_size),
         )
 
     @unittest.skip("T5 backbone deepcopies the configs, and fixing it would be more involved")
