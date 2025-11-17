@@ -29,12 +29,7 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...generation import GenerationConfig, GenerationMixin, GenerationMode
-from ...masking_utils import (
-    and_masks,
-    create_bidirectional_mask,
-    create_causal_mask,
-    create_sliding_window_causal_mask,
-)
+from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -430,7 +425,7 @@ class T5Gemma2MergedAttention(nn.Module):
 
         # merged attention.
         query_states = query_states
-        cross_key_size = cross_key_states.shape[2]
+        cross_key_size = cross_input_shape[1]
         key_states = torch.cat([key_states, cross_key_states], dim=2)
         value_states = torch.cat([value_states, cross_value_states], dim=2)
 
@@ -720,19 +715,6 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-def bidirectional_mask_function(attention_mask: Optional[torch.Tensor]) -> Callable:
-    """
-    This creates bidirectional attention mask.
-    """
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        if attention_mask is None:
-            return torch.ones((), dtype=torch.bool)
-        return attention_mask[batch_idx, kv_idx].to(torch.bool)
-
-    return inner_mask
-
-
 def sliding_window_mask_function(sliding_window: int, is_causal=True) -> Callable:
     """
     This creates uni/bidirectional attention mask with sliding window.
@@ -864,10 +846,6 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        """
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
-            Pixel values to be processed by the image encoder to extract image features.
-        """
         del token_type_ids
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -893,16 +871,10 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
                 "attention_mask": attention_mask,
             }
             self_attn_mask_mapping = {
-                "full_attention": create_bidirectional_mask(
-                    **mask_kwargs,
-                    and_mask_function=bidirectional_mask_function(attention_mask),
-                ),
+                "full_attention": create_bidirectional_mask(**mask_kwargs),
                 "sliding_attention": create_bidirectional_mask(
                     **mask_kwargs,
-                    and_mask_function=and_masks(
-                        sliding_window_mask_function(self.text_config.sliding_window, is_causal=False),
-                        bidirectional_mask_function(attention_mask),
-                    ),
+                    and_mask_function=sliding_window_mask_function(self.text_config.sliding_window, is_causal=False),
                 ),
             }
 
@@ -931,6 +903,19 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         return BaseModelOutput(
             last_hidden_state=hidden_states,
         )
+
+
+def bidirectional_mask_function(attention_mask: Optional[torch.Tensor]) -> Callable:
+    """
+    This creates bidirectional attention mask.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        if attention_mask is None:
+            return torch.ones((), dtype=torch.bool)
+        return attention_mask[batch_idx, kv_idx].to(torch.bool)
+
+    return inner_mask
 
 
 class T5Gemma2Decoder(T5Gemma2PreTrainedModel):

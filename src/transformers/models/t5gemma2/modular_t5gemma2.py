@@ -23,7 +23,7 @@ import torch.nn as nn
 from ...cache_utils import DynamicCache, EncoderDecoderCache, StaticCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationConfig, GenerationMixin, GenerationMode
-from ...masking_utils import and_masks, create_bidirectional_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -82,7 +82,7 @@ class T5Gemma2EncoderConfig(Gemma3Config):
     }
 
 
-class T5Gemma2DecoderConfig(T5Gemma2TextConfig):
+class T5Gemma2DecoderConfig(Gemma3TextConfig):
     model_type = "t5gemma2_decoder"
 
 
@@ -122,34 +122,6 @@ class T5Gemma2Config(PreTrainedConfig):
 
     model_type = "t5gemma2"
     keys_to_ignore_at_inference = ["past_key_values"]
-    base_model_tp_plan = {
-        # encoder
-        "encoder.layers.*.self_attn.q_proj": "colwise",
-        "encoder.layers.*.self_attn.k_proj": "colwise",
-        "encoder.layers.*.self_attn.v_proj": "colwise",
-        "encoder.layers.*.self_attn.o_proj": "rowwise",
-        "encoder.layers.*.mlp.gate_proj": "colwise",
-        "encoder.layers.*.mlp.up_proj": "colwise",
-        "encoder.layers.*.mlp.down_proj": "rowwise",
-        # decoder
-        "decoder.layers.*.self_attn.q_proj": "colwise",
-        "decoder.layers.*.self_attn.k_proj": "colwise",
-        "decoder.layers.*.self_attn.v_proj": "colwise",
-        "decoder.layers.*.self_attn.o_proj": "rowwise",
-        "decoder.layers.*.mlp.gate_proj": "colwise",
-        "decoder.layers.*.mlp.up_proj": "colwise",
-        "decoder.layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_pp_plan = {
-        # encoder
-        "encoder.embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "encoder.layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "encoder.norm": (["hidden_states"], ["hidden_states"]),
-        # decoder
-        "decoder.embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "decoder.layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "decoder.norm": (["hidden_states"], ["hidden_states"]),
-    }
 
     sub_configs = {
         "encoder": T5Gemma2EncoderConfig,
@@ -353,7 +325,7 @@ class T5Gemma2MergedAttention(Gemma3Attention):
 
         # merged attention.
         query_states = query_states
-        cross_key_size = cross_key_states.shape[2]
+        cross_key_size = cross_input_shape[1]
         key_states = torch.cat([key_states, cross_key_states], dim=2)
         value_states = torch.cat([value_states, cross_value_states], dim=2)
 
@@ -667,10 +639,6 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        """
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
-            Pixel values to be processed by the image encoder to extract image features.
-        """
         del token_type_ids
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -696,16 +664,10 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
                 "attention_mask": attention_mask,
             }
             self_attn_mask_mapping = {
-                "full_attention": create_bidirectional_mask(
-                    **mask_kwargs,
-                    and_mask_function=bidirectional_mask_function(attention_mask),
-                ),
+                "full_attention": create_bidirectional_mask(**mask_kwargs),
                 "sliding_attention": create_bidirectional_mask(
                     **mask_kwargs,
-                    and_mask_function=and_masks(
-                        sliding_window_mask_function(self.text_config.sliding_window, is_causal=False),
-                        bidirectional_mask_function(attention_mask),
-                    ),
+                    and_mask_function=sliding_window_mask_function(self.text_config.sliding_window, is_causal=False),
                 ),
             }
 

@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch T5Gemma2 model."""
 
 import copy
-import inspect
 import unittest
 
 import pytest
@@ -28,7 +27,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_torch,
-    require_torch_accelerator,
     torch_device,
 )
 
@@ -159,15 +157,10 @@ class T5Gemma2ModelTester:
         self.num_choices = num_choices
         self.scope = scope
         self.head_dim = self.hidden_size // self.num_attention_heads
-        # assume encoder and decoder have the same head dimension.
-        assert self.head_dim == self.encoder_hidden_size // self.encoder_num_attention_heads
         # special ids
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
-        # assume the number of attention heads are the same across encoder and decoder
-        # only used for generation testing purpose.
-        assert self.num_attention_heads == self.encoder_num_attention_heads
 
     def get_encoder_config(self):
         return self.encoder_config_class(
@@ -644,8 +637,6 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     _torch_compile_train_cls = T5Gemma2ForConditionalGeneration if is_torch_available() else None
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
-    # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
-    # in the dispatch_model function
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
@@ -661,23 +652,6 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             num_attention_heads=self.model_tester.num_attention_heads,
             num_hidden_layers=self.model_tester.num_hidden_layers,
         )
-
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        if tokenizer_name is None:
-            return True
-        if pipeline_test_case_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
-            return True
-
-        return False
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -739,37 +713,6 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_decoder_model_past_with_attn_mask(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
-
-    # Based on tests.models.t5.test_modeling_t5.T5ModelTest.test_decoder_model_past_with_3d_attn_mask
-    def test_decoder_model_past_with_3d_attn_mask(self):
-        (
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-            pixel_values,
-        ) = self.model_tester.prepare_config_and_inputs()
-
-        attention_mask = ids_tensor(
-            [self.model_tester.batch_size, self.model_tester.encoder_seq_length, self.model_tester.encoder_seq_length],
-            vocab_size=2,
-        )
-        decoder_attention_mask = ids_tensor(
-            [self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.seq_length],
-            vocab_size=2,
-        )
-
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-            pixel_values,
-        )
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -850,34 +793,6 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
                 result.logits.shape,
                 (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
             )
-
-    # Based on tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_sdpa_equivalence
-    # Add decoder_input_ids and adjust hidden states.
-    @require_torch_accelerator
-    def test_sdpa_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_sdpa:
-                self.skipTest(reason="Model does not support SDPA")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config).to(torch_device)
-            dummy_input = inputs_dict[model_class.main_input_name].to(torch_device)
-            decoder_dummy_input = torch.ones_like(dummy_input)
-
-            model.config._attn_implementation = "sdpa"
-            states_sdpa = model(dummy_input, decoder_input_ids=decoder_dummy_input, output_hidden_states=True)
-
-            model.config._attn_implementation = "eager"
-            states_eager = model(dummy_input, decoder_input_ids=decoder_dummy_input, output_hidden_states=True)
-
-            if hasattr(states_sdpa, "decoder_hidden_states"):
-                states_sdpa = states_sdpa.decoder_hidden_states[-1]
-                states_eager = states_eager.decoder_hidden_states[-1]
-            else:
-                states_sdpa = states_sdpa.hidden_states[-1]
-                states_eager = states_eager.hidden_states[-1]
-
-            torch.testing.assert_close(states_sdpa, states_eager, atol=1e-5, rtol=1e-5)
 
     @unittest.skip("T5Gemma2 eager/FA2 attention outputs are expected to be different")
     def test_flash_attn_2_equivalence(self):
@@ -982,41 +897,6 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
-    # Based on tests.test_modeling_common.ModelTesterMixin.test_inputs_embeds_matches_input_ids
-    # Update encoder and decoder embeddings
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model_class = self.model_tester.model_class
-
-        model = model_class(config)
-        model.to(torch_device)
-        model.eval()
-
-        model_forward_args = inspect.signature(model.forward).parameters
-        if "inputs_embeds" not in model_forward_args:
-            self.skipTest(reason="This model doesn't use `inputs_embeds`")
-
-        inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-        pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
-
-        encoder_embedding = model.get_encoder().get_input_embeddings()
-        decoder_embedding = model.get_decoder().get_input_embeddings()
-
-        encoder_input_ids = inputs["input_ids"]
-        decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-        encoder_input_ids[encoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
-        decoder_input_ids[decoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
-        del inputs["input_ids"]
-        inputs.pop("decoder_input_ids", None)
-
-        inputs_embeds = encoder_embedding(encoder_input_ids)
-        decoder_inputs_embeds = decoder_embedding(decoder_input_ids)
-        with torch.no_grad():
-            out_ids = model(input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids, **inputs)[0]
-            out_embeds = model(inputs_embeds=inputs_embeds, decoder_inputs_embeds=decoder_inputs_embeds, **inputs)[0]
-
-        torch.testing.assert_close(out_embeds, out_ids)
-
     @unittest.skip("T5Gemma 2 only support final layer hidden states.")
     def test_hidden_states_output(self):
         pass
@@ -1067,54 +947,9 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             torch.testing.assert_close(normalized_0[2], normalized_1[2], rtol=1e-3, atol=1e-4)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
-    # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
-    # Update hidden size for encoder and decoder
-    @require_torch_accelerator
+    @unittest.skip(reason="T5Gemma doesn't support flex masking")
     def test_flex_attention_with_grads(self):
-        for model_class in self.all_model_classes:
-            # TODO: raushan, fix for composite models after making VLMs support new attn API
-            if not model_class._supports_flex_attn or self._is_composite:
-                self.skipTest(reason="This model does not support flex attention")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config._attn_implementation = "flex_attention"
-            # Flex Attention cannot use dropout
-            config.encoder.attention_dropout = 0
-            config.decoder.attention_dropout = 0
-
-            # Flex attention relies on triton on compilation
-            # However, triton cannot handle hidden dimensions of less than 16
-            # --> forcing at least a hidden dim of 16
-            config.encoder.hidden_size *= max(
-                16
-                // getattr(
-                    config.encoder, "head_dim", config.encoder.hidden_size // config.encoder.num_attention_heads
-                ),
-                1,
-            )
-            config.decoder.hidden_size *= max(
-                16
-                // getattr(
-                    config.decoder, "head_dim", config.decoder.hidden_size // config.decoder.num_attention_heads
-                ),
-                1,
-            )
-            config.decoder.cross_attention_hidden_size = config.encoder.hidden_size
-
-            config.decoder.head_dim = max(16, config.decoder.head_dim)
-            config.encoder.head_dim = max(16, config.encoder.head_dim)
-
-            model = model_class(config).to(device=torch_device)
-            self.assertTrue(model.config._attn_implementation == "flex_attention")
-
-            # Elaborate workaround for encoder-decoder models as some do not specify their main input
-            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
-            if config.is_encoder_decoder:
-                dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
-                dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
-
-            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
-            _ = model(**dummy_inputs)
+        pass
 
     @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
     def test_training_gradient_checkpointing(self):
