@@ -384,7 +384,6 @@ class DeepseekOcrConfig(PreTrainedConfig):
         image_token_index=None,
         **kwargs,
     ):
-        # another hack - we directly override the model_type as hub repo isn't aligned
         language_config = kwargs.pop("language_config", None)
         original_model_type = kwargs.pop("model_type", None)
         if text_config is None and language_config is not None:

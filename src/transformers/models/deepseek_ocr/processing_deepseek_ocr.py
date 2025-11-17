@@ -370,7 +370,4 @@ class DeepseekOcrProcessor(ProcessorMixin):
         return md, crops
 
 
-DeepseekVLV2Processor = DeepseekOcrProcessor
-
-
-__all__ = ["DeepseekOcrProcessor", "DeepseekVLV2Processor"]
+__all__ = ["DeepseekOcrProcessor"]
