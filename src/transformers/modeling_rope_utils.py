@@ -608,66 +608,6 @@ def _compute_llama3_parameters(
     return inv_freq_llama, attention_factor
 
 
-def _compute_ernie_3d_parameters(
-    config: PreTrainedConfig,
-    device: "torch.device",
-    seq_len: Optional[int] = None,
-    layer_type: Optional[str] = None,
-) -> tuple["torch.Tensor", float]:
-    """
-    Computes the inverse frequencies for the Ernie 4.5 VL models.
-
-    Args:
-        config ([`~transformers.PreTrainedConfig`]):
-            The model configuration. This function assumes that the config will provide at least the following
-            properties:
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
-            *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
-            *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
-            *   rope_parameters (`dict[str, float | int]`): The standard RoPE scaling parameters, from which the following
-                keys will be accessed:
-                *   `freq_allocation` (`int`): The scaling factor applied to the inverse frequencies when 1) the
-                    wavelength is greater than `low_freq_wavelen` prior to smoothing, and 2) to all inverse frequencies
-                    during smoothing.
-            Additionally, this function will make use of the following properties if they are found in the config:
-            *   head_dim (`int`, *optional*): The size of the key-value heads in the model. If None, this value will be
-                derived as hidden_size // num_attention_heads.
-            *   partial_rotary_factor (`float`, *optional*): If less than 1.0, inverse frequencies will be returned for
-                the first fraction of the head_dim. Defaults to 1.0.
-        device (`torch.device`):
-            The device to use for initialization of the inverse frequencies.
-        seq_len (`int`, *optional*):
-            The current sequence length. Unused for this type of RoPE.
-    Returns:
-        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-        post-processing scaling factor applied to the computed cos/sin.
-    """
-    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-    standardize_rope_params(config)
-    rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
-
-    base = rope_parameters_dict["rope_theta"]
-    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
-    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-    dim = int(head_dim * partial_rotary_factor)
-    attention_factor = 1.0  # Unused in this type of RoPE
-
-    # Compute the inverse frequencies
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
-
-    # Divide frequency allocation based on `freq_allocation`
-    # and apply necessary (pre-)rotations
-    t_dim = rope_parameters_dict["freq_allocation"]  # time dimension
-    hw_dim = inv_freq.shape[-1] - t_dim  # height and width dimension
-
-    inv_freq_3d = torch.empty_like(inv_freq)
-    # (Pre-)Rotate to avoid another rotation during the forward
-    inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
-    inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
-
-    return inv_freq_3d, attention_factor
-
-
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this rope_parameters to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
@@ -677,7 +617,6 @@ ROPE_INIT_FUNCTIONS = {
     "yarn": _compute_yarn_parameters,
     "longrope": _compute_longrope_parameters,
     "llama3": _compute_llama3_parameters,
-    "ernie_3d": _compute_ernie_3d_parameters,
 }
 
 
@@ -904,28 +843,6 @@ def _validate_llama3_parameters(rope_parameters: dict, config: PreTrainedConfig,
         )
 
 
-def _validate_ernie_3d_parameters(rope_parameters: dict, config: PreTrainedConfig, ignore_keys: Optional[set] = None):
-    required_keys = {"rope_type", "rope_theta", "freq_allocation"}
-    rope_type = rope_parameters["rope_type"]
-    received_keys = set(rope_parameters.keys())
-    _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
-
-    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
-    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-    dim = int(head_dim * partial_rotary_factor)
-
-    freq_allocation = rope_parameters["freq_allocation"]
-    t_dim = freq_allocation
-    h_dim = (dim - t_dim) // 2
-    reconstructed_dim = t_dim + 2 * h_dim
-    if freq_allocation is None or not isinstance(freq_allocation, int) or reconstructed_dim != dim:
-        logger.warning(
-            "`rope_parameters`'s freq_allocation field must be an int that can evenly be split into three dimensions: "
-            f"`freq_allocation` and 2 * (dim - freq_allocation). However, we found the following splits {t_dim}, {h_dim}, {h_dim};"
-            f"this does not split evenly into the total dim of {dim} vs. {reconstructed_dim}."
-        )
-
-
 # Like `ROPE_INIT_FUNCTIONS`, this validation function mapping can be dynamically updated for custom RoPE types.
 ROPE_VALIDATION_FUNCTIONS = {
     "default": _validate_default_rope_parameters,
@@ -934,7 +851,6 @@ ROPE_VALIDATION_FUNCTIONS = {
     "yarn": _validate_yarn_parameters,
     "longrope": _validate_longrope_parameters,
     "llama3": _validate_llama3_parameters,
-    "ernie_3d": _validate_ernie_3d_parameters,
 }
 
 
@@ -1006,8 +922,6 @@ class RopeParameters(TypedDict):
             Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
         high_freq_factor (`float`, *optional*):
             Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        freq_allocation (`int`, *optional*):
-            Only used with 'ernie 4.5 vl'. Absolute allocation of the head dim to the time dim in 3D RoPE
     """
 
     rope_theta: float
@@ -1021,4 +935,3 @@ class RopeParameters(TypedDict):
     long_factor: Optional[list[float]]
     low_freq_factor: Optional[float]
     high_freq_factor: Optional[float]
-    freq_allocation: Optional[int]

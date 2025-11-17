@@ -35,7 +35,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
@@ -44,25 +44,64 @@ from .configuration_ernie4_5_vl import Ernie4_5_VLConfig, Ernie4_5_VLTextConfig,
 
 
 class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config, device=None):
         super().__init__()
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        if self.rope_type != "ernie_3d":
-            raise ValueError(f"Ernie 4.5 VL requires the `ernie_3d` rope type, but found {self.rope_type} instead.")
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        inv_freq, self.attention_scaling = ROPE_INIT_FUNCTIONS[self.rope_type](self.config, device)
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            raise ValueError(f"Ernie 4.5 VL requires the `default` rope type, but found {self.rope_type} instead.")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = inv_freq
 
-        # for 3d recomposition
-        t_dim = self.config.rope_parameters["freq_allocation"]  # time dimension
-        hw_dim = inv_freq.shape[-1] - t_dim  # height and width dimension  # noqa: F821
-        self.split_sizes = (hw_dim // 2, hw_dim // 2, t_dim)
+        self.mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[Ernie4_5_VLTextConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
+
+        # Special to ernie, we prerotate on the hw dim
+        mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])
+        hw_dim = mrope_section[0] + mrope_section[1]
+        t_dim = mrope_section[2]
+
+        inv_freq_3d = torch.empty_like(inv_freq)
+        # (Pre-)Rotate to avoid another rotation during the forward
+        inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
+        inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
+
+        return inv_freq_3d, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -84,7 +123,7 @@ class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
         return cos, sin
 
     def recomposition_to_3d(self, freq):
-        freq_h, freq_w, freq_t = (m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.split_sizes], dim=-1)))
+        freq_h, freq_w, freq_t = (m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.mrope_section], dim=-1)))
         freq_hw = torch.stack([freq_h, freq_w], dim=-1).flatten(-2)
         freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)
         return freq_hwt.repeat_interleave(2, dim=-1)

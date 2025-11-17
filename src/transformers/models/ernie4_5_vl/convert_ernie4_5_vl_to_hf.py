@@ -312,9 +312,9 @@ def convert_text_config_to_hf(text_config, original_config):
     text_config["moe_layer_start_index"] = min(original_config["moe_layer_start_index"])
     text_config["moe_num_experts"] = original_config["moe_num_experts"][0]  # the same for both modalities
     text_config["rope_parameters"] = {
-        "rope_type": "ernie_3d",
+        "rope_type": "default",
         "rope_theta": 500_000.0,
-        "freq_allocation": 20,  # can also be extracted from mrope
+        "mrope_section": [22, 22, 20],
     }
 
     # delete everything else
@@ -421,7 +421,7 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
             "video_end_token": "<|VIDEO_END|>",
             "video_start_token": "<|VIDEO_START|>",
         },
-        from_slow=True
+        from_slow=True,
     )
     tokenizer.save_pretrained(save_dir)
 
@@ -469,10 +469,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    convert_weights(args.checkpoint_path, args.pytorch_dump_folder_path)
+    # convert_weights(args.checkpoint_path, args.pytorch_dump_folder_path)
     convert_config(args.checkpoint_path, args.pytorch_dump_folder_path)
 
-    if args.convert_preprocessor:
-       convert_processor(args.checkpoint_path, args.pytorch_dump_folder_path)
+    #if args.convert_preprocessor:
+    #    convert_processor(args.checkpoint_path, args.pytorch_dump_folder_path)
 
     print(f"Saved converted checkpoint to {args.pytorch_dump_folder_path}")

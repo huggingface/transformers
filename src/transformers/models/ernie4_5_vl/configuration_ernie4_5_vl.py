@@ -200,7 +200,7 @@ class Ernie4_5_VLTextConfig(PreTrainedConfig):
         self.use_bias = use_bias
         self.rope_parameters = rope_parameters
         standardize_rope_params(self)
-        rope_config_validation(self)
+        rope_config_validation(self, ignore_keys={"mrope_section"})
         self.moe_intermediate_size = moe_intermediate_size
         if self.moe_intermediate_size is None:
             self.moe_intermediate_size = [1536, 512]

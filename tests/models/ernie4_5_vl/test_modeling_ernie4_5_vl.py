@@ -102,7 +102,7 @@ class Ernie4_5_VLVisionText2TextModelTester:
                 "hidden_act": "silu",
                 "max_position_embeddings": 512,
                 "tie_word_embeddings": True,
-                "rope_parameters": {"type": "ernie_3d", "rope_theta": 500_000.0, "freq_allocation": 2},
+                "rope_parameters": {"type": "default", "rope_theta": 500_000.0, "mrope_section": [1, 1, 2]},
                 "moe_intermediate_size": [22, 22],
                 "moe_k": 2,
                 "moe_num_experts": 8,
