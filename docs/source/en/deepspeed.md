@@ -436,13 +436,13 @@ data_collator = DataCollatorForLanguageModeling(
 )
 ```
 
-Sequence parallelism can be combined with data parallelism for even better scaling. The example below uses 8 GPUs with 4-way sequence parallelism and 2-way data parallelism.
+As mentioned earlier SP and DP by default use the same ranks, in which case you only need to configure `sp_size`. But sometimes you may want to make SP-replicas. For example, let's say we have 8 GPUs, and you want 2 replicas of SP. Then set `sp_size=4` and `dp_replicate_size=2`:
 
 ```py
 parallelism_config = ParallelismConfig(
     sp_backend="deepspeed",
     sp_size=4,
-    dp_shard_size=2,
+    dp_replicate_size: 2,
     sp_handler=DeepSpeedSequenceParallelConfig(
         sp_seq_length_is_variable=True,
         sp_attn_implementation="flash_attention_2",
