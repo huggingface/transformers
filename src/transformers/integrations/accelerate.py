@@ -445,19 +445,6 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
         dispatch_model(model, **device_map_kwargs)
 
 
-def get_disk_only_shard_files(device_map, weight_map):
-    """
-    Returns the list of shard files containing only weights offloaded to disk.
-    """
-    files_content = defaultdict(list)
-    for weight_name, filename in weight_map.items():
-        while len(weight_name) > 0 and weight_name not in device_map:
-            weight_name = ".".join(weight_name.split(".")[:-1])
-        files_content[filename].append(device_map[weight_name])
-
-    return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
-
-
 def expand_device_map(device_map, param_names):
     """
     Expand a device map to return the correspondence parameter name to device.
@@ -471,14 +458,13 @@ def expand_device_map(device_map, param_names):
 
 
 def accelerate_disk_offload(
-    disk_offload_folder,
-    checkpoint_files,
-    device_map,
-    checkpoint_keys,
-    sharded_metadata,
-    dtype,
+    disk_offload_folder: str | None,
+    checkpoint_files: list[str] | None,
+    device_map: dict,
+    expected_keys: list[str],
+    sharded_metadata: dict | None,
+    dtype: torch.dtype | None,
 ):
-    disk_only_shard_files = []
     if disk_offload_folder is not None:
         os.makedirs(disk_offload_folder, exist_ok=True)
     is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
@@ -489,15 +475,13 @@ def accelerate_disk_offload(
             " offers the weights in this format."
         )
     if is_offloaded_safetensors:
-        param_device_map = expand_device_map(device_map, checkpoint_keys)
+        param_device_map = expand_device_map(device_map, expected_keys)
         str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
         if sharded_metadata is None:
-            weight_map = dict.fromkeys(checkpoint_keys, checkpoint_files[0])
+            weight_map = dict.fromkeys(expected_keys, checkpoint_files[0])
         else:
             folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
             weight_map = {k: os.path.join(folder, v) for k, v in weight_map.items()}
-            # Find potential checkpoints containing only offloaded weights
-            disk_only_shard_files = get_disk_only_shard_files(device_map, weight_map)
         disk_offload_index = {
             name: {
                 "safetensors_file": file,
@@ -509,7 +493,8 @@ def accelerate_disk_offload(
         }
     else:
         disk_offload_index = {}
-    return disk_offload_index, disk_only_shard_files, is_offloaded_safetensors
+
+    return disk_offload_index
 
 
 def _init_infer_auto_device_map(
@@ -894,3 +879,4 @@ def check_tied_parameters_on_same_device(tied_params, device_map):
                 f"Tied parameters are on different devices: {tie_param_devices}. "
                 "Please modify your custom device map or set `device_map='auto'`. "
             )
+
