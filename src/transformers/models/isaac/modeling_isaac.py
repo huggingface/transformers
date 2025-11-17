@@ -273,6 +273,13 @@ class IsaacVisionEmbeddings(nn.Module):
         return torch.cat(output_chunks, dim=0)
 
 
+def _max_from_cu(cu: Optional[torch.Tensor], fallback: int) -> int:
+    """Helper to compute max sequence length from cumulative sequence lengths."""
+    if cu is None or len(cu) < 2:
+        return fallback
+    return int((cu[1:] - cu[:-1]).max().item())
+
+
 def build_document_attention_mask(
     cu_seqlens: Optional[torch.Tensor],
     total_tokens: int,
@@ -329,6 +336,7 @@ class IsaacVisionAttention(nn.Module):
         "eager": "isaac_eager",
         "isaac_eager": "isaac_eager",
     }
+    _FLASH_IMPLS = frozenset(("isaac_flash_attention_2", "isaac_flash_attention_3"))
 
     def __init__(self, config):
         super().__init__()
@@ -392,41 +400,70 @@ class IsaacVisionAttention(nn.Module):
             q.device,
         )
 
-        resolved_key = self.ATTENTION_KEY_MAP.get(attn_impl)
-        attention_fn = ALL_ATTENTION_FUNCTIONS.get(resolved_key) if resolved_key is not None else None
-        if attention_fn is None:
-            raise ValueError(f"Attention implementation {attn_impl} not found.")
+        resolved_key = self.ATTENTION_KEY_MAP.get(attn_impl, attn_impl)
 
-        query_states = q.transpose(0, 1).unsqueeze(0)
-        key_states = k.transpose(0, 1).unsqueeze(0)
-        value_states = v.transpose(0, 1).unsqueeze(0)
+        attn_weights = None
+        if resolved_key in self._FLASH_IMPLS:
+            y_lhd = self._flash_attention_forward(
+                q_lhd=q,
+                k_lhd=k,
+                v_lhd=v,
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
+                dropout=p_drop,
+            )
+        elif resolved_key == "isaac_sdpa":
+            y_lhd = self._sdpa_attention_forward(
+                q_lhd=q,
+                k_lhd=k,
+                v_lhd=v,
+                attention_mask=attn_mask,
+                cu_seqlens=cu_seqlens,
+                dropout=p_drop,
+            )
+        elif resolved_key == "isaac_eager":
+            y_lhd, attn_weights = self._eager_attention_forward(
+                q_lhd=q,
+                k_lhd=k,
+                v_lhd=v,
+                attention_mask=attn_mask,
+                dropout=p_drop,
+            )
+        else:
+            attention_fn = ALL_ATTENTION_FUNCTIONS.get(resolved_key)
+            if attention_fn is None:
+                raise ValueError(f"Attention implementation {attn_impl} not found.")
 
-        attention_kwargs: dict[str, Any] = {
-            "dropout": p_drop,
-            "scaling": self.scale,
-            "is_causal": False,
-        }
-        if cu_seqlens is not None:
-            attention_kwargs["cu_seq_lens_q"] = cu_seqlens
-            attention_kwargs["cu_seq_lens_k"] = cu_seqlens
-        if max_seqlen is not None:
-            attention_kwargs["max_length_q"] = max_seqlen
-            attention_kwargs["max_length_k"] = max_seqlen
+            query_states = q.transpose(0, 1).unsqueeze(0)
+            key_states = k.transpose(0, 1).unsqueeze(0)
+            value_states = v.transpose(0, 1).unsqueeze(0)
 
-        attn_output, _ = attention_fn(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attn_mask,
-            **attention_kwargs,
-        )
+            attention_kwargs: dict[str, Any] = {
+                "dropout": p_drop,
+                "scaling": self.scale,
+                "is_causal": False,
+            }
+            if cu_seqlens is not None:
+                attention_kwargs["cu_seq_lens_q"] = cu_seqlens
+                attention_kwargs["cu_seq_lens_k"] = cu_seqlens
+            if max_seqlen is not None:
+                attention_kwargs["max_length_q"] = max_seqlen
+                attention_kwargs["max_length_k"] = max_seqlen
 
-        y_lhd = attn_output.squeeze(0).permute(1, 0, 2).contiguous()
+            attn_output, attn_weights = attention_fn(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attn_mask,
+                **attention_kwargs,
+            )
+
+            y_lhd = attn_output.squeeze(0).permute(1, 0, 2).contiguous()
 
         # Merge heads and project
         y = self.out_proj(y_lhd.reshape(L, self.embed_dim))
-        return y.unsqueeze(0), None  # (1, L, E)
+        return y.unsqueeze(0), attn_weights  # (1, L, E)
 
     def _variable_length_context(self, *, cu_seqlens=None, max_seqlen=None):
         """Store packed-sequence metadata for the next forward call."""
@@ -438,6 +475,114 @@ class IsaacVisionAttention(nn.Module):
         cu_seqlens, max_seqlen = self._variable_length_metadata
         self._variable_length_metadata = None
         return cu_seqlens, max_seqlen
+
+    @staticmethod
+    def _max_from_cu(cu: Optional[torch.Tensor], fallback: int) -> int:
+        if cu is None or cu.numel() < 2:
+            return fallback
+        return int((cu[1:] - cu[:-1]).max().item())
+
+    def _flash_attention_forward(
+        self,
+        *,
+        q_lhd: torch.Tensor,
+        k_lhd: torch.Tensor,
+        v_lhd: torch.Tensor,
+        cu_seqlens: Optional[torch.Tensor],
+        max_seqlen: Optional[int],
+        dropout: float,
+    ) -> torch.Tensor:
+        L = q_lhd.size(0)
+        if max_seqlen is not None:
+            max_q = max_k = int(max_seqlen)
+        else:
+            max_q = max_k = self._max_from_cu(cu_seqlens, L)
+
+        if not q_lhd.is_contiguous():
+            q_lhd = q_lhd.contiguous()
+        if not k_lhd.is_contiguous():
+            k_lhd = k_lhd.contiguous()
+        if not v_lhd.is_contiguous():
+            v_lhd = v_lhd.contiguous()
+
+        out_lhd, *_ = torch.ops.aten._flash_attention_forward(
+            query=q_lhd,
+            key=k_lhd,
+            value=v_lhd,
+            cum_seq_q=cu_seqlens,
+            cum_seq_k=cu_seqlens,
+            max_q=max_q,
+            max_k=max_k,
+            dropout_p=dropout,
+            is_causal=False,
+            return_debug_mask=False,
+            scale=self.scale,
+            window_size_left=-1,
+            window_size_right=-1,
+            alibi_slopes=None,
+        )
+        return out_lhd
+
+    def _sdpa_attention_forward(
+        self,
+        *,
+        q_lhd: torch.Tensor,
+        k_lhd: torch.Tensor,
+        v_lhd: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        cu_seqlens: Optional[torch.Tensor],
+        dropout: float,
+    ) -> torch.Tensor:
+        L = q_lhd.size(0)
+        attn_mask = attention_mask
+        if attn_mask is None:
+            attn_mask = build_document_attention_mask(
+                cu_seqlens=cu_seqlens,
+                total_tokens=L,
+                dtype=q_lhd.dtype,
+                device=q_lhd.device,
+            )
+
+        q = q_lhd.permute(1, 0, 2).unsqueeze(0)
+        k = k_lhd.permute(1, 0, 2).unsqueeze(0)
+        v = v_lhd.permute(1, 0, 2).unsqueeze(0)
+
+        if attn_mask is not None and attn_mask.dtype != q.dtype:
+            attn_mask = attn_mask.to(q.dtype)
+
+        output = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=attn_mask,
+            dropout_p=dropout,
+            scale=self.scale,
+            is_causal=False,
+        )
+        return output.squeeze(0).permute(1, 0, 2).contiguous()
+
+    def _eager_attention_forward(
+        self,
+        *,
+        q_lhd: torch.Tensor,
+        k_lhd: torch.Tensor,
+        v_lhd: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        dropout: float,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        attn_weights = torch.matmul(q_lhd, k_lhd.transpose(1, 2)) * self.scale
+        if attention_mask is not None:
+            mask = attention_mask
+            if mask.dim() == 4:
+                mask = mask.squeeze(0).squeeze(0)
+            attn_weights = attn_weights + mask
+
+        attn_weights = torch.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q_lhd.dtype)
+        if dropout and self.training:
+            attn_weights = F.dropout(attn_weights, p=dropout, training=True)
+
+        attn_output_lhd = torch.matmul(attn_weights, v_lhd)
+        return attn_output_lhd, attn_weights
 
 
 class IsaacMLP(nn.Module):
@@ -1517,6 +1662,8 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         r"""
+        Forward pass for conditional generation supporting both standard inputs and TensorStream.
+
         tensor_stream (`TensorStream`, *optional*):
             Packed multimodal stream (text, vision, audio tokens) that already encodes spatial metadata. When provided,
             the model derives embeddings, modality masks, and 3D rotary coordinates directly from the stream instead of
