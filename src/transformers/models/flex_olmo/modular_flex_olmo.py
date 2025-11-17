@@ -125,9 +125,9 @@ class FlexOlmoConfig(OlmoeConfig):
         "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.v_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.mlp.experts.*.gate_proj": "colwise",
-        "layers.*.mlp.experts.*.up_proj": "colwise",
-        "layers.*.mlp.experts.*.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
