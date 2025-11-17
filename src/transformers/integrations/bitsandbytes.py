@@ -152,7 +152,7 @@ def _replace_with_bnb_linear(
                         out_features = module.out_features
 
                     if quantization_config.quantization_method() == "llm_int8":
-                        module = bnb.nn.Linear8bitLt(
+                        new_module = bnb.nn.Linear8bitLt(
                             in_features,
                             out_features,
                             module.bias is not None,
@@ -160,10 +160,10 @@ def _replace_with_bnb_linear(
                             threshold=quantization_config.llm_int8_threshold,
                         )
                         # hack to create the correct keys in the state dict with the right dtype
-                        module.weight.SCB = torch.empty(1, dtype=torch.float32)
+                        new_module.weight.SCB = torch.empty(1, dtype=torch.float32)
                         if pre_quantized:
-                            module.weight.data = module.weight.data.to(dtype=torch.int8)
-                        model._modules[name]=module
+                            new_module.weight.data = new_module.weight.data.to(dtype=torch.int8)
+                        model._modules[name]=new_module
                         has_been_replaced = True
                     else:
                         if (
@@ -177,7 +177,7 @@ def _replace_with_bnb_linear(
                                 if "quant_storage" in list(signature(bnb.nn.Linear4bit).parameters)
                                 else {}
                             )
-                            module = bnb.nn.Linear4bit(
+                            new_module = bnb.nn.Linear4bit(
                                 in_features,
                                 out_features,
                                 module.bias is not None,
@@ -188,7 +188,8 @@ def _replace_with_bnb_linear(
                             )
                             from bitsandbytes.functional import QuantState
                             # hack to create the correct keys in the state dict with the right dtype
-                            module.weight.quant_state = QuantState(absmax=torch.empty(1, dtype=torch.uint8),
+                            absmax_dtype = torch.uint8 if quantization_config.bnb_4bit_use_double_quant else torch.float32
+                            new_module.weight.quant_state = QuantState(absmax=torch.empty(1, dtype= absmax_dtype),
                                                                    code=torch.empty(1, dtype=torch.float32),
                                                                    shape=(1,),
                                                                    offset=torch.empty(1),
@@ -197,8 +198,8 @@ def _replace_with_bnb_linear(
                             if pre_quantized:
                                 # this is kind of an edge case when supporting both loading and quantization ...
                                 # we need to set the right dtype as we cast the checkpoint with the dtype of the meta model
-                                module.weight.data = module.weight.data.to(dtype=torch.uint8)
-                            model._modules[name] = module
+                                new_module.weight.data = new_module.weight.data.to(dtype=torch.uint8)
+                            model._modules[name] = new_module
                             has_been_replaced = True
                     # Store the module class in case we need to transpose the weight later
                     model._modules[name].source_cls = type(module)
