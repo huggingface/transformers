@@ -2334,13 +2334,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         return True
 
 
-AutoImageProcessor.register(
-    IsaacConfig,
-    fast_image_processor_class=IsaacImageProcessorFast,
-    exist_ok=True,
-)
-
-
 def _compute_residual_p_frames(frames: torch.Tensor, is_p_frame: list[bool]) -> torch.Tensor:
     """Compute residuals for P-frames to stay in sync with the training pipeline."""
     if not any(is_p_frame):
