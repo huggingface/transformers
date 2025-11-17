@@ -228,6 +228,8 @@ class SplitModulelist(ConversionOps):
         result = []
         for i, layers in enumerate(value):
             tmp = {}
+            if not isinstance(layers, dict):
+                layers = {concrete_target_keys[i]: layers[i] for i in range(len(layers))}
             for k, v in layers.items():
                 splits = torch.chunk(v, config.num_experts, dim=self.dim)
                 tmp.update({k.replace("*", str(i)): v for i, v in enumerate(splits)})
@@ -691,8 +693,10 @@ def revert_weight_conversion(model, state_dict, weight_mapping):
 
                     values = [values] if not isinstance(values, list) else values
                     with log_to_misc(layer_name, misc, (values, concrete_target_keys), operations):
-                        # TODO @Cyrilvallez starting from here you just reconstruct for each layer
-                        realized_value = dict(zip(concrete_target_keys, values))
+                        if len(values) == 1 and isinstance(values[0], dict):
+                            realized_value = values[0]
+                        else:
+                            realized_value = dict(zip(concrete_target_keys, values))
 
                     for k in list(realized_value.keys()).copy():
                         if op := converter.quantization_operation: # dequantize
@@ -705,7 +709,9 @@ def revert_weight_conversion(model, state_dict, weight_mapping):
 
                     for k, output_value in realized_value.items():
                         final_state_dict[k] = output_value[0] if isinstance(output_value, list) else output_value
-                    # schedule the saving of the weights using the threadpool. `save_file`
+
+                # TODO @Cyrilvallez handle scheduled saving, gather and etc
+                # schedule the saving of the weights using the threadpool. `save_file`
 
                 except SkipLayer:
                     continue
