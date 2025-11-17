@@ -628,7 +628,7 @@ def revert_weight_conversion(model, state_dict, weight_mapping):
         if matched_pattern is not None:
             converter = target_to_source[matched_pattern]  # TODO make sure its the ref
             sub_with_extractor = partial(re.sub, matched_pattern.replace("*", r"(\d+)"), string=original_key)
-            entry_key = sub_with_extractor("|".join(converter.source_keys))
+            entry_key = "|".join(map(sub_with_extractor, converter.source_keys))
             target_key = entry_key # at this point we don't know how many we'll collect :)
             entry: ConversionEntry = by_conversion_pattern.setdefault(entry_key, ConversionEntry(converter))
             converter_key = sub_with_extractor(matched_pattern)
