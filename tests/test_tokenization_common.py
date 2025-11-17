@@ -724,7 +724,7 @@ Hey how are you doing"""
         if not hasattr(self, "integration_expected_decoded_text") or self.integration_expected_decoded_text is None:
             self.skipTest("No integration expected decoded text provided")
 
-        tokenizer_original = AutoTokenizer.from_pretrained(
+        tokenizer_original = self.tokenizer_class.from_pretrained(
             self.from_pretrained_id[0],
             do_lower_case=False,
             keep_accents=True,
@@ -750,7 +750,7 @@ Hey how are you doing"""
         if not hasattr(self, "integration_expected_decoded_text") or self.integration_expected_decoded_text is None:
             self.skipTest("No integration expected decoded text provided")
 
-        tokenizer_original = AutoTokenizer.from_pretrained(
+        tokenizer_original = self.tokenizer_class.from_pretrained(
             self.from_pretrained_id[0],
             do_lower_case=False,
             keep_accents=True,
