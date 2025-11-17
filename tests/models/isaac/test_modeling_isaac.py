@@ -39,12 +39,8 @@ if is_torch_available():
     import torch
 
 try:
+    from perceptron.tensorstream.ops import modality_mask, role_mask, tensor_stream_token_view
     from perceptron.tensorstream.tensorstream import TensorStream
-    from perceptron.tensorstream.ops import (
-        role_mask,
-        tensor_stream_token_view,
-        modality_mask
-    )
 except Exception:
     TensorStream = None
 
@@ -147,97 +143,11 @@ def _assert_logits_statistics_close(
             abs=abs_tol,
         ), f"Logits statistic '{key}' drifted"
 
+
 @pytest.fixture(scope="session")
-def tokenizer(genesis_hf_checkpoint):
+def tokenizer(isaac_reference_checkpoint):
     """Load the tokenizer from the converted Perceptron HF checkpoint."""
-    return AutoTokenizer.from_pretrained(genesis_hf_checkpoint, trust_remote_code=True, use_fast=False)
-
-
-@pytest.fixture(scope="session")
-def genesis_hf_checkpoint():
-    """
-    Convert GENESIS_CKPT to HuggingFace format once per test session.
-    Uses the new convert_perceptron_to_isaac which:
-    1. Converts Perceptron → Qwen3 HF using existing logic
-    2. Transforms Qwen3 config → Perceptron config
-    Reuses existing conversion if available in genesis_hf_converted_checkpoint/.
-    """
-    return _reference_checkpoint_or_skip()
-
-
-def test_clone_generate_vs_training_generate_logits(tokenizer, isaac_config, genesis_hf_checkpoint):
-    """Verify deterministic generation via golden token/decoded text and logits statistics."""
-
-    golden = _load_generation_golden()
-    if not golden:
-        pytest.skip(
-            f"Missing generation golden file at {GENERATION_GOLDEN_FILE}. Run scripts/update_isaac_hashes.py to create it."
-        )
-
-    processor = create_isaac_processor(tokenizer, isaac_config)
-    image = _load_red_dot_image()
-    if image is None:
-        pytest.skip("PIL.Image is required for Isaac generation tests.")
-    messages = [
-        {
-            "role": "user",
-            "content": "Describe this image:",
-        },
-        {
-            "role": "user",
-            "content": "<image>",
-        },
-    ]
-
-    prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
-    inputs = processor(text=prompt, images=[image], return_tensors="pt")
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
-
-    model_config = IsaacConfig.from_dict(isaac_config.to_dict())
-    model_config.vision_attn_implementation = isaac_config.vision_attn_implementation
-    model = IsaacForConditionalGeneration.from_pretrained(
-        genesis_hf_checkpoint,
-        config=model_config,
-        attn_implementation="sdpa",
-    )
-    model = model.to(device=device, dtype=dtype)
-    model.eval()
-
-    input_ids = inputs["input_ids"].to(device)
-    serialized_input_ids = inputs["input_ids"].cpu().tolist()
-
-    assert serialized_input_ids == golden["input_ids"], "Encoder input_ids changed"
-
-    tensor_stream = inputs["tensor_stream"].to(device)
-    serialized_tensor_stream = tensor_stream_snapshot(tensor_stream)
-    tensor_stream =tensor_stream.to(device)
-
-    with torch.no_grad():
-        outputs = model.generate(
-            input_ids=input_ids,
-            tensor_stream=tensor_stream,
-            max_new_tokens=10,
-            do_sample=False,
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-            return_dict_in_generate=True,
-            output_logits=True,
-        )
-
-    logits = torch.cat(outputs.logits, dim=0).to(torch.float32).cpu()
-    logits_stats = compute_logits_statistics(logits)
-    generated_ids = outputs.sequences[0].tolist()
-    generated_text = safe_decode(tokenizer, outputs.sequences[0])
-
-    assert generated_ids == golden["token_ids"], "Generated token sequence changed"
-    assert generated_text == golden["decoded_text"], "Decoded text changed"
-    assert serialized_input_ids == golden["input_ids"], "Encoder input_ids changed"
-
-    _assert_tensor_stream_snapshot_equal(serialized_tensor_stream, golden["tensor_stream"])
-    _assert_logits_statistics_close(logits_stats, golden["logits_statistics"])
-
+    return AutoTokenizer.from_pretrained(isaac_reference_checkpoint, trust_remote_code=True, use_fast=False)
 
 @require_torch
 def test_isaac_sdpa_attention_backend():
@@ -426,17 +336,18 @@ def isaac_config(isaac_reference_checkpoint):
     return config
 
 @pytest.fixture(scope="session")
-def isaac_reference_model(isaac_reference_checkpoint):
-    try:
-        model = IsaacForConditionalGeneration.from_pretrained(
-            isaac_reference_checkpoint,
-            attn_implementation="sdpa",
-            torch_dtype=torch.float32,
-            trust_remote_code=False,
-        )
-    except (OSError, ValueError) as error:
-        raise RuntimeError(f"Unable to load reference Isaac checkpoint from {isaac_reference_checkpoint}") from error
-    model.to("cpu")
+def isaac_reference_model(isaac_reference_checkpoint, isaac_config):
+    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model_config = IsaacConfig.from_dict(isaac_config.to_dict())
+    model_config.vision_attn_implementation = isaac_config.vision_attn_implementation
+    model = IsaacForConditionalGeneration.from_pretrained(
+        isaac_reference_checkpoint,
+        config=model_config,
+        attn_implementation="sdpa",
+    )
+    model = model.to(device=device, dtype=dtype)
     model.eval()
     return model
 
@@ -796,6 +707,7 @@ def create_isaac_processor(
     return IsaacProcessor(
         image_processor=processor_image,
         tokenizer=tokenizer,
+        config=isaac_config,
         **processor_params,
     )
 
