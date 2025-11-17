@@ -878,6 +878,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("dinat", "DinatForImageClassification"),
         ("dinov2", "Dinov2ForImageClassification"),
         ("dinov2_with_registers", "Dinov2WithRegistersForImageClassification"),
+        ("dinov3_vit", "DINOv3ViTForImageClassification"),
         ("donut-swin", "DonutSwinForImageClassification"),
         (
             "efficientformer",
