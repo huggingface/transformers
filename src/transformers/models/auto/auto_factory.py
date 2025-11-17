@@ -288,8 +288,9 @@ class _BaseAutoModelClass:
         if is_peft_available():
             if adapter_kwargs is None:
                 adapter_kwargs = {}
-                if token is not None:
-                    adapter_kwargs["token"] = token
+            adapter_kwargs = adapter_kwargs.copy()  # avoid mutating original
+            if token is not None:
+                adapter_kwargs["token"] = token
 
             maybe_adapter_path = find_adapter_config_file(
                 pretrained_model_name_or_path, _commit_hash=commit_hash, **adapter_kwargs
