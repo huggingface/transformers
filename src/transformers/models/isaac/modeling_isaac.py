@@ -141,12 +141,12 @@ class IsaacVisionEmbeddings(nn.Module):
         self.position_embedding_size = int(self.num_patches**0.5)
         self.position_embedding = nn.Embedding(self.num_patches, self.embed_dim)
 
+    # Copied from transformers.models.siglip2.modeling_siglip2.Siglip2VisionEmbeddings.forward
     def forward(self, seq_patches: torch.Tensor, spatial_shapes: torch.Tensor) -> torch.Tensor:
         packed_pixel_values, seq_lengths = self._pack_to_batch(seq_patches, spatial_shapes)
         if packed_pixel_values is None:
             return seq_patches.new_zeros((0, self.embed_dim))
 
-        # Copied from transformers.models.siglip2.modeling_siglip2.Siglip2VisionEmbeddings.forward
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(packed_pixel_values.to(dtype=target_dtype))
 
