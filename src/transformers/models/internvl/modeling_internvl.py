@@ -765,7 +765,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         r"^multi_modal_projector": "model.multi_modal_projector",
         r"^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tied_weights_keys = None
 
     def __init__(self, config: InternVLConfig):
         super().__init__(config)

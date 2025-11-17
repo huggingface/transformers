@@ -611,6 +611,8 @@ class InternVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 
 class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
+    _tied_weights_keys = None
+
     def forward(**super_kwargs):
         r"""
         Example:
