@@ -28,6 +28,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -389,16 +390,9 @@ class DeepseekOcrVisionSdpaAttention(DeepseekOcrVisionAttention):
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
         if output_attentions:
             logger.warning_once(
-                "`DeepseekOcrVisionSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
-                "`output_attentions=True`. Falling back to the manual attention implementation, but "
-                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
-                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
+                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
             )
-            return super().forward(
-                hidden_states=hidden_states,
-                output_attentions=output_attentions,
-            )
-
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = (
@@ -1408,10 +1402,11 @@ class DeepseekOcrTextPreTrainedModel(PreTrainedModel):
         "attentions": DeepseekOcrTextAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, DeepseekOcrTextMoe):
-            module.gate.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -1519,7 +1514,10 @@ class DeepseekOcrTextModel(DeepseekOcrTextPreTrainedModel):
     """
 )
 class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {
+        r"^language_model.model": "language_model",
+    }
+    base_model_prefix = "model"
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
@@ -1836,13 +1834,13 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 )
 class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^image_newline": "model.image_newline",
-        "^language_model.lm_head": "lm_head",
+        r"^language_model.model": "model.language_model",
+        r"^vision_tower": "model.vision_tower",
+        r"^multi_modal_projector": "model.multi_modal_projector",
+        r"^image_newline": "model.image_newline",
+        r"^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {}
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True

@@ -1161,7 +1161,7 @@ class DeepseekOcrModel(LlavaNextModel):
     """
 )
 class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {}
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
