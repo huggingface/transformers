@@ -125,7 +125,6 @@ from .configuration_isaac import IsaacConfig, IsaacVisionConfig
 class IsaacVisionEmbeddings(nn.Module):
     """Adapter around SigLIP2 vision embeddings that consumes packed patch sequences."""
 
-    # Copied from transformers.models.siglip2.modeling_siglip2.Siglip2VisionEmbeddings.__init__
     def __init__(self, config: IsaacVisionConfig):
         super().__init__()
         self.config = config
@@ -141,7 +140,6 @@ class IsaacVisionEmbeddings(nn.Module):
         self.position_embedding_size = int(self.num_patches**0.5)
         self.position_embedding = nn.Embedding(self.num_patches, self.embed_dim)
 
-    # Copied from transformers.models.siglip2.modeling_siglip2.Siglip2VisionEmbeddings.forward
     def forward(self, seq_patches: torch.Tensor, spatial_shapes: torch.Tensor) -> torch.Tensor:
         packed_pixel_values, seq_lengths = self._pack_to_batch(seq_patches, spatial_shapes)
         if packed_pixel_values is None:
@@ -162,7 +160,6 @@ class IsaacVisionEmbeddings(nn.Module):
         embeddings = patch_embeds + resized_positional_embeddings
         return self._unpack_from_batch(embeddings, seq_lengths)
 
-    # Copied from transformers.models.siglip2.modeling_siglip2.Siglip2VisionEmbeddings.resize_positional_embeddings
     @staticmethod
     def resize_positional_embeddings(
         positional_embeddings: torch.Tensor,
