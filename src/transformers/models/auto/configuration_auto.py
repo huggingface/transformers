@@ -1022,7 +1022,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("parakeet_encoder", "parakeet"),
         ("parakeet_ctc", "parakeet"),
         # hacky hacky again. These mappings need to exist somewhere else
-        # also this exposes us more to supply chain attacks 
+        # also this exposes us more to supply chain attacks
         # it blurs a bit the line between remote code and distant
         # (also we always use the code in transformers)
         # ideas welcome

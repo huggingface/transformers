@@ -405,8 +405,9 @@ class DeepseekOcrConfig(PreTrainedConfig):
         if text_config is None and language_config is not None:
             text_config = language_config
 
+        if image_token_index is not None:
+            image_token_id = image_token_index
         self.image_token_id = image_token_id
-        self.image_token_index = image_token_id if image_token_index is None else image_token_index
 
         if text_config is None:
             self.text_config = DeepseekOcrTextConfig(
