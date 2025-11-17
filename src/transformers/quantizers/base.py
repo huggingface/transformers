@@ -423,6 +423,7 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} is not available yet and will be supported soon."
         )
 
+
 class SequentialLlama4TextExperts(ModuleList):
     """
     A module that implements a compressed version of a list of expert modules.
