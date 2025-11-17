@@ -3,9 +3,8 @@ from collections import defaultdict
 from inspect import signature
 from typing import Optional
 
-from ..quantizers.quantizers_utils import get_module_from_name
 from ..core_model_loading import ConversionOps
-
+from ..quantizers.quantizers_utils import get_module_from_name
 from ..utils import (
     get_available_devices,
     is_accelerate_available,
@@ -104,13 +103,16 @@ class Bnb8bitQuantize(ConversionOps):
             missing_keys.discard(f"{module_name}.SCB")
             return {target_key: new_value}
         else:
+            missing_keys.discard(target_key)
+            # useless key that gets saved for no reason
+            if tensor_name.endswith("weight_format"):
+                return {}
             # Save the states for later quantization when they are all gathered
             if not hasattr(self.hf_quantizer, "param_quant_stats"):
                 self.hf_quantizer.param_quant_stats = defaultdict(dict)
             self.hf_quantizer.param_quant_stats[module_name].update({target_key: value})
-            missing_keys.discard(target_key)
-            # We are ready for quantization in this case (SCB, weight_format and the weight)
-            if len(self.hf_quantizer.param_quant_stats[module_name]) == 3:
+            # We are ready for quantization in this case (SCB and the weight)
+            if len(self.hf_quantizer.param_quant_stats[module_name]) == 2:
                 weight = self.hf_quantizer.param_quant_stats[module_name].pop(f"{module_name}.weight")
                 kwargs = getattr(module, "weight").__dict__
                 weight_device = weight.device
