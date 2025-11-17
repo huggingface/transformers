@@ -46,7 +46,7 @@ class TestTrainerALSTUlyssesSP(TestCasePlus):
     @require_torch_multi_accelerator
     @require_accelerate
     @slow
-    def test_cp_equivalence(self):
+    def test_sp_equivalence(self):
         """Test that ALST/Ulysses sequence parallelism produces the same losses as without it."""
 
         # shared setup
@@ -54,12 +54,12 @@ class TestTrainerALSTUlyssesSP(TestCasePlus):
         script_path = __file__  # self.test_file_dir} / "test_alst_ulysses_sp.py"
         ds_config_path = self.test_file_dir / "ds_config_zero2.json"
 
-        # step 1. Run with CP enabled (cp_size=world_size)
-        cp_yes_output_dir = self.get_auto_remove_tmp_dir(return_pathlib_obj=True)
-        cp_yes_accelerate_config_path = cp_yes_output_dir / "context_parallel_config.yaml"
-        cp_yes_losses_path = cp_yes_output_dir / "cp_yes_losses.json"
+        # step 1. Run with SP enabled (sp_size=world_size)
+        sp_yes_output_dir = self.get_auto_remove_tmp_dir(return_pathlib_obj=True)
+        sp_yes_accelerate_config_path = sp_yes_output_dir / "context_parallel_config.yaml"
+        sp_yes_losses_path = sp_yes_output_dir / "sp_yes_losses.json"
         write_file(
-            cp_yes_accelerate_config_path,
+            sp_yes_accelerate_config_path,
             f"""
 distributed_type: DEEPSPEED
 deepspeed_config:
@@ -70,19 +70,18 @@ num_processes: {world_size}
 parallelism_config:
   parallelism_config_dp_replicate_size: 1
   parallelism_config_dp_shard_size: 1
-  parallelism_config_tp_size: 1
-  parallelism_config_cp_size: {world_size}
-  parallelism_config_cp_backend: deepspeed
-  parallelism_config_cp_seq_length_is_variable: true
-  parallelism_config_cp_attn_implementation: sdpa
+  parallelism_config_sp_size: {world_size}
+  parallelism_config_sp_backend: deepspeed
+  parallelism_config_sp_seq_length_is_variable: true
+  parallelism_config_sp_attn_implementation: sdpa
                    """,
         )
 
-        cmd_cp = f"""
+        cmd_sp = f"""
             accelerate launch
-            --config_file {cp_yes_accelerate_config_path}
+            --config_file {sp_yes_accelerate_config_path}
             {script_path}
-            --output_dir {cp_yes_output_dir}
+            --output_dir {sp_yes_output_dir}
             --report_to none
             --max_steps 10
             --per_device_train_batch_size 1
@@ -90,17 +89,17 @@ parallelism_config:
             --logging_steps 1
             --remove_unused_columns False
             --seed 42
-            --loss_output_file {cp_yes_losses_path}
+            --loss_output_file {sp_yes_losses_path}
         """.split()
 
-        execute_subprocess_async(cmd_cp, env=self.get_env())
+        execute_subprocess_async(cmd_sp, env=self.get_env())
 
-        # step 2. Run without CP enabled (cp_size=world_size)
-        cp_no_output_dir = self.get_auto_remove_tmp_dir(return_pathlib_obj=True)
-        cp_no_accelerate_config_path = cp_no_output_dir / "context_parallel_config.yaml"
-        cp_no_losses_path = cp_no_output_dir / "cp_yes_losses.json"
+        # step 2. Run without SP enabled (sp_size=world_size)
+        sp_no_output_dir = self.get_auto_remove_tmp_dir(return_pathlib_obj=True)
+        sp_no_accelerate_config_path = sp_no_output_dir / "context_parallel_config.yaml"
+        sp_no_losses_path = sp_no_output_dir / "sp_yes_losses.json"
         write_file(
-            cp_no_accelerate_config_path,
+            sp_no_accelerate_config_path,
             f"""
 distributed_type: DEEPSPEED
 deepspeed_config:
@@ -111,11 +110,11 @@ num_processes: {world_size}
                    """,
         )
 
-        cmd_cp = f"""
+        cmd_sp = f"""
             accelerate launch
-            --config_file {cp_no_accelerate_config_path}
+            --config_file {sp_no_accelerate_config_path}
             {script_path}
-            --output_dir {cp_no_output_dir}
+            --output_dir {sp_no_output_dir}
             --report_to none
             --max_steps 10
             --per_device_train_batch_size 1
@@ -123,31 +122,31 @@ num_processes: {world_size}
             --logging_steps 1
             --remove_unused_columns False
             --seed 42
-            --loss_output_file {cp_no_losses_path}
+            --loss_output_file {sp_no_losses_path}
         """.split()
 
-        execute_subprocess_async(cmd_cp, env=self.get_env())
+        execute_subprocess_async(cmd_sp, env=self.get_env())
 
-        # Compare losses - should be very close since CP just splits sequence computation
-        cp_yes_losses = read_json_file(cp_yes_losses_path)
-        cp_no_losses = read_json_file(cp_no_losses_path)
+        # Compare losses - should be very close since SP just splits sequence computation
+        sp_yes_losses = read_json_file(sp_yes_losses_path)
+        sp_no_losses = read_json_file(sp_no_losses_path)
 
-        assert len(cp_yes_losses) == len(cp_no_losses), (
-            f"Different number of losses: CP has {len(cp_yes_losses)}, no-CP has {len(cp_no_losses)}"
+        assert len(sp_yes_losses) == len(sp_no_losses), (
+            f"Different number of losses: SP has {len(sp_yes_losses)}, no-SP has {len(sp_no_losses)}"
         )
 
         # ALST/UlyssesSP should produce very similar results (small numerical differences expected)
         # The differences come from:
         # - Different gradient reduction patterns in distributed training
         # - BF16 mixed precision accumulated differences
-        cp_yes_losses_tensor = torch.tensor(cp_yes_losses)
-        cp_no_losses_tensor = torch.tensor(cp_no_losses)
+        sp_yes_losses_tensor = torch.tensor(sp_yes_losses)
+        sp_no_losses_tensor = torch.tensor(sp_no_losses)
         torch.testing.assert_close(
-            cp_yes_losses_tensor,
-            cp_no_losses_tensor,
+            sp_yes_losses_tensor,
+            sp_no_losses_tensor,
             atol=2e-2,
             rtol=2e-5,
-            msg=f"CP-enabled losses {cp_yes_losses} do not match CP-disabled losses {cp_no_losses}",
+            msg=f"SP-enabled losses {sp_yes_losses} do not match SP-disabled losses {sp_no_losses}",
         )
 
 
@@ -172,7 +171,7 @@ if __name__ == "__main__":
 
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        attn_implementation="sdpa",  # CP requires SDPA
+        attn_implementation="sdpa",  # SP requires SDPA or FA
     )
     # fix the outdated testing model config
     model.generation_config.pad_token_id = 1
@@ -189,7 +188,7 @@ if __name__ == "__main__":
     train_dataset = [tokenize_function(text) for text in texts]
 
     # Use standard DataCollatorForLanguageModeling for causal LM
-    # pad_to_multiple_of=4 ensures sequences are divisible by cp_size * 2 (for cp_size=2)
+    # pad_to_multiple_of=4 ensures sequences are divisible by sp_size * 2 (for sp_size=2)
     # Trainer will automatically generate position_ids and shift_labels as needed
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,

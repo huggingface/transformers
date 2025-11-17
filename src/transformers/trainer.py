@@ -2311,7 +2311,7 @@ class Trainer:
 
         # since DataLoader was Accelerate prepared w/o a model arg in the same call, we now have to complete the DL wrapping for ALST/UlyssesSP, after model has been prepared
         pc = getattr(self.accelerator, "parallelism_config", None)
-        if pc is not None and pc.cp_backend == "deepspeed":
+        if pc is not None and pc.sp_backend == "deepspeed":
             train_dataloader = self.accelerator.deepspeed_ulysses_dl_adapter(train_dataloader, model)
 
         if self.is_fsdp_enabled:
@@ -3663,7 +3663,7 @@ class Trainer:
                         inputs["shift_labels"] = labels[:, 1:].contiguous()
 
             # carve out space to make it clear there are other backends with different requirements, even though no code needs to be run at the moment
-            elif self.accelerator.parallelism_config.cp_backend == "deepspeed":
+            elif self.accelerator.parallelism_config.sp_backend == "deepspeed":
                 # - accelerator.parallelism_config performs the `model.config._attn_implementation` checks already and it supports more than `dspa`
                 # - UlyssesSPDataLoaderAdapter called from Accelerate performs the `shift_label` creation - must not interfere
                 # - position_ids generation should be done by HF Trainer if it wasn't done by the user
@@ -3843,8 +3843,8 @@ class Trainer:
         make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculating might be slightly inaccurate when performing gradient accumulation.
         """
         pc = getattr(self.accelerator, "parallelism_config", None)
-        if pc is not None and pc.cp_backend == "deepspeed":
-            return self._deepspeed_cp_compute_loss(model, inputs, return_outputs, pc)
+        if pc is not None and pc.sp_backend == "deepspeed":
+            return self._deepspeed_sp_compute_loss(model, inputs, return_outputs, pc)
 
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
@@ -3899,9 +3899,9 @@ class Trainer:
 
         return (loss, outputs) if return_outputs else loss
 
-    def _deepspeed_cp_compute_loss(self, model, inputs, return_outputs, pc):
+    def _deepspeed_sp_compute_loss(self, model, inputs, return_outputs, pc):
         """
-        How the loss is computed by Trainer under context parallelism scenario with cp_backend==deepspeed and cp_size>1. By default, all models return the loss in the first element.
+        How the loss is computed by Trainer under context parallelism scenario with sp_backend==deepspeed and sp_size>1. By default, all models return the loss in the first element.
 
         Args:
             model (`nn.Module`):
@@ -3928,9 +3928,9 @@ class Trainer:
             vocab_size=unwrapped_model.config.vocab_size,
         )
 
-        if pc.cp_size > 1:
-            sp_group = self.accelerator.torch_device_mesh["cp"].get_group()
-            sp_world_size = pc.cp_size
+        if pc.sp_size > 1:
+            sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
+            sp_world_size = pc.sp_size
             # differentiable weighted per-shard-loss aggregation across ranks
             losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
             # special dealing with SFT that has prompt tokens that aren't used in loss computation
