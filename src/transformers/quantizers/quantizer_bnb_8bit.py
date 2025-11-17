@@ -219,7 +219,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert.extend(keys_on_cpu)
 
         model = replace_with_bnb_linear(
-            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
+            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config, pre_quantized=self.pre_quantized
         )
 
         model.config.quantization_config = self.quantization_config
