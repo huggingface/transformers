@@ -447,7 +447,7 @@ def convert_and_load_state_dict_in_model(
 
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}  # {glob_pattern: plan_obj_or_key}
-    device_map = device_map or {}  # {exact_target_key: device}
+    device_map = device_map or {"": "cpu"}  # {exact_target_key: device}
     device_map_regex = re.compile(
         "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: x.count("."), reverse=True))
     )
