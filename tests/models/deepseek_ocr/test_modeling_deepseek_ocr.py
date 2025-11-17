@@ -280,46 +280,45 @@ class DeepseekOcrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
                 if any(re.finditer(r"Attention(?!Pool)", class_name)):
                     self.assertTrue(submodule.config._attn_implementation == "sdpa")
 
-
-@require_torch
+    @require_torch
     @slow
     class DeepseekOcrIntegrationTest(unittest.TestCase):
         def setUp(self):
             self.model_id = "deepseek-ai/DeepSeek-OCR"
 
-    def test_model_text_generation(self):
-        processor = AutoProcessor.from_pretrained(self.model_id)
-        model = DeepseekOcrForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16)
+        def test_model_text_generation(self):
+            processor = AutoProcessor.from_pretrained(self.model_id)
+            model = DeepseekOcrForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16)
 
-        conversation = [
-            {
-                "role": "<|User|>",
-                "content": [
-                    {"type": "image", "path": "./handwritten_letter_small.png"},
-                    {"type": "text", "text": "<|grounding|>Convert the document to markdown."},
-                ],
-            }
-        ]
+            conversation = [
+                {
+                    "role": "<|User|>",
+                    "content": [
+                        {"type": "image", "path": "./handwritten_letter_small.png"},
+                        {"type": "text", "text": "<|grounding|>Convert the document to markdown."},
+                    ],
+                }
+            ]
 
-        inputs = processor.apply_chat_template(
-            conversation, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt"
-        ).to(device=torch_device, dtype=model.dtype)
-        # inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
+            inputs = processor.apply_chat_template(
+                conversation, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt"
+            ).to(device=torch_device, dtype=model.dtype)
+            # inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
-        with torch.no_grad():
-            generated = model.generate(**inputs, max_new_tokens=250)
+            with torch.no_grad():
+                generated = model.generate(**inputs, max_new_tokens=250)
 
-        text = processor.batch_decode(generated, skip_special_tokens=False)[0]
+            text = processor.batch_decode(generated, skip_special_tokens=False)[0]
 
-        self.assertIn("<|grounding|>Convert the document to markdown.", text)
-        self.assertIn("text", text)
-        det_match = re.search(r"<\|det\|>\[\[([^\]]+)\]\]<\|/det\|>", text)
-        self.assertIsNotNone(det_match, msg=f"Detection coordinates not found in generated text: {text}")
-        det_values = [int(val.strip()) for val in det_match.group(1).split(",")]
-        expected_values = [52, 50, 940, 950]
-        for generated_val, expected_val in zip(det_values, expected_values):
-            self.assertLessEqual(
-                abs(generated_val - expected_val),
-                10,
-                msg=f"Detection coordinate {generated_val} deviates too much from expected {expected_val}",
-            )
+            self.assertIn("<|grounding|>Convert the document to markdown.", text)
+            self.assertIn("text", text)
+            det_match = re.search(r"<\|det\|>\[\[([^\]]+)\]\]<\|/det\|>", text)
+            self.assertIsNotNone(det_match, msg=f"Detection coordinates not found in generated text: {text}")
+            det_values = [int(val.strip()) for val in det_match.group(1).split(",")]
+            expected_values = [52, 50, 940, 950]
+            for generated_val, expected_val in zip(det_values, expected_values):
+                self.assertLessEqual(
+                    abs(generated_val - expected_val),
+                    10,
+                    msg=f"Detection coordinate {generated_val} deviates too much from expected {expected_val}",
+                )
