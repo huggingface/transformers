@@ -1591,9 +1591,9 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- has a unique cache type, `Zamba2HybridDynamicCache`
 
-        # Omit tokens covered by past_key_values
         empty_past_kv = past_key_values is None
 
+        # Omit tokens covered by past_key_values
         if not empty_past_kv:
             # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
             # Exception 1: when passing input_embeds, input_ids may be missing entries
