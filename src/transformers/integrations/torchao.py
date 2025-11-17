@@ -118,9 +118,10 @@ class TorchAoQuantize(ConversionOps):
                     if c is not None:
                         # filter_fn: not filtering out any modules
                         quantize_(module, c, filter_fn=lambda x, fqn: True)
-                        new_param = module._parameters[tensor_name]
-                        return {target_key: new_param}
+                        module._is_hf_initialized = True
+                        missing_keys.discard(target_key)
+                        return {}
             quantize_(module, self.hf_quantizer.quantization_config.get_apply_tensor_subclass())
-            print("module after quantize: ", target_key, module)
-            new_param = module._parameters[tensor_name]
-            return {target_key: new_param}
+            module._is_hf_initialized = True
+            missing_keys.discard(target_key)
+            return {}
