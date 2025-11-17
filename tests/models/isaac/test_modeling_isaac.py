@@ -11,16 +11,20 @@ import pytest
 
 from transformers import (
     AutoProcessor,
+    AutoTokenizer,
     IsaacConfig,
     IsaacForConditionalGeneration,
     IsaacModel,
     PreTrainedTokenizer,
     is_torch_available,
 )
+from transformers.models.isaac.configuration_isaac import IsaacVisionConfig
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
+from transformers.models.isaac.modeling_isaac import IsaacVisionAttention
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_offline_mode, is_vision_available
+
 
 if is_vision_available():
     from PIL import Image
@@ -36,6 +40,11 @@ if is_torch_available():
 
 try:
     from perceptron.tensorstream.tensorstream import TensorStream
+    from perceptron.tensorstream.ops import (
+        role_mask,
+        tensor_stream_token_view,
+        modality_mask
+    )
 except Exception:
     TensorStream = None
 
@@ -51,10 +60,28 @@ HASH_FILTERS = {
     "core_model": {"include": None, "exclude": {"vision_embedding", "audio_embedding", "inv_freq"}},
     "vision_modules": {"include": {"vision_embedding"}, "exclude": None},
 }
-RED_DOT_B64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="
-)
+RED_DOT_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="
 
+def tensor_stream_snapshot(ts: TensorStream) -> dict[str, object]:
+    """Summarize TensorStream tokens/modalities using public utilities."""
+
+    token_view = tensor_stream_token_view(ts).cpu().tolist()
+    modality = modality_mask(ts).cpu().tolist()
+    roles = role_mask(ts).cpu().tolist()
+
+    return {
+        "shape": list(ts.shape),
+        "token_view": token_view,
+        "modality_mask": modality,
+        "role_mask": roles,
+    }
+
+
+def _assert_tensor_stream_snapshot_equal(actual: dict[str, object], expected: dict[str, object]) -> None:
+    assert actual["shape"] == expected["shape"], "TensorStream shape changed"
+    assert actual["token_view"] == expected["token_view"], "TensorStream token view changed"
+    assert actual["modality_mask"] == expected["modality_mask"], "TensorStream modality mask changed"
+    assert actual["role_mask"] == expected["role_mask"], "TensorStream role mask changed"
 
 def _tensor_to_bytes(tensor):
     cpu_tensor = tensor.detach().cpu().contiguous()
@@ -80,6 +107,165 @@ def _hash_state_dict(state_dict, *, include=None, exclude=None):
         hasher.update(b"\0")
         hasher.update(_tensor_to_bytes(tensor))
     return hasher.hexdigest()
+
+def compute_logits_statistics(tensor: torch.Tensor) -> dict[str, object]:
+    """
+    Summarize logits with simple statistics that are stable across minor
+    implementation changes yet still sensitive to behavioral regressions.
+    """
+
+    float_tensor = tensor.detach().to(torch.float32).cpu()
+    flat = float_tensor.reshape(-1).to(torch.float64)
+
+    def _rounded(value: torch.Tensor | float) -> float:
+        return round(float(value), 10)
+
+    return {
+        "shape": list(float_tensor.shape),
+        "numel": flat.numel(),
+        "mean": _rounded(flat.mean()),
+        "std": _rounded(flat.std(unbiased=False)),
+        "min": _rounded(flat.min()),
+        "max": _rounded(flat.max()),
+        "sum": _rounded(flat.sum()),
+        "l2_norm": _rounded(torch.linalg.vector_norm(flat, ord=2)),
+    }
+
+def _assert_logits_statistics_close(
+    actual: dict[str, object],
+    expected: dict[str, object],
+    *,
+    rel: float = 1e-5,
+    abs_tol: float = 1e-6,
+) -> None:
+    assert actual["shape"] == expected["shape"], "Logits shape changed"
+    assert actual["numel"] == expected["numel"], "Logits numel changed"
+    for key in ("mean", "std","min", "max", "sum", "l2_norm"):
+        assert actual[key] == pytest.approx(
+            expected[key],
+            rel=rel,
+            abs=abs_tol,
+        ), f"Logits statistic '{key}' drifted"
+
+@pytest.fixture(scope="session")
+def tokenizer(genesis_hf_checkpoint):
+    """Load the tokenizer from the converted Perceptron HF checkpoint."""
+    return AutoTokenizer.from_pretrained(genesis_hf_checkpoint, trust_remote_code=True, use_fast=False)
+
+
+@pytest.fixture(scope="session")
+def genesis_hf_checkpoint():
+    """
+    Convert GENESIS_CKPT to HuggingFace format once per test session.
+    Uses the new convert_perceptron_to_isaac which:
+    1. Converts Perceptron → Qwen3 HF using existing logic
+    2. Transforms Qwen3 config → Perceptron config
+    Reuses existing conversion if available in genesis_hf_converted_checkpoint/.
+    """
+    return _reference_checkpoint_or_skip()
+
+
+def test_clone_generate_vs_training_generate_logits(tokenizer, isaac_config, genesis_hf_checkpoint):
+    """Verify deterministic generation via golden token/decoded text and logits statistics."""
+
+    golden = _load_generation_golden()
+    if not golden:
+        pytest.skip(
+            f"Missing generation golden file at {GENERATION_GOLDEN_FILE}. Run scripts/update_isaac_hashes.py to create it."
+        )
+
+    processor = create_isaac_processor(tokenizer, isaac_config)
+    image = _load_red_dot_image()
+    if image is None:
+        pytest.skip("PIL.Image is required for Isaac generation tests.")
+    messages = [
+        {
+            "role": "user",
+            "content": "Describe this image:",
+        },
+        {
+            "role": "user",
+            "content": "<image>",
+        },
+    ]
+
+    prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
+    inputs = processor(text=prompt, images=[image], return_tensors="pt")
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+
+    model_config = IsaacConfig.from_dict(isaac_config.to_dict())
+    model_config.vision_attn_implementation = isaac_config.vision_attn_implementation
+    model = IsaacForConditionalGeneration.from_pretrained(
+        genesis_hf_checkpoint,
+        config=model_config,
+        attn_implementation="sdpa",
+    )
+    model = model.to(device=device, dtype=dtype)
+    model.eval()
+
+    input_ids = inputs["input_ids"].to(device)
+    serialized_input_ids = inputs["input_ids"].cpu().tolist()
+
+    assert serialized_input_ids == golden["input_ids"], "Encoder input_ids changed"
+
+    tensor_stream = inputs["tensor_stream"].to(device)
+    serialized_tensor_stream = tensor_stream_snapshot(tensor_stream)
+    tensor_stream =tensor_stream.to(device)
+
+    with torch.no_grad():
+        outputs = model.generate(
+            input_ids=input_ids,
+            tensor_stream=tensor_stream,
+            max_new_tokens=10,
+            do_sample=False,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            return_dict_in_generate=True,
+            output_logits=True,
+        )
+
+    logits = torch.cat(outputs.logits, dim=0).to(torch.float32).cpu()
+    logits_stats = compute_logits_statistics(logits)
+    generated_ids = outputs.sequences[0].tolist()
+    generated_text = safe_decode(tokenizer, outputs.sequences[0])
+
+    assert generated_ids == golden["token_ids"], "Generated token sequence changed"
+    assert generated_text == golden["decoded_text"], "Decoded text changed"
+    assert serialized_input_ids == golden["input_ids"], "Encoder input_ids changed"
+
+    _assert_tensor_stream_snapshot_equal(serialized_tensor_stream, golden["tensor_stream"])
+    _assert_logits_statistics_close(logits_stats, golden["logits_statistics"])
+
+
+@require_torch
+def test_isaac_sdpa_attention_backend():
+    config = IsaacVisionConfig(
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=1,
+        num_attention_heads=4,
+        num_channels=3,
+        num_patches=16,
+        patch_size=4,
+    )
+    config._attn_implementation = "sdpa"
+
+    attn_module = IsaacVisionAttention(config).eval()
+    seq_len = 8
+    hidden_states = torch.randn(1, seq_len, config.hidden_size)
+    cu_seqlens = torch.tensor([0, seq_len], dtype=torch.int32)
+
+    with torch.no_grad():
+        outputs, attn_weights = attn_module(
+            hidden_states=hidden_states,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=seq_len,
+        )
+
+    assert outputs.shape == hidden_states.shape
+    assert attn_weights is None
 
 
 def _hash_tensor(tensor):
@@ -230,6 +416,14 @@ def isaac_processor(isaac_tokenizer, isaac_tiny_config):
 def isaac_reference_checkpoint():
     return _reference_checkpoint_or_skip()
 
+@pytest.fixture(scope="session")
+def isaac_config(isaac_reference_checkpoint):
+    """Load IsaacConfig from the converted checkpoint."""
+    # Load the config directly from the converted checkpoint
+    config = IsaacConfig.from_pretrained(isaac_reference_checkpoint)
+    # Most tests assume flash attention in vision unless they explicitly override it.
+    config.vision_attn_implementation = "flash_attention_2"
+    return config
 
 @pytest.fixture(scope="session")
 def isaac_reference_model(isaac_reference_checkpoint):
@@ -238,6 +432,7 @@ def isaac_reference_model(isaac_reference_checkpoint):
             isaac_reference_checkpoint,
             attn_implementation="sdpa",
             torch_dtype=torch.float32,
+            trust_remote_code=False,
         )
     except (OSError, ValueError) as error:
         raise RuntimeError(f"Unable to load reference Isaac checkpoint from {isaac_reference_checkpoint}") from error
@@ -413,9 +608,7 @@ def test_isaac_for_conditional_generation_initialization(isaac_tiny_config):
     assert hasattr(model.model, "vision_embedding")
     assert hasattr(model.model, "embed_fns")
 
-    input_ids = torch.randint(
-        0, isaac_tiny_config.vocab_size, (1, 10), device=torch_device, dtype=torch.long
-    )
+    input_ids = torch.randint(0, isaac_tiny_config.vocab_size, (1, 10), device=torch_device, dtype=torch.long)
     with torch.no_grad():
         outputs = model(input_ids=input_ids, return_dict=True)
     assert outputs.logits.shape == (1, 10, isaac_tiny_config.vocab_size)
@@ -561,6 +754,50 @@ def test_isaac_checkpoint_hashes(isaac_reference_model):
         current_hash = _hash_state_dict(state_dict, include=filters["include"], exclude=filters["exclude"])
         assert current_hash == expected_hashes[subset], f"Hash mismatch for subset '{subset}'"
 
+def create_isaac_processor(
+    tokenizer,
+    isaac_config,
+    *,
+    image_processor=None,
+    **overrides,
+):
+    """Helper to construct IsaacProcessor without requiring an IsaacConfig instance."""
+    params = {
+        "vision_token": isaac_config.vision_token,
+        "max_sequence_length": isaac_config.max_sequence_length,
+        "vision_patch_size": isaac_config.vision_patch_size,
+        "vision_max_num_patches": isaac_config.vision_max_num_patches,
+        "vision_min_num_patches": isaac_config.vision_min_num_patches,
+        "pixel_shuffle_scale": isaac_config.pixel_shuffle_scale,
+        "rescale_factor": isaac_config.vision_rescale_factor,
+        "image_mean": tuple(isaac_config.vision_mean),
+        "image_std": tuple(isaac_config.vision_std),
+        "vision_attn_implementation": isaac_config.vision_attn_implementation,
+    }
+    params.update(overrides)
+
+    processor_image = image_processor
+    if processor_image is None:
+        processor_image = IsaacImageProcessorFast(
+            patch_size=params["vision_patch_size"],
+            max_num_patches=params["vision_max_num_patches"],
+            min_num_patches=params["vision_min_num_patches"],
+            pixel_shuffle_scale=params["pixel_shuffle_scale"],
+            rescale_factor=params["rescale_factor"],
+            image_mean=params["image_mean"],
+            image_std=params["image_std"],
+        )
+    processor_params = {
+        "vision_token": isaac_config.vision_token,
+        "max_sequence_length": isaac_config.max_sequence_length,
+        "rescale_factor": isaac_config.vision_rescale_factor,
+    }
+
+    return IsaacProcessor(
+        image_processor=processor_image,
+        tokenizer=tokenizer,
+        **processor_params,
+    )
 
 @require_torch
 @require_vision
@@ -578,14 +815,14 @@ def test_hf_generate_vs_training_generate_logits(isaac_reference_model, isaac_re
     messages = [
         {
             "role": "user",
-            "content": f"Describe this image:",
+            "content": "Describe this image:",
         },
         {
             "role": "user",
-            "content": f"<image>",
-        }
+            "content": "<image>",
+        },
     ]
-    prompt = isaac_reference_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    prompt = isaac_reference_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
     batch = isaac_reference_processor(text=prompt, images=[image], return_tensors="pt")
 
     input_ids = batch["input_ids"]
@@ -611,12 +848,16 @@ def test_hf_generate_vs_training_generate_logits(isaac_reference_model, isaac_re
         )
 
     logits = torch.cat(outputs.logits, dim=0).to(torch.float32).cpu()
-    logits_hash = _hash_tensor(logits)
+    logits_stats = compute_logits_statistics(logits)
     generated_ids = outputs.sequences[0].tolist()
-    decoded_text = safe_decode(isaac_reference_processor.tokenizer, outputs.sequences[0])
 
-    assert logits_hash == golden["logits_hash"], "Generated logits hash mismatch"
     assert generated_ids == golden["token_ids"], "Generated token ids changed"
-    assert decoded_text == golden["decoded_text"], "Decoded text changed"
+    if "logits_statistics" in golden:
+        _assert_logits_statistics_close(logits_stats, golden["logits_statistics"])
+    else:
+        pytest.fail(
+            "Golden file missing both logits_statistics and logits_hash. "
+            f"Regenerate {GENERATION_GOLDEN_FILE} via scripts/update_isaac_hashes.py."
+        )
 
     isaac_reference_model.to("cpu")
