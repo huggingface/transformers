@@ -337,9 +337,6 @@ def isaac_config(isaac_reference_checkpoint):
 
 @pytest.fixture(scope="session")
 def isaac_reference_model(isaac_reference_checkpoint, isaac_config):
-    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     model_config = IsaacConfig.from_dict(isaac_config.to_dict())
     model_config.vision_attn_implementation = isaac_config.vision_attn_implementation
     model = IsaacForConditionalGeneration.from_pretrained(
@@ -347,8 +344,6 @@ def isaac_reference_model(isaac_reference_checkpoint, isaac_config):
         config=model_config,
         attn_implementation="sdpa",
     )
-    model = model.to(device=device, dtype=dtype)
-    model.eval()
     return model
 
 
@@ -651,6 +646,7 @@ def test_isaac_generation_with_tensor_stream(isaac_processor, isaac_tiny_config)
 @slow
 @tensorstream_required
 def test_isaac_checkpoint_hashes(isaac_reference_model):
+    isaac_reference_model = isaac_reference_model.to("cpu")
     expected_hashes = _load_expected_hashes()
     if not expected_hashes:
         pytest.skip(f"Missing golden hashes file at {HASH_FILE}.")
@@ -716,6 +712,10 @@ def create_isaac_processor(
 @slow
 @tensorstream_required
 def test_hf_generate_vs_training_generate_logits(isaac_reference_model, isaac_reference_processor):
+    device = "cuda"
+    dtype = torch.bfloat16
+    isaac_reference_model = isaac_reference_model.to(device=device, dtype=dtype)
+    isaac_reference_model.eval()
     golden = _load_generation_golden()
     if not golden:
         pytest.skip(f"Missing generation golden file at {GENERATION_GOLDEN_FILE}.")
