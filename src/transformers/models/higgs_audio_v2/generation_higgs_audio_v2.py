@@ -44,7 +44,8 @@ class HiggsAudioV2GenerationOutput(GenerateDecoderOnlyOutput):
     Outputs of HiggsAudioV2 generation models, when using non-beam methods.
 
     Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        sequences (`torch.LongTensor` of shape `(batch_size, audio_sequence_lenght, num_codebooks)`):
+            # TODO: check
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
@@ -192,25 +193,18 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
 
+            # ===========================
+            # BELOW DIFFERENCES WITH GenerationMixin._sample()
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    scores += (next_token_scores,)
+                    scores += (next_token_scores.reshape(batch_size, self.config.num_codebooks, self.config.codebook_size),)
                 if output_logits:
                     raw_logits += (next_token_logits,)
                 if output_attentions:
-                    decoder_attentions += (
-                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
-                    )
-                    if self.config.is_encoder_decoder:
-                        cross_attentions += (outputs.cross_attentions,)
-
+                    decoder_attentions += (outputs.attentions,)
                 if output_hidden_states:
-                    decoder_hidden_states += (
-                        (outputs.decoder_hidden_states,)
-                        if self.config.is_encoder_decoder
-                        else (outputs.hidden_states,)
-                    )
+                    decoder_hidden_states += (outputs.hidden_states,)
 
             # token selection
             if do_sample:
@@ -220,8 +214,6 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
             else:
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
 
-            # ===========================
-            # BELOW DIFFERENCES WITH GenerationMixin._sample()
             next_token_logits = next_token_logits.reshape(-1, self.config.num_codebooks, self.config.codebook_size)
             next_tokens = next_tokens.reshape(batch_size, self.config.num_codebooks)
 
@@ -305,7 +297,7 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
 
         if return_dict_in_generate:
             return HiggsAudioV2GenerationOutput(
-                sequences=model_kwargs.get("audio_input_ids"),
+                sequences=input_ids,
                 scores=scores,
                 logits=raw_logits,
                 attentions=decoder_attentions,
