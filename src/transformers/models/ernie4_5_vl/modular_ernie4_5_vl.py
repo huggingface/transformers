@@ -613,16 +613,24 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
 
     def _temporal_slicing(self, hidden_states, grid_thw):
         """
-        Creates slices along the temporal dimension (usually if we have a video input).
+        Slices along the temporal dimension in even/odd patterns (usually if we have a video input)
+        or duplicates along temporal dimension (usually if we have an image input).
 
-        If a "real" (video) slicing happens, then we change [1,2,1,2,1,2] to [1,1,1,2,2,2] patterns.
-        Otherwise, we repeat along the axis, i.e. [1,1,1] to [1,1,1,1,1,1]. NOTE: It is hard-coded
-        for `temporal_merge_size == 2`.
+        Example:
+            Video input with temporal pattern of [1, -1, 2, -2, 3, -3]
+                > Even input [1, 2, 3], odd input [-1, -2, -3]
+                > Reorderd via slices to [1, 2, 3, -1, -2, -3]
+            Image input with temporal pattern [1]
+                > Duplicate input [1], [1]
+                > Reordered to [1, 1]
+
+        NOTE: This is hard-coded for `temporal_merge_size == 2` and won't work otherwise.
         """
-        # Calculating offsets (based on flattened tensors)
+        # Calculating offsets on spatial dim (based on flattened tensors)
         grid_t, grid_hw = grid_thw[:, 0], grid_thw[:, 1:]
         grid_hw_after_conv = grid_hw.prod(-1) // (self.spatial_merge_size**2)
 
+        # Calculating offsets on batch dim (based on flattened tensors)
         tokens_per_img_or_vid = (grid_thw.prod(-1) // (self.spatial_merge_size**2)).flatten()
         batch_offsets = torch.empty(tokens_per_img_or_vid.size(), dtype=tokens_per_img_or_vid.dtype)
         batch_offsets[0] = 0
@@ -631,40 +639,33 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
         first_slice_offsets = []
         second_slice_offsets = []
         for temporal_size, spatial_size, batch_offset in zip(grid_t, grid_hw_after_conv, batch_offsets):
-            # Depending on temporal, we may interleave
+            # Depending on temporal, we may interleave:
+            #   - Images have temporal == 1 --> same offsets (duplicate "frame" image)
+            #   - Videos have temporal > 1 --> different offsets (even, odd)
             first_offset_range = range(0, temporal_size, 2)
             second_offset_range = range(1 if temporal_size > 1 else 0, temporal_size, 2)
 
-            is_same_offset_range = first_offset_range == second_offset_range
-            for temporal_offset in first_offset_range:
+            for temporal_offset_even, temporal_offset_odd in zip(first_offset_range, second_offset_range):
                 first_slice_offsets.append(
                     torch.arange(
-                        batch_offset + (temporal_offset) * spatial_size,
-                        batch_offset + (temporal_offset + 1) * spatial_size,
+                        batch_offset + (temporal_offset_even) * spatial_size,
+                        batch_offset + (temporal_offset_even + 1) * spatial_size,
+                    )
+                )
+                second_slice_offsets.append(
+                    torch.arange(
+                        batch_offset + (temporal_offset_odd) * spatial_size,
+                        batch_offset + (temporal_offset_odd + 1) * spatial_size,
                     )
                 )
 
-                # We can avoid looping another time if the ranges are the same
-                if is_same_offset_range:
-                    second_slice_offsets.append(
-                        torch.arange(
-                            batch_offset + (temporal_offset) * spatial_size,
-                            batch_offset + (temporal_offset + 1) * spatial_size,
-                        )
-                    )
-
-            if not is_same_offset_range:
-                for temporal_offset in second_offset_range:
-                    second_slice_offsets.append(
-                        torch.arange(
-                            batch_offset + (temporal_offset) * spatial_size,
-                            batch_offset + (temporal_offset + 1) * spatial_size,
-                        )
-                    )
-
+        # Input: [1, -1, 2, -2, 3, -3] or [1]
+        # Indices: [0, 2, 4] (even) or [0] (duplicate)
         first_slice_offsets = torch.cat(first_slice_offsets, dim=-1).to(hidden_states.device)
+        # Indices: [1, 3, 5] (odd) or [0] (duplicate)
         second_slice_offsets = torch.cat(second_slice_offsets, dim=-1).to(hidden_states.device)
 
+        # Output: [1, 2, 3, -1, -2, -3] or [1, 1]
         return torch.concat(
             [
                 torch.index_select(hidden_states, dim=0, index=first_slice_offsets),
@@ -675,6 +676,7 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
 
     def forward(self, hidden_states, grid_thw):
         # image spatial
+        # reshape imitates convolution via linear projection
         hidden_states = hidden_states.reshape([-1, hidden_states.shape[-1] * (self.spatial_merge_size**2)])
         hidden_states = self.spatial_linear(hidden_states)
 
