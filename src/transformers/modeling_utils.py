@@ -4208,23 +4208,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             missing_keys, unexpected_keys, mismatched_keys, misc = set(), set(), set(), set()
         else:
             all_pointer = set()
+            # Checkpoints are safetensors
             if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
-                if sharded_metadata is None:
-                    k_v_iterator = dict.fromkeys(
-                        safe_open(checkpoint_files[0], framework="pt").keys(), checkpoint_files[0].rsplit("/", 1)[1]
-                    ).items()
-                else:
-                    k_v_iterator = sharded_metadata["weight_map"].items()
-
                 merged_state_dict = {}
-                for k, v in k_v_iterator:
-                    file_pointer = safe_open(
-                        os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device="cpu"
-                    )
+                for file in checkpoint_files:
+                    file_pointer = safe_open(file, framework="pt", device="cpu")
                     all_pointer.add(file_pointer)
-                    merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+                    for k in file_pointer.keys():
+                        merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+            # User passed an explicit state_dict
             elif state_dict is not None:
                 merged_state_dict = state_dict
+            # Checkpoints are .bin
             elif checkpoint_files is not None:
                 merged_state_dict = {}
                 for ckpt_file in checkpoint_files:
