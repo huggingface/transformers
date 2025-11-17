@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 
+from .integrations.accelerate import offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, DTensor, Replicate, TensorParallelLayer
 from .utils import is_torch_greater_or_equal, logging
 
@@ -397,7 +398,7 @@ def dot_natural_key(s: str):
 
 @contextmanager
 def log_to_misc(
-    layer_name: str,
+    full_param_name: str,
     misc: MutableMapping[str, str],
     extras: Any = None,
     op: Union[list[ConversionOps], ConversionOps, None] = None,
@@ -421,22 +422,22 @@ def log_to_misc(
         if isinstance(extras, tuple) and len(extras) == 2:
             values, target_keys = extras
             descriptor = f"{op_name} " if op_name else ""
-            misc[layer_name] = (
+            misc[full_param_name] = (
                 f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {len(values)}"
             )
         elif isinstance(extras, str):
             suffix = f" via {op_name}" if op_name else ""
-            misc[layer_name] = f"{e}\nError{suffix} when processing parameter {extras}"
+            misc[full_param_name] = f"{e}\nError{suffix} when processing parameter {extras}"
         elif extras is None and op_name:
-            misc[layer_name] = f"{op_name}: {e}"
+            misc[full_param_name] = f"{op_name}: {e}"
         else:
-            misc[layer_name] = f"{extras} |Error: {e}"
+            misc[full_param_name] = f"{extras} |Error: {e}"
         raise SkipLayer()
 
 
 def set_param_for_module(
     model: PreTrainedModel,
-    layer_name: str,
+    full_param_name: str,
     param_value: torch.Tensor,
     mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
     missing_keys: MutableSet[str],
@@ -445,8 +446,8 @@ def set_param_for_module(
     distributed_operation: Optional[TensorParallelLayer],
     hf_quantizer: HfQuantizer,
 ):
-    with log_to_misc(layer_name, misc, layer_name):
-        module_path, _, param_name = layer_name.rpartition(".")
+    with log_to_misc(full_param_name, misc, full_param_name):
+        module_path, _, param_name = full_param_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
         if isinstance(param_value, list):
             param_value = param_value[0]
@@ -521,6 +522,8 @@ def convert_and_load_state_dict_in_model(
     device_map: dict | None = None,
     dtype_plan: dict | None = None,
     device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
+    disk_offload_index: dict | None = None,
+    disk_offload_folder: str | None = None,
 ):
     r"""
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
@@ -723,26 +726,36 @@ def convert_and_load_state_dict_in_model(
 
     total_entries = len(param_name_to_load)
     with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
-        for layer_name, mapping in param_name_to_load.items():
+        for full_param_name, mapping in param_name_to_load.items():
             pbar.update(1)
-            pbar.set_postfix({"Materializing param": layer_name})
+            pbar.set_postfix({"Materializing param": full_param_name})
             pbar.refresh()
             try:
                 realized_value, misc = mapping.convert(
-                    layer_name, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys
+                    full_param_name, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys
                 )
                 for k, output_value in realized_value.items():
-                    set_param_for_module(
-                        model,
-                        k,
-                        output_value,
-                        mismatch_keys,
-                        missing_keys,
-                        misc,
-                        unexpected_keys,
-                        mapping.distributed_operation,
-                        hf_quantizer,
-                    )
+                    param_device = device_map[re.search(device_map_regex, k).group()]
+                    # Offloading support
+                    if param_device == "disk":
+                        missing_keys.discard(k)
+                        # If not already offloaded, or if we applied any special Operation, we need to re-save
+                        if k not in disk_offload_index or len(operations) > 0:
+                            disk_offload_index = offload_weight(
+                                output_value, k, disk_offload_folder, disk_offload_index
+                            )
+                    else:
+                        set_param_for_module(
+                            model,
+                            k,
+                            output_value,
+                            mismatch_keys,
+                            missing_keys,
+                            misc,
+                            unexpected_keys,
+                            mapping.distributed_operation,
+                            hf_quantizer,
+                        )
             except SkipLayer:
                 continue
     thread_pool.shutdown(wait=False)

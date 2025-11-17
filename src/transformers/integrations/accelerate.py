@@ -471,7 +471,7 @@ def accelerate_disk_offload(
         os.makedirs(disk_offload_folder, exist_ok=True)
     is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
 
-    # In this cause, the offload index is simply the existing safetensors (except if using custom weight loading
+    # In this case, the offload index is simply the existing safetensors (except if using custom weight loading
     # Operation, e.g. the MoE models, where we need to resave the weights that were changed at loading time)
     if is_offloaded_safetensors:
         param_device_map = expand_device_map(device_map, expected_keys)

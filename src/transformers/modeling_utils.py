@@ -64,7 +64,6 @@ from .integrations.accelerate import (
     check_and_set_device_map,
     expand_device_map,
     init_empty_weights,
-    offload_weight,
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
@@ -4126,6 +4125,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 device_map,
                 model.dtype_plan,
                 device_mesh,
+                disk_offload_index,
+                disk_offload_folder,
             )
 
             # finally close all opened file pointers
@@ -4176,13 +4177,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         device_mesh.get_local_rank(),
                         device_mesh,
                     )
-
-        # If the model parameters were changed during loading (i.e. any custom Ops on the weights), we need to resave them
-        # for offloading
-        if device_map is not None and "disk" in device_map.values():
-            for name, param in model.state_dict().items():
-                if name not in disk_offload_index:
-                    disk_offload_index = offload_weight(param, name, disk_offload_folder, disk_offload_index)
 
         log_state_dict_report(
             model=model,
