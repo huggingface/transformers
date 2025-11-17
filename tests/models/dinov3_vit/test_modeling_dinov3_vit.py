@@ -29,7 +29,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DINOv3ViTBackbone, DINOv3ViTModel
+    from transformers import DINOv3ViTBackbone, DINOv3ViTForImageClassification, DINOv3ViTModel
 
 
 if is_vision_available():
@@ -169,6 +169,24 @@ class DINOv3ViTModelTester:
             (self.batch_size, self.seq_length, self.hidden_size),
         )
 
+    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+        config.num_labels = self.type_sequence_label_size
+        model = DINOv3ViTForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
+        # test greyscale images
+        config.num_channels = 1
+        model = DINOv3ViTForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -187,7 +205,9 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (DINOv3ViTModel, DINOv3ViTBackbone) if is_torch_available() else ()
+    all_model_classes = (
+        (DINOv3ViTModel, DINOv3ViTBackbone, DINOv3ViTForImageClassification) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
         {
             "image-feature-extraction": DINOv3ViTModel,
@@ -242,6 +262,10 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
+    def test_for_image_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -254,6 +278,12 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         model_name = "facebook/dinov3-vits16-pretrain-lvd1689m"
         model = DINOv3ViTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    @slow
+    def test_model_for_image_classification_from_pretrained(self):
+        model_name = "dimidagd/dinov3-vit7b16-pretrain-lvd1689m-imagenet1k-lc"
+        model = DINOv3ViTForImageClassification.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
 
@@ -273,6 +303,33 @@ class DINOv3ViTModelIntegrationTest(unittest.TestCase):
             if is_vision_available()
             else None
         )
+
+    @slow
+    def test_inference_lc_head_imagenet(self):
+        model = DINOv3ViTForImageClassification.from_pretrained(
+            "dimidagd/dinov3-vit7b16-pretrain-lvd1689m-imagenet1k-lc"
+        ).to(torch_device)
+        ground_truth_class_imagenet1 = "tabby, tabby cat"
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # Verify logits
+        expected_logits = torch.tensor([-1.0708860159, -0.7589257956, -1.1738269329, -0.9263097048, -1.0259437561]).to(
+            torch_device
+        )
+
+        torch.testing.assert_close(outputs.logits[0, : len(expected_logits)], expected_logits, rtol=1e-4, atol=1e-4)
+
+        # Test correct class prediction
+        predicted_class_idx = outputs.logits.argmax(-1).item()
+        predicted_class_str = model.config.id2label[predicted_class_idx]
+
+        self.assertEqual(predicted_class_str, ground_truth_class_imagenet1)
 
     @slow
     def test_inference_no_head(self):
