@@ -4,6 +4,8 @@ from inspect import signature
 from typing import Optional
 
 from ..quantizers.quantizers_utils import get_module_from_name
+from ..core_model_loading import ConversionOps
+
 from ..utils import (
     get_available_devices,
     is_accelerate_available,
@@ -28,8 +30,6 @@ if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module, remove_hook_from_module
 
 logger = logging.get_logger(__name__)
-
-from ..core_model_loading import ConversionOps
 
 
 class Bnb4bitQuantize(ConversionOps):
