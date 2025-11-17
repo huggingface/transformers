@@ -1138,6 +1138,12 @@ class AutoTokenizer:
 
         model_type = config_class_to_model_type(type(config).__name__)
         if model_type is not None:
+            # Check if Voxtral model requires mistral-common
+            if model_type == "voxtral" and not is_mistral_common_available():
+                raise ImportError(
+                    "The Voxtral tokenizer requires the `mistral-common` library to be installed. "
+                    "Please install it with: `pip install mistral-common` or `pip install transformers[mistral-common]`"
+                )
             tokenizer_class_py, tokenizer_class_fast = TOKENIZER_MAPPING[type(config)]
 
             if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
