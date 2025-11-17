@@ -630,9 +630,11 @@ def test_isaac_generation_with_tensor_stream(isaac_processor, isaac_tiny_config)
     processed = isaac_processor(text=prompt, images=None, return_tensors="pt")
 
     input_ids = processed["input_ids"].to(torch_device)
+    tensor_stream = processed["tensor_stream"]
+    tensor_stream = tensor_stream.to(torch_device)
     generated = model.generate(
         input_ids=input_ids,
-        tensor_stream=processed["tensor_stream"],
+        tensor_stream=tensor_stream,
         max_new_tokens=5,
         do_sample=False,
         pad_token_id=isaac_processor.tokenizer.pad_token_id,
