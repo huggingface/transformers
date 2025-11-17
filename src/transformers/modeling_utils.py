@@ -2413,8 +2413,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if not isinstance(mapping, dict):
             return
         if (  # we only tie for ourselves, so we look at our config
-            not self.config.tie_word_embeddings
-            and not self.config.tie_encoder_decoder  # if missing keys is None we init?
+            not self.config.get_text_config(decoder=True).tie_word_embeddings
+            and (
+                not self.config.is_encoder_decoder or not self.config.tie_encoder_decoder
+            )  # if missing keys is None we init?
         ):
             return
 

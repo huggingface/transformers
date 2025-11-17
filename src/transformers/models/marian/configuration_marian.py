@@ -161,7 +161,7 @@ class MarianConfig(PreTrainedConfig):
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
             forced_eos_token_id=forced_eos_token_id,
-            tie_encoder_decoder=share_encoder_decoder_embeddings.
+            tie_encoder_decoder=share_encoder_decoder_embeddings,
             **kwargs,
         )
 
