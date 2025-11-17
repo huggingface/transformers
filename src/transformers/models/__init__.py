@@ -234,6 +234,7 @@ if TYPE_CHECKING:
     from .mobilevitv2 import *
     from .modernbert import *
     from .modernbert_decoder import *
+    from .molmo import *
     from .moonshine import *
     from .moshi import *
     from .mpnet import *
