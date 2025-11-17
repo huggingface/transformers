@@ -1731,7 +1731,7 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_save_and_load_config_with_custom_generation(self):
         """
-        Tests that saving and loading a config with a custom generation kwarg iss not possible
+        Tests that saving and loading a config with a custom generation kwarg is not possible
         """
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
 
