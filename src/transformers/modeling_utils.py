@@ -1500,10 +1500,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # easily available
         self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
         # Current submodel should register its tied weights keys only if the config is asking for it
-        if not self.config.tie_word_embeddings and not self.config.tie_encoder_decoder:
-            self.all_tied_weights_keys = {}
-        else:
-            self.all_tied_weights_keys = self._tied_weights_keys.copy() if self._tied_weights_keys is not None else {}
+        self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(recurse=False)
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
@@ -2340,6 +2337,56 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Let the magic happen with this simple call
         self.smart_apply(self._initialize_weights)
+
+    def get_expanded_tied_weights_keys(self, recurse: bool = False) -> dict:
+        """
+        Return the expanded tied weight keys (in case they contain modules or regex patterns) for only the current
+        model, or recursively for all submodels if `recurse=True` (i.e. it will re-check the config values for all
+        submodels).
+        """
+        if recurse:
+            expanded_tied_weights = {}
+            for prefix, submodule in self.named_modules():
+                if isinstance(submodule, PreTrainedModel):
+                    # Will dynamically check the config if it has changed
+                    submodel_tied_weights = submodule.get_expanded_tied_weights_keys(recurse=False)
+                    expanded_tied_weights.update(
+                        {f"{prefix}.{k}": f"{prefix}.{v}" for k, v in submodel_tied_weights.items()}
+                    )
+            return expanded_tied_weights
+
+        tied_mapping = self._tied_weights_keys
+        # If the config does not specify any tying, return empty dict
+        if not self.config.tie_word_embeddings and not self.config.tie_encoder_decoder:
+            return {}
+        # If None, return empty dict
+        elif tied_mapping is None:
+            return {}
+
+        # We need to expand the regex patterns or the modules into proper parameters
+        expanded_tied_weights = {}
+        all_param_names = {k for k, _ in self.named_parameters(remove_duplicate=False)} | {
+            k for k, _ in self.named_buffers(remove_duplicate=False)
+        }
+        for target_name, source_name in tied_mapping.items():
+            target_name = "^" + target_name
+            source_name = "^" + source_name
+
+            source_params = sorted(filter(lambda x: re.search(source_name, x), all_param_names))
+            target_params = sorted(filter(lambda x: re.search(target_name, x), all_param_names))
+            if (
+                not len(source_params) > 0
+                or not len(target_params) > 0
+                or len(target_params) % len(source_params) != 0
+            ):
+                raise ValueError(
+                    f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. We found {source_params} to tie into {target_params}"
+                )
+            # we cycle source as it should be dispatch in many target if regex
+            for target_n, source_n in zip(target_params, cycle(source_params)):
+                expanded_tied_weights[target_n] = source_n
+
+        return expanded_tied_weights
 
     def tie_weights(self, missing_keys: Optional[set[str]] = None):
         """
@@ -4563,13 +4610,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
         running inits on them is very costly."""
         for tied_param in self.all_tied_weights_keys.keys():
-            # It's always a proper weight except for 2 or 3 old models where it's a regex or module set to None
-            # -> just skip it in those cases (they will just re-init before tying, so they loose the added optimization)
-            try:
-                param = self.get_parameter(tied_param)
-                param._is_hf_initialized = True
-            except AttributeError:
-                pass
+            param = self.get_parameter(tied_param)
+            param._is_hf_initialized = True
 
     def get_parameter_or_buffer(self, target: str):
         """
