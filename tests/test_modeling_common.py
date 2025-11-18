@@ -2611,7 +2611,9 @@ class ModelTesterMixin:
                     # model might return non-tensors objects (e.g. Cache class)
                     elif isinstance(tuple_object, torch.Tensor):
                         self.assertTrue(
-                            torch.allclose(set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5),
+                            torch.allclose(
+                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                            ),
                             msg=(
                                 "Tuple and dict output are not equal. Difference:"
                                 f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
