@@ -1577,7 +1577,14 @@ class ProcessorMixin(PushToHubMixin):
                 # It's a template string, render it directly
                 pass
 
-        is_tokenizers_fast = hasattr(self, "tokenizer") and self.tokenizer.__class__.__name__.endswith("Fast")
+        # Check if tokenizer is fast - use backend attribute if available, otherwise fall back to class name
+        is_tokenizers_fast = False
+        if hasattr(self, "tokenizer"):
+            if hasattr(self.tokenizer, "backend"):
+                is_tokenizers_fast = self.tokenizer.backend == "tokenizers"
+            else:
+                # Fallback to class name check
+                is_tokenizers_fast = self.tokenizer.__class__.__name__.endswith("Fast")
 
         if kwargs.get("continue_final_message", False):
             if kwargs.get("add_generation_prompt", False):
@@ -1670,11 +1677,20 @@ class ProcessorMixin(PushToHubMixin):
                 batch_images.append(images)
                 batch_videos.append(videos)
 
+        special_tokens_map = {}
+        if hasattr(self, "tokenizer") and hasattr(self.tokenizer, "special_tokens_map"):
+            special_tokens = self.tokenizer.special_tokens_map
+            # Filter out tokens that conflict with template kwargs
+            special_tokens_map = {
+                k: v for k, v in special_tokens.items()
+                if k not in processed_kwargs["template_kwargs"]
+            }
+
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
             chat_template=chat_template,
             **processed_kwargs["template_kwargs"],  # different flags such as `return_assistant_mask`
-            **self.tokenizer.special_tokens_map,  # tokenizer special tokens are used by some templates
+            **special_tokens_map,  # tokenizer special tokens are used by some templates
         )
 
         if not is_batched:
