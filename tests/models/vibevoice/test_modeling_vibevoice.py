@@ -398,13 +398,14 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         """
         reproducer that generates JSON with expected output: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
         standalone script for this test: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-test_integration_single-py
+
+        diffusers library is needed (working with `diffusers==0.35.2`)
         """
         set_seed(42)
         fixtures_path = Path(__file__).parent.parent.parent / "fixtures/vibevoice/expected_results_single.json"
         example_files_repo = "bezzam/vibevoice_samples"
         audio_fn = ["voices/en-Alice_woman.wav", "voices/en-Frank_man.wav"]
         max_new_tokens = 32
-        cfg_scale = 1.3
 
         # Load model and processor
         model = VibeVoiceForConditionalGeneration.from_pretrained(
@@ -434,15 +435,10 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).to(torch_device, dtype=next(model.parameters()).dtype)
 
         # Generate audio
-        noise_scheduler = getattr(diffusers, model.generation_config.noise_scheduler)(
-            **model.generation_config.noise_scheduler_config
-        )
         generated_speech = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            cfg_scale=cfg_scale,
             do_sample=False,
-            noise_scheduler=noise_scheduler,
             return_dict_in_generate=False,
         )[0].cpu().float()
 

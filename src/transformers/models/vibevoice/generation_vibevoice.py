@@ -13,11 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from queue import Queue
 from typing import Optional, Union
-
+import importlib
 import torch
 
 from ...generation import (
@@ -234,35 +233,54 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs
     ):
         """
-        Override to filter out VibeVoice-specific parameters before passing to the base class.
-        This follows the same pattern as CSM's approach with depth_decoder_* parameters.
+        This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
+
+        It extracts VibeVoice-specific parameters from kwargs and sets up the default noise scheduler (if not provided).
+
+        VibeVoice-specific parameters include:
+        - `noise_scheduler`: An optional noise scheduler instance to use instead of the default.
+        - `input_features`: Optional input features for the model, namely pre-processed audio.
+        - `input_features_mask`: Optional mask for the input features.
+        - `monitor_progress`: A callable to monitor generation progress. If provided, this function can be called to 
+            report the progress of the audio generation. The function takes a tensor argument `p` of shape `(n, 3)`, 
+            where `n` is the batch size. `p[i, 0]` contains the current generation step for batch item `i`, `p[i, 1]`
+            contains the maximum generation steps for batch item `i` (which may vary based on input length), and 
+            `p[i, 2]` contains the actual completion step for finished samples. No return value is expected.
+        
         """
-        # Extract VibeVoice-specific parameters and remove them from kwargs
-        vibevoice_kwargs = {
-            k[len("vibevoice_"):]: v for k, v in kwargs.items() if k.startswith("vibevoice_")
-        }
-        
-        # Remove the VibeVoice-specific keys from the original kwargs
-        kwargs = {k: v for k, v in kwargs.items() if not k.startswith("vibevoice_")}
-        
-        # Ensure generation_config is a proper GenerationConfig object
-        if generation_config is None:
-            generation_config = GenerationConfig()
-        elif isinstance(generation_config, dict):
-            generation_config = GenerationConfig(**generation_config)
+        monitor_progress = kwargs.pop("monitor_progress", None)
+        noise_scheduler = kwargs.pop("noise_scheduler", None)
+        input_features = kwargs.pop("input_features", None)
+        input_features_mask = kwargs.get("input_features_mask", None)
+        if "max_new_tokens" in kwargs and kwargs["max_new_tokens"] is None:
+            # pop to default to generation_config max_length behavior instead of internal default of 20
+            kwargs.pop("max_new_tokens")
         
         # Call the base class method with filtered kwargs
         generation_config, model_kwargs = super()._prepare_generation_config(generation_config, use_model_defaults, **kwargs)
-        
-        # Store generation-specific parameters as instance attributes
-        for param in ['cfg_scale', 'n_diffusion_steps', 'noise_scheduler', 'monitor_progress']:
-            if param in vibevoice_kwargs:
-                setattr(self, f'_vibevoice_{param}', vibevoice_kwargs[param])
-        
-        # Add actual model parameters to model_kwargs
-        for param in ['input_features', 'input_features_mask']:
-            if param in vibevoice_kwargs:
-                model_kwargs[param] = vibevoice_kwargs[param]
+
+        # try creating VibeVoice noise scheduler
+        if noise_scheduler is None:
+            # TODO (ebezzam) ok with this so user doesn't need to defined noise scheduler each time?
+            try:
+                scheduler_class = getattr(importlib.import_module("diffusers"), generation_config.noise_scheduler_class)
+                noise_scheduler = scheduler_class(**generation_config.noise_scheduler_config)
+            except ImportError:
+                raise ImportError(
+                    "The default VibeVoice noise scheduler could not be created because `diffusers` is not installed. " \
+                    "Please install with `pip install diffusers`."
+                )
+        if not (hasattr(noise_scheduler, "set_timesteps") and hasattr(noise_scheduler, "step") and hasattr(noise_scheduler, "timesteps")):
+            raise ValueError(
+                "The provided noise scheduler is not compatible with VibeVoice generation. "
+                "It must implement `set_timesteps` and `step` methods, and have a `timesteps` attribute."
+            )
+        generation_config.noise_scheduler = noise_scheduler
+        generation_config.monitor_progress = monitor_progress
+        if input_features is not None:
+            model_kwargs['input_features'] = input_features
+        if input_features_mask is not None:
+            model_kwargs['input_features_mask'] = input_features_mask
         
         return generation_config, model_kwargs
 
@@ -312,13 +330,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
         
         # *************** VibeVoice specific ***************
-        # Extract VibeVoice-specific parameters
         input_features = model_kwargs.pop('input_features', None)
         input_features_mask = model_kwargs.pop('input_features_mask', None)
-        cfg_scale = getattr(self, '_vibevoice_cfg_scale', 1.3)
-        n_diffusion_steps = getattr(self, '_vibevoice_n_diffusion_steps', 10)
-        noise_scheduler = getattr(self, '_vibevoice_noise_scheduler', None)
-        monitor_progress = getattr(self, '_vibevoice_monitor_progress', None)
+        noise_scheduler = generation_config.noise_scheduler
+        monitor_progress = getattr(generation_config, 'monitor_progress', None)
 
         # State tracking
         acoustic_cache = None
@@ -331,7 +346,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         # Output audio
         audio_chunks = [[] for _ in range(batch_size)]
         
-        # Token constraints for VibeVoice
+        # Token constraints for VibeVoice - only allow speech tokens
         valid_tokens = [
             self.config.speech_start_id,
             self.config.speech_end_id,
@@ -347,7 +362,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         negative_kwargs = {
             'input_ids': torch.full((batch_size, 1), self.config.speech_start_id, dtype=torch.long, device=input_ids.device),
             'attention_mask': torch.ones((batch_size, 1), dtype=torch.long, device=input_ids.device),
-            'max_new_tokens': generation_config.max_new_tokens or 100
+            'max_new_tokens': generation_config.max_new_tokens or 100,
         }
         # negative_generation_config = GenerationConfig()
         negative_generation_config, negative_model_kwargs = self._prepare_generation_config(
@@ -581,7 +596,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 positive_condition = outputs.last_hidden_state[diffusion_indices, -1, :]
                 negative_condition = negative_outputs.last_hidden_state[diffusion_indices, -1, :]
 
-                noise_scheduler.set_timesteps(num_inference_steps=n_diffusion_steps)
+                noise_scheduler.set_timesteps(num_inference_steps=generation_config.n_diffusion_steps)
                 condition = torch.cat([positive_condition, negative_condition], dim=0).to(self.diffusion_head.device)
                 speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
                 
@@ -604,7 +619,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     combined = torch.cat([half, half], dim=0)
                     eps = self.diffusion_head(combined, timestep.repeat(combined.shape[0]).to(combined), condition=condition)
                     cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
-                    half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
+                    half_eps = uncond_eps + generation_config.cfg_scale * (cond_eps - uncond_eps)
                     eps = torch.cat([half_eps, half_eps], dim=0)
                     speech = noise_scheduler.step(eps, timestep, speech).prev_sample
                 speech_latent = speech[: len(speech) // 2].unsqueeze(1)
@@ -696,131 +711,3 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             # so returning `input_ids` is insufficient for generated audio
             return final_audio_outputs
         # ============================================
-
-    @torch.no_grad()
-    def generate(
-        self,
-        inputs: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        streamer: Optional[Union[AudioStreamer]] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        input_features_mask: Optional[torch.BoolTensor] = None,
-        cfg_scale: float = 1.3,
-        n_diffusion_steps: int = 10,
-        noise_scheduler = None,
-        monitor_progress: Optional[Callable[[torch.Tensor], None]] = None,
-        **kwargs,
-    ) -> Union[torch.LongTensor, VibeVoiceGenerateOutput]:
-        """
-        Generates sequences of token ids and speech outputs for VibeVoice models.
-        
-        This method implements VibeVoice-specific generation that combines text generation with diffusion-based
-        speech synthesis. It supports streaming audio generation and classifier-free guidance for high-quality
-        speech output.
-
-        Args:
-            inputs (`torch.Tensor`, *optional*):
-                The sequence used as a prompt for the model.
-            generation_config (`GenerationConfig`, *optional*):
-                The generation configuration to be used as base parametrization for the generation call.
-            streamer (`AudioStreamer`, *optional*):
-                Streamer object for real-time audio generation streaming.
-            input_features (`torch.FloatTensor`, *optional*):
-                Input speech tensors for voice cloning or conditioning.
-            input_features_mask (`torch.BoolTensor`, *optional*):
-                Masks for speech tensors to ignore padded parts.
-            cfg_scale (`float`, *optional*, defaults to 1.3):
-                Classifier-free guidance scale for speech generation quality control.
-            n_diffusion_steps (`int`, *optional*, defaults to 10):
-                Number of diffusion denoising steps for speech generation.
-            noise_scheduler (`SchedulerMixin` from `diffusers, *required*):
-                The noise scheduler to use for diffusion sampling.
-            monitor_progress (`Callable[[torch.Tensor], None]`, *optional*):
-                If provided, this function can be called to report the progress of the audio generation. The function
-                takes a tensor argument `p` of shape `(n, 3)`, where `n` is the batch size. `p[i, 0]` contains the
-                current generation step for batch item `i`, `p[i, 1]` contains the maximum generation steps 
-                for batch item `i` (which may vary based on input length), and `p[i, 2]` contains the actual
-                completion step for finished samples. No return value is expected.
-            **kwargs:
-                Additional model-specific kwargs that will be forwarded to the model.
-
-        Example:
-            Using `monitor_progress` to track generation progress:
-
-            ```python
-            >>> import torch
-            >>> from transformers import VibeVoiceForConditionalGeneration
-            >>> from tqdm import tqdm
-
-            >>> model = VibeVoiceForConditionalGeneration.from_pretrained("vibevoice-model")
-
-            >>> # Track which samples have completed to avoid duplicate logging
-            >>> completed_samples = set()
-
-            >>> # Define a callback to monitor the progress of the generation
-            >>> with tqdm(desc="Generating") as pbar:
-            >>>     def monitor_progress(p_batch):
-            >>>         # Check for newly completed samples
-            >>>         finished_samples = (p_batch[:, 0] == p_batch[:, 1]).nonzero(as_tuple=False).squeeze(1)
-            >>>         if finished_samples.numel() > 0:
-            >>>             for sample_idx in finished_samples.tolist():
-            >>>                 if sample_idx not in completed_samples:
-            >>>                     completed_samples.add(sample_idx)
-            >>>                     # Use the actual completion step from column 2
-            >>>                     completion_step = int(p_batch[sample_idx, 2])
-            >>>                     print(f"Sample {sample_idx} completed at step {completion_step}", flush=True)
-            >>>         
-            >>>         # Find the sample with the maximum progress (most advanced)
-            >>>         # This ensures the progress bar continues updating as long as any sample is generating
-            >>>         active_samples = p_batch[:, 0] < p_batch[:, 1]  # Samples that haven't finished
-            >>>         if active_samples.any():
-            >>>             # Use the most advanced active sample
-            >>>             active_progress = p_batch[active_samples]
-            >>>             max_active_idx = torch.argmax(active_progress[:, 0])
-            >>>             p = active_progress[max_active_idx].detach().cpu()
-            >>>         else:
-            >>>             # All samples finished, use any sample (they should all be at max)
-            >>>             p = p_batch[0].detach().cpu()
-            >>>         
-            >>>         pbar.total = int(p[1])
-            >>>         pbar.n = int(p[0])
-            >>>         pbar.update()
-
-            >>>     # Generate audio with progress monitoring
-            >>>     output = model.generate(
-            >>>         input_ids=input_ids,
-            >>>         input_features=input_features,
-            >>>         noise_scheduler=noise_scheduler,
-            >>>         monitor_progress=monitor_progress
-            >>>     )
-            ```
-
-        Returns:
-            [`VibeVoiceGenerateOutput`] or `torch.LongTensor`: A [`VibeVoiceGenerateOutput`] (if 
-            `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a 
-            `torch.LongTensor` containing the generated token sequences. When speech synthesis
-            is performed, also includes the generated audio waveforms.
-        """
-        if noise_scheduler is None:
-            raise ValueError("`noise_scheduler` must be provided, e.g. `DPMSolverMultistepScheduler` from `diffusers`.")
-
-        # Pass VibeVoice-specific parameters through kwargs to _sample method
-        kwargs.update({
-            'vibevoice_input_features': input_features,
-            'vibevoice_input_features_mask': input_features_mask,
-            'vibevoice_cfg_scale': cfg_scale,
-            'vibevoice_n_diffusion_steps': n_diffusion_steps,
-            'vibevoice_noise_scheduler': noise_scheduler,
-            'vibevoice_monitor_progress': monitor_progress,
-        })
-        
-        # To avoid model defaults warning
-        if generation_config is None:
-            generation_config = self.generation_config
-        
-        return super().generate(
-            inputs=inputs,
-            generation_config=generation_config,
-            streamer=streamer,
-            **kwargs
-        )

@@ -397,13 +397,17 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     vibevoice_model.generation_config.cfg_scale = 1.3
     vibevoice_model.n_diffusion_steps = 10
     vibevoice_model.generation_config.do_sample = False
-    vibevoice_model.generation_config.noise_scheduler = "DPMSolverMultistepScheduler"
+    vibevoice_model.generation_config.noise_scheduler_class = "DPMSolverMultistepScheduler"
     vibevoice_model.generation_config.noise_scheduler_config = {
         "num_train_timesteps": 1000,
         "beta_schedule": "squaredcos_cap_v2",
         "prediction_type": "v_prediction",
     }
-    vibevoice_model.generation_config.ddpm_inference_steps = 10
+    vibevoice_model.generation_config.n_diffusion_steps = 10
+    if "7B" in checkpoint:
+        vibevoice_model.generation_config.max_new_tokens = 20250
+    else:
+        vibevoice_model.generation_config.max_new_tokens = 40500
 
     vibevoice_model.save_pretrained(output_dir)
     # -- push to hub
