@@ -91,10 +91,9 @@ ONNX_UNSUPPORTED_MODEL_TYPES: set[str] = {
     "zamba2",
 }
 
-# The following are models that can be exported but
-# their outputs don't match the expected outputs
-# Q: should we error on these models ?
-ONNX_INACCURATE_MODEL_TYPES: set[str] = {
+# The following are models that can be exported but their outputs
+# are extremely inaccurate compared to the original model.
+ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
     "audioflamingo3",
     "bit",
     "blt",
@@ -136,9 +135,9 @@ class OnnxExporter(DynamoExporter):
                 f"{self.__class__.__name__} is not supported for model type '{model.config.model_type}'."
             )
 
-        if model.config.model_type in ONNX_INACCURATE_MODEL_TYPES:
+        if model.config.model_type in ONNX_EXTREMELY_INACCURATE_MODEL_TYPES:
             raise NotImplementedError(
-                f"{self.__class__.__name__} does not produce accurate outputs for model type '{model.config.model_type}'."
+                f"Exporting a model of type '{model.config.model_type}' results in an ONNX model with extremely inaccurate outputs."
             )
 
         optimize = self.export_config.optimize
