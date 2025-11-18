@@ -168,6 +168,7 @@ def copy_(tensor: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
 TORCH_MODULES_TO_PATCH = (
     torch.nn.init,
     torch.nn.modules.activation,
+    torch.nn.modules.transformer,
 )
 
 
