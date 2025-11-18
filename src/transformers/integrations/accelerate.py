@@ -470,7 +470,11 @@ def expand_device_map(device_map, param_names):
     return new_device_map
 
 
-def update_param_name(param_name: str, weight_pattern_alt, weight_pattern_by_group_name, source_to_target):
+def update_param_name(param_name: str, weight_pattern_alt, weight_pattern_by_group_name, source_to_target) -> str:
+    """Update a source `param_name` in a checkpoint into the target name that the model expects, if different.
+    This uses the same logic as `core_model_loading.py`."""
+    # TODO Cyril: This function would not even need to exist if the Converter entries already contained the
+    # full expanded source and target names
     from ..core_model_loading import match_glob
 
     if weight_pattern_alt is None:
