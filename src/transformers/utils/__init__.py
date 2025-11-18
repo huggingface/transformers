@@ -177,6 +177,8 @@ from .import_utils import (
     is_nltk_available,
     is_num2words_available,
     is_onnx_available,
+    is_onnxruntime_available,
+    is_onnxscript_available,
     is_openai_available,
     is_optimum_available,
     is_optimum_quanto_available,

@@ -89,6 +89,8 @@ from transformers.testing_utils import (
     require_flash_attn_3,
     require_kernels,
     require_non_hpu,
+    require_onnxruntime,
+    require_onnxscript,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -3518,48 +3520,39 @@ class ModelTesterMixin:
                 model, inputs_dict = prepare_for_export(model, inputs_dict)
 
                 with torch.no_grad():
-                    set_seed(1234)
                     # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
                     # the export, the model used for export will return FakeTensors instead of real ones (torch cuda/inductor issue)
                     # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
+                    set_seed(1234)
                     eager_outputs = model(**copy.deepcopy(inputs_dict))
                     eager_outputs = get_leaf_tensors(eager_outputs)
-
-                if len(eager_outputs) == 0:
-                    self.fail("Eager outputs is empty.")
-                if not all(isinstance(output, torch.Tensor) for output in eager_outputs):
-                    self.fail("Eager outputs contain non-tensor values.")
+                    self.assertTrue(eager_outputs, "Eager outputs is empty.")
 
                 try:
                     exported_program = exporter.export(model, inputs_dict)
                 except NotImplementedError:
                     continue
-                except Exception as e:
-                    raise e
 
                 with torch.no_grad():
                     set_seed(1234)
                     exported_outputs = exported_program.module()(**copy.deepcopy(inputs_dict))
                     exported_outputs = get_leaf_tensors(exported_outputs)
-
-                # Check outptus sanity:
-                if len(exported_outputs) == 0:
-                    self.fail("Exported outputs is empty.")
-                if not all(isinstance(output, torch.Tensor) for output in exported_outputs):
-                    self.fail("Exported outputs contain non-tensor values.")
+                    self.assertTrue(exported_outputs, "Exported outputs is empty.")
 
                 # Check outputs closeness:
-                torch.testing.assert_close(eager_outputs, exported_outputs, atol=atol, rtol=rtol)
+                torch.testing.assert_close(exported_outputs, eager_outputs, atol=atol, rtol=rtol)
 
     @slow
+    @require_onnxscript
+    @require_onnxruntime
     @require_torch_greater_or_equal("2.5")
-    @pytest.mark.torch_onnx_export_test
-    def test_torch_onnx_export(self, atol=1e-4, rtol=1e-2):
+    @pytest.mark.onnx_export_test
+    def test_onnx_export(self, atol=1e-2, rtol=1e-2):
         """
         Test if model can be exported with torch.onnx.export()
 
         Args:
-            atol (`float`, *optional*, defaults to 1e-4): absolute tolerance for output comparison
+            atol (`float`, *optional*, defaults to 1e-2): absolute tolerance for output comparison
             rtol (`float`, *optional*, defaults to 1e-2): relative tolerance for output comparison
         """
 
@@ -3579,22 +3572,18 @@ class ModelTesterMixin:
                 model, inputs_dict = prepare_for_export(model, inputs_dict)
 
                 with torch.no_grad():
-                    set_seed(1234)
                     # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
                     # the export, the model used for export will return FakeTensors instead of real ones (torch cuda/inductor issue)
                     # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
+                    set_seed(1234)
                     eager_outputs = model(**copy.deepcopy(inputs_dict))
                     eager_outputs = get_leaf_tensors(eager_outputs)
-
-                if len(eager_outputs) == 0:
-                    self.fail("Eager outputs is empty.")
+                    self.assertTrue(eager_outputs, "Eager outputs is empty.")
 
                 try:
                     onnx_program = exporter.export(model, inputs_dict)
                 except NotImplementedError:
                     continue
-                except Exception as e:
-                    raise e
 
                 # Remove non-tensor inputs as they were probably converted to constants during the onnx export
                 inputs_dict = {
@@ -3603,21 +3592,26 @@ class ModelTesterMixin:
                     if not isinstance(v, (int, float, bool, str)) and v is not None
                 }
 
-                try:
-                    set_seed(1234)
-                    onnx_outputs = onnx_program(**copy.deepcopy(inputs_dict))
-                    onnx_outputs = get_leaf_tensors(onnx_outputs)
-                except Exception as e:
-                    raise e
+                set_seed(1234)
+                onnx_outputs = onnx_program(**copy.deepcopy(inputs_dict))
+                onnx_names = (re.sub(r"^output.", "", node.name) for node in onnx_program.model_proto.graph.output)
+                onnx_outputs = dict(zip(onnx_names, onnx_outputs))
+                self.assertTrue(onnx_outputs, "ONNX outputs is empty.")
 
-                if len(onnx_outputs) == 0:
-                    self.fail("ONNX outputs is empty.")
+                # Sometimes the model will return the same tensor multiple times under different names
+                # while onnx will just return it once, dropping one of the duplicates (arbitrarily).
+                eager_outputs = {k: v for k, v in eager_outputs.items() if k in onnx_outputs}
 
-                # Check if outputs are close:
                 try:
-                    torch.testing.assert_close(eager_outputs, onnx_outputs, atol=atol, rtol=rtol, check_device=False)
-                except AssertionError:
-                    pass
+                    # Check if outputs are close:
+                    torch.testing.assert_close(onnx_outputs, eager_outputs, atol=atol, rtol=rtol, check_device=False)
+                except AssertionError as e:
+                    mismatch_percentage = re.search(r"(\d+\.?\d*%)", str(e))
+                    if mismatch_percentage is not None:
+                        percentage = float(mismatch_percentage.group(1).strip("%"))
+                        if percentage < 5.0:
+                            continue
+                    self.fail(f"ONNX exported model of type {config.model_type} failed the output closeness test: {e}")
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):

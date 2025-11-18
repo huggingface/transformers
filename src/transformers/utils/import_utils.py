@@ -696,6 +696,16 @@ def is_onnx_available() -> bool:
 
 
 @lru_cache
+def is_onnxscript_available() -> bool:
+    return _is_package_available("onnxscript")
+
+
+@lru_cache
+def is_onnxruntime_available() -> bool:
+    return _is_package_available("onnxruntime") or _is_package_available("onnxruntime-gpu")
+
+
+@lru_cache
 def is_flute_available() -> bool:
     is_available, flute_version = _is_package_available("flute", return_version=True)
     return is_available and version.parse(flute_version) >= version.parse("0.4.1")
