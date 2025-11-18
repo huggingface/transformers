@@ -174,7 +174,7 @@ class SmolVLMModel(Idefics3Model):
             image_mask = input_ids == self.config.image_token_id
 
         num_image_tokens = image_mask.sum(dim=1)
-        if not torch.all(num_image_tokens % patch_size == 0):
+        if not torch.compiler.is_exporting() and not torch.all(num_image_tokens % patch_size == 0):
             raise ValueError("At least one sample has <image> tokens not divisible by patch_size.")
 
         blocks_per_sample = num_image_tokens // patch_size
@@ -212,7 +212,7 @@ class SmolVLMModel(Idefics3Model):
         nb_values_per_image = pixel_values.shape[1:].numel()
         real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
 
-        if not any(real_images_inds):
+        if not torch.compiler.is_exporting() and not any(real_images_inds):
             # no images, leave one empty image.
             real_images_inds[0] = True
 

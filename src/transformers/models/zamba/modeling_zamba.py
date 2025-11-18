@@ -204,6 +204,8 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
+        if torch.compiler.is_exporting():
+            torch._check(attention_mask.shape[3] >= key_states.shape[-2])
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
@@ -505,10 +507,10 @@ class ZambaMambaMixer(nn.Module):
                 device=hidden_states.device,
                 dtype=dtype,
             )
-            if attention_mask is not None and not torch.all(attention_mask == 1):
+            if torch.compiler.is_exporting() or (attention_mask is not None and not torch.all(attention_mask == 1)):
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
-            if attention_mask is not None and not torch.all(attention_mask == 1):
+            if torch.compiler.is_exporting() or (attention_mask is not None and not torch.all(attention_mask == 1)):
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 3. State Space Model sequence transformation
@@ -978,6 +980,8 @@ class ZambaModel(ZambaPreTrainedModel):
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             if attention_mask.dim() == 2:
                 mask_length = attention_mask.shape[-1]
+                if torch.compiler.is_exporting():
+                    torch._check(causal_mask.shape[-1] >= attention_mask.shape[-1])
                 padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
                 causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
 

@@ -197,7 +197,6 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
     test_attention_outputs = False
 
     def setUp(self):

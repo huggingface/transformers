@@ -1800,6 +1800,8 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
                 sequence_for_image = sequence_for_image[masked_tokens, :]
                 mmm_image_logits = self.mmm_image_head(sequence_for_image)
                 if return_loss:
+                    if torch.compiler.is_exporting():
+                        torch._check(mmm_image_logits.shape[0] > 0)
                     mmm_image_loss = nn.functional.cross_entropy(
                         mmm_image_logits.view(-1, self.image_vocab_size), mim_labels_filtered.view(-1)
                     )
@@ -1819,6 +1821,8 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
                 sequence_for_text = sequence_for_text[masked_tokens, :]
                 mmm_text_logits = self.mmm_text_head(sequence_for_text)
                 if return_loss:
+                    if torch.compiler.is_exporting():
+                        torch._check(mmm_text_logits.shape[0] > 0)
                     mmm_text_loss = nn.functional.cross_entropy(
                         mmm_text_logits.view(-1, self.text_vocab_size), mlm_labels_filtered.view(-1)
                     )
@@ -1834,7 +1838,8 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             image_embedding = self.flava.image_projection(image_embeddings[:, 0, :])
             image_embedding = nn.functional.normalize(image_embedding, dim=-1)
 
-            self.flava.logit_scale.data.clamp_(LOGIT_SCALE_CLAMP_MIN, LOGIT_SCALE_CLAMP_MAX)
+            if self.training:
+                self.flava.logit_scale.data.clamp_(LOGIT_SCALE_CLAMP_MIN, LOGIT_SCALE_CLAMP_MAX)
 
             logits_per_image, logits_per_text, gc_labels = self.global_contrastive_head(
                 image_embedding, text_embedding, self.flava.logit_scale

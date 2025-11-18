@@ -328,7 +328,7 @@ class DacResidualVectorQuantize(nn.Module):
             )
 
             # Create mask to apply quantizer dropout
-            mask = torch.full((hidden_state.shape[0],), fill_value=i, device=hidden_state.device) < n_quantizers
+            mask = torch.full((hidden_state.shape[0],), i, device=hidden_state.device, dtype=torch.long) < n_quantizers
             quantized_representation = quantized_representation + quantized_representation_i * mask[:, None, None]
             residual = residual - quantized_representation_i
 

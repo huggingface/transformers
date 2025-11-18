@@ -1301,11 +1301,18 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
-        if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
+        if not torch.compiler.is_exporting() and len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
-        sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
-            :, -1, :
-        ]
+
+        batch_size, _, hidden_size = hidden_states.size()
+        if torch.compiler.is_exporting():
+            # exportable version: avoids data-dependent shapes
+            last_eos_indices = eos_mask.long().cumsum(1).argmax(1)
+            batch_indices = torch.arange(batch_size, device=hidden_states.device)
+            sentence_representation = hidden_states[batch_indices, last_eos_indices]
+        else:
+            sentence_representation = hidden_states[eos_mask, :].view(batch_size, -1, hidden_size)[:, -1, :]
+
         logits = self.classification_head(sentence_representation)
 
         loss = None

@@ -776,6 +776,8 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
             dtype=torch.long,
             device=input_ids.device,
         )
+        if torch.compiler.is_exporting():
+            torch._check(num_questions.shape[0] == positions.shape[0])
         cols = torch.cat([torch.arange(n) for n in num_questions])
         positions[rows, cols] = flat_positions
         return positions
