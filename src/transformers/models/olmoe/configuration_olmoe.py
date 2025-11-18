@@ -104,6 +104,7 @@ class OlmoeConfig(PreTrainedConfig):
 
     model_type = "olmoe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_local_experts": "num_experts"}
 
     def __init__(
         self,
@@ -122,7 +123,7 @@ class OlmoeConfig(PreTrainedConfig):
         bos_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = 50279,
         tie_word_embeddings: Optional[int] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         clip_qkv: Optional[bool] = None,

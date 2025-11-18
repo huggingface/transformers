@@ -50,7 +50,7 @@ class TimeSeriesTransformerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         prediction_length=7,
         context_length=14,
         cardinality=19,
@@ -205,7 +205,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()

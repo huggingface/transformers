@@ -45,8 +45,8 @@ from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeMLP,
     Ernie4_5_MoeModel,
     Ernie4_5_MoeRMSNorm,
-    Ernie4_5_MoeSparseMoeBlock,
     Ernie4_5_MoeStatics,
+    Ernie4_5_MoeTopKRouter,
 )
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
@@ -207,20 +207,25 @@ class Ernie4_5_VLMoeStatics(Ernie4_5_MoeStatics):
     pass
 
 
+class Ernie4_5_VLMoeTopKRouter(Ernie4_5_MoeTopKRouter):
+    def __init__(self, config):
+        super().__init__(config)
+        self.moe_statics = Ernie4_5_VLMoeStatics(config)
+
+
 class Ernie4_5_VLMoeExperts(Ernie4_5_MoeExperts):
-    pass
+    def __init__(self, config, intermediate_size=None):
+        super().__init__(config)
+        self.intermediate_dim = config.moe_intermediate_size if intermediate_size is None else intermediate_size
 
 
-class Ernie4_5_VLSparseMoeBlock(Ernie4_5_MoeSparseMoeBlock):
+class Ernie4_5_VLSparseMoeBlock(nn.Module):
     def __init__(self, config, intermediate_size):
-        nn.Module.__init__()
+        super().__init__()
         self.hidden_dim = config.hidden_size
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_k
-        self.norm_min = config.moe_norm_min
-
-        self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
-        self.moe_statics = Ernie4_5_VLMoeStatics(config)
+        self.gate = Ernie4_5_VLMoeTopKRouter(config)
         self.experts = Ernie4_5_VLMoeExperts(config, intermediate_size)
 
     def forward(
@@ -229,7 +234,7 @@ class Ernie4_5_VLSparseMoeBlock(Ernie4_5_MoeSparseMoeBlock):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.view(-1, self.hidden_dim)
 
-        selected_experts, routing_weights, router_logits = self.route_tokens_to_experts(hidden_states)
+        selected_experts, routing_weights, router_logits = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
 
         # moe results are changed to a flattened shape to ease the modality isolated assigning of results

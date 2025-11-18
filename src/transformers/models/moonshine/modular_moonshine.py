@@ -164,7 +164,7 @@ class MoonshineConfig(PreTrainedConfig):
         initializer_range: Optional[float] = 0.02,
         decoder_start_token_id: Optional[int] = 1,
         use_cache: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         partial_rotary_factor: Optional[float] = 0.9,
         is_encoder_decoder: Optional[bool] = True,
         attention_bias: Optional[bool] = False,
@@ -764,7 +764,7 @@ class MoonshineModel(WhisperModel):
     """
 )
 class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["proj_out.weight"]
+    _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)

@@ -335,25 +335,78 @@ class Ernie4_5_VLMoeStatics(nn.Module):
         return hidden_states + self.e_score_correction_bias.squeeze()
 
 
-class Ernie4_5_VLMoeExperts(nn.ModuleList):
+class Ernie4_5_VLMoeTopKRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.weight = nn.Parameter(torch.zeros(config.moe_num_experts, config.hidden_size, dtype=torch.float32))
+        self.moe_statics = Ernie4_5_VLMoeStatics(config)
+        self.top_k = config.moe_k
+        self.norm_min = config.moe_norm_min
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        device_type = (
+            hidden_states.device.type
+            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
+            else "cpu"
+        )
+
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            router_logits = F.linear(hidden_states.float(), self.weight)
+            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+            _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
+            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
+            routing_weights = routing_weights / torch.clamp(
+                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
+            )
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        return routing_weights, selected_experts, router_logits
+
+
+class Ernie4_5_VLMoeExperts(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.num_experts = config.moe_num_experts
-        intermediate_size = config.moe_intermediate_size if intermediate_size is None else intermediate_size
-        for _ in range(self.num_experts):
-            self.append(Ernie4_5_VLMLP(config, intermediate_size))
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.moe_intermediate_size if intermediate_size is None else intermediate_size
+        self.use_bias = config.use_bias
+        self.act_fn = ACT2FN[config.hidden_act]
+
+        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        if self.use_bias:
+            self.gate_up_proj_bias = nn.Parameter(torch.zeros(self.num_experts, 2 * self.intermediate_dim))
+            self.down_proj_bias = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        else:
+            self.gate_up_proj_bias = None
+            self.down_proj_bias = None
 
     def forward(
         self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
+        if selected_experts.numel() == 0:
+            return final_hidden_states
+
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
+            expert_idx = int(expert_idx.item())
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
             current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * routing_weights[top_x, idx, None]
+            gate_inputs = F.linear(
+                current_state,
+                self.gate_up_proj[expert_idx],
+                None if self.gate_up_proj_bias is None else self.gate_up_proj_bias[expert_idx],
+            )
+            gate, up = gate_inputs.chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = F.linear(
+                current_hidden_states,
+                self.down_proj[expert_idx],
+                None if self.down_proj_bias is None else self.down_proj_bias[expert_idx],
+            )
+            current_hidden_states = current_hidden_states * routing_weights[top_x, idx, None]
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
@@ -364,29 +417,8 @@ class Ernie4_5_VLSparseMoeBlock(nn.Module):
         self.hidden_dim = config.hidden_size
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_k
-        self.norm_min = config.moe_norm_min
-
-        self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
-        self.moe_statics = Ernie4_5_VLMoeStatics(config)
+        self.gate = Ernie4_5_VLMoeTopKRouter(config)
         self.experts = Ernie4_5_VLMoeExperts(config, intermediate_size)
-
-    def route_tokens_to_experts(self, hidden_states):
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
-
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            router_logits = self.gate(hidden_states.float())
-            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-            _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
-            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
-            routing_weights = routing_weights / torch.clamp(
-                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
-            )
-        routing_weights = routing_weights.to(hidden_states.dtype)
-        return selected_experts, routing_weights, router_logits
 
     def forward(
         self,
@@ -394,7 +426,7 @@ class Ernie4_5_VLSparseMoeBlock(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.view(-1, self.hidden_dim)
 
-        selected_experts, routing_weights, router_logits = self.route_tokens_to_experts(hidden_states)
+        selected_experts, routing_weights, router_logits = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
 
         # moe results are changed to a flattened shape to ease the modality isolated assigning of results
@@ -1055,7 +1087,7 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
 
 @auto_docstring
 class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1549,7 +1581,7 @@ def load_balancing_loss_func(
 
 class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 

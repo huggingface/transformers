@@ -51,7 +51,7 @@ class ChameleonModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         seq_length=35,
         is_training=False,
         use_input_mask=True,

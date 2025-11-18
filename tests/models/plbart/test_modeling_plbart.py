@@ -71,7 +71,7 @@ class PLBartModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         seq_length=7,
         is_training=True,
         use_labels=False,
@@ -261,7 +261,7 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -437,6 +437,7 @@ class PLBartJavaCsIntegrationTest(AbstractSeq2SeqIntegrationTest):
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@slow
 class PLBartBaseIntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "uclanlp/plbart-base"
     src_text = ["Is 0 the first Fibonacci number ?", "Find the sum of all prime numbers ."]
@@ -452,7 +453,6 @@ class PLBartBaseIntegrationTest(AbstractSeq2SeqIntegrationTest):
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         self.assertEqual(self.tgt_text[0], decoded[0])
 
-    @slow
     def test_fill_mask(self):
         inputs = self.tokenizer(["Is 0 the <mask> Fibonacci <mask> ?"], return_tensors="pt").to(torch_device)
         src_lan = self.tokenizer._convert_lang_code_special_format("en_XX")
@@ -470,7 +470,7 @@ class PLBartStandaloneDecoderModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
+        batch_size=2,
         d_model=16,
         decoder_seq_length=7,
         is_training=True,
