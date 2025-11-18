@@ -15,7 +15,7 @@
 
 from copy import deepcopy
 
-from .core_model_loading import Concatenate, MergeModulelist, WeightConverter, WeightRenaming
+from .core_model_loading import Concatenate, MergeModulelist, WeightConverter, WeightRenaming, Chunk
 from .utils import is_torch_available
 
 
@@ -52,11 +52,16 @@ def _build_checkpoint_conversion_mapping():
                     ),  # each process has two lists of tensors, we cat each list. -> we end up with 2 tensors
                 ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
             ),
-            # WeightConverter(
-            #     ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
-            #     "self_attn.qkv_proj",
-            #     operations=[Concatenate(dim=0)],  # more like stack?
-            # ),
+            WeightConverter(
+                ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
+                "self_attn.qkv_proj",
+                operations=[Concatenate(dim=0)],  # more like stack?
+            ),
+            WeightConverter(
+                "input_layernorm.weight",
+                ["input_layernorm1.weight", "input_layernorm2.weight"],
+                operations=[Chunk(dim=0)],  # more like stack?
+            ),
 
             # TODO @ArthurZucker support this kind of patterns
             # WeightConverter(
