@@ -87,7 +87,7 @@ class SpeechT5ModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         is_training=False,
         vocab_size=81,
@@ -209,7 +209,7 @@ class SpeechT5ForSpeechToTextTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         encoder_seq_length=1024,  # speech is longer
         decoder_seq_length=7,
         is_training=False,
@@ -749,7 +749,7 @@ class SpeechT5ForTextToSpeechTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         encoder_seq_length=7,
         decoder_seq_length=1024,  # speech is longer
         is_training=False,
@@ -1239,7 +1239,7 @@ class SpeechT5ForSpeechToSpeechTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         encoder_seq_length=1024,  # speech is longer
         decoder_seq_length=1024,
         is_training=False,
@@ -1660,7 +1660,7 @@ class SpeechT5HifiGanTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         is_training=False,
         num_mel_bins=20,
