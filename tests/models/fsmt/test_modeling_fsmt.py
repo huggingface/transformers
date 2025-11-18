@@ -56,7 +56,7 @@ class FSMTModelTester:
         src_vocab_size=99,
         tgt_vocab_size=99,
         langs=["ru", "en"],
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         is_training=False,
         use_labels=False,
