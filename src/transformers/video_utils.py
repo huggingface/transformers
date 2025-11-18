@@ -581,13 +581,16 @@ def read_video_torchcodec(
     requires_backends(read_video_torchcodec, ["torchcodec"])
     from torchcodec.decoders import VideoDecoder
 
+    # VideoDecoder expects a string for device, default to "cpu" if None
+    device = kwargs.get("device") or "cpu"
+
     decoder = VideoDecoder(
         video_path,
         # Interestingly `exact` mode takes less than approximate when we load the whole video
         seek_mode="exact",
         # Allow FFmpeg decide on the number of threads for efficiency
         num_ffmpeg_threads=0,
-        device=kwargs.get("device"),
+        device=device,
     )
     metadata = VideoMetadata(
         total_num_frames=decoder.metadata.num_frames,
