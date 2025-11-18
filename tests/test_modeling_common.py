@@ -105,16 +105,11 @@ from transformers.utils import (
     CONFIG_NAME,
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
-    is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
 
 from .generation.test_utils import GenerationTesterMixin
-
-
-if is_accelerate_available():
-    from accelerate.utils import compute_module_sizes
 
 
 if is_torch_available():
@@ -125,6 +120,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
+    from transformers.integrations.accelerate import compute_module_sizes
     from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
@@ -2370,7 +2366,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir, safe_serialization=False)
 
@@ -2416,7 +2412,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
@@ -2455,7 +2451,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             # We test several splits of sizes to make sure it works.
             max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2498,7 +2494,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             # We test several splits of sizes to make sure it works.
             max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
