@@ -590,12 +590,12 @@ class Mamba2Mixer(nn.Module):
             # 1. Compute the output for each intra-chunk (diagonal blocks)
             # This is the analog of a causal mask
             L = torch.exp(segment_sum(A))
-            Y_diag = torch.einsum("bclhn,bcshn,bhcls,bcshp->bclhp", C, B, L, X)
+            Y_diag = torch.einsum("bclhn,bcshn,bhcls,bcshp->bclhp", C, B, L, hidden_states)
 
             # 2. Compute the state for each intra-chunk
             # (right term of low-rank factorization of off-diagonal blocks; B terms)
             decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
-            states = torch.einsum("bclhn,bhcl,bclhp->bchpn", B, decay_states, X)
+            states = torch.einsum("bclhn,bhcl,bclhp->bchpn", B, decay_states, hidden_states)
 
             # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
             # (middle term of factorization of off-diag blocks; A terms)
