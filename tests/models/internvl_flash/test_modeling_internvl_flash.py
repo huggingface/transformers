@@ -39,11 +39,6 @@ if is_torch_available():
 
     from transformers import InternvlFlashForConditionalGeneration, InternvlFlashModel
 
-
-if is_vision_available():
-    pass
-
-
 class InternvlFlashVisionText2TextModelTester:
     def __init__(
         self,
@@ -196,9 +191,6 @@ class InternvlFlashModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         self.model_tester = InternvlFlashVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=InternvlFlashConfig, has_text_modality=False)
 
-    @unittest.skip(
-        reason="Failing with `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
-    )
     def test_flex_attention_with_grads(self):
         pass
 

@@ -235,59 +235,72 @@ class InternvlFlashModel(InternVLModel):
         input_embeds: torch.Tensor,
         input_ids: torch.Tensor,
         mask_idx: torch.Tensor,
+        lengths: torch.Tensor,
+        starts: torch.Tensor,
+        ends: torch.Tensor,
         img_context_token_id: int,
         gate_result,
     ) -> tuple:
         N, C = input_embeds.shape
 
-        input_ids = input_ids.squeeze(0)  # (N,)
-        selected = input_ids == self.config.image_token_id
-        padded = torch.cat(
-            [torch.tensor([0], device=selected.device), selected.int(), torch.tensor([0], device=selected.device)]
-        )
-        diff = torch.diff(padded)
-
-        starts = (diff == 1).nonzero(as_tuple=True)[0]
-        ends = (diff == -1).nonzero(as_tuple=True)[0]
-        lengths = ends - starts
-
         keep_mask = torch.ones(N, dtype=torch.bool, device=input_embeds.device)
 
         delete_flags = torch.zeros(N, dtype=torch.int32, device=input_embeds.device)
 
-        total_blocks = 0
-        block_counts = []
-        for l in lengths.tolist():
-            if l % 256 != 0:
-                raise ValueError(f"l % 256 != 0, l = {l}")
-            num_blocks = l // 256
-            block_counts.append(num_blocks)
-            total_blocks += num_blocks
+        # total_blocks = 0
+        # block_counts = []
+        # for l in lengths.tolist():
+        #     if l % 256 != 0:
+        #         raise ValueError(f"l % 256 != 0, l = {l}")
+        #     num_blocks = l // 256
+        #     block_counts.append(num_blocks)
+        #     total_blocks += num_blocks
 
-        flag_idx = 0
-        for s, e, l, num_blocks in zip(starts.tolist(), ends.tolist(), lengths.tolist(), block_counts):
-            for i in range(num_blocks):
-                block_start = s + i * 256
-                block_end = block_start + 256
+        # flag_idx = 0
+        # for s, num_blocks in zip(starts.tolist(), block_counts):
+        #     for i in range(num_blocks):
+        #         block_start = s + i * 256
+        #         block_end = block_start + 256
 
-                compress = gate_result[flag_idx]
-                flag_idx += 1
+        #         compress = gate_result[flag_idx]
+        #         flag_idx += 1
 
-                if compress:
-                    keep_mask[block_start + 64 : block_end] = False
-                    delete_flags[block_start + 64 : block_end] = 1
+        #         if compress:
+        #             keep_mask[block_start + 64 : block_end] = False
+        #             delete_flags[block_start + 64 : block_end] = 1
+
+        if (lengths % 256 != 0).any():
+            raise ValueError(f"lengths % 256 != 0, lengths = {lengths}")
+        
+        block_counts = lengths // 256
+        total_blocks = block_counts.sum()
+
+        starts_expended = torch.repeat_interleave(starts, block_counts)
+        global_range = torch.arange(total_blocks, device=input_embeds.device)
+        cumsum_blocks = torch.cumsum(block_counts, dim=0)
+        group_starts = torch.cat([torch.zeros(1, dtype=torch.long, device=lengths.device), cumsum_blocks[:-1]])
+        local_block_indices = global_range - torch.repeat_interleave(group_starts, block_counts)
+
+        all_block_starts = starts_expended + (local_block_indices * 256)
+
+        compressed_starts = all_block_starts[gate_result]
+
+        if compressed_starts.numel() > 0:
+            offsets = torch.arange(64, 256, device=input_embeds.device)
+            indices_to_remove = (compressed_starts.unsqueeze(1) + offsets.unsqueeze(0)).view(-1)
+
+            keep_mask[indices_to_remove] = False
+            delete_flags[indices_to_remove] = 1
+
+
 
         cumulative_deletes = torch.cumsum(delete_flags, dim=0)
         cumulative_deletes = torch.cat([cumulative_deletes, cumulative_deletes[-1:].clone()], dim=0)
 
-        mask_idx = mask_idx.squeeze(0)
-        updated_mask_idx = mask_idx - cumulative_deletes[mask_idx.to(cumulative_deletes.device)].to(mask_idx.device)
-        updated_mask_idx = updated_mask_idx.unsqueeze(0)
-
         new_input_embeds = input_embeds[keep_mask.to(input_embeds.device), :]
         new_input_ids = input_ids[keep_mask.to(input_ids.device)]
 
-        return new_input_embeds, new_input_ids, updated_mask_idx, keep_mask
+        return new_input_embeds, new_input_ids, keep_mask
 
     def get_image_num_per_sample(
         self,
@@ -304,7 +317,7 @@ class InternvlFlashModel(InternVLModel):
         ends = (diff == -1).nonzero(as_tuple=True)[0]
         lengths = ends - starts
 
-        return lengths
+        return lengths, starts, ends
 
     def get_image_features(
         self,
@@ -365,6 +378,18 @@ class InternvlFlashModel(InternVLModel):
 
         return vit_embeds, gate_result
 
+    def _scatter_image_embeddings(
+            self,
+            inputs_embeds: torch.Tensor,
+            input_ids: torch.Tensor,
+            vit_embeds: torch.Tensor,
+        ) -> torch.Tensor:
+            selected_mask = input_ids == self.config.image_token_id
+            if selected_mask.sum() == 0:
+                return inputs_embeds 
+            inputs_embeds[selected_mask] = vit_embeds.to(inputs_embeds.device)
+            return inputs_embeds
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -385,7 +410,7 @@ class InternvlFlashModel(InternVLModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            lengths = self.get_image_num_per_sample(input_ids) / 256
+            lengths, starts, ends= self.get_image_num_per_sample(input_ids) / 256
             lengths_copy = lengths.clone()
 
             lengths_sum = torch.ones(int(lengths.sum().item()), dtype=torch.int64)
@@ -398,21 +423,20 @@ class InternvlFlashModel(InternVLModel):
             input_ids = input_ids.reshape(B * N)
 
             assert torch.all(attention_mask == 1)
-            inputs_embeds, input_ids, attention_mask, keep_mask = self.compress_visual_tokens_in_sentence(
+            inputs_embeds, input_ids, keep_mask = self.compress_visual_tokens_in_sentence(
                 input_embeds=inputs_embeds,
                 input_ids=input_ids,
-                mask_idx=attention_mask,
                 img_context_token_id=self.config.image_token_id,
                 gate_result=gate_result,
             )
 
-            attention_mask = torch.ones(1, inputs_embeds.shape[0]).to(inputs_embeds.device)
+            attention_mask = attention_mask[:, keep_mask].to(inputs_embeds.device)
 
-            selected = input_ids == self.config.image_token_id
-            assert selected.sum() != 0
-            inputs_embeds[selected] = vit_embeds.to(inputs_embeds.device)
-
-            inputs_embeds = inputs_embeds.reshape(B, -1, C)
+            inputs_embeds = self._scatter_image_embeddings(
+                inputs_embeds=inputs_embeds,
+                input_ids=input_ids,
+                vit_embeds=vit_embeds,
+            ).reshape(B, -1, C)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
