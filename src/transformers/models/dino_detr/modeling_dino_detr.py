@@ -985,7 +985,6 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         config (`DinoDetrConfig`):
             The configuration object containing model parameters. Must include the following attributes:
             - `num_encoder_layers` (int): The number of encoder layers.
-            - `enc_layer_share` (bool): Whether to share weights across encoder layers.
             - `num_queries` (int): The number of queries.
             - `d_model` (int): The hidden size of the model.
 
@@ -1024,7 +1023,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
             self.layers = _get_clones(
                 encoder_layer,
                 config.num_encoder_layers,
-                layer_share=config.enc_layer_share,
+                layer_share=False,
             )
         else:
             self.layers = []
@@ -1199,7 +1198,6 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         config (`DinoDetrConfig`):
             The configuration object containing model parameters. Must include the following attributes:
             - `num_decoder_layers` (int): The number of decoder layers.
-            - `dec_layer_share` (bool): Whether to share weights across decoder layers.
             - `num_feature_levels` (int): The number of feature levels.
             - `query_dim` (int): The dimensionality of the query embeddings.
             - `d_model` (int): The hidden size of the model.
@@ -1241,7 +1239,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
             self.layers = _get_clones(
                 decoder_layer,
                 config.num_decoder_layers,
-                layer_share=config.dec_layer_share,
+                layer_share=False,
             )
         else:
             self.layers = []
@@ -1969,14 +1967,8 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
         nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
 
-        if config.dec_pred_bbox_embed_share:
-            self.bbox_embed = _get_clones(self.bbox_embed, config.num_decoder_layers, layer_share=True)
-        else:
-            self.bbox_embed = [copy.deepcopy(self.bbox_embed) for _ in range(config.num_decoder_layers)]
-        if config.dec_pred_class_embed_share:
-            self.class_embed = _get_clones(self.class_embed, config.num_decoder_layers, layer_share=True)
-        else:
-            self.class_embed = [copy.deepcopy(self.class_embed) for _ in range(config.num_decoder_layers)]
+        self.bbox_embed = _get_clones(self.bbox_embed, config.num_decoder_layers, layer_share=True)
+        self.class_embed = _get_clones(self.class_embed, config.num_decoder_layers, layer_share=True)
         self.transformer.decoder.bbox_embed = self.bbox_embed
         self.transformer.decoder.class_embed = self.class_embed
 
