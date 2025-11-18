@@ -597,7 +597,7 @@ class DINOv3ViTForImageClassification(DINOv3ViTPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.dinov3 = DINOv3ViTModel(config)
+        self.dinov3_vit = DINOv3ViTModel(config)
 
         # Classifier head
         self.classifier = (
@@ -608,7 +608,7 @@ class DINOv3ViTForImageClassification(DINOv3ViTPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.dinov3.embeddings.patch_embeddings
+        return self.dinov3_vit.embeddings.patch_embeddings
 
     @can_return_tuple
     @auto_docstring
@@ -624,7 +624,7 @@ class DINOv3ViTForImageClassification(DINOv3ViTPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        outputs: BaseModelOutputWithPooling = self.dinov3(pixel_values, **kwargs)
+        outputs: BaseModelOutputWithPooling = self.dinov3_vit(pixel_values, **kwargs)
 
         sequence_output = outputs.last_hidden_state  # batch_size, sequence_length, hidden_size
         cls_token = sequence_output[:, 0]
