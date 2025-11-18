@@ -2159,6 +2159,14 @@ class Trainer:
                 ignore_keys_for_eval=ignore_keys_for_eval,
             )
 
+    def get_sp_size(self) -> int:
+        """Get the sequence parallel size"""
+        if getattr(self.accelerator, "parallelism_config", None) is None:
+            return 1
+        else:
+            pc = self.accelerator.parallelism_config
+            return pc.sp_size
+
     def get_cp_size(self) -> int:
         """Get the context parallel size"""
         if getattr(self.accelerator, "parallelism_config", None) is None:
@@ -2184,8 +2192,12 @@ class Trainer:
     def get_total_train_batch_size(self, args) -> int:
         """Calculates total batch size (micro_batch * grad_accum * dp_world_size).
 
-        Note: Only considers DP and TP and SP/CP (dp_world_size = world_size // tp_size // cp_size)."""
-        dp_world_size = args.world_size // self.get_tp_size() // self.get_cp_size()
+        Note: Only considers DP and TP and SP/CP (dp_world_size = world_size // tp_size // cp_size // sp_size).
+
+        Though do note that DP_world_size isn't args.world_size // self.get_sp_size, since SP ranks reuse DP ranks, so the variable below is misleading.
+        """
+
+        dp_world_size = args.world_size // self.get_tp_size() // self.get_cp_size() // self.get_sp_size
         return self._train_batch_size * args.gradient_accumulation_steps * dp_world_size
 
     def _inner_training_loop(
