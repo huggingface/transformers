@@ -2197,7 +2197,7 @@ class Trainer:
         Though do note that DP_world_size isn't args.world_size // self.get_sp_size, since SP ranks reuse DP ranks, so the variable below is misleading.
         """
 
-        dp_world_size = args.world_size // self.get_tp_size() // self.get_cp_size() // self.get_sp_size
+        dp_world_size = args.world_size // self.get_tp_size() // self.get_cp_size() // self.get_sp_size()
         return self._train_batch_size * args.gradient_accumulation_steps * dp_world_size
 
     def _inner_training_loop(
