@@ -107,14 +107,15 @@ class InternVLFlashGating(nn.Module):
         self.block2 = InternVLFlashMLP(hidden_size, mid_dim)
         self.block3 = InternVLFlashMLP(hidden_size, mid_dim)
         self.block4 = InternVLFlashMLP(hidden_size, mid_dim)
-        self.gate = nn.Sequential(nn.LayerNorm(hidden_size), nn.Linear(hidden_size, 2))  # 2 experts
+        self.gate_norm = nn.LayerNorm(hidden_size)
+        self.gate_proj = nn.Linear(hidden_size, 2)
 
     def forward(self, x):
         x = x + self.block1(x)
         x = x + self.block2(x)
         x = x + self.block3(x)
         x = x + self.block4(x)
-        logits = self.gate(x)  # shape: [B, 2]
+        logits = self.gate_proj(self.gate_norm(x))
         probs = torch.softmax(logits, dim=-1)  # 每个 token 的 expert 选择概率
         return probs
 
@@ -247,28 +248,6 @@ class InternvlFlashModel(InternVLModel):
 
         delete_flags = torch.zeros(N, dtype=torch.int32, device=input_embeds.device)
 
-        # total_blocks = 0
-        # block_counts = []
-        # for l in lengths.tolist():
-        #     if l % 256 != 0:
-        #         raise ValueError(f"l % 256 != 0, l = {l}")
-        #     num_blocks = l // 256
-        #     block_counts.append(num_blocks)
-        #     total_blocks += num_blocks
-
-        # flag_idx = 0
-        # for s, num_blocks in zip(starts.tolist(), block_counts):
-        #     for i in range(num_blocks):
-        #         block_start = s + i * 256
-        #         block_end = block_start + 256
-
-        #         compress = gate_result[flag_idx]
-        #         flag_idx += 1
-
-        #         if compress:
-        #             keep_mask[block_start + 64 : block_end] = False
-        #             delete_flags[block_start + 64 : block_end] = 1
-
         if (lengths % 256 != 0).any():
             raise ValueError(f"lengths % 256 != 0, lengths = {lengths}")
         
@@ -306,7 +285,7 @@ class InternvlFlashModel(InternVLModel):
         self,
         input_ids: torch.Tensor,
     ):
-        input_ids = input_ids.squeeze(0)  # (N,)
+        input_ids = input_ids.squeeze(0)  # (N,) #todo add batch size support
         selected = input_ids == self.config.image_token_id
         padded = torch.cat(
             [torch.tensor([0], device=selected.device), selected.int(), torch.tensor([0], device=selected.device)]
@@ -428,6 +407,9 @@ class InternvlFlashModel(InternVLModel):
                 input_ids=input_ids,
                 img_context_token_id=self.config.image_token_id,
                 gate_result=gate_result,
+                lengths=lengths_copy,
+                starts=starts,
+                ends=ends,
             )
 
             attention_mask = attention_mask[:, keep_mask].to(inputs_embeds.device)
