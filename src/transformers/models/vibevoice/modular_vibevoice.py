@@ -158,6 +158,39 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
 
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        if hasattr(module, '_init_weights'):
+            # If the module has its own _init_weights method, use it
+            module._init_weights(module)
+        elif isinstance(module, nn.Linear):
+            # Initialize linear layers
+            std = getattr(self.config, 'initializer_range', 0.02)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            # Initialize embedding layers
+            std = getattr(self.config, 'initializer_range', 0.02)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
+        elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
+            # Initialize convolution layers
+            std = getattr(self.config, 'initializer_range', 0.02)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif hasattr(module, 'weight') and module.weight is not None:
+            # Handle various norm layers and parameter tensors
+            if 'norm' in module.__class__.__name__.lower() or hasattr(module, 'variance_epsilon'):
+                # RMSNorm, LayerNorm, etc.
+                nn.init.ones_(module.weight)
+            elif module.weight.dim() == 1:
+                # 1D parameter tensors (like gamma, ffn_gamma)
+                if hasattr(self.config, 'layer_scale_init_value'):
+                    nn.init.constant_(module.weight, self.config.layer_scale_init_value)
+                else:
+                    nn.init.constant_(module.weight, 1e-6)  # Default layer scale value
+
 
 @auto_docstring(
     custom_intro="""

@@ -1,0 +1,2 @@
+Speaker 1: I heard there’s big news in TTS lately?
+Speaker 2: Yes! Microsoft Research just open-sourced VibeVoice. The model can generate speech up to 90 minutes long, with smooth delivery and rich emotion — it’s absolutely amazing.
