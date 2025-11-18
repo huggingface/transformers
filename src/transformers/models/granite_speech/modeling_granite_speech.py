@@ -21,6 +21,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
@@ -289,21 +290,9 @@ class GraniteSpeechPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
-        std = self.config.initializer_range
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, GraniteSpeechEncoderProjector):
-            module.query.normal_()
+        super()._init_weights(module)
+        if isinstance(module, GraniteSpeechEncoderProjector):
+            init.normal_(module.query)
 
 
 @auto_docstring(

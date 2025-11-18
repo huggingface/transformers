@@ -31,6 +31,7 @@ from torch import nn
 from torch.nn import Parameter
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -81,9 +82,9 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
-            module.experts.gate_up_proj.normal_(mean=0.0, std=std)
-            module.experts.down_proj.normal_(mean=0.0, std=std)
-            module.router.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.experts.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.experts.down_proj, mean=0.0, std=std)
+            init.normal_(module.router.weight, mean=0.0, std=std)
 
 
 def _get_feat_extract_output_lengths(input_lengths):
@@ -1607,10 +1608,10 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, Qwen3OmniMoeThinkerTextExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
-            module.down_proj.normal_(mean=0.0, std=std)
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, Qwen3OmniMoeThinkerTextTopKRouter):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
