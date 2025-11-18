@@ -539,7 +539,9 @@ def _init_infer_auto_device_map(
             # create a list of list of tied params based on unique tied groups
             groups = set(model.all_tied_weights_keys.values())
             tied_parameters = [
-                [k for k, v in model.all_tied_weights_keys.items() if v == target] + [target] for target in groups
+                sorted(
+                    [k for k, v in model.all_tied_weights_keys.items() if v == target] + [target] for target in groups
+                )
             ]
         else:
             tied_parameters = [[]]
