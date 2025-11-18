@@ -380,17 +380,19 @@ class WeightConverter:
 
     distributed_operation: Optional[TensorParallelLayer] = None
     quantization_operation: Optional[ConversionOps] = None
+    collected_tensors: dict[str, defaultdict[str, list[Future]]] = field(default_factory=dict, init=False)
+    layer_targets: dict[str, list[str]] = field(default_factory=dict, init=False)
 
     def __post_init__(self):
         if not isinstance(self.source_keys, list):
-            self.source_keys = [self.source_keys]
+            object.__setattr__(self, "source_keys", [self.source_keys])
         targets_were_none = False
         if not isinstance(self.target_keys, list):
             if self.target_keys is None:
-                self.target_keys = list(self.source_keys)
+                object.__setattr__(self, "target_keys", list(self.source_keys))
                 targets_were_none = True
             else:
-                self.target_keys = [self.target_keys]
+                object.__setattr__(self, "target_keys", [self.target_keys])
 
         if not targets_were_none and bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
             raise ValueError(
@@ -399,9 +401,6 @@ class WeightConverter:
 
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
-
-        self.collected_tensors: dict[str, defaultdict[str, list[Future]]] = {}
-        self.layer_targets: dict[str, list[str]] = {}
 
     def add_tensor(self, layer_key: str, source_pattern: str, future: Future, resolved_targets: list[str]):
         bucket = self.collected_tensors.setdefault(layer_key, defaultdict(list))
@@ -416,12 +415,14 @@ class WeightRenaming:
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
     distributed_operation: Optional[TensorParallelLayer] = None
     quantization_operation: Optional[ConversionOps] = None
+    collected_tensors: dict[str, defaultdict[str, list[Future]]] = field(default_factory=dict, init=False)
+    layer_targets: dict[str, list[str]] = field(default_factory=dict, init=False)
+    source_keys: list[str] = field(init=False)
+    target_keys: list[str] = field(init=False)
 
     def __post_init__(self):
-        self.source_keys = [self.source_key]
-        self.target_keys = [self.target_key]
-        self.collected_tensors: dict[str, defaultdict[str, list[Future]]] = {}
-        self.layer_targets: dict[str, list[str]] = {}
+        object.__setattr__(self, "source_keys", [self.source_key])
+        object.__setattr__(self, "target_keys", [self.target_key])
 
     def add_tensor(self, layer_key: str, source_pattern: str, future: Future, resolved_targets: list[str]):
         bucket = self.collected_tensors.setdefault(layer_key, defaultdict(list))
