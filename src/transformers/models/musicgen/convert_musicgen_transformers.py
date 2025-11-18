@@ -221,7 +221,7 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the Hugging Face hub."
     )
     parser.add_argument(
         "--device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."

@@ -2718,7 +2718,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         question = tokenizer.apply_chat_template(
             question, tokenize=False, add_generation_prompt=True, return_tensors="pt"
         )
-        inputs = tokenizer(question, return_tensors="pt", padding=True).to("cuda")
+        inputs = tokenizer(question, return_tensors="pt", padding=True).to(torch_device)
         outputs = model.generate(**inputs, generation_config=generation_config)
         responses = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         self.assertEqual(responses[0], EXPECTED_OUTPUT)
@@ -2737,7 +2737,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         cot_question = tokenizer.apply_chat_template(
             cot_question, tokenize=False, add_generation_prompt=True, return_tensors="pt"
         )
-        inputs = tokenizer([question, cot_question], return_tensors="pt", padding=True).to("cuda")
+        inputs = tokenizer([question, cot_question], return_tensors="pt", padding=True).to(torch_device)
 
         outputs = model.generate(**inputs, generation_config=generation_config)
         responses = tokenizer.batch_decode(outputs, skip_special_tokens=True)

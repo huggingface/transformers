@@ -411,7 +411,7 @@ class GenerationMixin(ContinuousMixin):
                     "Generation config file not found, using a generation config created from the model config."
                 )
             # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
-            if hasattr(self, "load_custom_generate"):
+            if hasattr(self, "load_custom_generate") and trust_remote_code:
                 try:
                     custom_generate = self.load_custom_generate(
                         pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **repo_loading_kwargs
@@ -608,7 +608,7 @@ class GenerationMixin(ContinuousMixin):
         use_cache = kwargs.get("use_cache")
         if use_cache is None:
             use_cache = getattr(self.config, "use_cache", False)
-        if past_key_values is None or use_cache:
+        if past_key_values is not None or use_cache:
             # TODO (joao): handle the case where cache length == input_ids length. The function below results in an
             # exception because we get empty input_ids after slicing. In essence, we need to roll back the cache 1
             # token to recompute the logits for the first token to be generated (but not all caches support roll backs)
@@ -1635,7 +1635,12 @@ class GenerationMixin(ContinuousMixin):
 
         # TransformersKwargs are model-agnostic attention and generation arguments such as 'output_attentions'
         for key, value in model_kwargs.items():
-            if value is not None and key not in model_args and key not in TransformersKwargs.__optional_keys__:
+            if (
+                value is not None
+                and key not in model_args
+                and key not in TransformersKwargs.__optional_keys__
+                and key != "debug_io"
+            ):
                 unused_model_args.append(key)
 
         if unused_model_args:
@@ -2170,7 +2175,7 @@ class GenerationMixin(ContinuousMixin):
             return False
 
         # Base logic
-        valid_hardware = self.device.type == "cuda" or bool(
+        valid_hardware = self.device.type in ["cuda", "xpu"] or bool(
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
         using_compilable_cache = (
