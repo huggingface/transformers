@@ -216,11 +216,20 @@ def compute_module_sizes(
     leaves_module_sizes = defaultdict(int)
 
     if buffers_only:
-        named_tensors = model.named_buffers(recurse=True)
+        iterator = model.named_buffers()
     else:
-        named_tensors = model.state_dict().items()
+        # We need parameters + buffers here, as state_dict does not count non-persistent buffers which are taking space
+        def all_tensors():
+            yield from model.named_parameters()
+            yield from model.named_buffers()
 
-    for name, param in named_tensors:
+        iterator = all_tensors()
+
+    tied_keys = getattr(model, "all_tied_weights_keys", {}).keys()
+    for name, param in iterator:
+        # Do not count tied keys
+        if name in tied_keys:
+            continue
         if hf_quantizer is not None:
             dtype_size = hf_quantizer.param_element_size(model, name)
         else:
