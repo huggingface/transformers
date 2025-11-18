@@ -242,7 +242,7 @@ def inverse_sigmoid(x: torch.FloatTensor, eps: float = 1e-3):
     return torch.log(x1 / x2)
 
 
-def dn_post_process(
+def denoising_post_process(
     outputs_class: torch.FloatTensor,
     outputs_coord: torch.FloatTensor,
     dn_meta: dict,
@@ -428,29 +428,19 @@ def build_position_encoding(config):
         config (`PretrainedConfig`):
             The configuration object containing model parameters. Must include the following attributes:
             - `d_model` (int): The hidden size of the model.
-            - `position_embedding_type` (str): The type of positional embedding to use. Supported values are `"SineHW"`
-              for sine-based embeddings and `"Learned"` for learned embeddings.
             - `pe_temperature_H` (int, *optional*): The temperature parameter for the height dimension in sine-based embeddings.
             - `pe_temperature_W` (int, *optional*): The temperature parameter for the width dimension in sine-based embeddings.
 
     Returns:
         `nn.Module`: A positional encoding module.
-
-    Raises:
-        `ValueError`: If the `position_embedding_type` is not supported.
     """
     N_steps = config.d_model // 2
-    if config.position_embedding_type in ("SineHW"):
-        position_embeddings = DinoDetrPositionEmbeddingSineHW(
-            N_steps,
-            temperatureH=config.pe_temperature_H,
-            temperatureW=config.pe_temperature_W,
-            normalize=True,
-        )
-    elif config.position_embedding_type in ("Learned"):
-        position_embeddings = DinoDetrLearnedPositionEmbedding(N_steps)
-    else:
-        raise ValueError(f"not supported {config.position_embedding}")
+    position_embeddings = DinoDetrPositionEmbeddingSineHW(
+        N_steps,
+        temperatureH=config.pe_temperature_H,
+        temperatureW=config.pe_temperature_W,
+        normalize=True,
+    )
 
     return position_embeddings
 
@@ -1778,7 +1768,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
 
         # Apply denoising post processing
         if self.config.dn_number > 0 and denoising_meta is not None:
-            outputs_class, outputs_coord = dn_post_process(
+            outputs_class, outputs_coord = denoising_post_process(
                 outputs_class,
                 outputs_coord,
                 denoising_meta,
