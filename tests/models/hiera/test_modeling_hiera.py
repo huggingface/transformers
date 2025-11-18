@@ -524,12 +524,12 @@ def prepare_img():
 
 @require_torch
 @require_vision
+@slow
 class HieraModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return AutoImageProcessor.from_pretrained("facebook/hiera-tiny-224-in1k-hf") if is_vision_available() else None
 
-    @slow
     def test_inference_image_classification_head(self):
         model = HieraForImageClassification.from_pretrained("facebook/hiera-tiny-224-in1k-hf").to(torch_device)
 
@@ -583,7 +583,6 @@ class HieraModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
-    @slow
     def test_inference_for_pretraining(self):
         # make random mask reproducible
         torch.manual_seed(2)

@@ -249,6 +249,9 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.assertEqual(len(scores), generated_length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
+    # After #33632, this test still passes, but many subsequential tests fail with `device-side assert triggered`.
+    # We need to put `@slow` whenever `run_test_using_subprocess` is used.
+    @slow
     @run_test_using_subprocess
     def test_beam_search_generate_dict_outputs_use_cache(self):
         super().test_beam_search_generate_dict_outputs_use_cache()
