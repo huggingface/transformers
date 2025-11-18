@@ -1733,7 +1733,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "Qwen2Tokenizer": Qwen2Converter,
     "ReformerTokenizer": ReformerConverter,
     "RemBertTokenizer": RemBertConverter,
-    "RetriBertTokenizer": BertConverter,
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
