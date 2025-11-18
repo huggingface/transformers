@@ -2192,9 +2192,16 @@ class Trainer:
     def get_total_train_batch_size(self, args) -> int:
         """Calculates total batch size (micro_batch * grad_accum * dp_world_size).
 
-        Note: Only considers DP and TP and SP/CP (dp_world_size = world_size // tp_size // cp_size // sp_size).
-
-        Though do note that DP_world_size isn't args.world_size // self.get_sp_size, since SP ranks reuse DP ranks, so the variable below is misleading.
+        Accounts for all parallelism dimensions: TP, CP, and SP.
+        
+        Formula: dp_world_size = world_size // (tp_size * cp_size * sp_size)
+        
+        Where:
+        - TP (Tensor Parallelism): Model layers split across GPUs
+        - CP (Context Parallelism): Sequences split using Ring Attention (FSDP2)
+        - SP (Sequence Parallelism): Sequences split using ALST/Ulysses (DeepSpeed)
+        
+        All dimensions are separate and multiplicative: world_size = dp_size * tp_size * cp_size * sp_size
         """
 
         dp_world_size = args.world_size // self.get_tp_size() // self.get_cp_size() // self.get_sp_size()
