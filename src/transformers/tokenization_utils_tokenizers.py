@@ -1016,16 +1016,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if len(extra_special_tokens) > 0:
             kwargs["extra_special_tokens"] = extra_special_tokens
 
-        # Check if the class accepts tokenizer_object parameter
-        class_signature = inspect.signature(self.__class__.__init__)
-        if "tokenizer_object" in class_signature.parameters:
-            # Standard path: pass tokenizer_object to constructor
-            return self.__class__(tokenizer_object=tokenizer, **kwargs)
-        else:
-            # Alternative path: create instance without tokenizer_object and set _tokenizer directly
-            new_tokenizer = self.__class__(**kwargs)
-            new_tokenizer._tokenizer = tokenizer
-            return new_tokenizer
+        kwargs["tokenizer_object"] = tokenizer
+        return self.__class__(**kwargs)
 
 
 class TokenizersExtractor:
