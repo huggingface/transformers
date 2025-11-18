@@ -1739,10 +1739,14 @@ class ProcessorMixin(PushToHubMixin):
 
                             if not (
                                 start_pos >= 0
+                                and start_pos < len(offsets)
                                 and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
                             ):
                                 # start_token is out of bounds maybe due to truncation.
                                 continue
+                            # Ensure end_pos is also within bounds
+                            if end_pos > len(input_ids[i]):
+                                end_pos = len(input_ids[i])
                             for token_id in range(start_pos, end_pos if end_pos else len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
