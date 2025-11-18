@@ -220,7 +220,7 @@ def eager_attention_forward(
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     if grouped_query_attention:
         # Equivalent to (but faster than):
-        # attn_output = (attn_weights @ value.unsqueeze(2)).flatten(1, 2).transpose(1, 2)
+        # attn_output = (attn_weights @ value.unsqueeze(2)).flatten(1, 2)
         attn_output = torch.einsum(
             "bkgjs, bksd -> bkgjd", attn_weights.unflatten(1, (key.shape[1], -1)), value
         ).flatten(1, 2)

@@ -224,8 +224,10 @@ def eager_attention_forward(
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     if grouped_query_attention:
+        # In GQA, the number of value heads is equal to the number of key heads and smaller than query heads.
+        # Therefore, 
         # Equivalent to (but faster than):
-        # attn_output = (attn_weights @ value.unsqueeze(2)).flatten(1, 2).transpose(1, 2)
+        # attn_output = (attn_weights @ value.unsqueeze(2)).flatten(1, 2)
         attn_output = torch.einsum(
             "bkgjs, bksd -> bkgjd", attn_weights.unflatten(1, (key.shape[1], -1)), value
         ).flatten(1, 2)
