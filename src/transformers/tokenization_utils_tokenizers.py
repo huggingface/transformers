@@ -97,6 +97,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
+        tokenizer_backend_override = kwargs.pop("__tokenizer_backend", None)
+        if tokenizer_backend_override is not None:
+            tokenizer_object = tokenizer_backend_override
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
         gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
@@ -1016,7 +1019,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if len(extra_special_tokens) > 0:
             kwargs["extra_special_tokens"] = extra_special_tokens
 
-        kwargs["tokenizer_object"] = tokenizer
+        kwargs["__tokenizer_backend"] = tokenizer
         return self.__class__(**kwargs)
 
 
