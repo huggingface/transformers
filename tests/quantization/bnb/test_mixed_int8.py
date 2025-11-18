@@ -381,7 +381,6 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
-
     def test_int8_serialization_sharded(self):
         r"""
         Test whether it is possible to serialize a model in 8-bit - sharded version.
