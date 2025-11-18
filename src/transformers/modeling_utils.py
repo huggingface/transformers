@@ -4186,9 +4186,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model, expanded_device_map, hf_quantizer)
 
-        if device_map is None:
-            device_map = {"": "cpu"}
-        keys = sorted(device_map.keys(), key=len, reverse=True)
         tp_plan = getattr(model, "_tp_plan", None)
         error_msgs = []
 
@@ -4211,33 +4208,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             missing_keys, unexpected_keys, mismatched_keys, misc = set(), set(), set(), set()
         else:
             all_pointer = set()
+            # Checkpoints are safetensors
             if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
-                pattern = re.compile(r"(" + "|".join(map(re.escape, keys)) + r")")
-                if sharded_metadata is None:
-                    k_v_iterator = dict.fromkeys(
-                        safe_open(checkpoint_files[0], framework="pt").keys(), checkpoint_files[0].rsplit("/", 1)[1]
-                    ).items()
-                else:
-                    k_v_iterator = sharded_metadata["weight_map"].items()
-
                 merged_state_dict = {}
-                for k, v in k_v_iterator:
-                    match = pattern.match(k)
-                    if match and match.group(1) != "":
-                        device = device_map[match.group(1)]
-                    else:
-                        device = device_map.get("", "cpu")
-                        if isinstance(device, torch.device):
-                            device = device.index  # safetensors only
-                    if device == "disk":
-                        device = "cpu"  # we read to cpu to then write to disk
-                    file_pointer = safe_open(
-                        os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
-                    )
+                for file in checkpoint_files:
+                    file_pointer = safe_open(file, framework="pt", device="cpu")
                     all_pointer.add(file_pointer)
-                    merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+                    for k in file_pointer.keys():
+                        merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+            # User passed an explicit state_dict
             elif state_dict is not None:
                 merged_state_dict = state_dict
+            # Checkpoints are .bin
             elif checkpoint_files is not None:
                 merged_state_dict = {}
                 for ckpt_file in checkpoint_files:
