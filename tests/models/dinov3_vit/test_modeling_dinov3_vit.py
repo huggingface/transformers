@@ -17,7 +17,13 @@ import unittest
 from functools import cached_property
 
 from transformers import DINOv3ViTConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_large_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -304,6 +310,7 @@ class DINOv3ViTModelIntegrationTest(unittest.TestCase):
             else None
         )
 
+    @require_torch_large_accelerator
     @slow
     def test_inference_lc_head_imagenet(self):
         model = DINOv3ViTForImageClassification.from_pretrained(
