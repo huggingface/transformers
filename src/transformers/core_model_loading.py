@@ -732,7 +732,10 @@ def convert_and_load_state_dict_in_model(
                 )
                 for k, output_value in realized_value.items():
                     output_value = output_value[0] if isinstance(output_value, list) else output_value
-                    param_device = device_map[re.search(device_map_regex, k).group()]
+                    device_match = device_map_regex.match(k)
+                    param_device = (
+                        device_map[device_match.group()] if device_match else device_map.get("", "cpu")
+                    )
                     # Offloading support
                     if param_device == "disk":
                         missing_keys.discard(k)
