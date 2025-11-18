@@ -183,9 +183,9 @@ class MarianTokenizer(PreTrainedTokenizer):
     def _convert_token_to_id(self, token):
         if token in self.current_encoder:
             return self.current_encoder[token]
-        # Fall back to SPM model for tokens not in external vocab
-        spm_id = self.current_spm.PieceToId(token)
-        return spm_id if spm_id != 0 else self.current_encoder[self.unk_token]
+        # The Marian vocab is not aligned with the SentencePiece IDs, so falling back to raw
+        # SentencePiece indices would map to unrelated tokens. Treat such pieces as unknown.
+        return self.current_encoder[self.unk_token]
 
     def remove_language_code(self, text: str):
         """Remove language codes like >>fr<< before sentencepiece"""
