@@ -793,6 +793,7 @@ class MllamaRotaryEmbedding(nn.Module):
 @auto_docstring
 class MllamaPreTrainedModel(PreTrainedModel):
     config: MllamaConfig
+    base_model_prefix = "model"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -1436,7 +1437,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     """
 )
 class MllamaModel(MllamaPreTrainedModel):
-    base_model_prefix = ""
     _checkpoint_conversion_mapping = {
         "language_model.model": "language_model",
         "model.vision_model": "vision_model",

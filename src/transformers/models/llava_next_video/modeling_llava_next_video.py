@@ -164,7 +164,7 @@ class LlavaNextVideoMultiModalProjector(nn.Module):
 @auto_docstring
 class LlavaNextVideoPreTrainedModel(PreTrainedModel):
     config: LlavaNextVideoConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     input_modalities = ["image", "video", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
