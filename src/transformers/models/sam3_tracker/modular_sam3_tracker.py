@@ -40,6 +40,7 @@ from ..sam2.modeling_sam2 import (
     Sam2TwoWayAttentionBlock,
     Sam2TwoWayTransformer,
 )
+from ..sam2.processing_sam2 import Sam2Processor
 
 
 class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
@@ -84,6 +85,10 @@ class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+
+
+class Sam3TrackerProcessor(Sam2Processor):
+    pass
 
 
 class Sam3TrackerMaskDecoderConfig(Sam2MaskDecoderConfig):
@@ -174,11 +179,6 @@ class Sam3TrackerMaskDecoder(Sam2MaskDecoder):
 
 
 class Sam3TrackerModel(Sam2Model):
-    _tied_weights_keys = {
-        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding",
-    }
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _checkpoint_conversion_mapping = {
         "tracker_model.": "",
         "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
@@ -222,6 +222,7 @@ __all__ = [
     "Sam3TrackerConfig",
     "Sam3TrackerPromptEncoderConfig",
     "Sam3TrackerMaskDecoderConfig",
+    "Sam3TrackerProcessor",
     "Sam3TrackerModel",
     "Sam3TrackerPreTrainedModel",
 ]

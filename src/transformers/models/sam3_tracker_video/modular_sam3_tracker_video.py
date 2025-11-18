@@ -50,6 +50,7 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoVisionEncoderOutput,
     Sam2VideoVisionRotaryEmbedding,
 )
+from ..sam2_video.processing_sam2_video import Sam2VideoProcessor
 
 
 class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
@@ -94,6 +95,10 @@ class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+
+
+class Sam3TrackerVideoProcessor(Sam2VideoProcessor):
+    pass
 
 
 class Sam3TrackerVideoMaskDecoderConfig(Sam2VideoMaskDecoderConfig):
@@ -456,6 +461,8 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
         "tracker_neck.": "vision_encoder.neck.",
     }
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
+    _tied_weights_keys = {}
+    _keys_to_ignore_on_load_missing = []
 
     def __init__(self, config: Sam3TrackerVideoConfig, remove_vision_encoder: bool = False):
         r"""
@@ -572,4 +579,5 @@ __all__ = [
     "Sam3TrackerVideoModel",
     "Sam3TrackerVideoInferenceSession",
     "Sam3TrackerVideoPreTrainedModel",
+    "Sam3TrackerVideoProcessor",
 ]

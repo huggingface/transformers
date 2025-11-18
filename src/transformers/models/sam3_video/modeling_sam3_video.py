@@ -20,7 +20,6 @@ from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
-from kernels import get_kernel
 from torch import Tensor
 from tqdm.auto import tqdm
 
@@ -32,9 +31,16 @@ from ..auto import AutoModel
 from .configuration_sam3_video import Sam3VideoConfig
 
 
-cv_utils_kernel = get_kernel("kernels-community/cv_utils")
-
 logger = logging.get_logger(__name__)
+
+cv_utils_kernel = None
+
+
+def load_cv_utils_kernel():
+    global cv_utils_kernel
+    from kernels import get_kernel
+
+    cv_utils_kernel = get_kernel("kernels-community/cv_utils")
 
 
 class Sam3VideoInferenceCache:
@@ -420,11 +426,6 @@ class Sam3VideoPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Sam3VideoModel(Sam3VideoPreTrainedModel):
-    _tied_weights_keys = {
-        "tracker_model.prompt_encoder.shared_embedding.positional_embedding": "tracker_model.shared_image_embedding.positional_embedding"
-    }
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["tracker_model.prompt_encoder.shared_embedding.positional_embedding"]
     all_tied_weights_keys = {}
 
     def __init__(self, config: Sam3VideoConfig):
@@ -1610,7 +1611,29 @@ def nms_masks(
         return is_valid  # no valid detection, return empty keep mask
 
     ious = mask_iou(masks_binary, masks_binary)  # (num_valid, num_valid)
-    kept_inds = cv_utils_kernel.generic_nms(ious, probs, iou_threshold, use_iou_matrix=True)
+
+    # Try to use kernels for NMS, fallback to keeping all valid detections if unavailable
+    if cv_utils_kernel is None:
+        try:
+            load_cv_utils_kernel()
+        except ImportError:
+            logger.warning_once(
+                "kernels library is not installed. NMS post-processing will be skipped. "
+                "Install it with `pip install kernels` for better mask quality."
+            )
+            return is_valid  # Fallback: keep all valid detections without NMS
+        except Exception as e:
+            logger.warning_once(
+                f"Failed to load cv_utils kernel (your torch/cuda setup may not be supported): {e}. "
+                "NMS post-processing will be skipped."
+            )
+            return is_valid  # Fallback: keep all valid detections without NMS
+
+    try:
+        kept_inds = cv_utils_kernel.generic_nms(ious, probs, iou_threshold, use_iou_matrix=True)
+    except Exception as e:
+        logger.warning_once(f"Failed to run NMS using kernels library: {e}. NMS post-processing will be skipped.")
+        return is_valid  # Fallback: keep all valid detections without NMS
 
     # valid_inds are the indices among `probs` of valid detections before NMS (or -1 for invalid)
     valid_inds = torch.where(is_valid, is_valid.cumsum(dim=0) - 1, -1)  # (num_det,)
@@ -1661,18 +1684,53 @@ def _get_connected_components_with_padding(mask):
     """Get connected components from masks (possibly padding them to an even size)."""
     mask = mask.to(torch.uint8)
     _, _, H, W = mask.shape
+
+    # Try to use kernels for connected components, fallback if unavailable
+    if cv_utils_kernel is None:
+        try:
+            load_cv_utils_kernel()
+        except ImportError:
+            logger.warning_once(
+                "kernels library is not installed. Hole filling and sprinkle removal will be skipped. "
+                "Install it with `pip install kernels` for better mask quality."
+            )
+            # Fallback: return dummy labels and counts that won't trigger filtering
+            labels = torch.zeros_like(mask, dtype=torch.int32)
+            counts = torch.full_like(mask, fill_value=mask.shape[2] * mask.shape[3] + 1, dtype=torch.int32)
+            return labels, counts
+        except Exception as e:
+            logger.warning_once(
+                f"Failed to load cv_utils kernel (your torch/cuda setup may not be supported): {e}. "
+                "Hole filling and sprinkle removal will be skipped."
+            )
+            # Fallback: return dummy labels and counts that won't trigger filtering
+            labels = torch.zeros_like(mask, dtype=torch.int32)
+            counts = torch.full_like(mask, fill_value=mask.shape[2] * mask.shape[3] + 1, dtype=torch.int32)
+            return labels, counts
+
     # make sure both height and width are even (to be compatible with cc_torch)
     pad_h = H % 2
     pad_w = W % 2
-    if pad_h == 0 and pad_w == 0:
-        labels, counts = cv_utils_kernel.cc_2d(mask.contiguous(), get_counts=True)
-    else:
-        # pad the mask to make its height and width even
-        # padding format is (padding_left,padding_right,padding_top,padding_bottom)
-        mask_pad = F.pad(mask, (0, pad_w, 0, pad_h), mode="constant", value=0)
-        labels, counts = cv_utils_kernel.cc_2d(mask_pad.contiguous(), get_counts=True)
-        labels = labels[:, :, :H, :W]
-        counts = counts[:, :, :H, :W]
+
+    try:
+        if pad_h == 0 and pad_w == 0:
+            labels, counts = cv_utils_kernel.cc_2d(mask.contiguous(), get_counts=True)
+        else:
+            # pad the mask to make its height and width even
+            # padding format is (padding_left,padding_right,padding_top,padding_bottom)
+            mask_pad = F.pad(mask, (0, pad_w, 0, pad_h), mode="constant", value=0)
+            labels, counts = cv_utils_kernel.cc_2d(mask_pad.contiguous(), get_counts=True)
+            labels = labels[:, :, :H, :W]
+            counts = counts[:, :, :H, :W]
+    except Exception as e:
+        logger.warning_once(
+            f"Failed to compute connected components using kernels library: {e}. "
+            "Hole filling and sprinkle removal will be skipped."
+        )
+        # Fallback: return dummy labels and counts that won't trigger filtering
+        labels = torch.zeros_like(mask, dtype=torch.int32)
+        counts = torch.full_like(mask, fill_value=H * W + 1, dtype=torch.int32)
+        return labels, counts
 
     return labels, counts
 

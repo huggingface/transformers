@@ -29,6 +29,7 @@ from torch import Tensor
 
 from transformers import CLIPTextModelWithProjection
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -755,6 +756,11 @@ class Sam3PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Sam3ViTEmbeddings):
+            init.normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring

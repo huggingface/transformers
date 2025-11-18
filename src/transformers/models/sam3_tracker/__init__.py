@@ -22,6 +22,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_sam3_tracker import *
     from .modeling_sam3_tracker import *
+    from .processing_sam3_tracker import *
 else:
     import sys
 

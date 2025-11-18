@@ -22,11 +22,8 @@ import requests
 
 from transformers import (
     Sam3TrackerConfig,
-    Sam3TrackerHieraDetConfig,
     Sam3TrackerMaskDecoderConfig,
-    Sam3TrackerProcessor,
     Sam3TrackerPromptEncoderConfig,
-    Sam3TrackerVisionConfig,
     pipeline,
 )
 from transformers.testing_utils import (
@@ -47,233 +44,11 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Sam3TrackerModel, Sam3TrackerProcessor, Sam3TrackerVisionModel
+    from transformers import Sam3TrackerModel, Sam3TrackerProcessor, Sam3VisionConfig, Sam3ViTConfig
 
 
 if is_vision_available():
     from PIL import Image
-
-
-class Sam3TrackerVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        hidden_size=12,
-        embed_dim_per_stage=[12, 24, 48, 96],
-        num_attention_heads_per_stage=[1, 2, 4, 8],
-        num_channels=3,
-        image_size=128,
-        patch_kernel_size=7,
-        patch_stride=4,
-        patch_padding=3,
-        batch_size=2,
-        blocks_per_stage=[1, 2, 7, 2],
-        backbone_channel_list=[96, 48, 24, 12],
-        backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
-        fpn_hidden_size=32,
-        is_training=False,
-    ):
-        self.parent = parent
-        self.hidden_size = hidden_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.patch_kernel_size = patch_kernel_size
-        self.patch_stride = patch_stride
-        self.patch_padding = patch_padding
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.blocks_per_stage = blocks_per_stage
-        self.embed_dim_per_stage = embed_dim_per_stage
-        self.num_attention_heads_per_stage = num_attention_heads_per_stage
-        self.backbone_channel_list = backbone_channel_list
-        self.backbone_feature_sizes = backbone_feature_sizes
-        self.fpn_hidden_size = fpn_hidden_size
-
-    def get_config(self):
-        backbone_config = Sam3TrackerHieraDetConfig(
-            hidden_size=self.hidden_size,
-            num_channels=self.num_channels,
-            image_size=self.image_size,
-            patch_stride=self.patch_stride,
-            patch_kernel_size=self.patch_kernel_size,
-            patch_padding=self.patch_padding,
-            blocks_per_stage=self.blocks_per_stage,
-            embed_dim_per_stage=self.embed_dim_per_stage,
-            num_attention_heads_per_stage=self.num_attention_heads_per_stage,
-        )
-        return Sam3TrackerVisionConfig(
-            backbone_config=backbone_config,
-            backbone_channel_list=self.backbone_channel_list,
-            backbone_feature_sizes=self.backbone_feature_sizes,
-            fpn_hidden_size=self.fpn_hidden_size,
-        )
-
-    def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        config = self.get_config()
-
-        return config, pixel_values
-
-    def create_and_check_model(self, config, pixel_values):
-        model = Sam3TrackerVisionModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values)
-        output_size = self.image_size // self.patch_stride // (2 * len(self.blocks_per_stage))
-        output_channels = self.hidden_size * 2 * len(self.blocks_per_stage)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, output_size, output_size, output_channels)
-        )
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
-        return config, inputs_dict
-
-
-@require_torch
-class Sam3TrackerVisionModelTest(ModelTesterMixin, unittest.TestCase):
-    """
-    Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
-    attention_mask and seq_length.
-    """
-
-    all_model_classes = (Sam3TrackerVisionModel,) if is_torch_available() else ()
-
-    test_resize_embeddings = False
-    test_torch_exportable = True
-
-    def setUp(self):
-        self.model_tester = Sam3TrackerVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Sam3TrackerVisionConfig, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    @unittest.skip(reason="SAM's vision encoder does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    def test_model_get_set_embeddings(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    # Overriding as attention shape depends on window_size
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class._from_config(config, attn_implementation="eager")
-            config = model.config
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            expected_num_attentions = sum(self.model_tester.blocks_per_stage)
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            window_size = config.backbone_config.window_size_per_stage[0]
-            out_dim = config.backbone_config.hidden_size
-            patch_stride = config.backbone_config.patch_stride
-            num_windows = (
-                self.model_tester.batch_size * (config.backbone_config.image_size // (window_size * patch_stride)) ** 2
-            )
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), expected_num_attentions)
-            self.assertListEqual(
-                list(attentions[0].shape[-4:]),
-                [num_windows, window_size, window_size, out_dim],
-            )
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), expected_num_attentions)
-            self.assertListEqual(
-                list(attentions[0].shape[-4:]),
-                [num_windows, window_size, window_size, out_dim],
-            )
-
-    # Overriding as attention shape depends on window_size
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class, image_size):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.hidden_states
-
-            expected_num_layers = sum(self.model_tester.blocks_per_stage) + 1
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-4:]),
-                [
-                    self.model_tester.batch_size,
-                    self.model_tester.image_size // self.model_tester.patch_stride,
-                    self.model_tester.image_size // self.model_tester.patch_stride,
-                    self.model_tester.hidden_size,
-                ],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        image_size = self.model_tester.image_size
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class, image_size)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class, image_size)
-
-    # Override as diffence slightly higher than the threshold
-    def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
-        super().test_batching_equivalence(atol=atol, rtol=rtol)
-
-    def test_sdpa_can_compile_dynamic(self):
-        self.skipTest(reason="SAM model can't be compiled dynamic yet")
 
 
 class Sam3TrackerPromptEncoderTester:
@@ -361,36 +136,42 @@ class Sam3TrackerModelTester:
         self,
         parent,
         num_channels=3,
-        image_size=128,
-        hidden_size=12,
-        patch_kernel_size=7,
-        patch_stride=4,
-        patch_padding=3,
-        blocks_per_stage=[1, 2, 7, 2],
-        embed_dim_per_stage=[12, 24, 48, 96],
-        backbone_channel_list=[96, 48, 24, 12],
-        backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
+        image_size=224,  # Keep reasonable size: 224 = 16 * 14
+        hidden_size=32,
+        patch_size=14,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=64,
+        window_size=8,  # 224/14 = 16 patches, 16/2 = 8 per window
+        global_attn_indexes=None,
         fpn_hidden_size=32,
+        scale_factors=None,
+        backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
         memory_encoder_hidden_size=32,
         batch_size=2,
         is_training=False,
     ):
+        if global_attn_indexes is None:
+            global_attn_indexes = [0, 1]
+        if scale_factors is None:
+            scale_factors = [2.0, 1.0, 0.5]  # 3 scales to match backbone_feature_sizes
+
         self.parent = parent
+        self.num_channels = num_channels
         self.image_size = image_size
         self.hidden_size = hidden_size
-        self.patch_kernel_size = patch_kernel_size
-        self.patch_stride = patch_stride
-        self.patch_padding = patch_padding
-        self.blocks_per_stage = blocks_per_stage
-        self.embed_dim_per_stage = embed_dim_per_stage
-        self.backbone_channel_list = backbone_channel_list
-        self.backbone_feature_sizes = backbone_feature_sizes
+        self.patch_size = patch_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.window_size = window_size
+        self.global_attn_indexes = global_attn_indexes
         self.fpn_hidden_size = fpn_hidden_size
+        self.scale_factors = scale_factors
+        self.backbone_feature_sizes = backbone_feature_sizes
         self.batch_size = batch_size
-        self.num_channels = num_channels
         self.is_training = is_training
         self.memory_encoder_hidden_size = memory_encoder_hidden_size
-
         self.prompt_encoder_tester = Sam3TrackerPromptEncoderTester()
         self.mask_decoder_tester = Sam3TrackerMaskDecoderTester()
 
@@ -401,21 +182,23 @@ class Sam3TrackerModelTester:
         return config, pixel_values
 
     def get_config(self):
-        backbone_config = Sam3TrackerHieraDetConfig(
+        backbone_config = Sam3ViTConfig(
             hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
             num_channels=self.num_channels,
             image_size=self.image_size,
-            patch_stride=self.patch_stride,
-            patch_kernel_size=self.patch_kernel_size,
-            patch_padding=self.patch_padding,
-            blocks_per_stage=self.blocks_per_stage,
-            embed_dim_per_stage=self.embed_dim_per_stage,
+            patch_size=self.patch_size,
+            window_size=self.window_size,
+            global_attn_indexes=self.global_attn_indexes,
         )
-        vision_config = Sam3TrackerVisionConfig(
+
+        vision_config = Sam3VisionConfig(
             backbone_config=backbone_config,
-            backbone_channel_list=self.backbone_channel_list,
-            backbone_feature_sizes=self.backbone_feature_sizes,
             fpn_hidden_size=self.fpn_hidden_size,
+            scale_factors=self.scale_factors,
+            backbone_feature_sizes=self.backbone_feature_sizes,
         )
 
         prompt_encoder_config = self.prompt_encoder_tester.get_config()
@@ -493,7 +276,7 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # Overriding as attention shape depends on window_size
+    # Overriding as Sam3TrackerModel returns vision_attentions
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -509,7 +292,7 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.vision_attentions
-            expected_num_attentions = sum(self.model_tester.blocks_per_stage)
+            expected_num_attentions = self.model_tester.num_hidden_layers
             self.assertEqual(len(attentions), expected_num_attentions)
 
             # check that output_attentions also work using config
@@ -517,13 +300,6 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             config.mask_decoder_config.output_attentions = True
             config.vision_config.output_attentions = True
             config.output_attentions = True
-            model = model_class._from_config(config, attn_implementation="eager")
-            window_size = config.vision_config.backbone_config.window_size_per_stage[0]
-            out_dim = self.model_tester.hidden_size
-            patch_stride = self.model_tester.patch_stride
-            num_windows = (
-                self.model_tester.batch_size * (self.model_tester.image_size // (window_size * patch_stride)) ** 2
-            )
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -531,10 +307,6 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.vision_attentions
             self.assertEqual(len(attentions), expected_num_attentions)
-            self.assertListEqual(
-                list(attentions[0].shape[-4:]),
-                [num_windows, window_size, window_size, out_dim],
-            )
 
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
@@ -546,10 +318,6 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.vision_attentions
             self.assertEqual(len(attentions), expected_num_attentions)
-            self.assertListEqual(
-                list(attentions[0].shape[-4:]),
-                [num_windows, window_size, window_size, out_dim],
-            )
 
     # Override as Sam3TrackerModel has different sub-modules
     def test_sdpa_can_dispatch_composite_models(self):
@@ -601,6 +369,7 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     # Override as Sam3TrackerModel doesn't have hidden states
+    @unittest.skip(reason="skip for now (head_size should be a multiple of 8)")
     def flash_attn_inference_equivalence(
         self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
     ):
@@ -741,8 +510,8 @@ def prepare_video():
 class Sam3TrackerModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.model = Sam3TrackerModel.from_pretrained("facebook/sam2.1-hiera-tiny").to(torch.float32)
-        self.processor = Sam3TrackerProcessor.from_pretrained("facebook/sam2.1-hiera-tiny")
+        self.model = Sam3TrackerModel.from_pretrained("../sam3-hf-v4-video-full").to(torch.float32)
+        self.processor = Sam3TrackerProcessor.from_pretrained("../sam3-hf-v4-video-full")
         self.model.to(torch_device)
         self.model.eval()
 
@@ -764,17 +533,24 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs)
         self.assertEqual(outputs.iou_scores.shape, (1, 1, 3))
-        self.assertEqual(outputs.pred_masks.shape, (1, 1, 3, 256, 256))
+        self.assertEqual(outputs.pred_masks.shape, (1, 1, 3, 288, 288))
         sorted_indices = torch.argsort(outputs.iou_scores.squeeze(), descending=True)
         scores = outputs.iou_scores.squeeze()[sorted_indices]
         masks_logits = outputs.pred_masks.squeeze()[sorted_indices][0, :3, :3]
         torch.testing.assert_close(
-            scores, torch.tensor([0.9547, 0.4932, 0.0427]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores,
+            torch.tensor([0.9106, 0.5326, 0.0379]).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
         )
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-24.9288, -41.7466, -31.0128], [-34.5113, -31.1054, -36.5913], [-25.2597, -37.5912, -33.4030]]
+                [
+                    [-18.9093, -31.1757, -23.6851],
+                    [-20.3388, -31.0213, -29.8815],
+                    [-20.7554, -29.4530, -30.1776],
+                ]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -792,14 +568,18 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs, multimask_output=False)
         self.assertEqual(outputs.iou_scores.shape, (1, 1, 1))
-        self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 256, 256))
+        self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 288, 288))
         scores = outputs.iou_scores.squeeze((0, 1))
         masks_logits = outputs.pred_masks.squeeze((0, 1))[0, :3, :3]
-        torch.testing.assert_close(scores, torch.tensor([0.9364]).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(scores, torch.tensor([0.9474]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-7.0462, -13.3857, -9.6419], [-10.4565, -9.7174, -12.3528], [-7.3704, -12.4391, -10.5539]]
+                [
+                    [-8.1500, -12.3282, -9.6828],
+                    [-9.0512, -11.6470, -11.6363],
+                    [-9.2391, -11.9863, -12.4858],
+                ]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -818,7 +598,7 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs)
         self.assertEqual(outputs.iou_scores.shape, (2, 1, 3))
-        self.assertEqual(outputs.pred_masks.shape, (2, 1, 3, 256, 256))
+        self.assertEqual(outputs.pred_masks.shape, (2, 1, 3, 288, 288))
 
         sorted_indices = torch.argsort(outputs.iou_scores[0].squeeze(), descending=True)
         scores1 = outputs.iou_scores[0].squeeze()[sorted_indices]
@@ -827,24 +607,38 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
         scores2 = outputs.iou_scores[1].squeeze()[sorted_indices]
         masks_logits2 = outputs.pred_masks[1].squeeze()[sorted_indices][0, :3, :3]
         torch.testing.assert_close(
-            scores1, torch.tensor([0.9586, 0.4913, 0.0448]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores1,
+            torch.tensor([0.8837, 0.5837, 0.0372]).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
         )
         torch.testing.assert_close(
             masks_logits1,
             torch.tensor(
-                [[-22.2555, -37.9250, -27.8928], [-30.8681, -27.9519, -32.8032], [-22.4133, -33.9966, -29.7111]]
+                [
+                    [-19.4976, -32.4384, -24.2687],
+                    [-20.9939, -32.2782, -31.2067],
+                    [-21.2991, -30.3071, -31.1489],
+                ]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
 
         torch.testing.assert_close(
-            scores2, torch.tensor([0.9504, 0.8117, 0.7426]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores2,
+            torch.tensor([0.7675, 0.7505, 0.5348]).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
         )
         torch.testing.assert_close(
             masks_logits2,
             torch.tensor(
-                [[-13.1182, -17.3217, -14.9651], [-16.2372, -12.7739, -17.6346], [-13.5013, -17.1549, -15.6614]]
+                [
+                    [-10.3051, -9.9056, -10.5699],
+                    [-8.8009, -11.1684, -10.7158],
+                    [-9.6653, -10.9755, -10.3231],
+                ]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -861,10 +655,10 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs, multimask_output=False)
         self.assertEqual(outputs.iou_scores.shape, (2, 2, 1))
-        self.assertEqual(outputs.pred_masks.shape, (2, 2, 1, 256, 256))
+        self.assertEqual(outputs.pred_masks.shape, (2, 2, 1, 288, 288))
         torch.testing.assert_close(
             outputs.iou_scores,
-            torch.tensor([[[0.9500], [0.9718]], [[0.9568], [0.9114]]]).to(torch_device),
+            torch.tensor([[[0.9370], [0.9425]], [[0.9734], [0.9262]]]).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
@@ -872,8 +666,14 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
             outputs.pred_masks[:, :, :, :2, :2],
             torch.tensor(
                 [
-                    [[[[-5.8131, -11.3020], [-8.6487, -8.0690]]], [[[-4.7731, -8.7606], [-6.2399, -7.0738]]]],
-                    [[[[-13.8661, -19.1254], [-20.2477, -14.1636]]], [[[-8.8229, -10.2760], [-11.3797, -8.7189]]]],
+                    [
+                        [[[-7.6936, -11.7077], [-8.6289, -11.0604]]],
+                        [[[-6.2675, -9.9616], [-6.5427, -9.0548]]],
+                    ],
+                    [
+                        [[[-10.3143, -13.0117], [-10.2967, -12.3099]]],
+                        [[[-9.1198, -10.1437], [-8.2902, -10.6460]]],
+                    ],
                 ]
             ).to(torch_device),
             atol=1e-4,
@@ -893,12 +693,15 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs, multimask_output=False)
         self.assertEqual(outputs.iou_scores.shape, (2, 4, 1))
-        self.assertEqual(outputs.pred_masks.shape, (2, 4, 1, 256, 256))
+        self.assertEqual(outputs.pred_masks.shape, (2, 4, 1, 288, 288))
         torch.testing.assert_close(
             outputs.iou_scores,
-            torch.tensor([[[0.9904], [0.9689], [0.9770], [0.9079]], [[0.9739], [0.9816], [0.9838], [0.9781]]]).to(
-                torch_device
-            ),
+            torch.tensor(
+                [
+                    [[0.9862], [0.9666], [0.9588], [0.9331]],
+                    [[0.9757], [0.9838], [0.9785], [0.9755]],
+                ]
+            ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
@@ -907,16 +710,16 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
             torch.tensor(
                 [
                     [
-                        [[[-11.1540, -18.3994], [-12.4230, -17.4403]]],
-                        [[[-19.3144, -29.3947], [-24.6341, -24.1144]]],
-                        [[[-24.2983, -37.6470], [-31.6659, -31.0893]]],
-                        [[[-25.4313, -44.0231], [-34.0903, -34.7447]]],
+                        [[[-12.5972, -19.5327], [-12.4126, -18.3935]]],
+                        [[[-20.2715, -31.6163], [-22.3341, -27.6888]]],
+                        [[[-20.9112, -31.4296], [-22.9174, -26.5892]]],
+                        [[[-23.6995, -37.8614], [-26.3752, -31.1497]]],
                     ],
                     [
-                        [[[-22.5539, -30.4633], [-32.8940, -21.6813]]],
-                        [[[-23.6637, -31.3489], [-32.5095, -22.4442]]],
-                        [[[-25.2987, -30.9999], [-34.6243, -24.1717]]],
-                        [[[-26.3150, -30.5313], [-35.0152, -24.0271]]],
+                        [[[-21.7436, -29.5702], [-24.3507, -25.5635]]],
+                        [[[-28.0691, -38.6044], [-31.3014, -33.8172]]],
+                        [[[-25.3085, -33.9384], [-27.7918, -30.1258]]],
+                        [[[-26.7339, -36.4405], [-28.8027, -31.8549]]],
                     ],
                 ]
             ).to(torch_device),
@@ -954,15 +757,23 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
             )
 
         self.assertEqual(outputs.iou_scores.shape, (1, 1, 1))
-        self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 256, 256))
-        scores = outputs.iou_scores.squeeze((0, 1))
-        masks_logits = outputs.pred_masks.squeeze((0, 1))[0, :3, :3]
-        torch.testing.assert_close(scores, torch.tensor([0.9738]).to(torch_device), atol=1e-4, rtol=1e-4)
+        self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 288, 288))
         torch.testing.assert_close(
-            masks_logits,
-            torch.tensor([[-5.3899, -9.7908, -8.4931], [-5.5144, -8.8731, -8.3000], [-5.5976, -9.9249, -9.0761]]).to(
-                torch_device
-            ),
+            outputs.iou_scores, torch.tensor([[[0.9809]]]).to(torch_device), atol=1e-4, rtol=1e-4
+        )
+        torch.testing.assert_close(
+            outputs.pred_masks[:, :, 0, :3, :3],
+            torch.tensor(
+                [
+                    [
+                        [
+                            [-5.3111, -7.4920, -5.5444],
+                            [-4.7685, -6.3513, -6.2969],
+                            [-4.8471, -5.1722, -6.5492],
+                        ]
+                    ]
+                ]
+            ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
@@ -984,21 +795,29 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
                 multimask_output=False,
             )
         self.assertEqual(outputs.iou_scores.shape, (1, 1, 1))
-        self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 256, 256))
-        scores = outputs.iou_scores.squeeze((0, 1))
-        masks_logits = outputs.pred_masks.squeeze((0, 1))[0, :3, :3]
-        torch.testing.assert_close(scores, torch.tensor([0.9719]).to(torch_device), atol=1e-4, rtol=1e-4)
+        self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 288, 288))
         torch.testing.assert_close(
-            masks_logits,
+            outputs.iou_scores, torch.tensor([[[0.9625]]]).to(torch_device), atol=1e-4, rtol=1e-4
+        )
+        torch.testing.assert_close(
+            outputs.pred_masks[:, :, 0, :3, :3],
             torch.tensor(
-                [[-15.5081, -21.8641, -18.0479], [-17.4401, -17.4754, -23.6469], [-14.3975, -19.4346, -18.5884]]
+                [
+                    [
+                        [
+                            [-13.4726, -19.9250, -16.3620],
+                            [-13.5886, -18.7266, -17.6766],
+                            [-14.6962, -19.3814, -19.9888],
+                        ]
+                    ]
+                ]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
 
     def test_dummy_pipeline_generation(self):
-        generator = pipeline("mask-generation", model="facebook/sam2.1-hiera-tiny", device=torch_device)
+        generator = pipeline("mask-generation", model="../sam3-hf-v4-video-full", device=torch_device)
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)

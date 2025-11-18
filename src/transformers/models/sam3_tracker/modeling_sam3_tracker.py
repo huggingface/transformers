@@ -767,11 +767,6 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         "no_object_pointer",
         "occlusion_spatial_embedding_parameter",
     ]
-    _tied_weights_keys = {
-        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding",
-    }
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _checkpoint_conversion_mapping = {
         "tracker_model.": "",
         "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",

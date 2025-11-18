@@ -91,6 +91,7 @@ class Sam3ViTConfig(PreTrainedConfig):
         super().__init__(**kwargs)
         if global_attn_indexes is None:
             global_attn_indexes = [7, 15, 23, 31]
+
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
@@ -132,6 +133,8 @@ class Sam3VisionConfig(PreTrainedConfig):
             The stride for the convolutions in the neck.
         num_feature_levels (`int`, *optional*, defaults to 3):
             The number of feature levels from the FPN to use.
+        backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[288, 288], [144, 144], [72, 72]]`):
+            The spatial sizes (height, width) of the feature maps from the backbone at different scales.
         scale_factors (`list[float]`, *optional*, defaults to `[4.0, 2.0, 1.0, 0.5]`):
             Scale factors for FPN multi-scale features. List of scaling factors for each FPN level.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
@@ -156,6 +159,7 @@ class Sam3VisionConfig(PreTrainedConfig):
         fpn_kernel_size=2,
         fpn_stride=2,
         num_feature_levels=3,
+        backbone_feature_sizes=None,
         scale_factors=None,
         hidden_act="gelu",
         layer_norm_eps=1e-6,
@@ -163,6 +167,8 @@ class Sam3VisionConfig(PreTrainedConfig):
         **kwargs,
     ):
         scale_factors = [4.0, 2.0, 1.0, 0.5] if scale_factors is None else scale_factors
+        if backbone_feature_sizes is None:
+            backbone_feature_sizes = [[288, 288], [144, 144], [72, 72]]
 
         if isinstance(backbone_config, dict):
             backbone_config["model_type"] = backbone_config.get("model_type", "sam3_vit_model")
@@ -178,6 +184,7 @@ class Sam3VisionConfig(PreTrainedConfig):
         self.fpn_stride = fpn_stride
         self.num_feature_levels = num_feature_levels
         self.scale_factors = scale_factors
+        self.backbone_feature_sizes = backbone_feature_sizes
 
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps

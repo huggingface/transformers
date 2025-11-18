@@ -1567,11 +1567,8 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     input_modalities = ["video", "text"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerVideoTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
-    _tied_weights_keys = {
-        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
-    }
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    _tied_weights_keys = {}
+    _keys_to_ignore_on_load_missing = []
     _checkpoint_conversion_mapping = {
         "tracker_model.": "",
         "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",

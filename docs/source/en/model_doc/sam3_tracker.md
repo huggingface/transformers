@@ -17,28 +17,283 @@ limitations under the License.
 
 -->
 
+# SAM3 Tracker
 
-# Sam3Tracker
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    </div>
+</div>
 
 ## Overview
 
-The Sam3Tracker model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+Sam3Tracker is an updated version of SAM2 (Segment Anything Model 2) that maintains the same API while providing improved performance and capabilities. SAM2 was proposed in [Segment Anything in Images and Videos](https://ai.meta.com/research/publications/sam-2-segment-anything-in-images-and-videos/) by Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollár, Christoph Feichtenhofer.
 
-The abstract from the paper is the following:
+The model can be used to predict segmentation masks of any object of interest given an input image or video, and input points or bounding boxes. Sam3Tracker maintains full API compatibility with SAM2, making it a drop-in replacement for existing SAM2 workflows.
 
-<INSERT PAPER ABSTRACT HERE>
+![example image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam2_header.gif)
 
-Tips:
+The abstract from the original SAM2 paper is the following:
 
-<INSERT TIPS ABOUT MODEL HERE>
+*We present Segment Anything Model 2 (SAM 2), a foundation model towards solving promptable visual segmentation in images and videos. We build a data engine, which improves model and data via user interaction, to collect the largest video segmentation dataset to date. Our model is a simple transformer architecture with streaming memory for real-time video processing. SAM 2 trained on our data provides strong performance across a wide range of tasks. In video segmentation, we observe better accuracy, using 3x fewer interactions than prior approaches. In image segmentation, our model is more accurate and 6x faster than the Segment Anything Model (SAM). We believe that our data, model, and insights will serve as a significant milestone for video segmentation and related perception tasks. We are releasing a version of our model, the dataset and an interactive demo.*
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+## Usage example
 
-## Usage examples
+### Automatic Mask Generation with Pipeline
 
-<INSERT SOME NICE EXAMPLES HERE>
+Sam3Tracker can be used for automatic mask generation to segment all objects in an image using the `mask-generation` pipeline:
+
+```python
+>>> from transformers import pipeline
+
+>>> generator = pipeline("mask-generation", model="facebook/sam3", device=0)
+>>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
+>>> outputs = generator(image_url, points_per_batch=64)
+
+>>> len(outputs["masks"])  # Number of masks generated
+39
+```
+
+### Basic Image Segmentation
+
+#### Single Point Click
+
+You can segment objects by providing a single point click on the object you want to segment:
+
+```python
+>>> from transformers import Sam3TrackerProcessor, Sam3TrackerModel
+from accelerate import Accelerator
+>>> import torch
+>>> from PIL import Image
+>>> import requests
+
+>>> device = Accelerator().device
+
+>>> model = Sam3TrackerModel.from_pretrained("facebook/sam3").to(device)
+>>> processor = Sam3TrackerProcessor.from_pretrained("facebook/sam3")
+
+>>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
+>>> raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+
+>>> input_points = [[[[500, 375]]]]  # Single point click, 4 dimensions (image_dim, object_dim, point_per_object_dim, coordinates)
+>>> input_labels = [[[1]]]  # 1 for positive click, 0 for negative click, 3 dimensions (image_dim, object_dim, point_label)
+
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
+
+>>> # The model outputs multiple mask predictions ranked by quality score
+>>> print(f"Generated {masks.shape[1]} masks with shape {masks.shape}")
+Generated 3 masks with shape torch.Size([1, 3, 1500, 2250])
+```
+
+#### Multiple Points for Refinement
+
+You can provide multiple points to refine the segmentation:
+
+```python
+>>> # Add both positive and negative points to refine the mask
+>>> input_points = [[[[500, 375], [1125, 625]]]]  # Multiple points for refinement
+>>> input_labels = [[[1, 1]]]  # Both positive clicks
+
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
+```
+
+#### Bounding Box Input
+
+Sam3Tracker also supports bounding box inputs for segmentation:
+
+```python
+>>> # Define bounding box as [x_min, y_min, x_max, y_max]
+>>> input_boxes = [[[75, 275, 1725, 850]]]
+
+>>> inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
+```
+
+#### Multiple Objects Segmentation
+
+You can segment multiple objects simultaneously:
+
+```python
+>>> # Define points for two different objects
+>>> input_points = [[[[500, 375]], [[650, 750]]]]  # Points for two objects in same image
+>>> input_labels = [[[1], [1]]]  # Positive clicks for both objects
+
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs, multimask_output=False)
+
+>>> # Each object gets its own mask
+>>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
+>>> print(f"Generated masks for {masks.shape[0]} objects")
+Generated masks for 2 objects
+```
+
+### Batch Inference
+
+#### Batched Images
+
+Process multiple images simultaneously for improved efficiency:
+
+```python
+>>> from transformers import Sam3TrackerProcessor, Sam3TrackerModel
+from accelerate import Accelerator
+>>> import torch
+>>> from PIL import Image
+>>> import requests
+
+>>> device = Accelerator().device
+
+>>> model = Sam3TrackerModel.from_pretrained("facebook/sam3").to(device)
+>>> processor = Sam3TrackerProcessor.from_pretrained("facebook/sam3")
+
+>>> # Load multiple images
+>>> image_urls = [
+...     "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg",
+...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
+... ]
+>>> raw_images = [Image.open(requests.get(url, stream=True).raw).convert("RGB") for url in image_urls]
+
+>>> # Single point per image
+>>> input_points = [[[[500, 375]]], [[[770, 200]]]]  # One point for each image
+>>> input_labels = [[[1]], [[1]]]  # Positive clicks for both images
+
+>>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs, multimask_output=False)
+
+>>> # Post-process masks for each image
+>>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
+>>> print(f"Processed {len(all_masks)} images, each with {all_masks[0].shape[0]} objects")
+Processed 2 images, each with 1 objects
+```
+
+#### Batched Objects per Image
+
+Segment multiple objects within each image using batch inference:
+
+```python
+>>> # Multiple objects per image - different numbers of objects per image
+>>> input_points = [
+...     [[[500, 375]], [[650, 750]]],  # Truck image: 2 objects
+...     [[[770, 200]]]  # Dog image: 1 object
+... ]
+>>> input_labels = [
+...     [[1], [1]],  # Truck image: positive clicks for both objects
+...     [[1]]  # Dog image: positive click for the object
+... ]
+
+>>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs, multimask_output=False)
+
+>>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
+```
+
+#### Batched Images with Batched Objects and Multiple Points
+
+Handle complex batch scenarios with multiple points per object:
+
+```python
+>>> # Add groceries image for more complex example
+>>> groceries_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/groceries.jpg"
+>>> groceries_image = Image.open(requests.get(groceries_url, stream=True).raw).convert("RGB")
+>>> raw_images = [raw_images[0], groceries_image]  # Use truck and groceries images
+
+>>> # Complex batching: multiple images, multiple objects, multiple points per object
+>>> input_points = [
+...     [[[500, 375]], [[650, 750]]],  # Truck image: 2 objects with 1 point each
+...     [[[400, 300]], [[630, 300], [550, 300]]]  # Groceries image: obj1 has 1 point, obj2 has 2 points
+... ]
+>>> input_labels = [
+...     [[1], [1]],  # Truck image: positive clicks
+...     [[1], [1, 1]]  # Groceries image: positive clicks for refinement
+... ]
+
+>>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs, multimask_output=False)
+
+>>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
+```
+
+#### Batched Bounding Boxes
+
+Process multiple images with bounding box inputs:
+
+```python
+>>> # Multiple bounding boxes per image (using truck and groceries images)
+>>> input_boxes = [
+...     [[75, 275, 1725, 850], [425, 600, 700, 875], [1375, 550, 1650, 800], [1240, 675, 1400, 750]],  # Truck image: 4 boxes
+...     [[450, 170, 520, 350], [350, 190, 450, 350], [500, 170, 580, 350], [580, 170, 640, 350]]  # Groceries image: 4 boxes
+... ]
+
+>>> # Update images for this example
+>>> raw_images = [raw_images[0], groceries_image]  # truck and groceries
+
+>>> inputs = processor(images=raw_images, input_boxes=input_boxes, return_tensors="pt").to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs, multimask_output=False)
+
+>>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
+>>> print(f"Processed {len(input_boxes)} images with {len(input_boxes[0])} and {len(input_boxes[1])} boxes respectively")
+Processed 2 images with 4 and 4 boxes respectively
+```
+
+### Using Previous Masks as Input
+
+Sam3Tracker can use masks from previous predictions as input to refine segmentation:
+
+```python
+>>> # Get initial segmentation
+>>> input_points = [[[[500, 375]]]]
+>>> input_labels = [[[1]]]
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> # Use the best mask as input for refinement
+>>> mask_input = outputs.pred_masks[:, :, torch.argmax(outputs.iou_scores.squeeze())]
+
+>>> # Add additional points with the mask input
+>>> new_input_points = [[[[500, 375], [450, 300]]]]
+>>> new_input_labels = [[[1, 1]]]
+>>> inputs = processor(
+...     input_points=new_input_points,
+...     input_labels=new_input_labels,
+...     original_sizes=inputs["original_sizes"],
+...     return_tensors="pt",
+... ).to(device)
+
+>>> with torch.no_grad():
+...     refined_outputs = model(
+...         **inputs,
+...         input_masks=mask_input,
+...         image_embeddings=outputs.image_embeddings,
+...         multimask_output=False,
+...     )
+```
 
 ## Sam3TrackerConfig
 
@@ -51,6 +306,12 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## Sam3TrackerMaskDecoderConfig
 
 [[autodoc]] Sam3TrackerMaskDecoderConfig
+
+## Sam3TrackerProcessor
+
+[[autodoc]] Sam3TrackerProcessor
+    - __call__
+    - post_process_masks
 
 ## Sam3TrackerModel
 
