@@ -1163,6 +1163,20 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
 
+        Returns:
+            logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, vocab_size)`):
+                Raw, unnormalized prediction scores returned by the language modeling head.
+                These logits **include scores for both text tokens and vision tokens**.
+
+                In vision-language models such as `GitForCausalLM`, the model embeds
+                both image patches and text tokens into a **shared joint representation**.
+                The output projection layer then produces logits over:
+
+                - all vocabulary text tokens, and
+                - special image-token indices that represent visual patch embeddings.
+
+                The returned logits will always have joint vision-language values. They will not have text-only scores because both types share the same embedding space.
+
         Examples:
 
         Image captioning example:
@@ -1307,7 +1321,11 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        # Compute logits for text and image tokens together (joint vision-language logits)
+        # These logits come from the combined hidden states and include:
+        # - all vocabulary text tokens
+        # - image-token embeddings from visual patches
+
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.output(hidden_states[:, slice_indices, :])
 
