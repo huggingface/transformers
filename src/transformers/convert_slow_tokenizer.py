@@ -1731,7 +1731,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
     "Qwen2Tokenizer": Qwen2Converter,
-    "RealmTokenizer": BertConverter,
     "ReformerTokenizer": ReformerConverter,
     "RemBertTokenizer": RemBertConverter,
     "RetriBertTokenizer": BertConverter,
