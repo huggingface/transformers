@@ -86,8 +86,8 @@ try:
             },
             "npu": {
                 Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger_kernels",
-                    layer_name="LigerRMSNorm",
+                    repo_id="kernels-ext-npu/rmsnorm",
+                    layer_name="rmsnorm",
                 )
             },
         },
