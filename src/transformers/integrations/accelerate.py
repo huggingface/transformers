@@ -259,7 +259,7 @@ def check_and_set_device_map(device_map: "torch.device | int | str | dict | None
 
 
 def compute_module_sizes(
-    model: "PreTrainedModel", hf_quantizer: "HfQuantizer | None"=None, buffers_only: bool=False
+    model: "PreTrainedModel", hf_quantizer: "HfQuantizer | None" = None, buffers_only: bool = False
 ) -> tuple[dict[str, int], dict[str, int]]:
     """
     Compute the size of each submodule of a given model (in bytes).
@@ -289,12 +289,14 @@ def compute_module_sizes(
 
     return all_module_sizes, leaves_module_sizes
 
-def compute_module_total_buffer_size(model: nn.Module, hf_quantizer: "HfQuantizer | None"=None):
+
+def compute_module_total_buffer_size(model: nn.Module, hf_quantizer: "HfQuantizer | None" = None):
     """
     Compute the total size of buffers in each submodule of a given model.
     """
     module_sizes, _ = compute_module_sizes(model, hf_quantizer, buffers_only=True)
     return module_sizes.get("", 0)
+
 
 def get_balanced_memory(
     model: "PreTrainedModel",
@@ -546,6 +548,7 @@ def accelerate_disk_offload(
         disk_offload_index = {}
     return disk_offload_index, disk_only_shard_files, is_offloaded_safetensors
 
+
 def _init_infer_auto_device_map(
     model: nn.Module,
     max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
@@ -617,7 +620,7 @@ def infer_auto_device_map(
     clean_result: bool = True,
     offload_buffers: bool = False,
     tied_parameters: Optional[list[list[str]]] = None,
-    hf_quantizer: "HfQuantizer | None" = None
+    hf_quantizer: "HfQuantizer | None" = None,
 ):
     """
     Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,
@@ -889,6 +892,7 @@ def infer_auto_device_map(
     check_tied_parameters_on_same_device(tied_parameters, device_map)
     return device_map
 
+
 def _get_param_device(param, device_map):
     if param in device_map:
         return device_map[param]
@@ -897,6 +901,7 @@ def _get_param_device(param, device_map):
         raise ValueError(f"The `device_map` does not contain the module {param}.")
     else:
         return _get_param_device(parent_param, device_map)
+
 
 def check_tied_parameters_on_same_device(tied_params, device_map):
     """
