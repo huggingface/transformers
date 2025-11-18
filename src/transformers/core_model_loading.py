@@ -730,9 +730,9 @@ def convert_and_load_state_dict_in_model(
                 realized_value, misc = mapping.convert(
                     full_param_name, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys
                 )
-                for k, output_value in realized_value.items():
-                    output_value = output_value[0] if isinstance(output_value, list) else output_value
-                    device_match = device_map_regex.match(k)
+                for target_name, param in realized_value.items():
+                    param = param[0] if isinstance(param, list) else param
+                    device_match = device_map_regex.match(target_name)
                     param_device = (
                         device_map[device_match.group()] if device_match else device_map.get("", "cpu")
                     )
@@ -742,13 +742,13 @@ def convert_and_load_state_dict_in_model(
                         # If not already offloaded, or if we applied any special Operation, we need to re-save
                         if k not in disk_offload_index or len(operations) > 0:
                             disk_offload_index = offload_weight(
-                                output_value, k, disk_offload_folder, disk_offload_index
+                                param, target_name, disk_offload_folder, disk_offload_index
                             )
                     else:
                         set_param_for_module(
                             model,
-                            k,
-                            output_value,
+                            target_name,
+                            param,
                             mismatch_keys,
                             missing_keys,
                             misc,
