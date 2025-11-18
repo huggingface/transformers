@@ -684,6 +684,7 @@ def patch_model_for_export(model: "PreTrainedModel"):
 def patch_torch_for_onnx_export():
     # Patch torch.where to handle dtype mismatches between x and y when it's called during export
     original_torch_where = torch.where
+    original_tensor_where = torch.Tensor.where
 
     def patched_torch_where(condition, x=None, y=None):
         if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor) and x.dtype != y.dtype:
@@ -700,26 +701,34 @@ def patch_torch_for_onnx_export():
         else:
             return original_torch_where(condition, x, y)
 
+    def patched_tensor_where(self, condition, other):
+        return patched_torch_where(condition, self, other)
+
     torch.where = patched_torch_where
+    torch.Tensor.where = patched_tensor_where
 
     # Patch torch.unsqueeze to support complex tensors during export
-    original_unsqueeze = torch.unsqueeze
+    original_torch_unsqueeze = torch.unsqueeze
+    original_tensor_unsqueeze = torch.Tensor.unsqueeze
 
-    def patched_unsqueeze(input, dim):
+    def patched_torch_unsqueeze(input, dim):
         if torch.is_complex(input):
-            real = original_unsqueeze(input.real, dim)
-            imag = original_unsqueeze(input.imag, dim)
+            real = original_torch_unsqueeze(input.real, dim)
+            imag = original_torch_unsqueeze(input.imag, dim)
             return torch.complex(real, imag)
         else:
-            return original_unsqueeze(input, dim)
+            return original_torch_unsqueeze(input, dim)
 
-    torch.unsqueeze = patched_unsqueeze
-    torch.Tensor.unsqueeze = patched_unsqueeze
+    def patched_tensor_unsqueeze(self, dim):
+        return patched_torch_unsqueeze(self, dim)
+
+    torch.unsqueeze = patched_torch_unsqueeze
+    torch.Tensor.unsqueeze = patched_tensor_unsqueeze
 
     try:
         yield
     finally:
         torch.where = original_torch_where
-
-        torch.unsqueeze = original_unsqueeze
-        torch.Tensor.unsqueeze = original_unsqueeze
+        torch.Tensor.where = original_tensor_where
+        torch.unsqueeze = original_torch_unsqueeze
+        torch.Tensor.unsqueeze = original_tensor_unsqueeze
