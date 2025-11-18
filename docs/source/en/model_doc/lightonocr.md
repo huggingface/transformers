@@ -12,7 +12,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-11-06.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2025-11-18.*
 
 # LightOnOCR
 

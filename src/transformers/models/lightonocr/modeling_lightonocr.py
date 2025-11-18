@@ -132,22 +132,6 @@ class LightOnOCRPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
-    def _init_weights(self, module):
-        std = (
-            self.config.text_config.initializer_range
-            if hasattr(self.config, "text_config") and hasattr(self.config.text_config, "initializer_range")
-            else 0.02
-        )
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
 
 # Vision model components - explicitly renamed from Pixtral
 class LightOnOCRVisionPreTrainedModel(PreTrainedModel):
@@ -160,15 +144,6 @@ class LightOnOCRVisionPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = ["LightOnOCRVisionAttentionLayer"]
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(1.0)
 
 
 # Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
@@ -1187,7 +1162,7 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
 class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
     config_class = LightOnOCRConfig
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: LightOnOCRConfig):
         super().__init__(config)
