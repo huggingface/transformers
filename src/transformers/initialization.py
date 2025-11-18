@@ -162,6 +162,25 @@ def copy_(tensor: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
     return tensor
 
 
+# Here, we need to check several modules imported, and hot patch all of them, as sometimes torch does
+# something like `from torch.nn.init import xavier_uniform_` in their internals (e.g in torch.nn.modules.activations,
+# where MultiHeadAttention lives), so the function name is binded at import time and just doing
+# `setattr(torch.nn.init, name, globals()[name])` is thus not enough
+# The following list should be enough for all torch versions we work with
+TORCH_MODULES_TO_PATCH = (
+    "torch.nn.init",
+    "torch.nn.modules.activation",
+    "torch.nn.modules.transformer",
+    "torch.nn.modules.linear",
+    "torch.nn.modules.loss",
+    "torch.nn.modules.batchnorm",
+    "torch.nn.modules.conv",
+    "torch.nn.modules.normalization",
+    "torch.nn.modules.rnn",
+    "torch.nn.modules.sparse",
+)
+
+
 @contextmanager
 def guard_torch_init_functions():
     """
@@ -174,18 +193,16 @@ def guard_torch_init_functions():
     originals = defaultdict(dict)
     try:
         # Replace all torch funcs by the ones in this file
-        for name in TORCH_INIT_FUNCTIONS.keys():
-            # Here, we need to check all modules imported, and hot patch all of them, as usually torch does
-            # something like `from torch.nn.init import xavier_uniform_` in their internals (e.g in torch.nn.modules,
-            # where MultiHeadAttention lives), so the function name is binded at import time and just doing
-            # `setattr(torch.nn.init, name, gloabls()[name])` is thus not enough
-            for module in sys.modules.copy().values():
-                if module and hasattr(module, name):
-                    originals[module][name] = getattr(module, name)
-                    setattr(module, name, globals()[name])
+        for module_name in TORCH_MODULES_TO_PATCH:
+            if module_name in sys.modules:
+                module = sys.modules[module_name]
+                for func_name in TORCH_INIT_FUNCTIONS.keys():
+                    if hasattr(module, func_name):
+                        originals[module][func_name] = getattr(module, func_name)
+                        setattr(module, func_name, globals()[func_name])
         yield
     finally:
         # Set back the original functions on all modules
         for module, functions in originals.items():
-            for name, func in functions.items():
-                setattr(module, name, func)
+            for func_name, func in functions.items():
+                setattr(module, func_name, func)
