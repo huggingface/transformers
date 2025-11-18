@@ -32,10 +32,10 @@ _import_structure = {
         "unpack_weights",
     ],
     "bitsandbytes": [
+        "Bnb4bitQuantize",
         "dequantize_and_replace",
         "replace_with_bnb_linear",
         "validate_bnb_backend_availability",
-        "Bnb4bitQuantize",
     ],
     "deepspeed": [
         "HfDeepSpeedConfig",
