@@ -37,6 +37,8 @@ class Sam3VideoConfig(PreTrainedConfig):
             Configuration for the Sam2Video tracker model. If not provided, default Sam2VideoConfig will be used.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing weight matrices.
+        low_res_mask_size (`int`, *optional*, defaults to 288):
+            Size (height and width) of the low-resolution mask outputs from the tracker before upsampling to video resolution.
         score_threshold_detection (`float`, *optional*, defaults to 0.5):
             Probability threshold for detection outputs - only keep detections above this threshold.
         det_nms_thresh (`float`, *optional*, defaults to 0.1):
@@ -49,6 +51,9 @@ class Sam3VideoConfig(PreTrainedConfig):
             by any detections. Often a stricter threshold like 0.5.
         new_det_thresh (`float`, *optional*, defaults to 0.7):
             Probability threshold for a detection to be added as a new object.
+        recondition_on_trk_masks (`bool`, *optional*, defaults to `True`):
+            Whether to use tracked masks (True) or detection masks (False) for reconditioning. Use True when tracked
+            masks are higher quality and detector serves as validation signal to strengthen memory and prevent drift.
         hotstart_delay (`int`, *optional*, defaults to 15):
             Number of frames to buffer outputs during hotstart. We hold off the outputs for `hotstart_delay`
             frames and remove tracklets based on hotstart heuristics.
@@ -80,9 +85,6 @@ class Sam3VideoConfig(PreTrainedConfig):
             High confidence threshold for reconditioning. Only detections above this threshold can recondition tracklets.
         high_iou_thresh (`float`, *optional*, defaults to 0.8):
             High IoU threshold for reconditioning. Only detections with IoU above this threshold can recondition tracklets.
-        recondition_on_trk_masks (`bool`, *optional*, defaults to `True`):
-            Whether to use tracked masks (True) or detection masks (False) for reconditioning. Use True when tracked
-            masks are higher quality and detector serves as validation signal to strengthen memory and prevent drift.
 
     Example:
     ```python

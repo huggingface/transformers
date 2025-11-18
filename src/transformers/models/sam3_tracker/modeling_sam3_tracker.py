@@ -32,6 +32,7 @@ from torch import Tensor
 
 from transformers.utils.generic import OutputRecorder
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -116,22 +117,12 @@ class Sam3TrackerPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, Sam3TrackerLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+        super()._init_weights(module)
         if isinstance(module, Sam3TrackerModel):
             if module.no_memory_embedding is not None:
-                module.no_memory_embedding.data.zero_()
+                init.zeros_(module.no_memory_embedding)
 
 
 class Sam3TrackerPositionalEmbedding(nn.Module):
@@ -228,7 +219,7 @@ class Sam3TrackerPromptEncoder(nn.Module):
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
-        boxes += 0.5  # Shift to center of pixel
+        boxes = boxes + 0.5  # Shift to center of pixel
         coords = boxes.view(*boxes.shape[:2], 2, 2)
         # add padding point for consistency with the original implementation
         coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
@@ -765,9 +756,6 @@ class Sam3TrackerVisionEncoderOutput(ModelOutput):
 )
 class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
     input_modalities = ["image", "text"]
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = [
         r"^detector_model.",
@@ -779,9 +767,14 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         "no_object_pointer",
         "occlusion_spatial_embedding_parameter",
     ]
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding",
+    }
+    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
+    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _checkpoint_conversion_mapping = {
         "tracker_model.": "",
-        "detector_model.vision_encoder.": "vision_encoder.",
+        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
         "tracker_neck.": "vision_encoder.neck.",
     }
 
@@ -806,11 +799,6 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
 
         self.post_init()
-
-    def _tie_weights(self):
-        self.prompt_encoder.shared_embedding.positional_embedding.data = (
-            self.shared_image_embedding.positional_embedding.data
-        )
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()

@@ -27,6 +27,8 @@ class Sam3ViTConfig(PreTrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers.
+        intermediate_size (`int`, *optional*, defaults to 4736):
+            Dimensionality of the feedforward (MLP) layers.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
@@ -39,48 +41,24 @@ class Sam3ViTConfig(PreTrainedConfig):
             Size of image patches.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for attention probabilities.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add bias to QKV projections.
-        mlp_ratio (`float`, *optional*, defaults to 4.625):
-            Ratio of mlp hidden dim to embedding dim.
-        use_abs_pos (`bool`, *optional*, defaults to `True`):
-            Whether to use absolute position embeddings.
-        tile_abs_pos (`bool`, *optional*, defaults to `True`):
-            Whether to tile absolute position embeddings instead of interpolation.
-        use_rope (`bool`, *optional*, defaults to `True`):
-            Whether to use RoPE (Rotary Position Embeddings).
         rope_theta (`float`, *optional*, defaults to 10000.0):
             Base frequency for RoPE.
-        use_interp_rope (`bool`, *optional*, defaults to `True`):
-            Whether to interpolate RoPE frequencies.
         window_size (`int`, *optional*, defaults to 24):
             Window size for windowed attention.
         global_attn_indexes (`list[int]`, *optional*, defaults to `[7, 15, 23, 31]`):
             Indexes of layers with global attention.
-        use_rel_pos (`bool`, *optional*, defaults to `False`):
-            Whether to use relative position embeddings (only for specific blocks).
-        rel_pos_zero_init (`bool`, *optional*, defaults to `True`):
-            Whether to zero-initialize relative position embeddings.
-        drop_path_rate (`float`, *optional*, defaults to 0.1):
-            Stochastic depth rate.
         layer_scale_init_value (`float`, *optional*):
             Initial value for layer scale. None means no layer scale.
-        pretrain_img_size (`int`, *optional*, defaults to 336):
+        pretrain_image_size (`int`, *optional*, defaults to 336):
             Pretrained model image size for position embedding initialization.
-        pretrain_use_cls_token (`bool`, *optional*, defaults to `True`):
-            Whether pretrained model used cls token.
-        retain_cls_token (`bool`, *optional*, defaults to `False`):
-            Whether to retain cls token in the output.
-        ln_pre (`bool`, *optional*, defaults to `True`):
-            Whether to apply layer norm before transformer blocks.
-        ln_post (`bool`, *optional*, defaults to `False`):
-            Whether to apply layer norm after transformer blocks.
-        output_channels (`int`, *optional*, defaults to 256):
-            Output dimensionality after the neck.
+        hidden_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for hidden states.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing weight matrices.
     """
@@ -148,16 +126,14 @@ class Sam3VisionConfig(PreTrainedConfig):
             `AutoModel.from_config`.
         fpn_hidden_size (`int`, *optional*, defaults to 256):
             The hidden dimension of the FPN.
-        fpn_kernel_size (`int`, *optional*, defaults to 1):
+        fpn_kernel_size (`int`, *optional*, defaults to 2):
             The kernel size for the convolutions in the neck.
-        fpn_stride (`int`, *optional*, defaults to 1):
+        fpn_stride (`int`, *optional*, defaults to 2):
             The stride for the convolutions in the neck.
-        fpn_padding (`int`, *optional*, defaults to 0):
-            The padding for the convolutions in the neck.
-        fpn_top_down_levels (`List[int]`, *optional*, defaults to `[2, 3]`):
-            The levels for the top-down FPN connections.
         num_feature_levels (`int`, *optional*, defaults to 3):
             The number of feature levels from the FPN to use.
+        scale_factors (`list[float]`, *optional*, defaults to `[4.0, 2.0, 1.0, 0.5]`):
+            Scale factors for FPN multi-scale features. List of scaling factors for each FPN level.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the neck.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -224,9 +200,11 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
             Dimensionality of the feedforward layers.
         dropout (`float`, *optional*, defaults to 0.1):
             Dropout probability.
-        activation_function (`str`, *optional*, defaults to `"relu"`):
+        hidden_act (`str`, *optional*, defaults to `"relu"`):
             Activation function in FFN.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        hidden_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for hidden states.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon for layer normalization.
         roi_size (`int`, *optional*, defaults to 7):
             ROI size for box pooling operations.
@@ -278,9 +256,11 @@ class Sam3DETREncoderConfig(PreTrainedConfig):
             Dimensionality of the feedforward layers.
         dropout (`float`, *optional*, defaults to 0.1):
             Dropout probability.
-        activation_function (`str`, *optional*, defaults to `"relu"`):
+        hidden_act (`str`, *optional*, defaults to `"relu"`):
             Activation function in FFN.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        hidden_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for hidden states.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon for layer normalization.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing weight matrices.
@@ -330,9 +310,11 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
             Dimensionality of the feedforward layers.
         dropout (`float`, *optional*, defaults to 0.1):
             Dropout probability.
-        activation_function (`str`, *optional*, defaults to `"relu"`):
+        hidden_act (`str`, *optional*, defaults to `"relu"`):
             Activation function in FFN.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        hidden_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for hidden states.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon for layer normalization.
         box_rpb_mode (`str`, *optional*, defaults to `"log"`):
             Mode for box relative position bias ("log" or "linear").
@@ -384,7 +366,7 @@ class Sam3MaskDecoderConfig(PreTrainedConfig):
             Dimensionality of the mask decoder.
         num_upsampling_stages (`int`, *optional*, defaults to 3):
             Number of upsampling stages in the pixel decoder (FPN).
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon for layer normalization.
         dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for prompt cross-attention.
@@ -428,10 +410,12 @@ class Sam3Config(PreTrainedConfig):
             Configuration for the text encoder.
         geometry_encoder_config (`dict` or `Sam3GeometryEncoderConfig`, *optional*):
             Configuration for the geometry encoder.
-        transformer_config (`dict` or `Sam3TransformerConfig`, *optional*):
-            Configuration for the transformer.
-        segmentation_config (`dict` or `Sam3SegmentationConfig`, *optional*):
-            Configuration for the segmentation head.
+        detr_encoder_config (`dict` or `Sam3DETREncoderConfig`, *optional*):
+            Configuration for the DETR encoder.
+        detr_decoder_config (`dict` or `Sam3DETRDecoderConfig`, *optional*):
+            Configuration for the DETR decoder.
+        mask_decoder_config (`dict` or `Sam3MaskDecoderConfig`, *optional*):
+            Configuration for the mask decoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing weight matrices.
 

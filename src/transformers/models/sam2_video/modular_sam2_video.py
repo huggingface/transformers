@@ -1764,6 +1764,17 @@ class Sam2VideoModel(Sam2Model):
         # Use -10/+20 as logits for neg/pos pixels (very close to 0/1 in prob after sigmoid).
         out_scale, out_bias = 20.0, -10.0  # sigmoid(-10.0)=4.5398e-05
         mask_inputs_float = mask_inputs.to(backbone_features[0].dtype)
+
+        # Ensure mask is at self.image_size resolution for consistency
+        if mask_inputs_float.shape[-2:] != (self.image_size, self.image_size):
+            mask_inputs_float = F.interpolate(
+                mask_inputs_float.float(),
+                size=(self.image_size, self.image_size),
+                align_corners=False,
+                mode="bilinear",
+                antialias=True,
+            ).to(mask_inputs.dtype)
+
         high_res_masks = mask_inputs_float * out_scale + out_bias
         low_res_masks = F.interpolate(
             high_res_masks.float(),

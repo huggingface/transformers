@@ -40,12 +40,10 @@ class Sam3VideoProcessor(ProcessorMixin):
             An instance of [`Sam2ImageProcessorFast`].
         video_processor (`Sam2VideoVideoProcessor`):
             An instance of [`Sam2VideoVideoProcessor`].
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
+        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
             An instance of [`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]. The tokenizer is a required input.
         target_size (`int`, *optional*):
             The target size (target_size, target_size) to which the image will be resized.
-        point_pad_value (`int`, *optional*, defaults to -10):
-            The value used for padding input points.
     """
 
     def __init__(

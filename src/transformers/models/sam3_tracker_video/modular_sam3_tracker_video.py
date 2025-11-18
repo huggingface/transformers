@@ -452,7 +452,7 @@ class Sam3TrackerVideoMaskDecoder(Sam2VideoMaskDecoder):
 class Sam3TrackerVideoModel(Sam2VideoModel):
     _checkpoint_conversion_mapping = {
         "tracker_model.": "",
-        "detector_model.vision_encoder.": "vision_encoder.",
+        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
         "tracker_neck.": "vision_encoder.neck.",
     }
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]

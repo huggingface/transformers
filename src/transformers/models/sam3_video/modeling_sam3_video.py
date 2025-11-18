@@ -5,13 +5,13 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn.functional as F
 from kernels import get_kernel
-from torch import Tensor, nn
+from torch import Tensor
 from tqdm.auto import tqdm
 
 from transformers.models.sam3.modeling_sam3 import Sam3VisionNeck
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import AutoModel
 from .configuration_sam3_video import Sam3VideoConfig
 
@@ -401,36 +401,15 @@ class Sam3VideoPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
 
-
+@auto_docstring
 class Sam3VideoModel(Sam3VideoPreTrainedModel):
-    """
-    SAM3 Video Model combining detection (Sam3) and tracking (Sam2-style) with fusion heuristics.
-
-    This model unrolls the detector and tracker submodules and integrates detection-tracking fusion logic
-    including NMS, association, hotstart, reconditioning, and occlusion handling.
-
-    Args:
-        config ([`Sam3VideoConfig`]): Model configuration class.
-    """
-
-    _tied_weights_keys = ["tracker_model.prompt_encoder.shared_embedding.positional_embedding"]
+    _tied_weights_keys = {
+        "tracker_model.prompt_encoder.shared_embedding.positional_embedding": "tracker_model.shared_image_embedding.positional_embedding"
+    }
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["tracker_model.prompt_encoder.shared_embedding.positional_embedding"]
+    all_tied_weights_keys = {}
 
     def __init__(self, config: Sam3VideoConfig):
         super().__init__(config)

@@ -756,23 +756,6 @@ class Sam3PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.weight.data.fill_(1.0)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        if isinstance(module, Sam3ViTEmbeddings):
-            module.position_embeddings.data.normal_(mean=0.0, std=std)
-
 
 @auto_docstring
 class Sam3ViTModel(Sam3PreTrainedModel):

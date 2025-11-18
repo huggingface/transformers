@@ -32,6 +32,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -676,31 +677,21 @@ class Sam3TrackerVideoPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, Sam3TrackerVideoLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, Sam3TrackerVideoModel):
+        super()._init_weights(module)
+        if isinstance(module, Sam3TrackerVideoModel):
             if module.no_memory_positional_encoding is not None:
-                module.no_memory_positional_encoding.data.zero_()
+                init.zeros_(module.no_memory_positional_encoding)
             if module.memory_temporal_positional_encoding is not None:
-                module.memory_temporal_positional_encoding.data.zero_()
+                init.zeros_(module.memory_temporal_positional_encoding)
             if module.no_object_pointer is not None:
-                module.no_object_pointer.data.zero_()
+                init.zeros_(module.no_object_pointer)
             if module.occlusion_spatial_embedding_parameter is not None:
-                module.occlusion_spatial_embedding_parameter.data.zero_()
+                init.zeros_(module.occlusion_spatial_embedding_parameter)
         if isinstance(module, Sam3TrackerVideoMemoryFuserCXBlock):
             if module.scale is not None:
-                module.scale.data.zero_()
+                init.zeros_(module.scale)
 
 
 class Sam3TrackerVideoVisionRotaryEmbedding(nn.Module):
@@ -1241,7 +1232,7 @@ class Sam3TrackerVideoPromptEncoder(nn.Module):
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
-        boxes += 0.5  # Shift to center of pixel
+        boxes = boxes + 0.5  # Shift to center of pixel
         coords = boxes.view(*boxes.shape[:2], 2, 2)
         # add padding point for consistency with the original implementation
         coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
@@ -1574,14 +1565,16 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 @auto_docstring
 class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     input_modalities = ["video", "text"]
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerVideoTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
+    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
+    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _checkpoint_conversion_mapping = {
         "tracker_model.": "",
-        "detector_model.vision_encoder.": "vision_encoder.",
+        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
         "tracker_neck.": "vision_encoder.neck.",
     }
 
@@ -1644,11 +1637,6 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             self.occlusion_spatial_embedding_parameter = torch.nn.Parameter(torch.zeros(1, self.mem_dim))
 
         self.post_init()
-
-    def _tie_weights(self):
-        self.prompt_encoder.shared_embedding.positional_embedding.data = (
-            self.shared_image_embedding.positional_embedding.data
-        )
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
@@ -2136,6 +2124,17 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         # Use -10/+20 as logits for neg/pos pixels (very close to 0/1 in prob after sigmoid).
         out_scale, out_bias = 20.0, -10.0  # sigmoid(-10.0)=4.5398e-05
         mask_inputs_float = mask_inputs.to(backbone_features[0].dtype)
+
+        # Ensure mask is at self.image_size resolution for consistency
+        if mask_inputs_float.shape[-2:] != (self.image_size, self.image_size):
+            mask_inputs_float = F.interpolate(
+                mask_inputs_float.float(),
+                size=(self.image_size, self.image_size),
+                align_corners=False,
+                mode="bilinear",
+                antialias=True,
+            ).to(mask_inputs.dtype)
+
         high_res_masks = mask_inputs_float * out_scale + out_bias
         low_res_masks = F.interpolate(
             high_res_masks.float(),

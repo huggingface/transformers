@@ -15,9 +15,10 @@
 
 
 import torch
-import torch.nn as nn
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoModel
 from ..sam2.configuration_sam2 import (
@@ -39,7 +40,6 @@ from ..sam2.modeling_sam2 import (
     Sam2TwoWayAttentionBlock,
     Sam2TwoWayTransformer,
 )
-from .configuration_sam3_tracker import Sam3TrackerConfig, Sam3TrackerMaskDecoderConfig, Sam3TrackerPromptEncoderConfig
 
 
 class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
@@ -133,22 +133,12 @@ class Sam3TrackerFeedForward(Sam2FeedForward):
 
 @auto_docstring
 class Sam3TrackerPreTrainedModel(Sam2PreTrainedModel):
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, Sam3TrackerLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+        PreTrainedModel._init_weights(module)
         if isinstance(module, Sam3TrackerModel):
             if module.no_memory_embedding is not None:
-                module.no_memory_embedding.data.zero_()
+                init.zeros_(module.no_memory_embedding)
 
 
 class Sam3TrackerPositionalEmbedding(Sam2PositionalEmbedding):
@@ -184,9 +174,14 @@ class Sam3TrackerMaskDecoder(Sam2MaskDecoder):
 
 
 class Sam3TrackerModel(Sam2Model):
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding",
+    }
+    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
+    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _checkpoint_conversion_mapping = {
         "tracker_model.": "",
-        "detector_model.vision_encoder.": "vision_encoder.",
+        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
         "tracker_neck.": "vision_encoder.neck.",
     }
     _keys_to_ignore_on_load_unexpected = [
