@@ -2311,7 +2311,7 @@ class Trainer:
 
         # since DataLoader was Accelerate prepared w/o a model arg in the same call, we now have to complete the DL wrapping for ALST/UlyssesSP, after model has been prepared
         pc = getattr(self.accelerator, "parallelism_config", None)
-        if pc is not None and pc.sp_backend == "deepspeed":
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
             train_dataloader = self.accelerator.deepspeed_ulysses_dl_adapter(train_dataloader, model)
 
         if self.is_fsdp_enabled:
@@ -3843,7 +3843,7 @@ class Trainer:
         make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculating might be slightly inaccurate when performing gradient accumulation.
         """
         pc = getattr(self.accelerator, "parallelism_config", None)
-        if pc is not None and pc.sp_backend == "deepspeed":
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
             return self._deepspeed_sp_compute_loss(model, inputs, return_outputs, pc)
 
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
@@ -3928,17 +3928,16 @@ class Trainer:
             vocab_size=unwrapped_model.config.vocab_size,
         )
 
-        if pc.sp_size > 1:
-            sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
-            sp_world_size = pc.sp_size
-            # differentiable weighted per-shard-loss aggregation across ranks
-            losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
-            # special dealing with SFT that has prompt tokens that aren't used in loss computation
-            good_tokens = (shift_labels != -100).view(-1).sum()
-            good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
-            total_loss = sum(losses_per_rank[rank] * good_tokens_per_rank[rank] for rank in range(sp_world_size))
-            total_good_tokens = sum(good_tokens_per_rank)
-            loss = total_loss / max(total_good_tokens, 1)
+        sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
+        sp_world_size = pc.sp_size
+        # differentiable weighted per-shard-loss aggregation across ranks
+        losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
+        # special dealing with SFT that has prompt tokens that aren't used in loss computation
+        good_tokens = (shift_labels != -100).view(-1).sum()
+        good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
+        total_loss = sum(losses_per_rank[rank] * good_tokens_per_rank[rank] for rank in range(sp_world_size))
+        total_good_tokens = sum(good_tokens_per_rank)
+        loss = total_loss / max(total_good_tokens, 1)
 
         return (loss, outputs) if return_outputs else loss
 
