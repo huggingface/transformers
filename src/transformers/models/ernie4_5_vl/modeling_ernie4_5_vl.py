@@ -27,6 +27,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -574,12 +575,12 @@ class Ernie4_5_VLPreTrainedModel(PreTrainedModel):
         "hidden_states": Ernie4_5_VLDecoderLayer,
         "attentions": Ernie4_5_VLTextAttention,
     }
-    _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
+    _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Ernie4_5_VLMoeStatics):
-            module.e_score_correction_bias.data.zero_()
+            init.zeros_(module.e_score_correction_bias)
 
 
 @auto_docstring
