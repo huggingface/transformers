@@ -44,7 +44,7 @@ class VitPoseModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         image_size=[16 * 8, 12 * 8],
         patch_size=[8, 8],
         num_channels=3,
