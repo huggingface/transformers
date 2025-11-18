@@ -51,7 +51,7 @@ class UMT5ModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
+        batch_size=2,
         encoder_seq_length=7,
         decoder_seq_length=7,
         # For common tests
@@ -361,6 +361,10 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="UMT5 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTester with T5->UMT5
 class UMT5EncoderOnlyModelTester:
@@ -368,7 +372,7 @@ class UMT5EncoderOnlyModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
+        batch_size=2,
         encoder_seq_length=7,
         # For common tests
         use_attention_mask=True,

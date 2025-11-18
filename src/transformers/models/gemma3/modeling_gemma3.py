@@ -446,7 +446,7 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Gemma3PreTrainedModel(PreTrainedModel):
     config: Gemma3Config
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Gemma3DecoderLayer",
@@ -632,7 +632,6 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Gemma3TextConfig
-    base_model_prefix = "model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)

@@ -437,16 +437,16 @@ class WeightRenaming:
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
 
-def _materialize_copy(tensor, dtype=None):
+def _materialize_copy(tensor, device=None, dtype=None):
     tensor = tensor[...]
-    if dtype is not None:
-        tensor = tensor.to(dtype)
+    if dtype is not None or device is not None:
+        tensor = tensor.to(device=device, dtype=dtype)
     return tensor
 
 
-def spawn_materialize(thread_pool, tensor, dtype=None) -> Future:
+def spawn_materialize(thread_pool, tensor, device=None, dtype=None) -> Future:
     def _job():
-        return _materialize_copy(tensor, dtype)
+        return _materialize_copy(tensor, device, dtype)
 
     return thread_pool.submit(_job)
 
@@ -576,7 +576,10 @@ def convert_and_load_state_dict_in_model(
 
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}  # {glob_pattern: plan_obj_or_key}
-    device_map = device_map or {}  # {exact_target_key: device}
+    device_map = device_map or {"": "cpu"}  # {exact_target_key: device}
+    device_map_regex = re.compile(
+        "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: x.count("."), reverse=True))
+    )
     dtype_plan = dtype_plan or {}  # {glob_pattern: dtype}
     weight_mapping = weight_mapping or []
     meta_model_state_dict = model.state_dict()
@@ -696,8 +699,10 @@ def convert_and_load_state_dict_in_model(
                     shard_index,
                 )
 
-        if future is None:
-            future = spawn_materialize(thread_pool, tensor, _dtype)
+        if future is None:  # If not TP, async materialize the tensors. TODO handle disk offload?
+            device_match = device_map_regex.match(first_target_key)
+            param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
+            future = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
         layer_key = "|".join(new_target_key)
         mapping.add_tensor(layer_key, source_pattern, future, new_target_key)
