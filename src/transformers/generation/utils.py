@@ -410,6 +410,14 @@ class GenerationMixin(ContinuousMixin):
                 logger.info(
                     "Generation config file not found, using a generation config created from the model config."
                 )
+                self.generation_config = GenerationConfig.from_pretrained(
+                    pretrained_model_name_or_path,
+                    config_file_name="config.json",
+                    _from_auto=from_auto_class,
+                    _from_pipeline=from_pipeline,
+                    _from_model_config=True,
+                    **repo_loading_kwargs,
+                )
             # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
             if hasattr(self, "load_custom_generate") and trust_remote_code:
                 try:
@@ -1778,14 +1786,12 @@ class GenerationMixin(ContinuousMixin):
             ):
                 new_generation_config = GenerationConfig.from_model_config(self.config)
                 if new_generation_config != self.generation_config:  # 4)
-                    warnings.warn(
-                        "You have modified the pretrained model configuration to control generation. This is a"
-                        " deprecated strategy to control generation and will be removed in v5."
+                    raise ValueError(
+                        "You have modified the pretrained model configuration to control generation."
+                        " This strategy to control generation is not supported anymore. "
                         " Please use and modify the model generation configuration (see"
                         " https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )",
-                        UserWarning,
                     )
-                    self.generation_config = new_generation_config
 
             generation_config = self.generation_config
             using_model_generation_config = True

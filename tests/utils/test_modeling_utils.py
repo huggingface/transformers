@@ -1608,30 +1608,19 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-    def test_modifying_model_config_gets_moved_to_generation_config(self):
+    def test_saving_model_config_with_generation_params(self):
         """
-        Calling `model.save_pretrained` should move the changes made to `generate` parameterization in the model config
-        to the generation config.
+        Calling `model.save_pretrained` with generation parameters should raise a `ValueError`
         """
         model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        # Initially, the repetition penalty has its default value in `model.config`. The `model.generation_config` will
-        # have the exact same default
-        self.assertTrue(model.config.repetition_penalty == 1.0)
         self.assertTrue(model.generation_config.repetition_penalty == 1.0)
-        # If the user attempts to save a custom generation parameter:
+        self.assertFalse(hasattr(model.config, "repetition_penalty"))
+
+        # If the user attempts to save a custom generation parameter, we raise an Error
         model.config.repetition_penalty = 3.0
-        with warnings.catch_warnings(record=True) as warning_list:
+        with self.assertRaises(ValueError):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.save_pretrained(tmp_dir)
-                # 1 - That parameter will be removed from `model.config`. We don't want to use `model.config` to store
-                # generative parameters, and the old default (1.0) would no longer reflect the user's wishes.
-                self.assertTrue(model.config.repetition_penalty is None)
-                # 2 - That parameter will be set in `model.generation_config` instead.
-                self.assertTrue(model.generation_config.repetition_penalty == 3.0)
-        # 3 - The user will see a warning regarding the custom parameter that has been moved.
-        self.assertTrue(len(warning_list) == 1)
-        self.assertTrue("Moving the following attributes" in str(warning_list[0].message))
-        self.assertTrue("repetition_penalty" in str(warning_list[0].message))
 
     def test_model_from_pretrained_from_mlx(self):
         from safetensors import safe_open
@@ -1729,35 +1718,32 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_save_and_load_config_with_custom_generation(self):
         """
-        Regression test for the ability to save and load a config with a custom generation kwarg (i.e. a parameter
-        that gets moved to the generation config and reset on the model config)
+        Tests that saving and loading a config with a custom generation kwarg is not possible
         """
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
 
         # The default for `num_beams` is 1 and `early_stopping` is False
-        self.assertTrue(model.config.num_beams == 1)
-        self.assertTrue(model.config.early_stopping is False)
+        # NOTE: accessible only from generation config, EVEN IF they are saved
+        # in `config.json` file in the hub
+        self.assertTrue(model.generation_config.num_beams == 1)
+        self.assertTrue(model.generation_config.early_stopping is False)
+        self.assertFalse(hasattr(model.config, "num_beams"))
+        self.assertFalse(hasattr(model.config, "early_stopping"))
 
-        # When we save the model, this custom parameter should be moved to the generation config AND the model
-        # config should contain `None`
-        model.config.num_beams = 2
+        # Sanity check: We can run `generate` with the model without any warnings
+        random_ids = torch.randint(0, 100, (1, 5))
+        with warnings.catch_warnings(record=True) as w:
+            model.generate(random_ids, max_new_tokens=3)
+        self.assertTrue(len(w) == 0)
+
+        # When we save the model and config has generation-related parameter,
+        # we will throw an error, nudging user to save attributes in the generation_config
+        model.config.num_beams = 5
         model.config.early_stopping = True
         self.assertTrue(model.generation_config.num_beams == 1)  # unmodified generation config
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            new_model = T5ForConditionalGeneration.from_pretrained(tmp_dir)
-            # moved to generation config
-            self.assertTrue(new_model.generation_config.num_beams == 2)
-            self.assertTrue(new_model.generation_config.early_stopping is True)
-            # reset in the model config
-            self.assertTrue(new_model.config.num_beams is None)
-            self.assertTrue(new_model.config.early_stopping is None)
-
-            # Sanity check: We can run `generate` with the new model without any warnings
-            random_ids = torch.randint(0, 100, (1, 5))
-            with warnings.catch_warnings(record=True) as w:
-                new_model.generate(random_ids, max_new_tokens=3)
-            self.assertTrue(len(w) == 0)
+            with self.assertRaises(ValueError):
+                model.save_pretrained(tmp_dir)
 
     def test_load_model_with_state_dict_only(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")

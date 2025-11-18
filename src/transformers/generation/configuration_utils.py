@@ -918,7 +918,9 @@ class GenerationConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
-        if kwargs.get("return_unused_kwargs") is True:
+        if kwargs.get("_from_model_config", False):
+            return cls.from_model_config(config_dict)
+        elif kwargs.get("return_unused_kwargs") is True:
             config, unused_kwargs = cls.from_dict(config_dict, **kwargs)
             config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
             return config, unused_kwargs
@@ -1084,19 +1086,19 @@ class GenerationConfig(PushToHubMixin):
             writer.write(self.to_json_string(use_diff=use_diff))
 
     @classmethod
-    def from_model_config(cls, model_config: PreTrainedConfig) -> "GenerationConfig":
+    def from_model_config(cls, model_config: PreTrainedConfig | dict) -> "GenerationConfig":
         """
         Instantiates a [`GenerationConfig`] from a [`PreTrainedConfig`]. This function is useful to convert legacy
         [`PreTrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
 
         Args:
-            model_config (`PreTrainedConfig`):
+            model_config (`PreTrainedConfig | dict`):
                 The model config that will be used to instantiate the generation config.
 
         Returns:
             [`GenerationConfig`]: The configuration object instantiated from those parameters.
         """
-        config_dict = model_config.to_dict()
+        config_dict = model_config.to_dict() if not isinstance(model_config, dict) else model_config
         config_dict.pop("_from_model_config", None)
 
         # Removes all `None` from the model config dict -- this lets the generation config defaults to take hold
@@ -1106,14 +1108,15 @@ class GenerationConfig(PushToHubMixin):
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
         # generation config (which in turn is defined from the outer attributes of model config).
-        decoder_config = model_config.get_text_config(decoder=True)
-        if decoder_config is not model_config:
-            default_generation_config = GenerationConfig()
-            decoder_config_dict = decoder_config.to_dict()
-            for attr in generation_config.to_dict():
-                is_unset = getattr(generation_config, attr) == getattr(default_generation_config, attr)
-                if attr in decoder_config_dict and is_unset:
-                    setattr(generation_config, attr, decoder_config_dict[attr])
+        if not isinstance(model_config, dict):
+            decoder_config = model_config.get_text_config(decoder=True)
+            if decoder_config is not model_config:
+                default_generation_config = GenerationConfig()
+                decoder_config_dict = decoder_config.to_dict()
+                for attr in generation_config.to_dict():
+                    is_unset = getattr(generation_config, attr) == getattr(default_generation_config, attr)
+                    if attr in decoder_config_dict and is_unset:
+                        setattr(generation_config, attr, decoder_config_dict[attr])
 
         # If any `output_...` flag is set to `True`, we ensure `return_dict_in_generate` is set to `True`.
         if generation_config.return_dict_in_generate is False:
