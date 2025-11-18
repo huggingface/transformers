@@ -868,7 +868,7 @@ def infer_auto_device_map(
                     is_buffer_fit_any_gpu = True
 
         if len(gpus) > 0 and not is_buffer_fit_any_gpu:
-            warnings.warn(
+            logger.warning(
                 f"Current model requires {non_gpu_buffer_size} bytes of buffer for offloaded layers, which seems does "
                 f"not fit any GPU's remaining memory. If you are experiencing a OOM later, please consider using "
                 f"offload_buffers=True."
