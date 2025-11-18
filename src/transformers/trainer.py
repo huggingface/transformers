@@ -3664,12 +3664,10 @@ class Trainer:
                         labels = nn.functional.pad(inputs["labels"], (0, 1), value=_ignore_index)
                         inputs["shift_labels"] = labels[:, 1:].contiguous()
 
-            # carve out space to make it clear there are other backends with different requirements, even though no code needs to be run at the moment
-            elif self.accelerator.parallelism_config.sp_backend == "deepspeed":
-                # - accelerator.parallelism_config performs the `model.config._attn_implementation` checks already and it supports more than `dspa`
-                # - UlyssesSPDataLoaderAdapter called from Accelerate performs the `shift_label` creation - must not interfere
-                # - position_ids generation should be done by HF Trainer if it wasn't done by the user
-                pass
+            # note: we don't do anything for accelerator.parallelism_config.sp_backend == "deepspeed" since:
+            # - accelerator.parallelism_config performs the `model.config._attn_implementation` checks already and it supports more than `dspa`
+            # - UlyssesSPDataLoaderAdapter called from Accelerate performs the `shift_label` creation - must not interfere
+            # - position_ids generation should be done by HF Trainer if it wasn't done by the user
 
             if "position_ids" not in inputs:
                 logger.warning_once("Position IDs not found in the inputs, generating manually")
