@@ -408,7 +408,7 @@ def _get_device_map(
 
         # Here we need to retie the weights before the call even if they are all on meta device, otherwise accelerate
         # mess up the device_map computation
-        # TODO Cyril: replace this function to avoid re-tying uselessly
+        # TODO Cyril: replace this function to avoid re-tying uselessly (and the function is very inefficient)
         model.tie_weights()
         device_map = infer_auto_device_map(
             model,
