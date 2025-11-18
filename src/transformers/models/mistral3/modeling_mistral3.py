@@ -176,6 +176,7 @@ class Mistral3ModelOutputWithPast(BaseModelOutputWithPast):
 @auto_docstring
 class Mistral3PreTrainedModel(PreTrainedModel):
     config: Mistral3Config
+    base_model_prefix = "model"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -194,6 +195,10 @@ class Mistral3PreTrainedModel(PreTrainedModel):
     """
 )
 class Mistral3Model(Mistral3PreTrainedModel):
+    _checkpoint_conversion_mapping = {
+        r"^language_model.model": "language_model",
+    }
+
     def __init__(self, config: Mistral3Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)

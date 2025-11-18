@@ -597,6 +597,10 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    @unittest.skip("Bark has no base model due to special archiecture")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 @require_torch
 class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -682,6 +686,10 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+    @unittest.skip("Bark has no base model due to special archiecture")
+    def test_model_base_model_prefix(self):
+        pass
 
 
 @require_torch

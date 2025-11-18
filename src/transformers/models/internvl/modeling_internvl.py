@@ -473,6 +473,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 @auto_docstring
 class InternVLPreTrainedModel(PreTrainedModel):
     config: InternVLConfig
+    base_model_prefix = "model"
     input_modalities = ["image", "text", "video"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -530,6 +531,10 @@ class InternVLModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class InternVLModel(InternVLPreTrainedModel):
+    _checkpoint_conversion_mapping = {
+        r"^language_model.model": "language_model",
+    }
+
     def __init__(self, config: InternVLConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)

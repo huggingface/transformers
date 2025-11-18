@@ -113,6 +113,7 @@ class VipLlavaMultiModalProjector(nn.Module):
 @auto_docstring
 class VipLlavaPreTrainedModel(PreTrainedModel):
     config: VipLlavaConfig
+    base_model_prefix = "model"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -131,6 +132,10 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
     """
 )
 class VipLlavaModel(VipLlavaPreTrainedModel):
+    _checkpoint_conversion_mapping = {
+        r"^language_model.model": "language_model",
+    }
+
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)

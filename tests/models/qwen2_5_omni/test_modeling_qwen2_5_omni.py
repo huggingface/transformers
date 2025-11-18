@@ -293,6 +293,10 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     def test_model_outputs_equivalence(self):
         pass
 
+    @unittest.skip("Qwen2Omni has no base model, model architecture is special")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Qwen2 is audio+text model (not vision+text)
         if not self.has_attentions:

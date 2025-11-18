@@ -429,7 +429,7 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }
     config: JetMoeConfig
-    base_model_prefix = "transformer"
+    base_model_prefix = "model"
     supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]

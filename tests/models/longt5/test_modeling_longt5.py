@@ -734,6 +734,10 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_load_save_without_tied_weights(self):
         pass
 
+    @unittest.skip(reason="LongT5 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 @require_torch
 class LongT5TGlobalModelTest(LongT5ModelTest):
@@ -870,6 +874,10 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
             [layer_attentions.shape for layer_attentions in attentions],
             [encoder_expected_shape] * len(attentions),
         )
+
+    @unittest.skip(reason="LongT5 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
 
 
 class LongT5EncoderOnlyModelTester:

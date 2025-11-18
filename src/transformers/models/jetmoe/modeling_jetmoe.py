@@ -568,7 +568,7 @@ class JetMoeDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class JetMoePreTrainedModel(PreTrainedModel):
     config: JetMoeConfig
-    base_model_prefix = "transformer"
+    base_model_prefix = "model"
     supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]

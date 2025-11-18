@@ -778,7 +778,7 @@ class ClvpConditioningEncoder(nn.Module):
 @auto_docstring
 class ClvpPreTrainedModel(PreTrainedModel):
     config: ClvpConfig
-    base_model_prefix = "clvp"
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 

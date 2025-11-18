@@ -521,6 +521,10 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     def test_model_get_set_embeddings(self):
         pass
 
+    @unittest.skip(reason="InstructBLIP has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
