@@ -1668,8 +1668,11 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
-    def get_encoder(self):
-        return self.prophetnet.encoder
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.prophetnet.encoder
+        else:
+            return super().get_encoder(modality=modality)
 
 
 @auto_docstring(

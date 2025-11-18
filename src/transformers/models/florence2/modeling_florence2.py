@@ -769,8 +769,11 @@ class Florence2Model(Florence2PreTrainedModel):
             image_hidden_states=image_features if pixel_values is not None else None,
         )
 
-    def get_encoder(self):
-        return self.language_model.get_encoder()
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.language_model.get_encoder()
+        else:
+            return super().get_encoder(modality=modality)
 
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):

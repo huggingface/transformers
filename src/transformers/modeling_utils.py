@@ -2213,7 +2213,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if modality in ["image", "video"]:
             possible_module_names = ["vision_tower", "visual", "vision_model", "vision_encoder", "image_tower"]
         elif modality == "audio":
-            possible_module_names = ["audio_tower", "audio_encoder"]
+            possible_module_names = ["audio_tower", "audio_encoder", "speech_encoder"]
         elif modality is None:
             possible_module_names = ["text_encoder", "encoder"]
         else:

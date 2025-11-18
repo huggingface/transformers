@@ -1513,8 +1513,11 @@ class Florence2Model(LlavaModel):
         super().__init__(config)
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
 
-    def get_encoder(self):
-        return self.language_model.get_encoder()
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.language_model.get_encoder()
+        else:
+            return super().get_encoder(modality=modality)
 
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         """
