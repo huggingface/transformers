@@ -169,6 +169,7 @@ class HfQuantizer(ABC):
         "Return the element size (in bytes) for `param_name`."
         if self.param_needs_quantization(model, param_name):
             from accelerate.utils import CustomDtype
+
             mapping = {
                 torch.int8: 1,
                 CustomDtype.INT4: 0.5,
