@@ -4076,7 +4076,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Prepare the full device map
         if device_map is not None:
-            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, dtype)
+            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
         # restore default dtype
         if dtype_orig is not None:

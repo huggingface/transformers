@@ -169,7 +169,6 @@ class HfQuantizer(ABC):
         "Return the element size (in bytes) for `param_name`."
         if self.param_needs_quantization(model, param_name):
             from accelerate.utils import CustomDtype
-
             mapping = {
                 torch.int8: 1,
                 CustomDtype.INT4: 0.5,
@@ -205,23 +204,6 @@ class HfQuantizer(ABC):
 
     def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
         return unexpected_keys
-
-    def get_special_dtypes_update(self, model, dtype: "torch.dtype") -> dict[str, "torch.dtype"]:
-        """
-        returns dtypes for modules that are not quantized - used for the computation of the device_map in case
-        one passes a str as a device_map. The method will use the `modules_to_not_convert` that is modified
-        in `_process_model_before_weight_loading`.
-
-        Args:
-            model (`~transformers.PreTrainedModel`):
-                The model to quantize
-            dtype (`torch.dtype`):
-                The dtype passed in `from_pretrained` method.
-        """
-
-        return {
-            name: dtype for name, _ in model.named_parameters() if any(m in name for m in self.modules_to_not_convert)
-        }
 
     def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
