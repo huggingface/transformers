@@ -103,10 +103,6 @@ class DinoDetrConfig(PretrainedConfig):
                 Relative weight of the generalized IoU loss in the object detection loss.
             focal_alpha (`float`, *optional*, defaults to 0.25):
                 Alpha parameter in the focal loss.
-            dec_pred_class_embed_share (`bool`, *optional*, defaults to `True`): Whether to share class embeddings across decoder layers.
-            dec_pred_bbox_embed_share (`bool`, *optional*, defaults to `True`): Whether to share bounding box embeddings across decoder layers.
-            enc_layer_share (`bool`, *optional*, defaults to `False`): Whether to share encoder layers.
-            dec_layer_share (`bool`, *optional*, defaults to `False`): Whether to share decoder layers.
             pe_temperatureH (`float`, *optional*, defaults to 20): The temperature for positional encoding along the height dimension.
             pe_temperatureW (`float`, *optional*, defaults to 20): The temperature for positional encoding along the width dimension.
             backbone_config (`PretrainedConfig` or `dict`, *optional*):
@@ -179,10 +175,6 @@ class DinoDetrConfig(PretrainedConfig):
         bbox_loss_coefficient=5.0,
         giou_loss_coefficient=2.0,
         focal_alpha=0.25,
-        dec_pred_class_embed_share=True,
-        dec_pred_bbox_embed_share=True,
-        enc_layer_share=False,
-        dec_layer_share=False,
         pe_temperature_H=20,
         pe_temperature_W=20,
         backbone_config=None,
@@ -235,8 +227,6 @@ class DinoDetrConfig(PretrainedConfig):
         self.dn_box_noise_scale = dn_box_noise_scale
         self.dn_label_noise_ratio = dn_label_noise_ratio
         self.auxiliary_loss = auxiliary_loss
-        self.dec_pred_class_embed_share = dec_pred_class_embed_share
-        self.dec_pred_bbox_embed_share = dec_pred_bbox_embed_share
         self.use_dn = use_dn
         self.use_masks = use_masks
         self.class_cost = class_cost
@@ -248,8 +238,6 @@ class DinoDetrConfig(PretrainedConfig):
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
         self.focal_alpha = focal_alpha
-        self.enc_layer_share = enc_layer_share
-        self.dec_layer_share = dec_layer_share
         self.pe_temperature_H = pe_temperature_H
         self.pe_temperature_W = pe_temperature_W
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
