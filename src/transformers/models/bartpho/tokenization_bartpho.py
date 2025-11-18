@@ -156,6 +156,7 @@ class BartphoTokenizer(SentencePieceBackend):
             mask_token=mask_token,
             **kwargs,
         )
+        self._align_added_tokens_with_fairseq_vocab()
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
@@ -243,8 +244,11 @@ class BartphoTokenizer(SentencePieceBackend):
 
     def get_vocab(self):
         """Override to use fairseq vocabulary"""
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
+        vocab = dict(self.fairseq_tokens_to_ids)
+        if hasattr(self, "_added_tokens_encoder"):
+            for token, idx in self._added_tokens_encoder.items():
+                if token not in vocab:
+                    vocab[token] = idx
         return vocab
 
     def _convert_token_to_id(self, token):
@@ -266,6 +270,24 @@ class BartphoTokenizer(SentencePieceBackend):
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the fairseq vocab."""
         return self.fairseq_ids_to_tokens[index]
+
+    def _align_added_tokens_with_fairseq_vocab(self):
+        """
+        The slow tokenizer base class populates `_added_tokens_*` using SentencePiece ids. Remap those entries so that
+        every token present in the reduced fairseq dictionary uses the same ids everywhere, otherwise conversions and
+        special-token setters observe two different vocabularies.
+        """
+        if not hasattr(self, "_added_tokens_decoder") or not hasattr(self, "_added_tokens_encoder"):
+            return
+
+        remapped_decoder: dict[int, AddedToken] = {}
+        for original_id, token_obj in self._added_tokens_decoder.items():
+            token = token_obj.content
+            new_id = self.fairseq_tokens_to_ids.get(token, original_id)
+            remapped_decoder[new_id] = token_obj
+
+        self._added_tokens_decoder = remapped_decoder
+        self._added_tokens_encoder = {token.content: idx for idx, token in remapped_decoder.items()}
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
