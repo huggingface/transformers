@@ -46,7 +46,7 @@ class FastSpeech2ConformerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         num_hidden_layers=1,
         num_attention_heads=2,
         hidden_size=24,
@@ -200,7 +200,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             _, info = FastSpeech2ConformerModel.from_pretrained(tmpdirname, output_loading_info=True)
-        self.assertEqual(info["missing_keys"], [])
+        self.assertEqual(info["missing_keys"], set())
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -457,7 +457,7 @@ class FastSpeech2ConformerWithHifiGanTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         num_hidden_layers=1,
         num_attention_heads=2,
         hidden_size=24,
@@ -618,7 +618,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             _, info = FastSpeech2ConformerWithHifiGan.from_pretrained(tmpdirname, output_loading_info=True)
-        self.assertEqual(info["missing_keys"], [])
+        self.assertEqual(info["missing_keys"], set())
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

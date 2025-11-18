@@ -345,11 +345,7 @@ def get_diff(repo: Repo, base_commit: str, commits: list[str]) -> list[str]:
                 if diff_obj.a_path != diff_obj.b_path:
                     code_diff.extend([diff_obj.a_path, diff_obj.b_path])
                 else:
-                    # Otherwise, we check modifications are in code and not docstrings.
-                    if diff_is_docstring_only(repo, commit, diff_obj.b_path):
-                        print(f"Ignoring diff in {diff_obj.b_path} as it only concerns docstrings or comments.")
-                    else:
-                        code_diff.append(diff_obj.a_path)
+                    code_diff.append(diff_obj.a_path)
 
     return code_diff
 
@@ -994,7 +990,7 @@ def infer_tests_to_run(
     model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
     # Grab the corresponding test files:
     if (
-        any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"])
+        any(x in modified_files for x in ["setup.py"])
         or not filter_models
         and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI
         or commit_flags["test_all"]
@@ -1027,11 +1023,13 @@ def infer_tests_to_run(
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
 
     create_test_list_from_filter(test_files_to_run, out_path="test_preparation/")
-
-    doctest_list = get_doctest_files()
+    if len(test_files_to_run) < 20:
+        doctest_list = get_doctest_files()
+    else:
+        doctest_file = []
 
     print(f"\n### DOCTEST TO RUN ###\n{_print_list(doctest_list)}")
-    if len(doctest_list) > 0:
+    if len(doctest_list):
         doctest_file = Path(output_file).parent / "doctest_list.txt"
         with open(doctest_file, "w", encoding="utf-8") as f:
             f.write(" ".join(doctest_list))

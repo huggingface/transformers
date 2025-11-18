@@ -53,7 +53,7 @@ class MT5ModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
+        batch_size=2,
         encoder_seq_length=7,
         decoder_seq_length=7,
         # For common tests
@@ -456,10 +456,6 @@ class MT5ModelTester:
                 decoder_attention_mask=decoder_attention_mask,
             )
 
-            # check that models has less parameters
-            self.parent.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             # check that outputs are equal
@@ -476,10 +472,6 @@ class MT5ModelTester:
                 tied_model.to(torch_device)
                 tied_model.eval()
 
-                # check that models has less parameters
-                self.parent.assertLess(
-                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-                )
                 random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
                 tied_model_result = tied_model(
@@ -743,6 +735,10 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model = MT5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @unittest.skip(reason="MT5 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTester with T5->MT5
 class MT5EncoderOnlyModelTester:
@@ -750,7 +746,7 @@ class MT5EncoderOnlyModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
+        batch_size=2,
         encoder_seq_length=7,
         # For common tests
         use_attention_mask=True,

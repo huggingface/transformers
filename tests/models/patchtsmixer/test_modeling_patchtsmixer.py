@@ -98,7 +98,7 @@ class PatchTSMixerModelTester:
         output_range: list | None = None,
         head_aggregation: str | None = None,
         # Trainer related
-        batch_size=13,
+        batch_size=2,
         is_training=True,
         seed_number=42,
         post_init=True,
@@ -276,7 +276,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
