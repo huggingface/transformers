@@ -218,7 +218,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             WeightConverter("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
         missing, unexpected, mismatch, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, quantizer=None
+            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
         )
 
         self.assertEqual(
@@ -368,7 +368,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         ]
 
         missing, unexpected, mismatch, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, quantizer=quantizer
+            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=quantizer
         )
 
         self.assertEqual(missing, set())

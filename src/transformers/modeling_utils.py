@@ -47,7 +47,11 @@ from torch.utils.checkpoint import checkpoint
 from . import initialization as init
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_checkpoint_conversion_mapping
-from .core_model_loading import WeightConverter, convert_and_load_state_dict_in_model, revert_weight_conversion
+from .core_model_loading import (
+    WeightConverter,
+    convert_and_load_state_dict_in_model,
+    revert_weight_conversion,
+)
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -4059,7 +4063,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Prepare the full device map
         if device_map is not None:
-            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, dtype)
+            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
         # restore default dtype
         if dtype_orig is not None:
@@ -4692,6 +4696,9 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         try:
             param = model.get_parameter_or_buffer(param_name)
         except AttributeError:
+            # TODO: for now let's skip if we can't find the parameters
+            if hf_quantizer is not None:
+                continue
             raise AttributeError(f"Parameter {param_name} not found in model")
 
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`

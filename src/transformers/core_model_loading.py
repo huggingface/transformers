@@ -46,22 +46,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-str_to_torch_dtype = {
-    "BOOL": torch.bool,
-    "U8": torch.uint8,
-    "I8": torch.int8,
-    "I16": torch.int16,
-    "F16": torch.float16,
-    "BF16": torch.bfloat16,
-    "I32": torch.int32,
-    "F32": torch.float32,
-    "F64": torch.float64,
-    "I64": torch.int64,
-    "F8_E4M3": torch.float8_e4m3fn,
-    "F8_E5M2": torch.float8_e5m2,
-}
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -389,11 +373,15 @@ def set_param_for_module(
     missing_keys: MutableSet[str],
     misc: MutableMapping[str, Any],
     distributed_operation: Optional[TensorParallelLayer],
+    hf_quantizer: HfQuantizer,
 ):
     with log_to_misc(layer_name, misc, layer_name):
         module_path, _, param_name = layer_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
-        param_value = param_value[0] if isinstance(param_value, list) else param_value[...]
+        if isinstance(param_value, list):
+            param_value = param_value[0]
+        elif not isinstance(param_value, torch.nn.Parameter):
+            param_value = param_value[...]
         ref = getattr(module_obj, param_name)
 
         use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
@@ -415,7 +403,7 @@ def set_param_for_module(
 
         # Remove from missing keys (it's either mismatched, or all good)
         missing_keys.discard(layer_name)
-        if ref is not None and ref.shape != param_value.shape:
+        if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
             module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
         else:
@@ -434,7 +422,7 @@ def convert_and_load_state_dict_in_model(
     state_dict: dict[str, Any],
     weight_mapping: dict[str, WeightConverter] | None,
     tp_plan: dict[str, str] | None,
-    quantizer: HfQuantizer | None,
+    hf_quantizer: HfQuantizer | None,
     dtype: torch.dtype | None = None,
     device_map: dict | None = None,
     dtype_plan: dict | None = None,
@@ -499,20 +487,14 @@ def convert_and_load_state_dict_in_model(
                 unexpected_keys.add(t)
                 continue
 
-            if quantizer is not None and quantizer.param_needs_quantization(model, t):
-                if quantizer.__class__.__name__ == "FineGrainedFP8HfQuantizer":
-                    from .integrations.finegrained_fp8 import Fp8Quantize
-
-                    converter.quantization_operation = Fp8Quantize()  # TODO support other methods
-                else:
-                    raise ValueError("This quantization method is gonna be supported SOOOON")
-            else:
-                _dtype = dtype
-                matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
-                if matched_dtype_pattern is not None:
-                    _dtype = dtype_plan[matched_dtype_pattern]
-                elif empty_param.dtype != _dtype:
-                    _dtype = empty_param.dtype
+            if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, t):
+                converter.quantization_operation = hf_quantizer.get_quantize_ops()
+            _dtype = dtype
+            matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
+            if matched_dtype_pattern is not None:
+                _dtype = dtype_plan[matched_dtype_pattern]
+            elif empty_param.dtype != _dtype:
+                _dtype = empty_param.dtype
 
         first_target_key = new_target_key[0]
         target_key = "|".join(new_target_key)
@@ -575,9 +557,7 @@ def convert_and_load_state_dict_in_model(
                             if op := converter.quantization_operation:
                                 with log_to_misc(layer_name, misc, op=op):
                                     realized_value.update(
-                                        op.convert(
-                                            {k: realized_value.pop(k)}, quant_config=quantizer.quantization_config
-                                        )
+                                        op.convert({k: realized_value.pop(k)}, model=model, missing_keys=missing_keys)
                                     )
 
                         for k, output_value in realized_value.items():
@@ -591,6 +571,7 @@ def convert_and_load_state_dict_in_model(
                                 missing_keys,
                                 misc,
                                 converter.distributed_operation,
+                                hf_quantizer,
                             )
 
                 except SkipLayer:

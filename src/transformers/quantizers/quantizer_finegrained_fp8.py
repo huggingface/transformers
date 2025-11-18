@@ -226,3 +226,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def get_accelerator_warm_up_factor(self):
         # Pre-processing is done cleanly, so we can allocate everything here
         return 2
+
+    def get_quantize_ops(self):
+        from ..integrations.finegrained_fp8 import Fp8Quantize
+
+        return Fp8Quantize(self)
