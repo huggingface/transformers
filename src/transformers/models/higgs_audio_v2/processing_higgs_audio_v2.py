@@ -82,15 +82,20 @@ class HiggsAudioV2Processor(ProcessorMixin):
         audio_token="<|AUDIO_OUT|>",
         audio_bos_token="<|audio_out_bos|>",
         audio_eos_token="<|audio_eos|>",
+        audio_delay_token="<|reserved_special_token_6|>",
         audio_stream_bos_id=1024,
         audio_stream_eos_id=1025,
     ):
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         self.audio_bos_token = tokenizer.audio_bos_token if hasattr(tokenizer, "audio_bos_token") else audio_bos_token
         self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
+        self.audio_delay_token = (
+            tokenizer.audio_delay_token if hasattr(tokenizer, "audio_delay_token") else audio_delay_token
+        )
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(self.audio_bos_token)
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(self.audio_eos_token)
+        self.audio_delay_token_id = tokenizer.convert_tokens_to_ids(self.audio_delay_token)
         self.audio_stream_bos_id = audio_stream_bos_id
         self.audio_stream_eos_id = audio_stream_eos_id
 
@@ -99,6 +104,15 @@ class HiggsAudioV2Processor(ProcessorMixin):
             tokenizer,
             audio_tokenizer=audio_tokenizer,
             chat_template=chat_template,
+        )
+
+    def get_audio_tokens(self, num_audio_tokens):
+        """
+        Returns the audio tokens for a given number of audio tokens.
+        """
+        num_codebooks = self.audio_tokenizer.config.num_quantizers
+        return self.audio_token * (num_audio_tokens - (num_codebooks - 1)) + self.audio_delay_token * (
+            num_codebooks - 1
         )
 
     def __call__(
@@ -160,10 +174,8 @@ class HiggsAudioV2Processor(ProcessorMixin):
             # expand audio tokens in text
             num_audio_tokens_iter = iter(len(audio_input_ids) for audio_input_ids in audio_input_ids_list)
             for i in range(len(text)):
-                num_codebooks = self.audio_tokenizer.config.num_quantizers
-                audio_tokens = lambda num_audio_tokens: self.audio_token * (num_audio_tokens - (num_codebooks - 1)) + "<|reserved_special_token_6|>" * (num_codebooks - 1)
                 expanded = re.sub(
-                    re.escape(self.audio_token), lambda _: audio_tokens(next(num_audio_tokens_iter)), text[i]
+                    re.escape(self.audio_token), lambda _: self.get_audio_tokens(next(num_audio_tokens_iter)), text[i]
                 )
                 text[i] = expanded
 

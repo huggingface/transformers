@@ -3301,11 +3301,11 @@ class HiggsAudioV2DelayPatternLogitsProcessor(LogitsProcessor):
                 min_bos_idxs = audio_bos_idxs[is_first]
                 current_after_bos = (delay_pattern_size - min_bos_idxs[:, 1]).unsqueeze(-1)
                 unique_batch_idxs = batch_idxs.unique().to(self.bos_delay_pattern.device)
-                self.bos_delay_pattern[unique_batch_idxs] = (
-                    self.bos_delay_pattern[unique_batch_idxs] - current_after_bos.to(self.bos_delay_pattern.device)
-                )
+                self.bos_delay_pattern[unique_batch_idxs] = self.bos_delay_pattern[
+                    unique_batch_idxs
+                ] - current_after_bos.to(self.bos_delay_pattern.device)
             else:
-                # there is no audio bos token, 
+                # there is no audio bos token,
                 self.bos_delay_pattern = torch.zeros_like(self.bos_delay_pattern)
 
         # Initialize eos delay pattern
@@ -3319,9 +3319,9 @@ class HiggsAudioV2DelayPatternLogitsProcessor(LogitsProcessor):
                 min_eos_idxs = audio_eos_idxs[is_first]
                 current_after_eos = (delay_pattern_size - min_eos_idxs[:, 1]).unsqueeze(-1)
                 unique_batch_idxs = batch_idxs.unique().to(self.eos_delay_pattern.device)
-                self.eos_delay_pattern[unique_batch_idxs] = (
-                    self.eos_delay_pattern[unique_batch_idxs] - current_after_eos.to(self.eos_delay_pattern.device)
-                )
+                self.eos_delay_pattern[unique_batch_idxs] = self.eos_delay_pattern[
+                    unique_batch_idxs
+                ] - current_after_eos.to(self.eos_delay_pattern.device)
 
         # at each generation step, we decrement the bos delay pattern
         row_mask = self.bos_delay_pattern >= 0

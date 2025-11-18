@@ -21,7 +21,6 @@ import torch.nn as nn
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -33,7 +32,7 @@ from ...utils import (
 from ...utils.generic import check_model_inputs
 from ..csm.modeling_csm import CsmBackboneModelEmbeddings
 from ..llama.configuration_llama import LlamaConfig
-from ..llama.modeling_llama import LlamaDecoderLayer, LlamaMLP, LlamaModel, LlamaRMSNorm
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaMLP, LlamaModel, LlamaPreTrainedModel, LlamaRMSNorm
 from .generation_higgs_audio_v2 import HiggsAudioV2GenerationMixin
 
 
@@ -139,7 +138,7 @@ class HiggsAudioV2DecoderLayer(LlamaDecoderLayer):
         hidden_states: torch.Tensor,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]],
         attention_mask: Optional[torch.Tensor] = None,
-        audio_out_mask: Optional[torch.BoolTensor] = None,
+        audio_token_mask: Optional[torch.BoolTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
@@ -148,15 +147,18 @@ class HiggsAudioV2DecoderLayer(LlamaDecoderLayer):
     ) -> torch.Tensor:
         residual = hidden_states
 
-        audio_out_mask = audio_out_mask.to(hidden_states.device)
-        hidden_states = hidden_states.masked_scatter(
-            audio_out_mask.unsqueeze(-1),
-            self.audio_input_layernorm(hidden_states[audio_out_mask]).to(hidden_states.device),
-        )
-        hidden_states = hidden_states.masked_scatter(
-            ~audio_out_mask.unsqueeze(-1),
-            self.input_layernorm(hidden_states[~audio_out_mask]).to(hidden_states.device),
-        )
+        if audio_token_mask is None:
+            hidden_states = self.audio_input_layernorm(hidden_states)
+        else:
+            audio_token_mask = audio_token_mask.to(hidden_states.device)
+            hidden_states = hidden_states.masked_scatter(
+                audio_token_mask.unsqueeze(-1),
+                self.audio_input_layernorm(hidden_states[audio_token_mask]).to(hidden_states.device),
+            )
+            hidden_states = hidden_states.masked_scatter(
+                ~audio_token_mask.unsqueeze(-1),
+                self.input_layernorm(hidden_states[~audio_token_mask]).to(hidden_states.device),
+            )
 
         # Self Attention
         hidden_states, _ = self.self_attn(
@@ -171,15 +173,19 @@ class HiggsAudioV2DecoderLayer(LlamaDecoderLayer):
         )
         hidden_states = residual + hidden_states
 
-        # Dual-path FFN
-        text_hidden_states = self.post_attention_layernorm(hidden_states[~audio_out_mask])
-        audio_hidden_states = self.audio_post_attention_layernorm(hidden_states[audio_out_mask])
+        if audio_token_mask is None:
+            audio_hidden_states = self.audio_post_attention_layernorm(hidden_states)
+            audio_hidden_states = self.audio_mlp(audio_hidden_states)
+            hidden_states = hidden_states + audio_hidden_states.to(hidden_states.device)
+        else:
+            text_hidden_states = self.post_attention_layernorm(hidden_states[~audio_token_mask])
+            audio_hidden_states = self.audio_post_attention_layernorm(hidden_states[audio_token_mask])
 
-        text_hidden_states = self.mlp(text_hidden_states)
-        hidden_states[~audio_out_mask] += text_hidden_states.to(hidden_states.device)
+            text_hidden_states = self.mlp(text_hidden_states)
+            hidden_states[~audio_token_mask] += text_hidden_states.to(hidden_states.device)
 
-        audio_hidden_states = self.audio_mlp(audio_hidden_states)
-        hidden_states[audio_out_mask] += audio_hidden_states.to(hidden_states.device)
+            audio_hidden_states = self.audio_mlp(audio_hidden_states)
+            hidden_states[audio_token_mask] += audio_hidden_states.to(hidden_states.device)
 
         return hidden_states
 
@@ -187,14 +193,52 @@ class HiggsAudioV2DecoderLayer(LlamaDecoderLayer):
 class HiggsAudioV2Embeddings(CsmBackboneModelEmbeddings):
     def forward(self, input_ids):
         inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
-        inputs_embeds = inputs_embeds.sum(dim=1)
+        inputs_embeds = inputs_embeds.sum(dim=-2)
         return inputs_embeds
+
+
+class HiggsAudioV2PreTrainedModel(LlamaPreTrainedModel):
+    pass
 
 
 class HiggsAudioV2Model(LlamaModel):
     def __init__(self, config: HiggsAudioV2Config):
         super().__init__(config)
         self.embed_audio_tokens = HiggsAudioV2Embeddings(config)
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_input_ids_mask: torch.LongTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of audio_input_ids. If the lengths are different, an error is raised.
+
+        If input_ids and inputs_embeds are None, we return None.
+        Indeed this means we cannot determine the placeholder mask, the model is to be used in a audio-only mode, hence we return None.
+        """
+        if input_ids is None and inputs_embeds is None:
+            return None
+
+        elif input_ids is None:
+            special_audio_mask = inputs_embeds == self.embed_tokens(
+                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_audio_mask = special_audio_mask.all(-1)
+
+        else:
+            special_audio_mask = (input_ids == self.config.audio_token_id) | (
+                input_ids == self.config.audio_delay_token_id
+            )
+
+        if audio_input_ids_mask is not None:
+            n_audio_tokens_in_text = special_audio_mask.sum()
+            n_audio_tokens_in_audio = audio_input_ids_mask.sum()
+            if n_audio_tokens_in_text != n_audio_tokens_in_audio:
+                raise ValueError(
+                    f"Number of audio tokens in text and audio do not match: in text: {n_audio_tokens_in_text}, in audio: {n_audio_tokens_in_audio}"
+                )
+
+        return special_audio_mask
 
     @check_model_inputs()
     @auto_docstring
@@ -211,17 +255,31 @@ class HiggsAudioV2Model(LlamaModel):
         use_cache: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        if (input_ids is None) and (inputs_embeds is None) and (audio_input_ids is None):
+            raise ValueError("You must specify at least one of input_ids, inputs_embeds, or audio_input_ids")
 
-        audio_token_mask = (input_ids == self.config.audio_token_id) | (input_ids == self.config.audio_delay_token_id)
-        if inputs_embeds is None:
+        if (input_ids is not None) and (inputs_embeds is not None):
+            raise ValueError("Only one of input_ids or inputs_embeds can be provided")
+
+        audio_token_mask = self.get_placeholder_mask(input_ids, inputs_embeds, audio_input_ids_mask)
+
+        if input_ids is not None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-            if audio_input_ids is not None:
-                audio_inputs_embeds = self.embed_audio_tokens(audio_input_ids[audio_input_ids_mask])
-                # TODO: @eustlb, in-place operation on leaf tensor? check if training compatible
-                inputs_embeds[audio_token_mask] = audio_inputs_embeds.to(inputs_embeds.device)
+        if audio_input_ids is not None:
+            audio_embeds = self.embed_audio_tokens(audio_input_ids)
+
+        if inputs_embeds is not None and audio_input_ids is not None:
+            audio_embeds = (
+                audio_embeds[audio_input_ids_mask.to(audio_embeds.device)]
+                if audio_input_ids_mask is not None
+                else audio_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(
+                audio_token_mask[..., None].expand_as(inputs_embeds), audio_embeds.to(inputs_embeds.device)
+            )
+        elif audio_input_ids is not None:
+            inputs_embeds = audio_embeds
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -251,7 +309,7 @@ class HiggsAudioV2Model(LlamaModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
-                audio_out_mask=audio_token_mask,
+                audio_token_mask=audio_token_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
@@ -285,34 +343,33 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
 
     def prepare_inputs_for_generation(
         self,
-        *args,
+        input_ids: torch.LongTensor,
         audio_input_ids: Optional[torch.LongTensor] = None,
         audio_input_ids_mask: Optional[torch.LongTensor] = None,
         **kwargs,
     ):
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
 
-        # Handle audio_input_ids slicing for generation with past_key_values
         if audio_input_ids is not None and model_inputs.get("past_key_values") is not None:
-            current_input_length = (
-                model_inputs["inputs_embeds"].shape[1]
-                if model_inputs.get("inputs_embeds") is not None
-                else model_inputs["input_ids"].shape[1]
+            current_cache_length = model_inputs["cache_position"][0]
+            audio_token_mask = (input_ids == self.config.audio_token_id) | (
+                input_ids == self.config.audio_delay_token_id
             )
-            audio_input_ids = audio_input_ids[:, -current_input_length:]
-            audio_input_ids = audio_input_ids.clone(memory_format=torch.contiguous_format)
-            model_inputs["audio_input_ids"] = audio_input_ids
+            in_cache_num_audio_input_ids = audio_token_mask[:, :current_cache_length].sum(dim=-1)
 
-        # Handle audio_input_ids_mask slicing for generation with past_key_values
-        if audio_input_ids_mask is not None and model_inputs.get("past_key_values") is not None:
-            current_input_length = (
-                model_inputs["inputs_embeds"].shape[1]
-                if model_inputs.get("inputs_embeds") is not None
-                else model_inputs["input_ids"].shape[1]
-            )
-            audio_input_ids_mask = audio_input_ids_mask[:, -current_input_length:]
-            audio_input_ids_mask = audio_input_ids_mask.clone(memory_format=torch.contiguous_format)
-            model_inputs["audio_input_ids_mask"] = audio_input_ids_mask
+            # already cached audio_input_ids should be masked
+            # this surmise that audio_input_ids are right padded!
+            valid_audio_input_ids = audio_input_ids_mask.cumsum(dim=-1) > in_cache_num_audio_input_ids[:, None]
+            audio_input_ids_mask = audio_input_ids_mask & valid_audio_input_ids
+
+        if audio_input_ids_mask is not None and (~audio_input_ids_mask[:, :-1]).all():
+            # in decoding mode, we only pass audio_input_ids
+            audio_input_ids = audio_input_ids[:, -1:, :].clone(memory_format=torch.contiguous_format)
+            model_inputs.pop("input_ids", None)
+            audio_input_ids_mask = None
+
+        model_inputs["audio_input_ids"] = audio_input_ids
+        model_inputs["audio_input_ids_mask"] = audio_input_ids_mask
 
         return model_inputs
 
@@ -388,4 +445,9 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
         )
 
 
-__all__ = ["HiggsAudioV2ForConditionalGeneration", "HiggsAudioV2PreTrainedModel", "HiggsAudioV2Model", "HiggsAudioV2Config"]
+__all__ = [
+    "HiggsAudioV2ForConditionalGeneration",
+    "HiggsAudioV2PreTrainedModel",
+    "HiggsAudioV2Model",
+    "HiggsAudioV2Config",
+]

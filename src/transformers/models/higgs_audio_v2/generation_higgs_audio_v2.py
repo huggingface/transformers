@@ -16,7 +16,7 @@
 
 import os
 from dataclasses import dataclass
-from typing import Optional, Union, Any
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -25,9 +25,9 @@ from ...generation import (
     GenerateDecoderOnlyOutput,
     GenerationConfig,
     GenerationMixin,
+    GenerationMode,
     LogitsProcessorList,
     StoppingCriteriaList,
-    GenerationMode,
 )
 from ...generation.logits_process import HiggsAudioV2DelayPatternLogitsProcessor
 from ...generation.streamers import BaseStreamer
@@ -95,11 +95,13 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
             )
         )
         return logits_processor
-    
+
     def _prepare_generation_config(
         self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Any
     ) -> tuple[GenerationConfig, dict]:
-        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, use_model_defaults, **kwargs)
+        generation_config, model_kwargs = super()._prepare_generation_config(
+            generation_config, use_model_defaults, **kwargs
+        )
         original_get_generation_mode = generation_config.get_generation_mode
 
         def patched_get_generation_mode(assistant_model=None):
@@ -137,7 +139,6 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
         scores = () if (return_dict_in_generate and output_scores) else None
         raw_logits = () if (return_dict_in_generate and output_logits) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
-        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # keep track of which sequences are already finished
@@ -198,7 +199,9 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    scores += (next_token_scores.reshape(batch_size, self.config.num_codebooks, self.config.codebook_size),)
+                    scores += (
+                        next_token_scores.reshape(batch_size, self.config.num_codebooks, self.config.codebook_size),
+                    )
                 if output_logits:
                     raw_logits += (next_token_logits,)
                 if output_attentions:

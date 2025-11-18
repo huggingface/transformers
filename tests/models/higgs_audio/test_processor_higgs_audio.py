@@ -21,7 +21,10 @@ import numpy as np
 from parameterized import parameterized
 
 from transformers import DacFeatureExtractor, HiggsAudioV2Processor, HiggsAudioV2Tokenizer, PreTrainedTokenizerFast
-from transformers.models.higgs_audio_v2.processing_higgs_audio_v2 import HiggsAudioV2ProcessorKwargs, build_delay_pattern_mask
+from transformers.models.higgs_audio_v2.processing_higgs_audio_v2 import (
+    HiggsAudioV2ProcessorKwargs,
+    build_delay_pattern_mask,
+)
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
