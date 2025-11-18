@@ -193,10 +193,10 @@ def guard_torch_init_functions():
     originals = defaultdict(dict)
     try:
         # Replace all torch funcs by the ones in this file
-        for func_name in TORCH_INIT_FUNCTIONS.keys():
-            for module_name in TORCH_MODULES_TO_PATCH:
-                if module_name in sys.modules:
-                    module = sys.modules[module_name]
+        for module_name in TORCH_MODULES_TO_PATCH:
+            if module_name in sys.modules:
+                module = sys.modules[module_name]
+                for func_name in TORCH_INIT_FUNCTIONS.keys():
                     if hasattr(module, func_name):
                         originals[module][func_name] = getattr(module, func_name)
                         setattr(module, func_name, globals()[func_name])
