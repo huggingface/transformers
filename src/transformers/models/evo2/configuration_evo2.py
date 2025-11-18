@@ -15,14 +15,74 @@ __all__ = ["Evo2Config"]
 
 
 class Evo2Config(PretrainedConfig):
-    r"""Configuration class for the Evo2 model."""
+    r"""
+    This is the configuration class to store the configuration of a [`Evo2Model`]. It is used to instantiate an Evo2
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Evo2-1b-base model.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 512):
+            Vocabulary size of the Evo2 model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`Evo2Model`]
+        hidden_size (`int`, *optional*, defaults to 2048):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_key_value_heads (`int`, *optional*):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=None`, the model will use the same number of key/value heads as the number of
+            query heads.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with.
+        rope_theta (`float`, *optional*, defaults to 1000000.0):
+            The base period of the RoPE embeddings.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the rms normalization layers.
+        attn_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        hidden_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the hidden units.
+        mlp_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the MLP layers.
+        layer_types (`Sequence[str]`, *optional*):
+            List of layer types ("attention" or "hyena") for each layer. If None, defaults to all "attention".
+        hyena_filters (`int`, *optional*, defaults to 256):
+            Number of Hyena filter groups.
+        hyena_kernel_size (`int`, *optional*, defaults to 8):
+            Kernel size for the short convolution in Hyena.
+        hyena_hidden_size (`int`, *optional*):
+            Hidden size for Hyena layers.
+        hyena_order (`int`, *optional*, defaults to 4):
+            Order of the Hyena recurrence.
+        hyena_flip_x1x2 (`bool`, *optional*, defaults to False):
+            Whether to flip x1 and x2 in the Hyena gating mechanism.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        use_cache (`bool`, *optional*, defaults to True):
+            Whether or not the model should return the last key/values attentions (not used by all models).
+        pad_token_id (`int`, *optional*, defaults to 1):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 0):
+            End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to True):
+            Whether to tie weight embeddings
+    """
 
     model_type = "evo2"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
-        vocab_size: int = 256,
+        vocab_size: int = 512,
         hidden_size: int = 2048,
         intermediate_size: Optional[int] = None,
         num_hidden_layers: int = 24,
@@ -39,6 +99,7 @@ class Evo2Config(PretrainedConfig):
         hyena_kernel_size: int = 8,
         hyena_hidden_size: Optional[int] = None,
         hyena_order: int = 4,
+        hyena_flip_x1x2: bool = False,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         pad_token_id: int = 1,
@@ -71,6 +132,7 @@ class Evo2Config(PretrainedConfig):
         self.hyena_kernel_size = hyena_kernel_size
         self.hyena_hidden_size = hyena_hidden_size if hyena_hidden_size is not None else hidden_size
         self.hyena_order = hyena_order
+        self.hyena_flip_x1x2 = hyena_flip_x1x2
         self.initializer_range = initializer_range
         self.use_cache = use_cache
 

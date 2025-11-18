@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -81,7 +81,8 @@ class Evo2RotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        # Register inv_freq as persistent so it can be loaded from checkpoints
+        self.register_buffer("inv_freq", inv_freq, persistent=True)
         self.original_inv_freq = inv_freq
 
     @staticmethod
@@ -123,19 +124,29 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 class Evo2ParallelGatedMLP(nn.Module):
-    def __init__(self, config: Evo2Config):
+    def __init__(self, config: Evo2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
+        self.layer_idx = layer_idx
+        
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.dropout = nn.Dropout(config.mlp_dropout)
+        
+        # Evo2 style: only layer 0 has activation, rest use identity
+        self.use_activation = (layer_idx == 0)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        gated = F.silu(self.gate_proj(hidden_states))
-        up = self.up_proj(hidden_states)
-        hidden_states = self.down_proj(gated * up)
+        z1 = self.gate_proj(hidden_states)
+        z2 = self.up_proj(hidden_states)
+        
+        # Apply SiLU only for layer 0, identity for others (Evo2 style)
+        if self.use_activation:
+            z1 = F.silu(z1)
+        
+        hidden_states = self.down_proj(z1 * z2)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 
@@ -210,32 +221,146 @@ class Evo2HyenaFilter(nn.Module):
     def __init__(self, config: Evo2Config):
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.num_attention_heads = config.num_attention_heads
         self.order = config.hyena_order
-        self.filter_channels = config.hyena_filters
-        self.kernel_size = config.hyena_kernel_size
+        self.short_filter_length = config.hyena_kernel_size
+        self.hyena_flip_x1x2 = config.hyena_flip_x1x2
 
-        self.in_proj = nn.Linear(self.hidden_size, self.filter_channels * self.order, bias=False)
-        self.conv = nn.Conv1d(
-            in_channels=self.filter_channels,
-            out_channels=self.filter_channels,
-            kernel_size=self.kernel_size,
-            groups=self.filter_channels,
-            padding=self.kernel_size - 1,
+        # Projections: hidden_size -> 3 * hidden_size (for x, y, z)
+        self.projections = nn.Linear(self.hidden_size, self.order * self.hidden_size, bias=False)
+        
+        # Short filter (Conv1d)
+        self.short_filter_weight = nn.Parameter(
+            torch.randn(self.order * self.hidden_size, 1, self.short_filter_length)
         )
-        self.out_proj = nn.Linear(self.filter_channels * self.order, self.hidden_size, bias=False)
-        self.activation = nn.SiLU()
+        
+        # Output projection
+        self.out_filter_dense = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
+        
+        # Long filter parameters - check if FIR or IIR based on config
+        self.hyena_filter_groups = config.hyena_filters  
+        self.channels_per_group = self.hidden_size // self.hyena_filter_groups
+        
+        # These parameters are optional and will be set dynamically when loading weights
+        # We register them as None initially
+        self.h = None
+        self.D = None
+        self.log_poles = None
+        self.residues = None
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch, seq_len, _ = hidden_states.shape
-        projected = self.in_proj(hidden_states)
-        projected = projected.view(batch, seq_len, self.order, self.filter_channels).permute(0, 2, 3, 1)
-        conv_input = projected.reshape(batch * self.order, self.filter_channels, seq_len)
-        conv_output = self.conv(conv_input)
-        conv_output = conv_output[:, :, :seq_len]
-        conv_output = conv_output.view(batch, self.order, self.filter_channels, seq_len).permute(0, 3, 1, 2)
-        conv_output = conv_output.reshape(batch, seq_len, self.order * self.filter_channels)
-        conv_output = self.activation(conv_output)
-        return self.out_proj(conv_output)
+        
+        # Project to 3 * hidden_size
+        u = self.projections(hidden_states)  # [batch, seq_len, 3 * hidden_size]
+        
+        # Transpose for conv1d: [batch, 3 * hidden_size, seq_len]
+        u = u.transpose(1, 2)
+        
+        # Apply short filter (depthwise conv1d)
+        u = F.conv1d(
+            u.to(torch.float32),
+            self.short_filter_weight.to(torch.float32),
+            padding=self.short_filter_length - 1,
+            groups=self.order * self.hidden_size
+        )[:, :, :seq_len]
+        u = u.to(hidden_states.dtype)
+        
+        # Apply interleave to de-interleave the channels (following vortex model.py line 645)
+        # This reorders from [x1, x2, v, x1, x2, v, ...] to [x1, x1, ..., x2, x2, ..., v, v, ...]
+        # u is [batch, 3 * hidden_size, seq_len]
+        u_x1 = u[:, 0::3, :]  # Every 3rd channel starting from 0
+        u_x2 = u[:, 1::3, :]  # Every 3rd channel starting from 1
+        u_v = u[:, 2::3, :]   # Every 3rd channel starting from 2
+        u = torch.cat([u_x1, u_x2, u_v], dim=1)  # [batch, 3 * hidden_size, seq_len]
+        
+        # Split into x2, x1, v
+        # Note: Vortex column_split returns x2, x1, v in that order
+        # u is now [batch, 3 * hidden_size, seq_len]
+        # We split along dim 1
+        x2, x1, v = u.split([self.hidden_size, self.hidden_size, self.hidden_size], dim=1)
+        
+        # Vortex HyenaCascade.sequential_forward logic:
+        # x2, x1, v = column_split(...)
+        # if self.hyena_flip_x1x2: x1, x2 = x2, x1
+        if self.hyena_flip_x1x2:
+            x1, x2 = x2, x1
+            
+        # Compute x1 * v (element-wise)
+        x1v = x1 * v
+        
+        # Apply long filter to x1v
+        # Both FIR and IIR use FFT convolution (IIR converts to FIR first)
+        if self.h is not None or (self.log_poles is not None and self.residues is not None):
+            # Compute filter h
+            if self.h is not None:
+                # FIR filter: use pre-computed h
+                h = self.h
+            else:
+                # IIR filter: convert to FIR using modal form (model.py compute_filter line 703)
+                # h = (residues[..., None] * (log_poles * self.t).exp()).sum(1)[None]
+                # Create time vector t = [0, 1, 2, ..., seq_len-1]
+                t = torch.arange(seq_len, device=hidden_states.device, dtype=torch.float32)[None, None, :]  # [1, 1, L]
+                
+                # log_poles: [hidden_size, state_dim, 1], residues: [hidden_size, state_dim]
+                log_poles = self.log_poles.to(torch.float32)
+                residues = self.residues.to(torch.float32)
+                
+                # Compute h = sum(residues * exp(log_poles * t), dim=state_dim)
+                # Broadcasting: log_poles [D, S, 1] * t [1, 1, L] = [D, S, L]
+                h = (residues.unsqueeze(-1) * torch.exp(log_poles * t)).sum(dim=1)  # [D, L]
+                h = h.unsqueeze(0)  # [1, D, L] - matches FIR filter shape [num_groups, hidden_size/num_groups, L]
+            
+            # FFT convolution following vortex engine.py parallel_iir
+            fft_size = 2 * seq_len
+            
+            # Prepare filter: h shape is [num_groups, 1, filter_len] or [1, hidden_size, 1, filter_len] for IIR
+            h = h.to(torch.float32)
+            H = torch.fft.rfft(h, n=fft_size) / fft_size  # [num_groups, 1, fft_len]
+            
+            # Apply adjust_filter_shape_for_broadcast logic
+            H = H.squeeze()  # [num_groups, fft_len] for FIR or [hidden_size, fft_len] for IIR
+            
+            # For x1v: [batch, hidden_size, seq_len], we need H: [batch, hidden_size, fft_len]
+            if H.shape[0] != self.hidden_size:
+                # FIR case: Repeat H for each channel in group
+                # hidden_size = num_groups * channels_per_group
+                if self.hyena_filter_groups > 1:
+                    H = H.repeat_interleave(self.channels_per_group, dim=0)  # [hidden_size, fft_len]
+            # else: IIR case, H is already [hidden_size, fft_len]
+            
+            H = H.unsqueeze(0)  # [1, hidden_size, fft_len]
+            
+            # FFT of input - use torch.fft.fft like original, not rfft
+            X_s = torch.fft.fft(x1v.to(torch.float32), n=fft_size)  # [batch, hidden_size, fft_size]
+            X = X_s[..., : H.shape[-1]]  # [batch, hidden_size, fft_len]
+            
+            # Multiply in frequency domain
+            y = torch.fft.irfft(X * H, n=fft_size, norm='forward')[..., :seq_len]
+            
+            # Add bias (direct connection) - note the order matches original: (y + x1v * D) * x2
+            # Ensure both y and x1v are in float32 for numerical stability
+            if self.D is not None:
+                x1v_f32 = x1v.to(torch.float32)
+                D_f32 = self.D.to(torch.float32)
+                y = y + x1v_f32 * D_f32.unsqueeze(0).unsqueeze(-1)
+            
+            # Convert back to original dtype (matching Mamba2 pattern)
+            y = y.to(hidden_states.dtype)
+        else:
+            # No long filter
+            y = x1v
+        
+        # Apply gating: x2 * y
+        z = x2 * y
+        
+        # Transpose back: [batch, hidden_size, seq_len] -> [batch, seq_len, hidden_size]
+        z = z.transpose(1, 2)
+        
+        # Output projection
+        out = self.out_filter_dense(z)
+        
+        return out
 
 
 class Evo2AttentionBlock(nn.Module):
@@ -244,7 +369,7 @@ class Evo2AttentionBlock(nn.Module):
         self.attention = Evo2Attention(config, layer_idx)
         self.input_layernorm = Evo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Evo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.mlp = Evo2ParallelGatedMLP(config)
+        self.mlp = Evo2ParallelGatedMLP(config, layer_idx)
         self.hidden_dropout = nn.Dropout(config.hidden_dropout)
 
     def forward(
@@ -257,7 +382,8 @@ class Evo2AttentionBlock(nn.Module):
         use_cache: bool,
         cache_position: Optional[torch.LongTensor],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
-        residual = hidden_states
+        # Keep residual in float32 for numerical stability (Mamba2 technique)
+        residual = hidden_states.to(torch.float32) if hidden_states.dtype == torch.bfloat16 else hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         attn_output, attn_weights, present_kv = self.attention(
             hidden_states,
@@ -268,23 +394,24 @@ class Evo2AttentionBlock(nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
         )
-        hidden_states = residual + self.hidden_dropout(attn_output)
+        hidden_states = (residual + self.hidden_dropout(attn_output).to(residual.dtype)).to(hidden_states.dtype)
 
-        residual = hidden_states
+        # Keep residual in float32 for numerical stability
+        residual = hidden_states.to(torch.float32) if hidden_states.dtype == torch.bfloat16 else hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + self.hidden_dropout(hidden_states)
+        hidden_states = (residual + self.hidden_dropout(hidden_states).to(residual.dtype)).to(hidden_states.dtype)
 
         return hidden_states, attn_weights, present_kv
 
 
 class Evo2HyenaBlock(nn.Module):
-    def __init__(self, config: Evo2Config):
+    def __init__(self, config: Evo2Config, layer_idx: int):
         super().__init__()
         self.input_layernorm = Evo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.filter = Evo2HyenaFilter(config)
         self.post_attention_layernorm = Evo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.mlp = Evo2ParallelGatedMLP(config)
+        self.mlp = Evo2ParallelGatedMLP(config, layer_idx)
         self.hidden_dropout = nn.Dropout(config.hidden_dropout)
 
     def forward(
@@ -298,15 +425,17 @@ class Evo2HyenaBlock(nn.Module):
         cache_position: Optional[torch.LongTensor],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
         del attention_mask, past_key_value, output_attentions, use_cache, cache_position, position_ids
-        residual = hidden_states
+        # Keep residual in float32 for numerical stability (Mamba2 technique)
+        residual = hidden_states.to(torch.float32) if hidden_states.dtype == torch.bfloat16 else hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states = self.filter(hidden_states)
-        hidden_states = residual + self.hidden_dropout(hidden_states)
+        hidden_states = (residual + self.hidden_dropout(hidden_states).to(residual.dtype)).to(hidden_states.dtype)
 
-        residual = hidden_states
+        # Keep residual in float32 for numerical stability
+        residual = hidden_states.to(torch.float32) if hidden_states.dtype == torch.bfloat16 else hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + self.hidden_dropout(hidden_states)
+        hidden_states = (residual + self.hidden_dropout(hidden_states).to(residual.dtype)).to(hidden_states.dtype)
 
         return hidden_states, None, None
 
@@ -318,7 +447,7 @@ class Evo2DecoderLayer(GradientCheckpointingLayer):
         if layer_type == "attention":
             self.block = Evo2AttentionBlock(config, layer_idx)
         else:
-            self.block = Evo2HyenaBlock(config)
+            self.block = Evo2HyenaBlock(config, layer_idx)
 
     def forward(
         self,
@@ -560,9 +689,11 @@ class Evo2ForCausalLM(Evo2PreTrainedModel, GenerationMixin):
         hidden_states = outputs[0]
         if isinstance(logits_to_keep, int):
             slice_indices = slice(-logits_to_keep, None) if logits_to_keep > 0 else slice(None)
-            logits = self.lm_head(hidden_states[:, slice_indices, :])
+            # Mamba2 technique: convert to lm_head dtype, then to float32 for numerical stability
+            logits = self.lm_head(hidden_states[:, slice_indices, :].to(self.lm_head.weight.dtype)).float()
         else:
-            logits = self.lm_head(hidden_states[:, logits_to_keep, :])
+            # Mamba2 technique: convert to lm_head dtype, then to float32 for numerical stability
+            logits = self.lm_head(hidden_states[:, logits_to_keep, :].to(self.lm_head.weight.dtype)).float()
 
         loss = None
         if labels is not None:
