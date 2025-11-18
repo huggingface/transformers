@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import sys
 from collections import defaultdict
 from contextlib import contextmanager
 
@@ -165,10 +166,18 @@ def copy_(tensor: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
 # something like `from torch.nn.init import xavier_uniform_` in their internals (e.g in torch.nn.modules.activations,
 # where MultiHeadAttention lives), so the function name is binded at import time and just doing
 # `setattr(torch.nn.init, name, gloabls()[name])` is thus not enough
+# The following list should be enough for all torch versions we work with
 TORCH_MODULES_TO_PATCH = (
-    torch.nn.init,
-    torch.nn.modules.activation,
-    torch.nn.modules.transformer,
+    "torch.nn.init",
+    "torch.nn.modules.activation",
+    "torch.nn.modules.transformer",
+    "torch.nn.modules.linear",
+    "torch.nn.modules.loss",
+    "torch.nn.modules.batchnorm",
+    "torch.nn.modules.conv",
+    "torch.nn.modules.normalization",
+    "torch.nn.modules.rnn",
+    "torch.nn.modules.sparse",
 )
 
 
@@ -185,10 +194,12 @@ def guard_torch_init_functions():
     try:
         # Replace all torch funcs by the ones in this file
         for func_name in TORCH_INIT_FUNCTIONS.keys():
-            for module in TORCH_MODULES_TO_PATCH:
-                if hasattr(module, func_name):
-                    originals[module][func_name] = getattr(module, func_name)
-                    setattr(module, func_name, globals()[func_name])
+            for module_name in TORCH_MODULES_TO_PATCH:
+                if module_name in sys.modules:
+                    module = sys.modules[module_name]
+                    if hasattr(module, func_name):
+                        originals[module][func_name] = getattr(module, func_name)
+                        setattr(module, func_name, globals()[func_name])
         yield
     finally:
         # Set back the original functions on all modules
