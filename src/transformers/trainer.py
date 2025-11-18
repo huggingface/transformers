@@ -3844,6 +3844,7 @@ class Trainer:
         """
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
+            self.model_accepts_loss_kwargs = False  # does its own treatment of num_items_in_batch
             return self._deepspeed_sp_compute_loss(model, inputs, return_outputs, pc)
 
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
@@ -5210,8 +5211,7 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
-                pc = getattr(self.accelerator, "parallelism_config", None)
-                if pc is not None and pc.cp_backend == "torch":
+                if pc := getattr(self.accelerator, "parallelism_config", None):
                     num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
 
         return num_items_in_batch
