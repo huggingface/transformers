@@ -56,9 +56,7 @@ def _scale_boxes(boxes, target_sizes):
 class Sam3ImageProcessorFast(Sam2ImageProcessorFast):
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
-    size = {"height": 1024, "width": 1024}
     size = {"height": 1008, "width": 1008}
-    mask_size = {"height": 256, "width": 256}
     mask_size = {"height": 288, "width": 288}
 
     def post_process_semantic_segmentation(

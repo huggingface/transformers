@@ -24,6 +24,9 @@ class Sam3ViTConfig(PreTrainedConfig):
     r"""
     Configuration class for SAM3 Vision Encoder (ViT backbone).
 
+    Instantiating a configuration defaults will yield a similar configuration to that of SAM 3
+    [facebook/sam3](https://huggingface.co/facebook/sam3) architecture.
+
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers.
@@ -45,8 +48,6 @@ class Sam3ViTConfig(PreTrainedConfig):
             The epsilon used by layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for attention probabilities.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add bias to QKV projections.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             Base frequency for RoPE.
         window_size (`int`, *optional*, defaults to 24):
@@ -78,7 +79,6 @@ class Sam3ViTConfig(PreTrainedConfig):
         hidden_act="gelu",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
-        qkv_bias=True,
         rope_theta=10000.0,
         window_size=24,
         global_attn_indexes=None,
@@ -102,7 +102,6 @@ class Sam3ViTConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
         self.attention_dropout = attention_dropout
-        self.qkv_bias = qkv_bias
         self.rope_theta = rope_theta
         self.window_size = window_size
         self.global_attn_indexes = global_attn_indexes
@@ -116,7 +115,8 @@ class Sam3VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam3VisionModel`]. It is used to instantiate a SAM
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    defaults will yield a similar configuration to that of SAM 3 architecture.
+    defaults will yield a similar configuration to that of SAM 3
+    [facebook/sam3](https://huggingface.co/facebook/sam3) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -127,12 +127,6 @@ class Sam3VisionConfig(PreTrainedConfig):
             `AutoModel.from_config`.
         fpn_hidden_size (`int`, *optional*, defaults to 256):
             The hidden dimension of the FPN.
-        fpn_kernel_size (`int`, *optional*, defaults to 2):
-            The kernel size for the convolutions in the neck.
-        fpn_stride (`int`, *optional*, defaults to 2):
-            The stride for the convolutions in the neck.
-        num_feature_levels (`int`, *optional*, defaults to 3):
-            The number of feature levels from the FPN to use.
         backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[288, 288], [144, 144], [72, 72]]`):
             The spatial sizes (height, width) of the feature maps from the backbone at different scales.
         scale_factors (`list[float]`, *optional*, defaults to `[4.0, 2.0, 1.0, 0.5]`):
@@ -156,9 +150,6 @@ class Sam3VisionConfig(PreTrainedConfig):
         self,
         backbone_config=None,
         fpn_hidden_size=256,
-        fpn_kernel_size=2,
-        fpn_stride=2,
-        num_feature_levels=3,
         backbone_feature_sizes=None,
         scale_factors=None,
         hidden_act="gelu",
@@ -180,9 +171,6 @@ class Sam3VisionConfig(PreTrainedConfig):
 
         # Neck
         self.fpn_hidden_size = fpn_hidden_size
-        self.fpn_kernel_size = fpn_kernel_size
-        self.fpn_stride = fpn_stride
-        self.num_feature_levels = num_feature_levels
         self.scale_factors = scale_factors
         self.backbone_feature_sizes = backbone_feature_sizes
 
@@ -323,10 +311,6 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
             Dropout probability for hidden states.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon for layer normalization.
-        box_rpb_mode (`str`, *optional*, defaults to `"log"`):
-            Mode for box relative position bias ("log" or "linear").
-        use_presence_token (`bool`, *optional*, defaults to `True`):
-            Whether to use presence token for object detection.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing weight matrices.
     """
@@ -344,8 +328,6 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
         hidden_act="relu",
         hidden_dropout=0.0,
         layer_norm_eps=1e-6,
-        box_rpb_mode="log",
-        use_presence_token=True,
         initializer_range=0.02,
         **kwargs,
     ):
@@ -359,8 +341,6 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.hidden_dropout = hidden_dropout
         self.layer_norm_eps = layer_norm_eps
-        self.box_rpb_mode = box_rpb_mode
-        self.use_presence_token = use_presence_token
         self.initializer_range = initializer_range
 
 
@@ -407,6 +387,9 @@ class Sam3MaskDecoderConfig(PreTrainedConfig):
 class Sam3Config(PreTrainedConfig):
     r"""
     Configuration class to store the configuration of a [`Sam3Model`].
+
+    Instantiating a configuration defaults will yield a similar configuration to that of SAM 3
+    [facebook/sam3](https://huggingface.co/facebook/sam3) architecture.
 
     This is the main configuration class that combines all sub-configurations for the SAM3 model.
 

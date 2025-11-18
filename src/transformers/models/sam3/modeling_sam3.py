@@ -2412,4 +2412,4 @@ class Sam3Model(Sam3PreTrainedModel):
         )
 
 
-__all__ = ["Sam3Model", "Sam3VisionModel", "Sam3ViTModel"]
+__all__ = ["Sam3Model", "Sam3VisionModel", "Sam3ViTModel", "Sam3PreTrainedModel"]

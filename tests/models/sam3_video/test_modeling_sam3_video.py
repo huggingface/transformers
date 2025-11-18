@@ -86,7 +86,7 @@ class Sam3VideoModelIntegrationTest(unittest.TestCase):
         self.assertLessEqual(len(outputs_per_frame), 4)  # frame 0 + up to 3 more
 
         # Check output structure for each frame
-        for frame_idx, processed_outputs in outputs_per_frame.items():
+        for processed_outputs in outputs_per_frame.values():
             self.assertIn("object_ids", processed_outputs)
             self.assertIn("scores", processed_outputs)
             self.assertIn("boxes", processed_outputs)

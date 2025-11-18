@@ -802,7 +802,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         # Step 3: removed tracks that overlaps with another track for `hotstart_dup_thresh` frames
         # a) find overlaps tracks -- we consider overlap if they match to the same detection
         # NOTE: In streaming mode, we still track overlaps for metadata but skip removal logic
-        for _, matched_trk_obj_ids in det_to_matched_trk_obj_ids.items():
+        for matched_trk_obj_ids in det_to_matched_trk_obj_ids.values():
             if len(matched_trk_obj_ids) < 2:
                 continue  # only count detections that are matched to multiple (>=2) masklets
             # if there are multiple matched track ids, we need to find the one that appeared first;

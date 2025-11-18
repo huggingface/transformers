@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-11-19 and added to Hugging Face Transformers on 2025-11-19.*
 
 # SAM3
 
@@ -299,6 +300,16 @@ SAM3 uses the following label conventions:
 
 [[autodoc]] Sam3Processor
     - __call__
+
+## Sam3ImageProcessorFast
+
+[[autodoc]] Sam3ImageProcessorFast
+    - preprocess
+
+## Sam3ViTModel
+
+[[autodoc]] Sam3ViTModel
+    - forward
 
 ## Sam3VisionModel
 

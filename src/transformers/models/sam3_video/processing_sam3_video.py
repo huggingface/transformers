@@ -264,14 +264,7 @@ class Sam3VideoProcessor(ProcessorMixin):
             out_obj_ids = torch.tensor(curr_obj_ids, dtype=torch.int64)
             out_probs = torch.tensor([model_outputs["obj_id_to_score"][obj_id] for obj_id in curr_obj_ids])
             out_tracker_probs = torch.tensor(
-                [
-                    (
-                        model_outputs["obj_id_to_tracker_score"][obj_id]
-                        if obj_id in model_outputs["obj_id_to_tracker_score"]
-                        else 0.0
-                    )
-                    for obj_id in curr_obj_ids
-                ]
+                [model_outputs["obj_id_to_tracker_score"].get(obj_id, 0.0) for obj_id in curr_obj_ids]
             )
 
             # Interpolate low-res masks to video resolution

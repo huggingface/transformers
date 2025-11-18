@@ -27,6 +27,9 @@ class Sam3VideoConfig(PreTrainedConfig):
     Configuration class for [`Sam3VideoModel`]. This combines configurations for the detector (Sam3) and tracker
     (Sam2Video) components, along with detection-tracking fusion hyperparameters.
 
+    Instantiating a configuration defaults will yield a similar configuration to that of SAM 3
+    [facebook/sam3](https://huggingface.co/facebook/sam3) architecture.
+
     This model integrates detection and tracking with various fusion heuristics including NMS, association,
     hotstart, reconditioning, and occlusion handling.
 

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-11-19 and added to Hugging Face Transformers on 2025-11-19.*
 
 # SAM3 Video
 
@@ -173,6 +174,10 @@ For real-time applications, SAM3 Video supports processing video frames as they 
 ## Sam3VideoInferenceSession
 
 [[autodoc]] Sam3VideoInferenceSession
+
+## Sam3VideoSegmentationOutput
+
+[[autodoc]] Sam3VideoSegmentationOutput
 
 ## Sam3VideoModel
 
