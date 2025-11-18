@@ -1594,7 +1594,6 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         config.mask_decoder_config._attn_implementation = config._attn_implementation
         self.mask_decoder = Sam3TrackerVideoMaskDecoder(config.mask_decoder_config)
 
-        self.num_feature_levels = config.vision_config.num_feature_levels
         self.backbone_feature_sizes = config.vision_config.backbone_feature_sizes
         # a single token to indicate no memory embedding from previous frames
         self.hidden_dim = config.vision_config.fpn_hidden_size
