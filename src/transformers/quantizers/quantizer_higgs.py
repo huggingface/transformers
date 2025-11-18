@@ -192,3 +192,7 @@ class HiggsHfQuantizer(HfQuantizer):
 
         model = dequantize_higgs(model)
         return model
+
+    def get_quantize_ops(self):
+        from ..integrations.higgs import HiggsQuantize
+        return HiggsQuantize(self)

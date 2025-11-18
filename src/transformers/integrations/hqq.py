@@ -21,7 +21,89 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+from ..quantizers.quantizers_utils import get_module_from_name
 
+
+def HqqQuantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, missing_keys=None **kwargs) -> dict[str, torch.Tensor]:
+        target_key, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+
+
+        module, tensor_name = get_module_from_name(model, param_name)
+        module_name = param_name.rsplit(".", 1)[0]
+        parent_module, node = get_module_from_name(model, module_name)
+
+        quant_config = model.config.quantization_config["quant_config"]
+        skip_modules = model.config.quantization_config["skip_modules"]
+
+        # In this case we do not quantize this layer (it's explicitly skipped) -> simply load param
+        if any(skip_module in module.name for skip_module in skip_modules):
+            return {target_key: value}
+
+        # We need this hack as the model is not pre-prepared as an empty skeleton on meta device
+        if self.pre_quantized:
+            # Save them for later
+            if not hasattr(self.hf_quantizer, "hqq_params"):
+                self.hf_quantizer.hqq_params = defaultdict(dict)
+            self.hf_quantizer.hqq_params[module_name].update({tensor_name: value})
+            hqq_params = self.hf_quantizer.hqq_params[module_name]
+
+            # If they are all present and saved, make it a HQQLinear layer! (we cannot do it param after param because
+            # hqq does not support it...)
+            if all(k in hqq_params for k in self.hf_quantizer.hqq_keys) and ("bias" in hqq_params or module.bias is None):
+                hqq_layer = HQQLinear(
+                    linear_layer=None,
+                    quant_config=None,
+                    compute_dtype=self.hf_quantizer.dtype,
+                    device=value.device,
+                    del_orig=False,
+                )
+                hqq_layer.load_state_dict(hqq_params)
+
+                if hqq_layer.bias is not None and isinstance(hqq_layer.bias, torch.Tensor):
+                    hqq_layer.bias = torch.nn.Parameter(hqq_layer.bias)
+                if self.using_multi_gpu:
+                    hqq_layer = self._patch_layer_for_multigpu(hqq_layer)
+
+                setattr(parent_module, node, hqq_layer)
+                del self.hqq_params[module_name], module
+                return {}
+            return {}
+
+        # Load param in the module (without caring about device or dtype, it will be changed later)
+        module.load_state_dict({tensor_name: param_value}, strict=False, assign=True)
+
+        # If both the weight and bias have already been loaded, time to quantize!
+        module_is_ready = module.weight.device.type != "meta" and (
+            module.bias is None or module.bias.device.type != "meta"
+        )
+
+        if module_is_ready:
+            module_tag = ".".join(module.name.split(".")[-2:])
+            if "weight_quant_params" in quant_config:
+                module_quant_config = quant_config
+            elif module_tag in quant_config:
+                module_quant_config = quant_config[module_tag]
+
+            hqq_layer = HQQLinear(
+                module,
+                quant_config=module_quant_config,
+                compute_dtype=self.dtype,
+                device=target_device,
+                del_orig=True,
+            )
+
+            if hqq_layer.bias is not None and isinstance(hqq_layer.bias, torch.Tensor):
+                hqq_layer.bias = torch.nn.Parameter(hqq_layer.bias)
+
+            if self.using_multi_gpu:
+                hqq_layer = self._patch_layer_for_multigpu(hqq_layer)
+
+            setattr(parent_module, node, hqq_layer)
 # Name all modules inside the model
 def autoname_modules(model):
     for name, module in model.named_modules():

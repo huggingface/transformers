@@ -163,3 +163,7 @@ class QuantoHfQuantizer(HfQuantizer):
 
     def is_serializable(self, safe_serialization=None):
         return False
+
+    def get_quantize_ops(self):
+        from ..integrations.quanto import QuantoQuantize
+        return QuantoQuantize(self)
