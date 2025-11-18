@@ -2313,6 +2313,8 @@ class Trainer:
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
             train_dataloader = self.accelerator.deepspeed_ulysses_dl_adapter(train_dataloader, model)
+            # Update len_dataloader since UlyssesSPDataLoaderAdapter changes the dataloader length (multiplies by sp_world_size)
+            len_dataloader = len(train_dataloader) if has_length(train_dataloader) else None
 
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
