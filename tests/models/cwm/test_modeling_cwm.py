@@ -17,6 +17,7 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -85,6 +86,7 @@ class CwmModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch_accelerator
 @slow
+@require_read_token
 class CwmIntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
