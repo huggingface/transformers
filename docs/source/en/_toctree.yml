@@ -110,23 +110,31 @@
       title: Writing a chat template
     title: Chat with models
   - sections:
+    - local: serialization
+      title: Export to production
+    - local: transformers_as_backend
+      title: Inference backends
     - local: serving
-      title: Serving LLMs, VLMs, and other chat-based models
-    - local: jan
-      title: Jan
-    - local: cursor
-      title: Cursor
-    - local: tiny_agents
-      title: Tiny-Agents CLI and MCP tools
-    - local: open_webui
-      title: Open WebUI
-    title: Serving
+      title: Serve CLI
+    - local: serve-cli-integrations
+      title: Serve CLI integrations
+    title: Deployment
+  - sections:
+    - local: perf_torch_compile
+      title: torch.compile
+    - local: perf_infer_gpu_one
+      title: GPU
+    - local: perf_infer_gpu_multi
+      title: Distributed inference
+    - local: perf_infer_cpu
+      title: CPU
+    title: Optimization
   - local: agents
     title: Agents
   - local: tools
     title: Tools
-  - local: transformers_as_backend
-    title: Transformers as modeling backend
+  - local: continuous_batching
+    title: Continuous Batching
   title: Inference
 - isExpanded: false
   sections:
@@ -228,11 +236,9 @@
   title: Quantization
 - isExpanded: false
   sections:
-  - local: serialization
-    title: ONNX
-  - local: executorch
-    title: ExecuTorch
-  title: Export to production
+  - local: kernel_doc/overview
+    title: Kernels in transformers
+  title: Kernels
 - isExpanded: false
   sections:
   - sections:
