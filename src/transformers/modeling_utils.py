@@ -1499,8 +1499,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
         # easily available
         self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
-        # Current submodel should register its tied weights keys only if the config is asking for it
-        self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(recurse=False)
+        # Current submodel should register its tied weights
+        self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(all_submodels=False)
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
@@ -2338,18 +2338,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Let the magic happen with this simple call
         self.smart_apply(self._initialize_weights)
 
-    def get_expanded_tied_weights_keys(self, recurse: bool = False) -> dict:
+    def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
         """
         Return the expanded tied weight keys (in case they contain modules or regex patterns) for only the current
-        model, or recursively for all submodels if `recurse=True` (i.e. it will re-check the config values for all
+        model, or recursively for all submodels if `all_submodels=True` (i.e. it will re-check the config values for all
         submodels).
         """
-        if recurse:
+        if all_submodels:
             expanded_tied_weights = {}
             for prefix, submodule in self.named_modules():
                 if isinstance(submodule, PreTrainedModel):
                     # Will dynamically check the config if it has changed
-                    submodel_tied_weights = submodule.get_expanded_tied_weights_keys(recurse=False)
+                    submodel_tied_weights = submodule.get_expanded_tied_weights_keys(all_submodels=False)
                     expanded_tied_weights.update(
                         {f"{prefix}.{k}": f"{prefix}.{v}" for k, v in submodel_tied_weights.items()}
                     )
@@ -2362,6 +2362,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # If None, return empty dict
         elif tied_mapping is None:
             return {}
+        # Short-cut for the most common cases: if the tied weights mapping only contains already expanded params,
+        # return it directly (the regex matches names containing only letters, numbers, dots, underscores, and finishing by
+        # "bias" or "weight")
+        common_case_regex = re.compile(r"^[A-Za-z0-9_\.]+(weight)|(bias)$")
+        if all(common_case_regex.match(k) for k in tied_mapping.keys() | tied_mapping.values()):
+            return tied_mapping.copy()
 
         # We need to expand the regex patterns or the modules into proper parameters
         expanded_tied_weights = {}
