@@ -50,7 +50,7 @@ class TimeSeriesTransformerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         prediction_length=7,
         context_length=14,
         cardinality=19,

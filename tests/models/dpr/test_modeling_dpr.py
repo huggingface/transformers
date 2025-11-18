@@ -34,7 +34,7 @@ class DPRModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         is_training=False,
         use_input_mask=True,
