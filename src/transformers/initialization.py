@@ -165,7 +165,7 @@ def copy_(tensor: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
 # Here, we need to check several modules imported, and hot patch all of them, as sometimes torch does
 # something like `from torch.nn.init import xavier_uniform_` in their internals (e.g in torch.nn.modules.activations,
 # where MultiHeadAttention lives), so the function name is binded at import time and just doing
-# `setattr(torch.nn.init, name, gloabls()[name])` is thus not enough
+# `setattr(torch.nn.init, name, globals()[name])` is thus not enough
 # The following list should be enough for all torch versions we work with
 TORCH_MODULES_TO_PATCH = (
     "torch.nn.init",
