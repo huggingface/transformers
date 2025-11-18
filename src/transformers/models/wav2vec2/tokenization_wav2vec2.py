@@ -181,6 +181,28 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+        # Remap added tokens so their ids never collide with any nested vocabulary ids. (silent bug pre v5)
+        if isinstance(self.vocab, dict) and len(self.vocab) > 0:
+            sample_value = next(iter(self.vocab.values()))
+            if isinstance(sample_value, dict):
+                nested_vocab_ids = set()
+                for sub_vocab in self.vocab.values():
+                    nested_vocab_ids.update(sub_vocab.values())
+            else:
+                nested_vocab_ids = set(self.vocab.values())
+            collisions = [idx for idx in list(self._added_tokens_decoder.keys()) if idx in nested_vocab_ids]
+            if collisions:
+                next_index = max(nested_vocab_ids | set(self._added_tokens_decoder.keys())) + 1
+                for idx in collisions:
+                    token = self._added_tokens_decoder.pop(idx)
+                    while next_index in nested_vocab_ids or next_index in self._added_tokens_decoder:
+                        next_index += 1
+                    self._added_tokens_decoder[next_index] = token
+                    self._added_tokens_encoder[token.content] = next_index
+                    nested_vocab_ids.add(next_index)
+                self._update_trie()
+                self._update_total_vocab_size()
+
         # make sure that tokens made of several
         # characters are not split at tokenization
         for token in self.encoder:
