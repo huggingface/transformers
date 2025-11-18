@@ -513,6 +513,7 @@ def set_param_for_module(
     mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
     missing_keys: MutableSet[str],
     misc: MutableMapping[str, Any],
+    unexpected_keys: MutableSet[str],
     distributed_operation: Optional[TensorParallelLayer],
 ):
     with log_to_misc(layer_name, misc, layer_name):
@@ -520,6 +521,9 @@ def set_param_for_module(
         module_obj = model.get_submodule(module_path) if module_path else model
         param_value = param_value[0] if isinstance(param_value, list) else param_value[...]
         ref = getattr(module_obj, param_name)
+        if ref is None:
+            unexpected_keys.add(t)
+            continue
 
         use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
         if not isinstance(param_value, torch.nn.Parameter):
@@ -635,9 +639,6 @@ def convert_and_load_state_dict_in_model(
             elif meta_model_state_dict.get(f"{prefix}.{t}") is not None:
                 t = f"{prefix}.{t}"
             empty_param = meta_model_state_dict.get(t)
-            if empty_param is None:
-                unexpected_keys.add(t)
-                continue
             new_target_key.append(t)
 
             if quantizer is not None and quantizer.param_needs_quantization(model, t):
@@ -761,6 +762,7 @@ def convert_and_load_state_dict_in_model(
                             mismatch_keys,
                             missing_keys,
                             misc,
+                            unexpected_keys,
                             mapping.distributed_operation,
                         )
                 except SkipLayer:
