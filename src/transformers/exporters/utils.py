@@ -70,26 +70,26 @@ def get_leaf_tensors(obj: Any) -> tuple[torch.Tensor]:
         raise ValueError(f"Unexpected object type: {type(obj)}")
 
 
-def _get_leaf_tensor_names(obj: Any, prefix: str = "") -> list[str]:
+def get_leaf_tensor_names(obj: Any, prefix: str = "") -> list[str]:
     if _is_pure_python_object(obj):
         return []
     elif isinstance(obj, torch.Tensor):
         return [prefix]
     elif isinstance(obj, (list, tuple, set)):
-        return _get_leaf_tensor_names(dict(enumerate(obj)), prefix=prefix)
+        return get_leaf_tensor_names(dict(enumerate(obj)), prefix=prefix)
     elif isinstance(obj, DynamicCache):
-        return _get_leaf_tensor_names(_dict_from_dynamic_cache(obj), prefix=prefix)
+        return get_leaf_tensor_names(_dict_from_dynamic_cache(obj), prefix=prefix)
     elif isinstance(obj, EncoderDecoderCache):
-        return _get_leaf_tensor_names(_dict_from_encoder_decoder_cache(obj), prefix=prefix)
+        return get_leaf_tensor_names(_dict_from_encoder_decoder_cache(obj), prefix=prefix)
     elif isinstance(obj, dict):
-        return sum((_get_leaf_tensor_names(v, prefix=f"{prefix}.{k}") for k, v in obj.items()), [])
+        return sum((get_leaf_tensor_names(v, prefix=f"{prefix}.{k}") for k, v in obj.items()), [])
     else:
         raise ValueError(f"Unexpected object type: {type(obj)}")
 
 
 def get_inputs_outputs_names(inputs: dict[str, Any], outputs: dict[str, Any]) -> tuple[list[str], list[str]]:
-    inputs_names = _get_leaf_tensor_names(inputs)
-    outputs_names = _get_leaf_tensor_names(outputs)
+    inputs_names = get_leaf_tensor_names(inputs)
+    outputs_names = get_leaf_tensor_names(outputs)
     for name in set(inputs_names).intersection(set(outputs_names)):
         inputs_names[inputs_names.index(name)] = f"input.{name}"
         outputs_names[outputs_names.index(name)] = f"output.{name}"
@@ -677,3 +677,48 @@ def patch_model_for_export(model: "PreTrainedModel"):
 
         for function_name, original_function in original_functions.items():
             setattr(modeling_module, function_name, original_function)
+
+
+# TODO: there should be some operator registration mechanism in torch.onnx to avoid this kind of monkey patching
+@contextmanager
+def patch_torch_for_onnx_export():
+    # Patch torch.where to handle dtype mismatches between x and y when it's called during export
+    original_torch_where = torch.where
+
+    def patched_torch_where(condition, x=None, y=None):
+        if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor) and x.dtype != y.dtype:
+            y = y.to(x.dtype)
+        elif isinstance(x, torch.Tensor) and isinstance(y, (int, float, bool)):
+            y = torch.tensor(y, dtype=x.dtype, device=x.device)
+        elif isinstance(y, torch.Tensor) and isinstance(x, (int, float, bool)):
+            x = torch.tensor(x, dtype=y.dtype, device=y.device)
+
+        if x is None and y is None:
+            return original_torch_where(condition)
+        elif y is None:
+            return original_torch_where(condition, x)
+        else:
+            return original_torch_where(condition, x, y)
+
+    torch.where = patched_torch_where
+    torch.Tensor.where = patched_torch_where
+
+    # Patch torch.unsqueeze to support complex tensors during export
+    original_unsqueeze = torch.unsqueeze
+
+    def patched_unsqueeze(input, dim):
+        if torch.is_complex(input):
+            real = original_unsqueeze(input.real, dim)
+            imag = original_unsqueeze(input.imag, dim)
+            return torch.complex(real, imag)
+        else:
+            return original_unsqueeze(input, dim)
+
+    torch.unsqueeze = patched_unsqueeze
+    torch.Tensor.unsqueeze = patched_unsqueeze
+
+    try:
+        yield
+    finally:
+        torch.where = original_torch_where
+        torch.unsqueeze = original_unsqueeze

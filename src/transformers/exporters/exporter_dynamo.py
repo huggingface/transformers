@@ -106,7 +106,9 @@ class DynamoExporter(HfExporter):
             `ExportedProgram`: The exported model.
         """
         if model.config.model_type in DYNAMO_UNSUPPORTED_MODEL_TYPES:
-            raise NotImplementedError(f"DynamoExporter is not supported for model type '{model.config.model_type}'.")
+            raise NotImplementedError(
+                f"{self.__class__.__name__} is not supported for model type '{model.config.model_type}'."
+            )
 
         # we use a copy to avoid side effects
         inputs = copy.deepcopy(sample_inputs)
