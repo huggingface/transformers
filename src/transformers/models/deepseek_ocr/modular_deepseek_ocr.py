@@ -55,25 +55,46 @@ logger = logging.get_logger(__name__)
 
 DEEPSEEK_OCR_DEFAULT_IMAGE_TOKEN_ID = 128815
 DEEPSEEK_OCR_STATE_DICT_MAPPING = {
-    "model.sam_model.patch_embed.proj": "model.sam_model.patch_embed.projection",
-    "model.sam_model.blocks.*.norm1": "model.sam_model.layers.*.layer_norm1",
-    "model.sam_model.blocks.*.norm2": "model.sam_model.layers.*.layer_norm2",
-    "model.sam_model.blocks": "model.sam_model.layers",
-    "model.sam_model.neck.0": "model.sam_model.neck.conv1",
-    "model.sam_model.neck.1": "model.sam_model.neck.layer_norm1",
-    "model.sam_model.neck.2": "model.sam_model.neck.conv2",
-    "model.sam_model.neck.3": "model.sam_model.neck.layer_norm2",
-    "model.vision_model.embeddings": "model.clip_model.vision_model.embeddings",
-    "model.vision_model.transformer.layers": "model.clip_model.vision_model.encoder.layers",
-    "model.vision_model.pre_layrnorm": "model.clip_model.vision_model.pre_layrnorm",
-    "model.vision_model.post_layernorm": "model.clip_model.vision_model.post_layernorm",
-    "model.projector": "model.multi_modal_projector",
-    "model.layers": "model.language_model.layers",
-    "model.embed_tokens": "model.language_model.embed_tokens",
-    "model.norm": "model.language_model.norm",
-    "model.view_seperator": "model.view_seperator",
-    "model.image_newline": "model.image_newline",
-    "lm_head": "lm_head",
+    r"^model\.sam_model\.patch_embed\.proj\.(weight|bias)": r"model.sam_model.patch_embed.projection.\1",
+    r"^model\.sam_model\.blocks\.(\d+)\.norm1\.(weight|bias)": r"model.sam_model.layers.\1.layer_norm1.\2",
+    r"^model\.sam_model\.blocks\.(\d+)\.norm2\.(weight|bias)": r"model.sam_model.layers.\1.layer_norm2.\2",
+    r"^model\.sam_model\.blocks\.(\d+)\.attn\.qkv\.(weight|bias)": r"model.sam_model.layers.\1.attn.qkv.\2",
+    r"^model\.sam_model\.blocks\.(\d+)\.attn\.proj\.(weight|bias)": r"model.sam_model.layers.\1.attn.proj.\2",
+    r"^model\.sam_model\.blocks\.(\d+)\.attn\.rel_pos_([hw])": r"model.sam_model.layers.\1.attn.rel_pos_\2",
+    r"^model\.sam_model\.blocks\.(\d+)\.mlp\.lin(\d+)\.(weight|bias)": r"model.sam_model.layers.\1.mlp.lin\2.\3",
+    r"^model\.sam_model\.neck\.0\.weight": r"model.sam_model.neck.conv1.weight",
+    r"^model\.sam_model\.neck\.1\.(weight|bias)": r"model.sam_model.neck.layer_norm1.\1",
+    r"^model\.sam_model\.neck\.2\.weight": r"model.sam_model.neck.conv2.weight",
+    r"^model\.sam_model\.neck\.3\.(weight|bias)": r"model.sam_model.neck.layer_norm2.\1",
+    r"^model\.sam_model\.net_2\.weight": r"model.sam_model.net_2.weight",
+    r"^model\.sam_model\.net_3\.weight": r"model.sam_model.net_3.weight",
+    r"^model\.sam_model\.pos_embed": r"model.sam_model.pos_embed",
+    r"^model\.vision_model\.embeddings\.class_embedding": r"model.clip_model.vision_model.embeddings.class_embedding",
+    r"^model\.vision_model\.embeddings\.patch_embedding\.weight": r"model.clip_model.vision_model.embeddings.patch_embedding.weight",
+    r"^model\.vision_model\.embeddings\.position_embedding\.weight": r"model.clip_model.vision_model.embeddings.position_embedding.weight",
+    r"^model\.vision_model\.pre_layrnorm\.(weight|bias)": r"model.clip_model.vision_model.pre_layrnorm.\1",
+    r"^model\.vision_model\.transformer\.layers\.(\d+)\.layer_norm(\d+)\.(weight|bias)": r"model.clip_model.vision_model.encoder.layers.\1.layer_norm\2.\3",
+    r"^model\.vision_model\.transformer\.layers\.(\d+)\.self_attn\.qkv_proj\.(weight|bias)": r"model.clip_model.vision_model.encoder.layers.\1.self_attn.qkv_proj.\2",
+    r"^model\.vision_model\.transformer\.layers\.(\d+)\.self_attn\.out_proj\.(weight|bias)": r"model.clip_model.vision_model.encoder.layers.\1.self_attn.out_proj.\2",
+    r"^model\.vision_model\.transformer\.layers\.(\d+)\.mlp\.fc(\d+)\.(weight|bias)": r"model.clip_model.vision_model.encoder.layers.\1.mlp.fc\2.\3",
+    r"^model\.vision_model\.post_layernorm\.(weight|bias)": r"model.clip_model.vision_model.post_layernorm.\1",
+    r"^model\.projector\.layers\.(weight|bias)": r"model.multi_modal_projector.layers.\1",
+    r"^model\.embed_tokens\.weight": r"model.language_model.embed_tokens.weight",
+    r"^model\.layers\.(\d+)\.input_layernorm\.weight": r"model.language_model.layers.\1.input_layernorm.weight",
+    r"^model\.layers\.(\d+)\.post_attention_layernorm\.weight": r"model.language_model.layers.\1.post_attention_layernorm.weight",
+    r"^model\.layers\.(\d+)\.self_attn\.(q|k|v|o)_proj\.weight": r"model.language_model.layers.\1.self_attn.\2_proj.weight",
+    r"^model\.layers\.(\d+)\.mlp\.(gate|up|down)_proj\.weight": r"model.language_model.layers.\1.mlp.\2_proj.weight",
+    r"^model\.layers\.(\d+)\.mlp\.(gate|up|down)\.(weight|bias)": r"model.language_model.layers.\1.mlp.\2.\3",
+    r"^model\.norm\.weight": r"model.language_model.norm.weight",
+    r"^model\.layers\.(\d+)\.mlp\.experts\.(\d+)\.(gate|up|down)_proj\.(weight|bias)": r"model.language_model.layers.\1.mlp.experts.\2.\3_proj.\4",
+    r"^model\.layers\.(\d+)\.mlp\.shared_experts\.(\d+)\.(gate|up|down)_proj\.(weight|bias)": r"model.language_model.layers.\1.mlp.shared_experts.\2.\3_proj.\4",
+    r"^model\.layers\.(\d+)\.mlp\.experts\.(\d+)\.(gate|up|down)\.(weight|bias)": r"model.language_model.layers.\1.mlp.experts.\2.\3.\4",
+    r"^model\.layers\.(\d+)\.mlp\.shared_experts\.(\d+)\.(gate|up|down)\.(weight|bias)": r"model.language_model.layers.\1.mlp.shared_experts.\2.\3.\4",
+    r"^model\.layers\.(\d+)\.mlp\.shared_experts\.(gate|up|down)_proj\.(weight|bias)": r"model.language_model.layers.\1.mlp.shared_experts.\2_proj.\3",
+    r"^model\.layers\.(\d+)\.mlp\.shared_experts\.(gate|up|down)\.(weight|bias)": r"model.language_model.layers.\1.mlp.shared_experts.\2.\3",
+    r"^model\.image_newline": r"model.image_newline",
+    r"^model\.view_seperator": r"model.view_seperator",
+    r"^lm_head\.weight": r"lm_head.weight",
 }
 
 
@@ -302,6 +323,12 @@ class DeepseekOcrTextConfig(DeepseekV2Config):
     ```
     """
 
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts": "gather",
+    }
+
     def __init__(
         self,
         vocab_size: Optional[int] = 32000,
@@ -366,7 +393,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
             The config object or dictionary of the vision encoders (SAM and CLIP).
         projector_config (`DeepseekOcrProjectorConfig` or `dict`, *optional*):
             The config object or dictionary of the projector that maps vision features to text embedding space.
-        image_token_id (`int`, *optional*, defaults to 100015):
+        image_token_id (`int`, *optional*, defaults to 128815):
             The id of the image token in the model's token vocabulary.
 
     Example:
@@ -401,9 +428,12 @@ class DeepseekOcrConfig(PreTrainedConfig):
     ):
         language_config = kwargs.pop("language_config", None)
         original_model_type = kwargs.pop("model_type", None)
+        image_token_index = kwargs.pop("image_token_index", None)
         if text_config is None and language_config is not None:
             text_config = language_config
 
+        if image_token_index is not None:
+            image_token_id = image_token_index
         self.image_token_id = image_token_id
 
         if text_config is None:

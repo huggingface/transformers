@@ -238,12 +238,7 @@ class DeepseekOcrTextConfig(PreTrainedConfig):
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.q_a_proj": "colwise",
-        "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "local_colwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
         "layers.*.mlp.experts": "gather",
     }
     base_model_pp_plan = {
@@ -350,7 +345,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
             The config object or dictionary of the vision encoders (SAM and CLIP).
         projector_config (`DeepseekOcrProjectorConfig` or `dict`, *optional*):
             The config object or dictionary of the projector that maps vision features to text embedding space.
-        image_token_id (`int`, *optional*, defaults to 100015):
+        image_token_id (`int`, *optional*, defaults to 128815):
             The id of the image token in the model's token vocabulary.
 
     Example:
@@ -385,9 +380,12 @@ class DeepseekOcrConfig(PreTrainedConfig):
     ):
         language_config = kwargs.pop("language_config", None)
         original_model_type = kwargs.pop("model_type", None)
+        image_token_index = kwargs.pop("image_token_index", None)
         if text_config is None and language_config is not None:
             text_config = language_config
 
+        if image_token_index is not None:
+            image_token_id = image_token_index
         self.image_token_id = image_token_id
 
         if text_config is None:
