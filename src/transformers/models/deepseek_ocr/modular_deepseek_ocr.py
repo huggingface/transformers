@@ -397,7 +397,6 @@ class DeepseekOcrConfig(PreTrainedConfig):
         vision_config=None,
         projector_config=None,
         image_token_id=DEEPSEEK_OCR_DEFAULT_IMAGE_TOKEN_ID,
-        image_token_index=None,
         **kwargs,
     ):
         language_config = kwargs.pop("language_config", None)
@@ -405,8 +404,6 @@ class DeepseekOcrConfig(PreTrainedConfig):
         if text_config is None and language_config is not None:
             text_config = language_config
 
-        if image_token_index is not None:
-            image_token_id = image_token_index
         self.image_token_id = image_token_id
 
         if text_config is None:
