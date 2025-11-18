@@ -55,7 +55,7 @@ class PvtV2ModelTester(ModelTesterMixin):
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         image_size=None,
         num_channels=3,
         num_encoder_blocks=4,
