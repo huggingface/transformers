@@ -109,10 +109,6 @@ OBJECTS_TO_IGNORE = {
     # Deprecated
     "InputExample",
     "InputFeatures",
-    # Signature is *args/**kwargs
-    "TFSequenceSummary",
-    "TFBertTokenizer",
-    "TFGPT2Tokenizer",
     # Missing arguments in the docstring
     "ASTFeatureExtractor",
     "AlbertModel",
