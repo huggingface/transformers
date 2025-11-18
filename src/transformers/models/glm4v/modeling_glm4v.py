@@ -249,6 +249,8 @@ def eager_attention_forward(
     **kwargs: Unpack[TransformersKwargs],
 ):
     if grouped_query_attention := key.shape[1] != query.shape[1]:
+        # In GQA, there are multiple query heads for each key head. To make GQA work, we reshape the input from
+        # (batch, num_query_heads, seq_len, dim) to (batch, num_key_heads, num_query_heads_per_key, seq_len, dim)
         query_states = query.view(query.shape[0], key.shape[1], -1, *query.shape[2:])
         # Equivalent to (but faster than):
         # attn_weights = query_states @ key.unsqueeze(2).transpose(-1, -2) * scaling
@@ -1421,6 +1423,8 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vCausalLMOutputWithPast]:
         r"""
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1429,8 +1433,6 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
 
         Example:
 
