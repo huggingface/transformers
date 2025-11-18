@@ -58,8 +58,6 @@ class DinoDetrConfig(PretrainedConfig):
             dilation (`bool`, *optional*, defaults to `False`):
                 Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
                 `use_timm_backbone` = `True`.
-            position_embedding_type (`str`, *optional*, defaults to `"SineHW"`):
-                Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
             encoder_n_points (`int`, *optional*, defaults to 4):
                 The number of sampled keys in each feature level for each attention head in the encoder.
             dropout (`float`, *optional*, defaults to 0.0):
@@ -152,7 +150,6 @@ class DinoDetrConfig(PretrainedConfig):
         num_heads=8,
         decoder_n_points=4,
         dilation=False,
-        position_embedding_type="SineHW",
         encoder_n_points=4,
         dropout=0.0,
         activation_function="relu",
@@ -219,7 +216,6 @@ class DinoDetrConfig(PretrainedConfig):
         self.backbone_config = backbone_config
         self.backbone_kwargs = backbone_kwargs
         self.use_pretrained_backbone = use_pretrained_backbone
-        self.position_embedding_type = position_embedding_type
         self.encoder_n_points = encoder_n_points
         self.dropout = dropout
         self.activation_function = activation_function
