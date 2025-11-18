@@ -415,8 +415,10 @@ class LogBinomialSoftmax(nn.Module):
         if probabilities.ndim == 3:
             probabilities = probabilities.unsqueeze(1)  # make it (batch_size, num_channels, height, width)
 
-        one_minus_probabilities = torch.clamp(1 - probabilities, eps, 1)
-        probabilities = torch.clamp(probabilities, eps, 1)
+        eps_tensor = torch.tensor(eps, device=probabilities.device, dtype=probabilities.dtype)
+        one_tensor = torch.tensor(1.0, device=probabilities.device, dtype=probabilities.dtype)
+        one_minus_probabilities = torch.clamp(1 - probabilities, eps_tensor, one_tensor)
+        probabilities = torch.clamp(probabilities, eps_tensor, one_tensor)
         y = (
             log_binom(self.k_minus_1, self.k_idx)
             + self.k_idx * torch.log(probabilities)
