@@ -198,57 +198,57 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip(reason="HiggsAudioV2 does not support assisted decoding.")
+    @pytest.mark.skip(reason="HiggsAudioV2 does not support assisted decoding.")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="HiggsAudioV2 does not support assisted decoding.")
+    @pytest.mark.skip(reason="HiggsAudioV2 does not support assisted decoding.")
     def test_assisted_decoding_sample(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="HiggsAudioV2 does not support beam search.")
+    @pytest.mark.skip(reason="HiggsAudioV2 does not support beam search.")
     def test_beam_sample_generate(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="HiggsAudioV2 does not support beam search.")
+    @pytest.mark.skip(reason="HiggsAudioV2 does not support beam search.")
     def test_beam_search_generate(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="HiggsAudioV2 does not support beam search.")
+    @pytest.mark.skip(reason="HiggsAudioV2 does not support beam search.")
     def test_beam_search_generate_dict_output(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="HiggsAudioV2 does not support beam search.")
+    @pytest.mark.skip(reason="HiggsAudioV2 does not support beam search.")
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="HiggsAudioV2 does not support beam search.")
+    @pytest.mark.skip(reason="HiggsAudioV2 does not support beam search.")
     def test_beam_sample_generate_dict_output(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="HiggsAudioV2 does not support beam search.")
+    @pytest.mark.skip(reason="HiggsAudioV2 does not support beam search.")
     def test_generate_from_inputs_embeds_1_beam_search(self, _, num_beams):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="HiggsAudioV2 does not support beam search.")
+    @pytest.mark.skip(reason="HiggsAudioV2 does not support beam search.")
     def test_model_parallel_beam_search(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="HiggsAudioV2 does not support prompt lookup decoding.")
+    @pytest.mark.skip(reason="HiggsAudioV2 does not support prompt lookup decoding.")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="HiggsAudioV2 does not support prompt lookup decoding.")
+    @pytest.mark.skip(reason="HiggsAudioV2 does not support prompt lookup decoding.")
     def test_prompt_lookup_decoding_stops_at_eos(self):
         pass
 
@@ -264,11 +264,11 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="HiggsAudioV2 has custom embedding approach (text and audio embeddings).")
+    @pytest.mark.skip(reason="HiggsAudioV2 has custom embedding approach (text and audio embeddings).")
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="HiggsAudioV2 has special embeddings that can never be tied")
+    @pytest.mark.skip(reason="HiggsAudioV2 has special embeddings that can never be tied")
     def test_tied_weights_keys(self):
         pass
 

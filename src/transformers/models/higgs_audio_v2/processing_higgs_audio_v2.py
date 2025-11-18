@@ -47,7 +47,6 @@ class HiggsAudioV2ProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "sampling_rate": 24000,
         },
-        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
@@ -153,6 +152,8 @@ class HiggsAudioV2Processor(ProcessorMixin):
                     f"The number of audio tokens in each text ({n_audio_in_text}) should be the same as the "
                     f"number of provided audios ({n_audio})."
                 )
+        elif sum(n_audio_in_text) == 0 and n_audio > 0:
+            raise ValueError("Audio were provided, but there are no audio tokens in the prompt")
 
         if audio is not None:
             # tokenize audio
@@ -160,6 +161,9 @@ class HiggsAudioV2Processor(ProcessorMixin):
             for audio_el in audio:
                 # TODO: @eustlb, this should be batched !!!
                 audio_inputs = self.feature_extractor(audio_el, **audio_kwargs)
+
+                # TODO: @eustlb, padding_mask should be supported...
+                audio_inputs.pop("padding_mask", None)
                 audio_inputs.to(self.audio_tokenizer.device)
                 audio_input_ids = self.audio_tokenizer.encode(**audio_inputs).audio_codes
 
@@ -169,6 +173,8 @@ class HiggsAudioV2Processor(ProcessorMixin):
                 audio_input_ids = torch.cat([bos_codes, audio_input_ids, eos_codes], dim=2)
 
                 audio_input_ids = self.build_delay_pattern(audio_input_ids)
+
+                # TODO: @eustlb, is the cpu call necessary ?
                 audio_input_ids_list.append(audio_input_ids[0].transpose(0, 1).cpu())
 
             # expand audio tokens in text
@@ -322,6 +328,17 @@ class HiggsAudioV2Processor(ProcessorMixin):
             if isinstance(audio_value, torch.Tensor):
                 audio_value = audio_value.cpu().float().numpy()
             sf.write(p, audio_value, sampling_rate)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+
+        # TODO: @eustlb, to be standardized!!
+        audio_tokenizer_input_names = [
+            "audio_input_ids",
+            "audio_input_ids_mask"
+        ]
+        return tokenizer_input_names + audio_tokenizer_input_names
 
 
 __all__ = ["HiggsAudioV2Processor"]
