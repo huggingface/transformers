@@ -26,7 +26,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
@@ -65,61 +65,84 @@ str_to_torch_dtype = {
 logger = logging.get_logger(__name__)
 
 
-def _glob_to_regex_src(glob: str, *, digits_only: bool = True) -> str:
+def compile_glob_rule(source_glob: str, target_glob: str) -> Tuple[re.Pattern, str]:
     """
-    Convert a glob with '*' into a regex *source* string. We don't use `glob.translate`
-    '*' matches (\\d+) if digits_only else (.+). Inner groups are non-capturing.
+    Convert a glob-style source + target into a full regex + replacement.
+
+    Rules:
+      - '*' in source_glob  →  (.*) capture group
+      - '*' in target_glob  →  \\1, \\2, ... backrefs
     """
-    star = r"(\d+)" if digits_only else r"(.+)"
-    return glob.replace(r"\*", star)
+    pattern = re.escape(source_glob).replace(r"\*", "(.*)")
+    regex = re.compile(pattern)
+
+    counter = 0
+
+    def _star_to_backref(_: re.Match) -> str:
+        nonlocal counter
+        counter += 1
+        return rf"\{counter}"
+
+    replacement = re.sub(r"\*", _star_to_backref, target_glob)
+    return regex, replacement
 
 
-def build_glob_alt(
-    globs: list[str],
-) -> tuple[re.Pattern, dict[str, str]]:
-    r"""
-    Build one compiled regex alternation with a named group per glob. This allows to run a single
-    re.match and get the correct group name to finally get which pattern matched.
-    Returns (compiled_regex, name->glob map).
-
-    Example:
-
-    ```py
-    >>> reg, map_ = build_glob_alt(["mlp.*.w1", "mlp.*.w2"])
-    >>> print(reg)
-    (re.compile(r'(?P<g0>.*mlp\.(\d+)\.w1)|(?P<g1>.*mlp\.(\d+)\.w2)', re.UNICODE),
-    >>> print(map_)
-    {'g0': 'mlp.*.w1', 'g1': 'mlp.*.w2'})
-    >>> match_ = reg.match("model.layers.0.mlp.0.w1.weight")
-    >>> print(match_.lastgroup)
-    'g0'
-    >>> print(map_[match_.lastgroup])
-    mlp.*.w1
-    ```
+def build_glob_alternation(globs: List[str]) -> Tuple[re.Pattern, Dict[str, str]]:
     """
-    name_map: dict[str, str] = {}
-    parts: list[str] = []
+    Build a single alternation regex with one named group per glob.
+    """
+    if not globs:
+        return re.compile(r"(?!x)"), {}
+    group_to_glob: Dict[str, str] = {}
+    branches: List[str] = []
 
-    for i, g in enumerate(globs):
-        name = f"g{i}"
-        name_map[name] = g
-        pat_src = _glob_to_regex_src(g)
-        prefix_src = ""
-        if pat_src.startswith("*"):
-            prefix_src = "."
-        elif not pat_src.startswith(r"\^") and not pat_src.startswith(r".*"):
-            prefix_src = ".*"
+    for i, glob in enumerate(globs):
+        group_name = f"g{i}"
+        group_to_glob[group_name] = glob
+        body = re.escape(glob).replace(r"\*", ".*")
+        branches.append(f"(?P<{group_name}>.*{body}.*)")
 
-        parts.append(f"(?P<{name}>{prefix_src}{pat_src}.*)")
+    alternation = re.compile("|".join(branches))
+    return alternation, group_to_glob
 
-    alt_src = "|".join(parts).replace("\\^", "^").replace("\\.", r"\.")
-    try:
-        reg = re.compile(alt_src)
-    except re.error as e:
-        logger.error(f"Error compiling regex for alternation: {alt_src}")
-        raise e
 
-    return reg, name_map
+def sub_key(
+    key: str,
+    alternation: re.Pattern,
+    group_to_glob: Dict[str, str],
+    compiled_rules: Dict[str, Tuple[re.Pattern, str]],
+) -> str:
+    """
+    Apply glob-based rewrite rules to a single key.
+    """
+    match = alternation.match(key)
+    if not match:
+        return key
+
+    matched_globs = [
+        group_to_glob[group_name]
+        for group_name, value in match.groupdict().items()
+        if value is not None
+    ]
+
+    result: str | None = None
+
+    for source_glob in matched_globs:
+        regex, replacement = compiled_rules[source_glob]
+
+        if not regex.search(key):
+            continue
+
+        candidate = regex.sub(replacement, key, count=1)
+
+        if result is None:
+            result = candidate
+        elif candidate != result:
+            raise ValueError(
+                f"Contradictory rules for key {key!r}: {result!r} vs {candidate!r}"
+            )
+
+    return result if result is not None else key
 
 
 def match_glob(key: str, alt: re.Pattern, name_map: dict[str, str]) -> Optional[str]:
@@ -127,7 +150,7 @@ def match_glob(key: str, alt: re.Pattern, name_map: dict[str, str]) -> Optional[
     Match the key against the alternation; return the original glob string that matched.
     """
     m = alt.match(key)
-    if not m:
+    if not m or m.lastgroup is None:
         return None
     return name_map.get(m.lastgroup)
 
@@ -140,8 +163,14 @@ class ConversionOps:
 
     @abstractmethod
     def convert(
-        self, value: Union[dict[str, torch.Tensor], Sequence[torch.Tensor], torch.Tensor], *args, **kwargs
-    ) -> torch.Tensor:
+        self,
+        value: dict[str, Any],
+        *,
+        source_keys: list[str],
+        target_keys: list[str],
+        concrete_target_keys: list[str],
+        config,
+    ) -> dict[str, list[torch.Tensor]]:
         raise NotImplementedError
 
 
@@ -160,11 +189,30 @@ class Chunk(ConversionOps):
         self.sizes = list(sizes) if sizes is not None else None
         self.reverse_op = Concatenate
 
-    def convert(self, value: torch.Tensor, *args, **kwargs) -> list[torch.Tensor]:
-        # chunk requires a single tensor input
-        if len(value) != 1 or len(value[0]) != 1:
-            raise ValueError("Chunk operation requires a single tensor input.")
-        return list(torch.chunk(value[0][0], self.chunks, dim=self.dim))
+    def convert(
+        self,
+        value: dict[str, list[torch.Tensor]],
+        *,
+        source_keys: list[str],
+        target_keys: list[str],
+        concrete_target_keys: list[str],
+        config,
+    ) -> dict[str, list[torch.Tensor]]:
+        if len(value) != 1:
+            raise ValueError("Chunk operation expects a single source tensor.")
+        tensors = next(iter(value.values()))
+        if len(tensors) != 1:
+            raise ValueError("Chunk operation received unexpected multiple tensors for a single source.")
+        tensor = tensors[0]
+        if not isinstance(tensor, torch.Tensor):
+            raise TypeError("Chunk operation requires torch.Tensor inputs.")
+        if self.sizes is not None:
+            chunks = torch.split(tensor, self.sizes, dim=self.dim)
+        else:
+            chunks = torch.chunk(tensor, self.chunks, dim=self.dim)
+        if len(chunks) != len(concrete_target_keys):
+            raise ValueError("Number of produced chunks does not match the expected targets.")
+        return {target: [chunk] for target, chunk in zip(concrete_target_keys, chunks)}
 
 
 class Concatenate(ConversionOps):
@@ -177,14 +225,31 @@ class Concatenate(ConversionOps):
         self.reverse_op = Chunk
 
     @torch.no_grad
-    def convert(self, value: Sequence[torch.Tensor], *args, **kwargs) -> torch.Tensor:
-        if isinstance(value[0], list):
-            value = [v[0] for v in value]
-        tensors = value
+    def convert(
+        self,
+        value: dict[str, list[torch.Tensor]],
+        *,
+        source_keys: list[str],
+        target_keys: list[str],
+        concrete_target_keys: list[str],
+        config,
+    ) -> dict[str, list[torch.Tensor]]:
+        if len(concrete_target_keys) != 1:
+            raise ValueError("Concatenate expects a single target key.")
+        tensors: list[torch.Tensor] = []
+        for key in source_keys:
+            tensor = value.get(key)
+            if tensor is None:
+                raise ValueError(f"Missing tensor for source pattern {key}.")
+            if len(tensor) != 1:
+                raise ValueError(f"Concatenate expected exactly one tensor per source, got {len(tensor)} for {key}.")
+            current = tensor[0]
+            if not isinstance(current, torch.Tensor):
+                raise TypeError("Concatenate can only operate on torch.Tensor instances.")
+            tensors.append(current)
         if not tensors:
-            raise ValueError("Fuse requires at least one tensor to concatenate.")
-
-        return torch.cat(tuple(tensors), dim=self.dim)
+            raise ValueError("Concatenate requires at least one tensor.")
+        return {concrete_target_keys[0]: [torch.cat(tuple(tensors), dim=self.dim)]}
 
 
 class MergeModulelist(Concatenate):
@@ -199,13 +264,26 @@ class MergeModulelist(Concatenate):
         self.reverse_op = SplitModulelist
 
     @torch.no_grad
-    def convert(self, value: Sequence[torch.Tensor], *args, **kwargs) -> list[torch.Tensor]:
-        merged = []
-        for group in value:
-            if not isinstance(group, Sequence) or len(group) == 0:
-                raise ValueError("MergeModulelist requires non-empty sub-sequences.")
-            group = [k for k in group if k.ndim]
-            merged.append(torch.stack(group, dim=self.dim))
+    def convert(
+        self,
+        value: dict[str, list[torch.Tensor]],
+        *,
+        source_keys: list[str],
+        target_keys: list[str],
+        concrete_target_keys: list[str],
+        config,
+    ) -> dict[str, list[torch.Tensor]]:
+        merged: dict[str, list[torch.Tensor]] = {}
+        rename_to_targets = len(target_keys) == len(source_keys) == len(concrete_target_keys)
+        for idx, key in enumerate(source_keys):
+            tensors = value.get(key, [])
+            if not tensors:
+                raise ValueError(f"MergeModulelist requires non-empty tensors for {key}.")
+            stacked = torch.stack(tensors, dim=self.dim)
+            if rename_to_targets:
+                merged[concrete_target_keys[idx]] = [stacked]
+            else:
+                merged[key] = [stacked]
         return merged
 
 
@@ -220,18 +298,25 @@ class SplitModulelist(ConversionOps):
         self.reverse_op = MergeModulelist
 
     @torch.no_grad
-    def convert(self, value: Sequence[torch.Tensor], *, context: dict[str, Any]) -> list[list[torch.Tensor]]:
-        if not isinstance(value, Sequence):
-            raise TypeError("SplitModulelist expects a sequence of tensors.")
+    def convert(
+        self,
+        value: dict[str, list[torch.Tensor]],
+        *,
+        source_keys: list[str],
+        target_keys: list[str],
+        concrete_target_keys: list[str],
+        config,
+    ) -> dict[str, list[torch.Tensor]]:
         if len(value) != len(self.sizes):
-            raise ValueError("Number of tensors does not match the provided split specifications.")
-
-        result: list[list[torch.Tensor]] = []
-        for tensor, split_sizes in zip(value, self.sizes):
-            if not isinstance(tensor, torch.Tensor):
+            raise ValueError("SplitModulelist received an unexpected number of tensors.")
+        result: dict[str, list[torch.Tensor]] = {}
+        for (key, tensors), split_sizes in zip(value.items(), self.sizes):
+            if len(tensors) != 1:
+                raise ValueError("SplitModulelist expects exactly one tensor per key.")
+            current_tensor = tensors[0]
+            if not isinstance(current_tensor, torch.Tensor):
                 raise TypeError("SplitModulelist can only split torch.Tensor instances.")
-            splits = torch.split(tensor, split_sizes, dim=self.dim)
-            result.append(list(splits))
+            result[key] = list(torch.split(current_tensor, split_sizes, dim=self.dim))
         return result
 
 
@@ -253,11 +338,21 @@ class PermuteForRope(ConversionOps):
 
     @torch.no_grad
     def convert(
-        self, value: Union[dict[str, torch.Tensor], Sequence[torch.Tensor], torch.Tensor], config
-    ) -> Union[dict[str, torch.Tensor], list[torch.Tensor], torch.Tensor]:
+        self,
+        value: dict[str, list[torch.Tensor]],
+        *,
+        source_keys: list[str],
+        target_keys: list[str],
+        concrete_target_keys: list[str],
+        config,
+    ) -> dict[str, list[torch.Tensor]]:
         self.config = config
-        out = [[self._apply(x) for x in inner] if isinstance(inner, list) else self._apply(inner) for inner in value]
-        return out
+        output: dict[str, list[torch.Tensor]] = {}
+        for key, tensors in value.items():
+            if len(tensors) != 1:
+                raise ValueError("PermuteForRope expects a single tensor per key.")
+            output[key] = [self._apply(tensors[0])]
+        return output
 
 
 @dataclass(slots=True)
@@ -302,11 +397,40 @@ class WeightConverter:
                 f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
             )
 
+        if not self.operations:
+            raise ValueError("WeightConverter requires at least one operation.")
+
+        self.collected_tensors: dict[str, defaultdict[str, list[Future]]] = {}
+        self.layer_targets: dict[str, list[str]] = {}
+
+    def add_tensor(self, layer_key: str, source_pattern: str, future: Future, resolved_targets: list[str]):
+        bucket = self.collected_tensors.setdefault(layer_key, defaultdict(list))
+        bucket[source_pattern].append(future)
+        self.layer_targets.setdefault(layer_key, resolved_targets)
+
 
 @dataclass(slots=True)
-class ConversionEntry:
-    weight_converter: WeightConverter
-    collected_tensors: dict = field(default_factory=lambda: defaultdict(dict))
+class WeightRenaming:
+    source_key: str
+    target_key: str
+    operations: list[ConversionOps] = field(default_factory=list, repr=False)
+    distributed_operation: Optional[TensorParallelLayer] = None
+    quantization_operation: Optional[ConversionOps] = None
+
+    def __post_init__(self):
+        self.source_keys = [self.source_key]
+        self.target_keys = [self.target_key]
+        self.collected_tensors: dict[str, defaultdict[str, list[Future]]] = {}
+        self.layer_targets: dict[str, list[str]] = {}
+
+    def add_tensor(self, layer_key: str, source_pattern: str, future: Future, resolved_targets: list[str]):
+        bucket = self.collected_tensors.setdefault(layer_key, defaultdict(list))
+        bucket[source_pattern].append(future)
+        self.layer_targets.setdefault(layer_key, resolved_targets)
+
+    def __post_init__(self):
+        self.source_keys = [self.source_key]
+        self.target_keys = [self.target_key]
 
 
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
@@ -432,7 +556,7 @@ class SkipLayer(Exception):
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
-    weight_mapping: dict[str, WeightConverter] | None,
+    weight_mapping: list[WeightConverter | WeightRenaming] | None,
     tp_plan: dict[str, str] | None,
     quantizer: HfQuantizer | None,
     dtype: torch.dtype | None = None,
@@ -449,7 +573,7 @@ def convert_and_load_state_dict_in_model(
     tp_plan = tp_plan or {}  # {glob_pattern: plan_obj_or_key}
     device_map = device_map or {}  # {exact_target_key: device}
     dtype_plan = dtype_plan or {}  # {glob_pattern: dtype}
-    weight_mapping = weight_mapping or {}  # {glob_pattern: WeightConverter}
+    weight_mapping = weight_mapping or []
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
 
@@ -459,48 +583,70 @@ def convert_and_load_state_dict_in_model(
     # Global thread_pool
     thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 
-    _patterns = list(itertools.chain.from_iterable([k.source_keys for k in weight_mapping]))
-    source_to_target = {sk: k for k in weight_mapping for sk in k.source_keys}
-    weight_pattern_alt, weight_pattern_by_group_name = build_glob_alt(_patterns)
-    tp_plan_alt, tp_plan_by_group_name = build_glob_alt(list(tp_plan.keys()))
-    dtype_policy_alt, dtype_policy_by_group_name = build_glob_alt(list(dtype_plan.keys()))
+    renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
+    all_mappings: list[WeightRenaming | WeightConverter] = renamings + converters
+    passthrough_renamings: dict[str, WeightRenaming] = {}
+
+    rename_patterns = [entry.source_key for entry in renamings]
+    rename_alt, rename_by_group = build_glob_alternation(rename_patterns)
+    rename_rules = {entry.source_key: compile_glob_rule(entry.source_key, entry.target_key) for entry in renamings}
+    rename_map = {entry.source_key: entry for entry in renamings}
+
+    converter_patterns = list(itertools.chain.from_iterable(converter.source_keys for converter in converters))
+    pattern_to_converter = {pattern: converter for converter in converters for pattern in converter.source_keys}
+    weight_pattern_alt, weight_pattern_by_group_name = build_glob_alternation(converter_patterns)
+    tp_plan = tp_plan or {}
+    dtype_plan = dtype_plan or {}
+    tp_plan_alt, tp_plan_by_group_name = build_glob_alternation(list(tp_plan.keys()))
+    dtype_policy_alt, dtype_policy_by_group_name = build_glob_alternation(list(dtype_plan.keys()))
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
-    # 1. Create the conversion entries
-    by_conversion_pattern: dict[str, ConversionEntry] = {}
     for original_key, tensor in state_dict:
-        matched_pattern = match_glob(original_key, weight_pattern_alt, weight_pattern_by_group_name)
+        renamed_key = original_key
+        applied_rename: WeightRenaming | None = None
+        rename_match = match_glob(original_key, rename_alt, rename_by_group)
+        if rename_match is not None:
+            rule = rename_rules.get(rename_match)
+            if rule is not None:
+                regex, replacement = rule
+                renamed_key = regex.sub(replacement, original_key, count=1)
+                applied_rename = rename_map.get(rename_match)
+
+        matched_pattern = match_glob(renamed_key, weight_pattern_alt, weight_pattern_by_group_name)
         if matched_pattern is not None:
-            converter = source_to_target[matched_pattern]  # TODO make sure its the ref
-            sub_with_extractor = partial(re.sub, matched_pattern.replace("*", r"(\d+)"), string=original_key)
-            entry_key = "|".join(converter.target_keys)
-            target_key = "|".join(map(sub_with_extractor, [k.replace("*", "\\1") for k in converter.target_keys]))
-            entry: ConversionEntry = by_conversion_pattern.setdefault(entry_key, ConversionEntry(converter))
-            converter_key = sub_with_extractor(matched_pattern)
+            converter = pattern_to_converter[matched_pattern]
+            extractor_pattern = matched_pattern.replace("*", r"(\d+)")
+            sub_with_extractor = partial(re.sub, extractor_pattern, string=renamed_key)
+            resolved_targets = list(map(sub_with_extractor, [k.replace("*", "\\1") for k in converter.target_keys]))
+            source_pattern = matched_pattern
         else:
-            converter = WeightConverter(original_key)
-            converter_key = entry_key = target_key = original_key
-            entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
+            converter = None
+            resolved_targets = [renamed_key]
+            source_pattern = rename_match or renamed_key
 
         _dtype = dtype
-        new_target_key = []  # test_load_with_mismatched_shapes for AutoModel.from_pretrained(AutoForCausal, vocab=10)
-        for t in target_key.split("|"):
+        new_target_key: list[str] = []
+        pending_quantize_op = None
+        for t in resolved_targets:
             if t.startswith(prefix) and meta_model_state_dict.get(re.sub(f"^{prefix}.", "", t, count=1)) is not None:
                 t = re.sub(f"^{prefix}.", "", t, count=1)
             elif meta_model_state_dict.get(f"{prefix}.{t}") is not None:
                 t = f"{prefix}.{t}"
-            new_target_key.append(t)
             empty_param = meta_model_state_dict.get(t)
-            # If it does not exist, it's unexpected
             if empty_param is None:
                 unexpected_keys.add(t)
                 continue
+            new_target_key.append(t)
 
             if quantizer is not None and quantizer.param_needs_quantization(model, t):
                 if quantizer.__class__.__name__ == "FineGrainedFP8HfQuantizer":
                     from .integrations.finegrained_fp8 import Fp8Quantize
 
-                    converter.quantization_operation = Fp8Quantize()  # TODO support other methods
+                    if converter is not None:
+                        converter.quantization_operation = Fp8Quantize()
+                    else:
+                        pending_quantize_op = Fp8Quantize()
                 else:
                     raise ValueError("This quantization method is gonna be supported SOOOON")
             else:
@@ -511,88 +657,113 @@ def convert_and_load_state_dict_in_model(
                 elif empty_param.dtype != _dtype:
                     _dtype = empty_param.dtype
 
+        if not new_target_key:
+            continue
+
         first_target_key = new_target_key[0]
-        target_key = "|".join(new_target_key)
+        if converter is not None:
+            mapping: WeightRenaming | WeightConverter = converter
+        elif applied_rename is not None:
+            mapping = applied_rename
+        else:
+            mapping = passthrough_renamings.get(renamed_key)
+            if mapping is None:
+                mapping = WeightRenaming(renamed_key, renamed_key)
+                passthrough_renamings[renamed_key] = mapping
+                all_mappings.append(mapping)
+
+        if pending_quantize_op is not None and getattr(mapping, "quantization_operation", None) is None:
+            mapping.quantization_operation = pending_quantize_op
 
         future = None
         if device_mesh:
             if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name):
                 empty_param = meta_model_state_dict.get(first_target_key)
-                if getattr(converter, "distributed_operation", {}) is None:
+                if getattr(mapping, "distributed_operation", None) is None:
                     tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
-                    converter.distributed_operation = tp_layer(
+                    mapping.distributed_operation = tp_layer(
                         device_mesh=device_mesh, rank=device_map[""].index, empty_param=empty_param.clone()
                     )
-                    # VERY IMPORTANT: this tells us wether we collected stuffs or not.
-                shard_index = len(entry.collected_tensors[target_key].get(converter_key, []))
+                layer_key = "|".join(new_target_key)
+                shard_index = len(mapping.collected_tensors.get(layer_key, {}).get(source_pattern, []))
                 future = spawn_tp_materialize(
                     thread_pool,
                     tensor,
                     _dtype,
-                    converter.distributed_operation,
+                    mapping.distributed_operation,
                     shard_index,
                 )
 
-        if future is None:  # If not TP, async materialize the tensors. TODO handle disk offload?
+        if future is None:
             future = spawn_materialize(thread_pool, tensor, _dtype)
-        entry.collected_tensors[target_key].setdefault(converter_key, []).append(future)
 
-    # 2. Actually convert the ckpt
-    inverse_converters = {}
-    keys = list(by_conversion_pattern.keys())
+        layer_key = "|".join(new_target_key)
+        mapping.add_tensor(layer_key, source_pattern, future, new_target_key)
 
-    with logging.tqdm(total=len(keys), desc="Loading weights") as pbar:
-        for key in keys[::-1]:  # revert to process simple keys first
-            group = by_conversion_pattern.pop(key)
-            converter = group.weight_converter
-            operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
-            for layer_name, tensors_for_this_layer in group.collected_tensors.items():
+    total_entries = sum(len(mapping.collected_tensors) for mapping in all_mappings)
+
+    with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
+        for mapping in all_mappings:
+            operations = mapping.operations if isinstance(mapping.operations, list) else [mapping.operations]
+            for layer_name, tensors_for_this_layer in mapping.collected_tensors.items():
                 pbar.update(1)
                 pbar.set_postfix({"Materializing param": layer_name})
                 pbar.refresh()
-                concrete_target_keys = layer_name.split("|")
+                concrete_target_keys = mapping.layer_targets.get(layer_name, [])
+                if not bool(set(concrete_target_keys) - unexpected_keys):
+                    continue
                 try:
-                    if bool(set(concrete_target_keys) - unexpected_keys):
-                        with log_to_misc(layer_name, misc):
-                            values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
+                    with log_to_misc(layer_name, misc):
+                        values = {
+                            pattern: [future.result() for future in futures]
+                            for pattern, futures in tensors_for_this_layer.items()
+                        }
 
+                    if operations:
+                        payload = values
                         for op in operations:
-                            with log_to_misc(layer_name, misc, (values, concrete_target_keys), operations):
-                                values = op.convert(values, model.config)
+                            with log_to_misc(layer_name, misc, (payload, concrete_target_keys), operations):
+                                payload = op.convert(
+                                    payload,
+                                    source_keys=mapping.source_keys,
+                                    target_keys=mapping.target_keys,
+                                    concrete_target_keys=concrete_target_keys,
+                                    config=model.config,
+                                )
+                    else:
+                        if len(values) != len(concrete_target_keys):
+                            raise ValueError("Renaming expects one tensor per target key.")
+                        payload = {}
+                        for src_key, target in zip(mapping.source_keys, concrete_target_keys):
+                            tensors = values.get(src_key, [])
+                            if not tensors:
+                                raise ValueError(f"Missing tensors for source pattern {src_key}.")
+                            payload[target] = tensors
 
-                        values = [values] if not isinstance(values, list) else values
-                        with log_to_misc(layer_name, misc, (values, concrete_target_keys), operations):
-                            realized_value = {
-                                k: t for k, t in zip(concrete_target_keys, values) if k not in unexpected_keys
-                            }
+                    realized_value = {}
+                    for key, tensors in payload.items():
+                        if key in unexpected_keys or not tensors:
+                            continue
+                        realized_value[key] = tensors[0]
 
-                        for k in list(realized_value.keys()).copy():
-                            if op := converter.quantization_operation:
-                                with log_to_misc(layer_name, misc, op=op):
-                                    realized_value.update(
-                                        op.convert(
-                                            {k: realized_value.pop(k)}, quant_config=quantizer.quantization_config
-                                        )
-                                    )
-
-                        for k, output_value in realized_value.items():
-                            for src in converter.source_keys:  # what should happen to k when we meet k at saving
-                                inverse_converters[k] = {src: converter}
-                            set_param_for_module(
-                                model,
-                                k,
-                                output_value,
-                                mismatch_keys,
-                                missing_keys,
-                                misc,
-                                converter.distributed_operation,
+                    if mapping.quantization_operation is not None and quantizer is not None:
+                        with log_to_misc(layer_name, misc, op=mapping.quantization_operation):
+                            realized_value = mapping.quantization_operation.convert(
+                                realized_value, quant_config=quantizer.quantization_config
                             )
 
+                    for k, output_value in realized_value.items():
+                        set_param_for_module(
+                            model,
+                            k,
+                            output_value,
+                            mismatch_keys,
+                            missing_keys,
+                            misc,
+                            mapping.distributed_operation,
+                        )
                 except SkipLayer:
                     continue
-            del group
-
-    model.inverse_converters = inverse_converters
     thread_pool.shutdown(wait=False)
     return missing_keys, unexpected_keys, mismatch_keys, misc
 

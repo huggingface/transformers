@@ -15,7 +15,7 @@
 
 from copy import deepcopy
 
-from .core_model_loading import Concatenate, MergeModulelist, WeightConverter
+from .core_model_loading import Concatenate, MergeModulelist, WeightConverter, WeightRenaming
 from .utils import is_torch_available
 
 
@@ -28,8 +28,8 @@ def _build_checkpoint_conversion_mapping():
         "mixtral": [
             WeightConverter(
                 source_keys=[
-                    "block_sparse_moe.experts.*.w1.weight",
-                    "block_sparse_moe.experts.*.w3.weight",
+                    "mlp.experts.*.w1.weight",
+                    "mlp.experts.*.w3.weight",
                 ],  # you give me a list of 2 keys, I collect a list of a list of tensors
                 target_keys="mlp.experts.gate_up_proj",  # target key gets the list of two tensors
                 operations=[
@@ -41,7 +41,7 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightConverter(
                 source_keys=[
-                    "block_sparse_moe.experts.*.w2.weight",
+                    "mlp.experts.*.w2.weight",
                 ],
                 target_keys="mlp.experts.down_proj",  # target key gets the list of two tensors
                 operations=[
@@ -55,7 +55,7 @@ def _build_checkpoint_conversion_mapping():
             #     "self_attn.qkv_proj",
             #     operations=[Concatenate(dim=0)],  # more like stack?
             # ),
-            WeightConverter("*.block_sparse_moe.", "*.mlp."),
+            WeightRenaming("*.block_sparse_moe.", "*.mlp."),
         ],
         "qwen2_moe": [
             WeightConverter(
@@ -73,36 +73,36 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "legacy": [
-            WeightConverter(
-                source_keys="LayerNorm.gamma",
-                target_keys="LayerNorm.weight",
+            WeightRenaming(
+                source_key="LayerNorm.gamma",
+                target_key="LayerNorm.weight",
             ),
-            WeightConverter(
-                source_keys="LayerNorm.beta",
-                target_keys="LayerNorm.bias",
+            WeightRenaming(
+                source_key="LayerNorm.beta",
+                target_key="LayerNorm.bias",
             ),
         ],
     }
     if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
         mapping["legacy"] += [
-            WeightConverter(
-                source_keys="weight_g",
-                target_keys="parametrizations.weight.original0",
+            WeightRenaming(
+                source_key="weight_g",
+                target_key="parametrizations.weight.original0",
             ),
-            WeightConverter(
-                source_keys="weight_v",
-                target_keys="parametrizations.weight.original1",
+            WeightRenaming(
+                source_key="weight_v",
+                target_key="parametrizations.weight.original1",
             ),
         ]
     else:
         mapping["legacy"] += [
-            WeightConverter(
-                source_keys="parametrizations.weight.original0",
-                target_keys="weight_g",
+            WeightRenaming(
+                source_key="parametrizations.weight.original0",
+                target_key="weight_g",
             ),
-            WeightConverter(
-                source_keys="parametrizations.weight.original1",
-                target_keys="weight_v",
+            WeightRenaming(
+                source_key="parametrizations.weight.original1",
+                target_key="weight_v",
             ),
         ]
 
