@@ -97,9 +97,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
-        tokenizer_backend_override = kwargs.pop("__tokenizer_backend", None)
-        if tokenizer_backend_override is not None:
-            tokenizer_object = tokenizer_backend_override
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
         gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
@@ -267,8 +264,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         eos = self.eos_token
         eos_token_id = self.eos_token_id
+        # If eos_token is None and add_eos_token is True, silently disable add_eos_token
+        # This allows tokenizers to set add_eos_token even if eos_token is not configured
         if eos is None and self.add_eos_token:
-            raise ValueError("add_eos_token = True but eos_token = None")
+            self._add_eos_token = False
+            return
 
         single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
         pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
@@ -284,20 +284,20 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     @property
     def add_eos_token(self):
-        return self._add_eos_token
+        return getattr(self, "_add_eos_token", False)
 
     @property
     def add_bos_token(self):
-        return self._add_bos_token
+        return getattr(self, "_add_bos_token", False)
 
     @add_eos_token.setter
     def add_eos_token(self, value):
-        self._add_eos_token = value
+        object.__setattr__(self, "_add_eos_token", value)
         self.update_post_processor()
 
     @add_bos_token.setter
     def add_bos_token(self, value):
-        self._add_bos_token = value
+        object.__setattr__(self, "_add_bos_token", value)
         self.update_post_processor()
 
     def _post_init(self):
@@ -1019,8 +1019,25 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if len(extra_special_tokens) > 0:
             kwargs["extra_special_tokens"] = extra_special_tokens
 
-        kwargs["__tokenizer_backend"] = tokenizer
-        return self.__class__(**kwargs)
+        # Always try to pass tokenizer_object in kwargs first (standard TokenizersBackend usage)
+        # If the class creates its own tokenizer and passes it explicitly to super().__init__(),
+        # this will cause a TypeError, which we catch and handle by removing tokenizer_object
+        # from kwargs and setting _tokenizer directly after initialization.
+        kwargs["tokenizer_object"] = tokenizer
+        try:
+            return self.__class__(**kwargs)
+        except TypeError as e:
+            # Check if the error is due to multiple values for tokenizer_object
+            if "multiple values for keyword argument 'tokenizer_object'" in str(e):
+                # Class creates its own tokenizer and passes it explicitly (like LayoutLMv3Tokenizer)
+                # Remove tokenizer_object from kwargs and set _tokenizer directly
+                kwargs.pop("tokenizer_object", None)
+                new_tokenizer = self.__class__(**kwargs)
+                new_tokenizer._tokenizer = tokenizer
+                return new_tokenizer
+            else:
+                # Some other TypeError, re-raise it
+                raise
 
 
 class TokenizersExtractor:
