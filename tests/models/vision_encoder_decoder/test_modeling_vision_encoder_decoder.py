@@ -313,9 +313,9 @@ class EncoderDecoderMixin:
         generated_output = enc_dec_model.generate(
             inputs,
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
         )
-        self.assertEqual(generated_output.shape, (inputs.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(generated_output.shape, (inputs.shape[0],) + (enc_dec_model.generation_config.max_length,))
 
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -883,10 +883,12 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
             decoder_start_token_id=enc_dec_model.config.decoder.bos_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
             **kwargs,
         )
-        self.assertEqual(generated_output.shape, (pixel_values.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            generated_output.shape, (pixel_values.shape[0],) + (enc_dec_model.generation_config.max_length,)
+        )
 
     @unittest.skip(reason="There are no published pretrained TrOCR checkpoints for now")
     def test_real_model_save_load_from_pretrained(self):
@@ -994,10 +996,12 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
             decoder_start_token_id=enc_dec_model.config.decoder.bos_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
             **kwargs,
         )
-        self.assertEqual(generated_output.shape, (pixel_values.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            generated_output.shape, (pixel_values.shape[0],) + (enc_dec_model.generation_config.max_length,)
+        )
 
     @unittest.skip(reason="VIT2GPT2 also has an integration test for testinf save-load")
     def test_real_model_save_load_from_pretrained(self):
@@ -1105,10 +1109,12 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
             decoder_start_token_id=enc_dec_model.config.decoder.bos_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
             **kwargs,
         )
-        self.assertEqual(generated_output.shape, (pixel_values.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            generated_output.shape, (pixel_values.shape[0],) + (enc_dec_model.generation_config.max_length,)
+        )
 
     @unittest.skip(reason="Donut has an Integration test for that")
     def test_real_model_save_load_from_pretrained(self):
