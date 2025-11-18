@@ -30,7 +30,7 @@ from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, dynamic_rope_update, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters, dynamic_rope_update, rope_config_standardize_and_validate
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -213,12 +213,12 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 5000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self, ignore_keys={"mrope_section", "mrope_interleaved"})
+        self.rope_parameters["rope_theta"] = kwargs.get("rope_theta", 5000000.0)
+        rope_config_standardize_and_validate(self, ignore_keys={"mrope_section", "mrope_interleaved"})
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 

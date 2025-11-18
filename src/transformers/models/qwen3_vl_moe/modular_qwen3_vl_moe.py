@@ -23,7 +23,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
@@ -190,12 +190,12 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         self.head_dim = head_dim or hidden_size // num_attention_heads
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 5000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self, ignore_keys={"mrope_section", "mrope_interleaved"})
+        self.rope_parameters["rope_theta"] = kwargs.get("rope_theta", 5000000.0)
+        rope_config_standardize_and_validate(self, ignore_keys={"mrope_section", "mrope_interleaved"})
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step

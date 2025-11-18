@@ -22,7 +22,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
 from ...utils import logging
 
 
@@ -161,12 +161,12 @@ class GraniteMoeConfig(PreTrainedConfig):
         self.use_cache = use_cache
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters["rope_theta"] = kwargs.get("rope_theta", 10000.0)
+        rope_config_standardize_and_validate(self)
 
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
@@ -188,8 +188,6 @@ class GraniteMoeConfig(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        rope_config_validation(self)
 
 
 __all__ = ["GraniteMoeConfig"]

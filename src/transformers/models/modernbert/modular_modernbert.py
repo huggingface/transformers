@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_flash_attn_2_available, logging
 from ...utils.import_utils import is_triton_available
@@ -234,9 +234,6 @@ class ModernBertConfig(PreTrainedConfig):
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
         self.repad_logits_with_grad = repad_logits_with_grad
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
@@ -255,13 +252,21 @@ class ModernBertConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
+        default_rope_params = {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "default"},
+        }
+        rope_parameters = rope_parameters if rope_parameters is not None else default_rope_params
+        if (rope_scaling := kwargs.pop("rope_scaling", None)) is not None:
+            rope_parameters["full_attention"].update(rope_scaling)
+            rope_parameters["sliding_attention"].update(rope_scaling)
+        rope_parameters["full_attention"]["rope_theta"] = getattr(self, "global_rope_theta", 160_000.0)
+        rope_parameters["sliding_attention"]["rope_theta"] = getattr(self, "local_rope_theta", 10000.0)
+
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "global_rope_theta", 160_000.0)
-        rope_local_base_freq = getattr(self, "local_rope_theta", 10000.0)
-        standardize_rope_params(
-            self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_local_base_freq}
-        )
-        rope_config_validation(self)
+        rope_config_standardize_and_validate(self)
 
     def to_dict(self):
         output = super().to_dict()

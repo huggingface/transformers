@@ -14,7 +14,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import standardize_rope_params
+from ...modeling_rope_utils import rope_config_standardize_and_validate
 
 
 class EfficientLoFTRConfig(PreTrainedConfig):
@@ -176,12 +176,13 @@ class EfficientLoFTRConfig(PreTrainedConfig):
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters or {}
+        rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters if rope_parameters is not None else {} or {}
         self.rope_parameters["partial_rotary_factor"] = kwargs.get("partial_rotary_factor", 4.0)
         self.rope_parameters["rope_theta"] = kwargs.get("rope_theta", 10000.0)
 
         # Standardize and validate the correctness of rotary position embeddings parameters
-        standardize_rope_params(self)
+        rope_config_standardize_and_validate(self)
         super().__init__(**kwargs)
 
 

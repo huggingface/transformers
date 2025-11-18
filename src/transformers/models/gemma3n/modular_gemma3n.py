@@ -28,7 +28,7 @@ from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -236,9 +236,6 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.layer_types = layer_types
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         if layer_types is None:
             self.layer_types = [
@@ -249,13 +246,20 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
 
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
+        default_rope_params = {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "default"},
+        }
+        rope_parameters = rope_parameters if rope_parameters is not None else default_rope_params
+        if (rope_scaling := kwargs.pop("rope_scaling", None)) is not None:
+            rope_parameters["full_attention"].update(rope_scaling)
+        rope_parameters["full_attention"]["rope_theta"] = kwargs.get("rope_theta", 1_000_000.0)
+        rope_parameters["sliding_attention"]["rope_theta"] = kwargs.get("rope_local_base_freq", 10000.0)
+
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1000000.0)
-        rope_local_base_freq = kwargs.get("rope_local_base_freq", 100000.0)
-        standardize_rope_params(
-            self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_local_base_freq}
-        )
-        rope_config_validation(self)
+        rope_config_standardize_and_validate(self)
 
         self.hidden_size_per_layer_input = hidden_size_per_layer_input
         self.num_kv_shared_layers = num_kv_shared_layers

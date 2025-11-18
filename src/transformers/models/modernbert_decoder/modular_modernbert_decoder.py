@@ -28,7 +28,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -208,9 +208,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         self.classifier_activation = classifier_activation
         self.use_cache = use_cache
         self.global_attn_every_n_layers = global_attn_every_n_layers
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
         # for consistency with ModernBert
         self.reference_compile = False
 
@@ -225,13 +222,21 @@ class ModernBertDecoderConfig(PreTrainedConfig):
                 else:
                     self.layer_types.append("full_attention")
 
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
+        default_rope_params = {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "default"},
+        }
+        rope_parameters = rope_parameters if rope_parameters is not None else default_rope_params
+        if (rope_scaling := kwargs.pop("rope_scaling", None)) is not None:
+            rope_parameters["full_attention"].update(rope_scaling)
+            rope_parameters["sliding_attention"].update(rope_scaling)
+        rope_parameters["full_attention"]["rope_theta"] = getattr(self, "global_rope_theta", 160_000.0)
+        rope_parameters["sliding_attention"]["rope_theta"] = getattr(self, "local_rope_theta", 10000.0)
+
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "global_rope_theta", 160_000.0)
-        rope_local_base_freq = getattr(self, "local_rope_theta", 10000.0)
-        standardize_rope_params(
-            self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_local_base_freq}
-        )
-        rope_config_validation(self)
+        rope_config_standardize_and_validate(self)
 
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
         self.sliding_window = local_attention // 2 if local_attention else -1

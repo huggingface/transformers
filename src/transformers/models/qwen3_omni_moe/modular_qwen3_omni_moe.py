@@ -42,7 +42,7 @@ from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
@@ -217,9 +217,8 @@ class Qwen3OmniMoeTextConfig(Qwen3MoeConfig):
         self.sliding_window = sliding_window
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self, ignore_keys={"mrope_section", "interleaved", "mrope_interleaved"})
+        self.rope_parameters["rope_theta"] = kwargs.get("rope_theta", 1000000.0)
+        rope_config_standardize_and_validate(self, ignore_keys={"mrope_section", "interleaved", "mrope_interleaved"})
 
 
 class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
@@ -674,12 +673,12 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters["rope_theta"] = kwargs.get("rope_theta", 10000.0)
+        rope_config_standardize_and_validate(self)
 
     @property
     def layer_types(self):

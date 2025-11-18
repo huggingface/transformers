@@ -22,7 +22,7 @@
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
 
@@ -187,16 +187,18 @@ class Gemma3TextConfig(PreTrainedConfig):
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
 
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
+        default_rope_params = {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "default"},
+        }
+        rope_parameters = rope_parameters if rope_parameters is not None else default_rope_params
         if (rope_scaling := kwargs.pop("rope_scaling", None)) is not None:
-            if rope_parameters is None:
-                rope_parameters = {"sliding_attention": {"rope_type": "default"}, "full_attention": rope_scaling}
-            elif "full_attention" in rope_parameters:
-                rope_parameters["full_attention"].update(rope_scaling)
-            else:
-                rope_parameters.update(rope_scaling)
+            rope_parameters["full_attention"].update(rope_scaling)
+        rope_parameters["full_attention"]["rope_theta"] = kwargs.get("rope_theta", 1_000_000.0)
+        rope_parameters["sliding_attention"]["rope_theta"] = kwargs.get("rope_local_base_freq", 10000.0)
 
-        self.rope_parameters = rope_parameters
         self.use_bidirectional_attention = use_bidirectional_attention
         if use_bidirectional_attention:
             self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
@@ -212,12 +214,7 @@ class Gemma3TextConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 1_000_000.0)
-        rope_local_base_freq = getattr(self, "rope_local_base_freq", 10000.0)
-        standardize_rope_params(
-            self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_local_base_freq}
-        )
-        rope_config_validation(self)
+        rope_config_standardize_and_validate(self)
 
 
 class Gemma3Config(PreTrainedConfig):
