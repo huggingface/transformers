@@ -1002,7 +1002,8 @@ class Trainer:
                 lengths=lengths,
                 model_input_name=model_input_name,
             )
-
+        if self.args.sequential_sampling:
+            return SequentialSampler(train_dataset)
         else:
             return RandomSampler(train_dataset)
 
