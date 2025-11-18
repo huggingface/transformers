@@ -89,7 +89,7 @@ class CsmGenerationMixin(GenerationMixin):
         return kept_criteria
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Any
+        self, generation_config: Optional[GenerationConfig], **kwargs: Any
     ) -> tuple[GenerationConfig, dict]:
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
@@ -104,9 +104,7 @@ class CsmGenerationMixin(GenerationMixin):
         kwargs = {k: v for k, v in kwargs.items() if not k.startswith("depth_decoder_")}
 
         # initialize the generation config
-        generation_config, model_kwargs = super()._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
+        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
         self.depth_decoder.generation_config.update(**depth_decoder_kwargs)
 
         # ensure the depth decoder generation config is valid

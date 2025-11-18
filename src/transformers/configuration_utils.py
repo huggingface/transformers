@@ -303,7 +303,8 @@ class PreTrainedConfig(PushToHubMixin):
         self.decoder_start_token_id = decoder_start_token_id
 
         # Parameters for sequence generation saved in the config are popped instead of loading them.
-        for parameter_name in self._get_global_generation_defaults().keys():
+        generation_params = []
+        for parameter_name in generation_params:
             kwargs.pop(parameter_name, None)
 
         # Name or path to the pretrained checkpoint
@@ -442,13 +443,11 @@ class PreTrainedConfig(PushToHubMixin):
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
-        non_default_generation_parameters = self._get_non_default_generation_parameters()
-        if len(non_default_generation_parameters) > 0:
+        generation_parameters = self._get_generation_parameters()
+        if len(generation_parameters) > 0:
             raise ValueError(
-                "Some non-default generation parameters are set in the model config. These should go into either a) "
-                "`model.generation_config` (as opposed to `model.config`); OR b) a GenerationConfig file "
-                "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model)."
-                f"\nNon-default generation parameters: {str(non_default_generation_parameters)}",
+                "Some generation parameters are set in the model config. These should go into `model.generation_config`"
+                f"as opposed to `model.config. \nGeneration parameters found: {str(generation_parameters)}",
             )
 
         os.makedirs(save_directory, exist_ok=True)
@@ -1059,58 +1058,16 @@ class PreTrainedConfig(PushToHubMixin):
 
         cls._auto_class = auto_class
 
-    @staticmethod
-    def _get_global_generation_defaults() -> dict[str, Any]:
-        return {
-            "max_length": 20,
-            "min_length": 0,
-            "do_sample": False,
-            "early_stopping": False,
-            "num_beams": 1,
-            "temperature": 1.0,
-            "top_k": 50,
-            "top_p": 1.0,
-            "typical_p": 1.0,
-            "repetition_penalty": 1.0,
-            "length_penalty": 1.0,
-            "no_repeat_ngram_size": 0,
-            "encoder_no_repeat_ngram_size": 0,
-            "bad_words_ids": None,
-            "num_return_sequences": 1,
-            "output_scores": False,
-            "return_dict_in_generate": False,
-            "forced_bos_token_id": None,
-            "forced_eos_token_id": None,
-            "remove_invalid_values": False,
-            "exponential_decay_length_penalty": None,
-            "suppress_tokens": None,
-            "begin_suppress_tokens": None,
-            # Deprecated arguments (moved to the Hub). TODO joao, manuel: remove in v4.62.0
-            "num_beam_groups": 1,
-            "diversity_penalty": 0.0,
-        }
-
-    def _get_non_default_generation_parameters(self) -> dict[str, Any]:
+    def _get_generation_parameters(self) -> dict[str, Any]:
         """
         Gets the non-default generation parameters on the PreTrainedConfig instance
         """
-        non_default_generation_parameters = {}
-        decoder_attribute_name = None
+        generation_params = {}
+        # for f in ["generate_params"]:
+        #     if hasattr(self, f.name):
+        #         generation_params[f.name] = getattr(self, f.name)
 
-        # If it is a composite model, we want to check the subconfig that will be used for generation
-        self_decoder_config = self if decoder_attribute_name is None else getattr(self, decoder_attribute_name)
-
-        for parameter_name, default_global_value in self._get_global_generation_defaults().items():
-            if hasattr(self_decoder_config, parameter_name):
-                parameter_value = getattr(self_decoder_config, parameter_name, None)
-                # Two cases in which is okay for the model config to hold generation config parameters:
-                # 1. The parameter is set to `None`, effectively delegating its value to the generation config
-                # 2. The parameter is set the global generation defaults
-                if parameter_value is None or parameter_value == default_global_value:
-                    continue
-                non_default_generation_parameters[parameter_name] = getattr(self_decoder_config, parameter_name)
-
-        return non_default_generation_parameters
+        return generation_params
 
     def get_text_config(self, decoder=None, encoder=None) -> "PreTrainedConfig":
         """
