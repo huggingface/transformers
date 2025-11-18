@@ -586,9 +586,12 @@ def _init_infer_auto_device_map(
 
     module_sizes, _ = compute_module_sizes(model, hf_quantizer)
 
-    if tied_parameters is None and len(model.all_tied_weights_keys) > 0:
-        # create a list of list of tied params
-        tied_parameters = [list(t) for t in model.all_tied_weights_keys.items()]
+    if tied_parameters is None:
+        if len(model.all_tied_weights_keys) > 0:
+            # create a list of list of tied params
+            tied_parameters = [list(t) for t in model.all_tied_weights_keys.items()]
+        else:
+            tied_parameters = [[]]
 
     # Direct submodules and parameters
     modules_to_treat = (
