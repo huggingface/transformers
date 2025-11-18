@@ -398,7 +398,7 @@ def dot_natural_key(s: str):
 
 @contextmanager
 def log_to_misc(
-    full_param_name: str,
+    all_target_keys: str,
     misc: MutableMapping[str, str],
     extras: Any = None,
     op: Union[list[ConversionOps], ConversionOps, None] = None,
@@ -422,16 +422,16 @@ def log_to_misc(
         if isinstance(extras, tuple) and len(extras) == 2:
             values, target_keys = extras
             descriptor = f"{op_name} " if op_name else ""
-            misc[full_param_name] = (
+            misc[all_target_keys] = (
                 f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {len(values)}"
             )
         elif isinstance(extras, str):
             suffix = f" via {op_name}" if op_name else ""
-            misc[full_param_name] = f"{e}\nError{suffix} when processing parameter {extras}"
+            misc[all_target_keys] = f"{e}\nError{suffix} when processing parameter {extras}"
         elif extras is None and op_name:
-            misc[full_param_name] = f"{op_name}: {e}"
+            misc[all_target_keys] = f"{op_name}: {e}"
         else:
-            misc[full_param_name] = f"{extras} |Error: {e}"
+            misc[all_target_keys] = f"{extras} |Error: {e}"
         raise SkipLayer()
 
 
