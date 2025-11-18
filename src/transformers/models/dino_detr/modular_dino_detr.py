@@ -4,14 +4,18 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
 
+from torch.nn import MultiheadAttention
+
 from transformers.modeling_outputs import ModelOutput
 from transformers.modeling_utils import PreTrainedModel
 from transformers.models.detr.image_processing_detr import center_to_corners_format
 from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 
 from ...activations import ACT2FN
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
+    TransformersKwargs,
     is_scipy_available,
     is_timm_available,
     is_torch_available,
@@ -19,7 +23,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-from ...utils.generic import can_return_tuple
+from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrConvEncoder,
     DeformableDetrEncoderLayer,
@@ -92,19 +96,12 @@ class DinoDetrEncoderOutput(ModelOutput):
             Stacked intermediate hidden states (output of each layer of the encoder).
         intermediate_ref (`torch.FloatTensor`, *optional*):
             Stacked intermediate reference points (reference points of each layer of the encoder).
-        encoder_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden states of the encoder at the output of each layer.
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
-            Attention weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
     output: torch.FloatTensor
     intermediate_output: Optional[torch.FloatTensor] = None
     intermediate_ref: Optional[torch.FloatTensor] = None
     encoder_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -117,14 +114,10 @@ class DinoDetrDecoderOutput(ModelOutput):
             Stacked intermediate hidden states (output of each layer of the decoder).
         ref_points (`Optional[List[torch.FloatTensor]]`, *optional*):
             Stacked intermediate reference points (reference points of each layer of the decoder).
-        attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
-            Attention weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
     intermediate: list[torch.FloatTensor]
     ref_points: Optional[list[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -141,21 +134,12 @@ class DinoDetrEncoderDecoderOutput(ModelOutput):
             Final hidden states of the encoder.
         reference_points_encoder (`Optional[torch.FloatTensor]`, *optional*):
             Final reference points of the encoder.
-        encoder_states (`Optional[torch.FloatTensor]`, *optional*):
-            Hidden states of the encoder at the output of each layer.
-        encoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
-            Attention weights of the encoder at each layer.
-        decoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
-            Attention weights of the decoder at each layer.
     """
 
     hidden_states: torch.FloatTensor
     reference_points: Optional[torch.FloatTensor] = None
     hidden_states_encoder: Optional[torch.FloatTensor] = None
     reference_points_encoder: Optional[torch.FloatTensor] = None
-    encoder_states: Optional[torch.FloatTensor] = None
-    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -180,22 +164,16 @@ class DinoDetrModelOutput(ModelOutput):
             Tuple of hidden states of the encoder at the output of each layer.
         decoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
             Tuple of hidden states of the decoder at the output of each layer.
-        encoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
-            Tuple of attention weights of the encoder at each layer.
-        decoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
-            Tuple of attention weights of the decoder at each layer.
     """
 
     last_hidden_state: torch.FloatTensor
-    hidden_states: Optional[list[torch.FloatTensor]] = None
+    hidden_states_model: Optional[list[torch.FloatTensor]] = None
     references: Optional[list[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_reference: Optional[torch.FloatTensor] = None
     denoising_meta: Optional[dict] = None
     encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -234,10 +212,6 @@ class DinoDetrObjectDetectionOutput(ModelOutput):
             Tuple of hidden states of the encoder at the output of each layer.
         decoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
             Tuple of hidden states of the decoder at the output of each layer.
-        encoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
-            Tuple of attention weights of the encoder at each layer.
-        decoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
-            Tuple of attention weights of the decoder at each layer.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -252,8 +226,6 @@ class DinoDetrObjectDetectionOutput(ModelOutput):
     denoising_meta: Optional[dict] = None
     encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 def _get_clones(module: torch.nn.Module, N: int, layer_share: bool = False):
@@ -697,14 +669,10 @@ class DinoDetrDecoderLayer(nn.Module):
             A list of tensors representing the spatial shapes of each memory level.
         self_attn_mask (`Optional[torch.LongTensor]`, *optional*):
             A tensor of shape `(num_queries, num_queries)` representing the self-attention mask.
-        output_attentions (`Optional[bool]`, *optional*):
-            Whether to return attention weights.
 
     Returns:
         `Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor]]]`:
             - `queries` (`torch.FloatTensor`): The updated queries after passing through the decoder layer.
-            - `attn_weights_total` (`Optional[Tuple[torch.FloatTensor]]`): A tuple of attention weights for each module
-              in the sequence, if `output_attentions` is `True`.
     """
 
     def __init__(self, config: DinoDetrConfig):
@@ -734,7 +702,7 @@ class DinoDetrDecoderLayer(nn.Module):
         return tensor if pos is None else tensor + pos
 
     # Fully connected
-    def forward_ffn(self, pixel_values: torch.FloatTensor):
+    def forward_ffn(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         transformed_values = self.linear2(self.dropout3(self.activation(self.linear1(pixel_values))))
         output = pixel_values + self.dropout4(transformed_values)
         output = self.norm3(output)
@@ -746,6 +714,7 @@ class DinoDetrDecoderLayer(nn.Module):
         queries: torch.FloatTensor,
         query_position_embeddings: torch.FloatTensor,
         self_attn_mask: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         attn_weights = None
         q = k = self.with_pos_embed(queries, query_position_embeddings)
@@ -766,6 +735,7 @@ class DinoDetrDecoderLayer(nn.Module):
         memory_level_start_index: torch.FloatTensor,
         memory_spatial_shapes: torch.FloatTensor,
         memory_spatial_shapes_list: list[torch.FloatTensor],
+        **kwargs: Unpack[TransformersKwargs],
     ):
         transformed_queries, attn_weights = self.cross_attn(
             hidden_states=self.with_pos_embed(queries, query_position_embeddings).transpose(0, 1),
@@ -793,17 +763,15 @@ class DinoDetrDecoderLayer(nn.Module):
         memory_spatial_shapes: torch.FloatTensor,
         memory_spatial_shapes_list: list[torch.FloatTensor],
         self_attn_mask: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        attn_weights_total = ()
-
         # Self Attention
         queries, attn_weights = self.forward_sa(
             queries=queries,
             query_position_embeddings=query_position_embeddings,
             self_attn_mask=self_attn_mask,
+            **kwargs,
         )
-        attn_weights_total += (attn_weights,)
 
         # Deformable Cross Attention
         queries, attn_weights = self.forward_ca(
@@ -815,15 +783,13 @@ class DinoDetrDecoderLayer(nn.Module):
             memory_level_start_index=memory_level_start_index,
             memory_spatial_shapes=memory_spatial_shapes,
             memory_spatial_shapes_list=memory_spatial_shapes_list,
+            **kwargs,
         )
-        attn_weights_total += (attn_weights,)
 
         # Fully Connected Layer
-        queries = self.forward_ffn(queries)
+        queries = self.forward_ffn(queries, **kwargs)
 
         outputs = (queries,)
-        if output_attentions:
-            outputs += (attn_weights_total,)
 
         return outputs
 
@@ -862,16 +828,12 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
             A tensor of shape `(batch_size, num_levels, 2)` representing the valid ratios for each level.
         key_padding_mask (`torch.LongTensor`):
             A tensor of shape `(batch_size, total_spatial_elements)` indicating which spatial elements are padded.
-        output_attentions (`Optional[bool]`, *optional*):
-            Whether to return attention weights.
 
     Returns:
         `DinoDetrEncoderOutput`:
             - `output` (`torch.FloatTensor`): The final output of the encoder.
             - `intermediate_output` (`Optional[torch.FloatTensor]`): Stacked intermediate hidden states.
             - `intermediate_ref` (`Optional[torch.FloatTensor]`): Stacked intermediate reference points.
-            - `encoder_states` (`Tuple[torch.FloatTensor]`): Hidden states of the encoder at each layer.
-            - `attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights for each layer, if `output_attentions` is `True`.
 
     """
 
@@ -927,7 +889,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         level_start_index: torch.FloatTensor,
         valid_ratios: torch.FloatTensor,
         key_padding_mask: torch.LongTensor,
-        output_attentions: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Forward pass for the encoder module.
@@ -950,8 +912,6 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
             `torch.FloatTensor`:
                 A tensor of shape `(batch_size, sum(height_i * width_i), hidden_size)` representing the output embeddings.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        all_self_attns = () if output_attentions else None
 
         output = input_embeddings
 
@@ -973,12 +933,9 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
                 spatial_shapes_list=spatial_shapes_list,
                 level_start_index=level_start_index,
                 attention_mask=key_padding_mask,
-                output_attentions=output_attentions,
             )
 
             output = output_layer[0]
-            if output_attentions:
-                all_self_attns += (output_layer[1],)
 
         encoder_states = encoder_states + (output,)
         if self.norm is not None:
@@ -991,7 +948,6 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
             intermediate_output=intermediate_output,
             intermediate_ref=intermediate_ref,
             encoder_states=encoder_states,
-            attentions=all_self_attns,
         )
 
 
@@ -1035,14 +991,11 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
             A tensor of shape `(num_levels, 2)` where each row contains the height and width of a feature map level.
         valid_ratios (`Optional[torch.FloatTensor]`, *optional*):
             A tensor of shape `(batch_size, num_levels, 2)` representing the valid ratios for each level.
-        output_attentions (`Optional[bool]`, *optional*):
-            Whether to return attention weights.
 
     Returns:
         `DinoDetrDecoderOutput` object containing:
             - `intermediate` (`List[torch.FloatTensor]`): Stacked intermediate hidden states.
             - `ref_points` (`List[torch.FloatTensor]`): Stacked intermediate reference points.
-            - `attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights for each layer, if `output_attentions` is `True`.
     """
 
     def __init__(
@@ -1086,7 +1039,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         level_start_index: Optional[torch.FloatTensor] = None,
         spatial_shapes: Optional[torch.FloatTensor] = None,
         valid_ratios: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Forward pass for the decoder.
@@ -1109,8 +1062,6 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
             `torch.FloatTensor`:
                 A tensor of shape `(num_queries, batch_size, d_model)` representing the updated target embeddings.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        all_attns = () if output_attentions else None
 
         output = queries
 
@@ -1134,7 +1085,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
             query_pos = self.ref_point_head(query_sine_embed)  # nq, bs, 256
 
             output_layer = layer(
-                queries=output,
+                output,
                 query_position_embeddings=query_pos,
                 query_reference_points=reference_points_input,
                 memory=memory,
@@ -1143,11 +1094,9 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
                 memory_spatial_shapes=spatial_shapes,
                 memory_spatial_shapes_list=spatial_shapes_list,
                 self_attn_mask=self_attn_mask,
-                output_attentions=output_attentions,
+                **kwargs,
             )
             output = output_layer[0]
-            if output_attentions:
-                all_attns += (output_layer[1],)
 
             # Compute new reference points
             if self.bbox_embed is not None:
@@ -1161,7 +1110,6 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         return DinoDetrDecoderOutput(
             intermediate=[itm_out.transpose(0, 1) for itm_out in intermediate],
             ref_points=[itm_refpoint.transpose(0, 1) for itm_refpoint in ref_points],
-            attentions=all_attns,
         )
 
 
@@ -1196,8 +1144,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
             A tensor of shape `(batch_size, num_queries, d_model)` representing the input queries.
         attn_mask (`Optional[torch.FloatTensor]`, *optional*):
             A tensor representing the attention mask for the decoder.
-        output_attentions (`Optional[bool]`, *optional*):
-            Whether to return attention weights.
 
     Returns:
         `DinoDetrEncoderDecoderOutput` object containing:
@@ -1205,9 +1151,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
             - `reference_points` (`torch.FloatTensor`): The final reference points of the decoder.
             - `hidden_states_encoder` (`Optional[torch.FloatTensor]`): The final hidden states of the encoder.
             - `reference_points_encoder` (`Optional[torch.FloatTensor]`): The final reference points of the encoder.
-            - `encoder_states` (`Optional[Tuple[torch.FloatTensor]]`): Hidden states of the encoder at each layer.
-            - `encoder_attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights of the encoder at each layer.
-            - `decoder_attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights of the decoder at each layer.
     """
 
     def __init__(self, config):
@@ -1287,7 +1230,7 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
         contrastive_query_reference_points: torch.FloatTensor,
         contrastive_queries: torch.FloatTensor,
         attn_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Forward pass for the encoder-decoder module.
@@ -1305,8 +1248,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
                 A tensor of shape `(batch_size, num_queries, d_model)` representing the input queries.
             attn_mask (`Optional[torch.FloatTensor]`, *optional*):
                 A tensor representing the attention mask for the decoder.
-            output_attentions (`Optional[bool]`, *optional*, defaults to `False`):
-                Whether to return attention weights.
 
         Returns:
             `DinoDetrEncoderDecoderOutput` object containing:
@@ -1314,13 +1255,7 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
                 - `reference_points` (`torch.FloatTensor`): The final reference points of the decoder.
                 - `hidden_states_encoder` (`Optional[torch.FloatTensor]`): The final hidden states of the encoder.
                 - `reference_points_encoder` (`Optional[torch.FloatTensor]`): The final reference points of the encoder.
-                - `encoder_states` (`Optional[Tuple[torch.FloatTensor]]`): Hidden states of the encoder at each layer.
-                - `encoder_attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights of the encoder at each layer.
-                - `decoder_attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights of the decoder at each layer.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        encoder_attentions = None
-        decoder_attentions = None
 
         # Format input for encoder, mainly flatten
         src_flatten = []
@@ -1358,21 +1293,9 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
             spatial_shapes_list=spatial_shapes_list,
             valid_ratios=valid_ratios,
             key_padding_mask=mask_flatten,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        (
-            memory,
-            # enc_intermediate_output,
-            # enc_intermediate_refpoints,
-            encoder_states,
-        ) = (
-            outputs_encoder_part["output"],
-            # outputs_encoder_part["intermediate_output"],
-            # outputs_encoder_part["intermediate_ref"],
-            outputs_encoder_part["encoder_states"],
-        )
-        if output_attentions:
-            encoder_attentions = outputs_encoder_part["attentions"]
+        (memory,) = (outputs_encoder_part["output"],)
 
         # Create and select topk queries. generate_initial_queries initializes bounding boxes on a 2d grid,
         # memory is simply masked
@@ -1427,23 +1350,18 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
             valid_ratios=valid_ratios,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states, reference_points = (
             outputs_decoder_part["intermediate"],
             outputs_decoder_part["ref_points"],
         )
-        if output_attentions:
-            decoder_attentions = outputs_decoder_part["attentions"]
 
         return DinoDetrEncoderDecoderOutput(
             hidden_states=hidden_states,
             reference_points=reference_points,
             hidden_states_encoder=hidden_states_encoder,
             reference_points_encoder=reference_points_encoder,
-            encoder_states=encoder_states,
-            encoder_attentions=encoder_attentions,
-            decoder_attentions=decoder_attentions,
         )
 
 
@@ -1491,12 +1409,6 @@ DINO_DETR_INPUTS_DOCSTRING = r"""
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
             embedded representation.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
 """
 
 
@@ -1517,6 +1429,21 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         r"transformer\.decoder\.bbox_embed\.[1-9]\d*",
         r"transformer\.decoder\.class_embed\.[1-9]\d*",
     ]
+    _can_record_outputs = {
+        "encoder_self_attentions": OutputRecorder(
+            DinoDetrMultiscaleDeformableAttention, layer_name="self_attn", index=1
+        ),
+        "decoder_self_attentions": OutputRecorder(MultiheadAttention, layer_name="self_attn", index=1),
+        "decoder_cross_attentions": OutputRecorder(
+            DinoDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1
+        ),
+        # "encoder_hidden_states": OutputRecorder(DinoDetrEncoder, layer_name="encoder", index=3),
+        # "decoder_hidden_states": OutputRecorder(DinoDetrDecoder, layer_name="decoder", index=0),
+        # "hidden_states": OutputRecorder(DinoDetrDecoderLayer, index=0),
+        # "hidden_states": OutputRecorder(DinoDetrDecoder, layer_name="decoder", index=0),
+        "encoder_hidden_states": DinoDetrEncoderLayer,
+        "decoder_hidden_states": DinoDetrDecoderLayer,
+    }
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
 
@@ -1530,7 +1457,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         backbone = DinoDetrConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = DinoDetrConvModel(backbone, position_embeddings)
-        self.output_hidden_states = config.output_hidden_states
         d_model = config.d_model
 
         # Prepare input projection layers
@@ -1603,13 +1529,13 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
     @can_return_tuple
     @add_start_docstrings_to_model_forward(DINO_DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DinoDetrModelOutput, config_class=_CONFIG_FOR_DOC)
+    @check_model_inputs()
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: Optional[torch.LongTensor] = None,
         labels: Optional[list[dict]] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Returns:
@@ -1635,10 +1561,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 300, 256]
         """
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        encoder_attentions = None
-        decoder_attentions = None
 
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
@@ -1692,40 +1614,27 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             contrastive_query_reference_points=contrastive_query_reference_points,
             contrastive_queries=contrastive_queries,
             attn_mask=attn_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         (
             hidden_states,
             reference_points,
             hidden_states_encoder,
             reference_points_encoder,
-            encoder_states,
         ) = (
             outputs_transformer_part["hidden_states"],
             outputs_transformer_part["reference_points"],
             outputs_transformer_part["hidden_states_encoder"],
             outputs_transformer_part["reference_points_encoder"],
-            outputs_transformer_part["encoder_states"],
         )
-        if output_attentions:
-            encoder_attentions = outputs_transformer_part["encoder_attentions"]
-            decoder_attentions = outputs_transformer_part["decoder_attentions"]
 
         return DinoDetrModelOutput(
             last_hidden_state=hidden_states[-1],
-            hidden_states=hidden_states,
+            hidden_states_model=hidden_states,
             references=reference_points,
             encoder_last_hidden_state=hidden_states_encoder,
             encoder_reference=reference_points_encoder,
             denoising_meta=dn_meta,
-            decoder_hidden_states=(
-                hidden_states if output_hidden_states or self.config.output_hidden_states else None
-            ),
-            encoder_hidden_states=(
-                encoder_states if output_hidden_states or self.config.output_hidden_states else None
-            ),
-            encoder_attentions=encoder_attentions,
-            decoder_attentions=decoder_attentions,
         )
 
 
@@ -1745,6 +1654,18 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         r"transformer\.decoder\.bbox_embed\.[1-9]\d*",
         r"transformer\.decoder\.class_embed\.[1-9]\d*",
     ]
+    _can_record_outputs = {
+        "encoder_self_attentions": OutputRecorder(
+            DinoDetrMultiscaleDeformableAttention, layer_name="self_attn", index=1
+        ),
+        "decoder_self_attentions": OutputRecorder(MultiheadAttention, layer_name="self_attn", index=1),
+        "decoder_cross_attentions": OutputRecorder(
+            DinoDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1
+        ),
+        # "hidden_states": DinoDetrDecoderLayer,
+        "encoder_hidden_states": DinoDetrEncoderLayer,
+        "decoder_hidden_states": DinoDetrDecoderLayer,
+    }
 
     def __init__(self, config: DinoDetrConfig):
         super().__init__(config)
@@ -1758,13 +1679,13 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
     @can_return_tuple
     @add_start_docstrings_to_model_forward(DINO_DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DinoDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @check_model_inputs()
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: Optional[torch.LongTensor] = None,
         labels: Optional[list[dict]] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -1806,9 +1727,6 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         Detected <object> with confidence 0.7341 at location <location>
         Detected <object> with confidence 0.7229 at location <location>
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        encoder_attentions = None
-        decoder_attentions = None
 
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
@@ -1823,23 +1741,16 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             labels=labels,
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions,
+            **kwargs,
         )
 
         last_hidden_state = outputs_model_part.last_hidden_state
-        hidden_states = outputs_model_part.hidden_states[1:]
+        hidden_states = outputs_model_part.hidden_states_model[1:]
         reference_points = outputs_model_part.references
         hidden_states_encoder = outputs_model_part.encoder_last_hidden_state
         reference_points_encoder = outputs_model_part.encoder_reference
         if self.training:
             denoising_meta = outputs_model_part.denoising_meta
-        if output_hidden_states or self.model.output_hidden_states:
-            decoder_hidden_states = outputs_model_part.decoder_hidden_states
-            encoder_hidden_states = outputs_model_part.encoder_hidden_states
-        if output_attentions:
-            encoder_attentions = outputs_model_part.encoder_attentions
-            decoder_attentions = outputs_model_part.decoder_attentions
 
         # Convert hidden states to bounding boxes
         hidden_states[0] += self.model.label_enc.weight[0, 0] * 0.0
@@ -1905,13 +1816,6 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                 num_decoder_layers=self.config.num_decoder_layers,
             )
 
-        encoder_hidden_states = (
-            encoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
-        )
-        decoder_hidden_states = (
-            decoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
-        )
-
         dict_outputs = DinoDetrObjectDetectionOutput(
             last_hidden_state=last_hidden_state,
             reference=reference_points[-1],
@@ -1923,10 +1827,6 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             pred_boxes=outputs_coord_list[-1],
             auxiliary_outputs=out_aux_loss,
             denoising_meta=denoising_meta,
-            encoder_hidden_states=(encoder_hidden_states),
-            decoder_hidden_states=(decoder_hidden_states),
-            encoder_attentions=encoder_attentions,
-            decoder_attentions=decoder_attentions,
         )
         return dict_outputs
 

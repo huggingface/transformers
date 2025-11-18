@@ -14,6 +14,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Dino DETR model."""
 
+import copy
 import inspect
 import math
 import unittest
@@ -175,7 +176,7 @@ class DinoDetrModelTester:
         result = model(pixel_values)
 
         self.parent.assertEqual(
-            result.hidden_states[-1].shape,
+            result.hidden_states_model[-1].shape,
             (self.batch_size, self.num_queries, self.hidden_size),
         )
 
@@ -305,99 +306,30 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
+
+            inputs_dict["output_encoder_self_attentions"] = True
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions
+            attentions = outputs.encoder_self_attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            inputs_dict["output_encoder_self_attentions"] = False
 
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
+            inputs_dict["output_decoder_self_attentions"] = True
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions
+            attentions = outputs.decoder_self_attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            inputs_dict["output_decoder_self_attentions"] = False
 
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [
-                    self.model_tester.num_attention_heads,
-                    self.model_tester.num_feature_levels,
-                    self.model_tester.encoder_n_points,
-                ],
-            )
-            out_len = len(outputs)
-
-            correct_outlen = 7
-
-            # loss is at first position
-            if "labels" in inputs_dict:
-                correct_outlen += 1  # loss is added to beginning
-            # Object Detection model returns pred_logits and pred_boxes
-            if model_class.__name__ == "DinoDetrForObjectDetection":
-                correct_outlen += 2
-
-            self.assertEqual(out_len, correct_outlen)
-
-            # decoder attentions
-            decoder_attentions = outputs.decoder_attentions
-            self.assertIsInstance(decoder_attentions, (list, tuple))
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-            # self-attention
-            self.assertListEqual(
-                list(decoder_attentions[0][0].shape[-2:]),
-                [
-                    self.model_tester.num_queries,
-                    self.model_tester.num_queries,
-                ],
-            )
-            # cross-attention
-            self.assertListEqual(
-                list(decoder_attentions[0][1].shape[-3:]),
-                [
-                    self.model_tester.num_attention_heads,
-                    self.model_tester.num_feature_levels,
-                    self.model_tester.decoder_n_points,
-                ],
-            )
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
+            inputs_dict["output_decoder_cross_attentions"] = True
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
-            else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
-
-            self_attentions = outputs.encoder_attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [
-                    self.model_tester.num_attention_heads,
-                    self.model_tester.num_feature_levels,
-                    self.model_tester.encoder_n_points,
-                ],
-            )
+            attentions = outputs.decoder_cross_attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            inputs_dict["output_decoder_cross_attentions"] = False
 
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -484,44 +416,92 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(copy.deepcopy(config))
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers,
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            if hasattr(self.model_tester, "encoder_seq_length"):
+                seq_length = self.model_tester.encoder_seq_length
+                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
+                    seq_length = seq_length * self.model_tester.chunk_length
+            else:
+                seq_length = self.model_tester.seq_length
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
+            )
+
+            hidden_states = outputs.decoder_hidden_states
+
+            self.assertIsInstance(hidden_states, (list, tuple))
+            self.assertEqual(len(hidden_states), expected_num_layers)
+            seq_len = getattr(self.model_tester, "seq_length", None)
+            decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape),
+                [decoder_seq_length, self.model_tester.batch_size, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_encoder_hidden_states"] = True
+            inputs_dict["output_decoder_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
     def test_retain_grad_hidden_states_attentions(self):
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = True
+        inputs_dict["output_encoder_self_attentions"] = True
+        inputs_dict["output_decoder_self_attentions"] = True
+        inputs_dict["output_decoder_cross_attentions"] = True
 
         # no need to test all models as different heads yield the same functionality
-        model_class = self.all_model_classes[0]
+        model_class = self.all_model_classes[1]
         model = model_class(config)
         model.to(torch_device)
+        model.train()
 
         inputs = self._prepare_for_class(inputs_dict, model_class)
 
         outputs = model(**inputs)
 
-        # we take the second output since last_hidden_state is the second item
+        # attentions
+        encoder_self_attentions = outputs.encoder_self_attentions[0]
+        decoder_self_attentions = outputs.decoder_self_attentions[0]
+        decoder_cross_attentions = outputs.decoder_cross_attentions[0]
 
-        encoder_hidden_states = outputs.encoder_hidden_states[0]
-        encoder_attentions = outputs.encoder_attentions[0]
-        encoder_hidden_states.retain_grad()
-        encoder_attentions.retain_grad()
+        encoder_self_attentions.retain_grad()
+        decoder_self_attentions.retain_grad()
+        decoder_cross_attentions.retain_grad()
 
-        # self-attention
-        # self_attentions = outputs.decoder_attentions[0][0]
-        # self_attentions.retain_grad()
+        # Use last_hidden_state for gradient testing
+        loss = outputs["logits"]
+        loss = loss.sum()
 
-        # cross-attention
-        cross_attentions = outputs.decoder_attentions[0][1]
-        cross_attentions.retain_grad()
+        # Perform a backward pass to compute gradients
+        loss.backward()
 
-        output = outputs["hidden_states"][1]
-        output.flatten()[0].backward(retain_graph=True)
-
-        self.assertIsNotNone(encoder_hidden_states.grad)
-        self.assertIsNotNone(encoder_attentions.grad)
-        self.assertIsNotNone(cross_attentions.grad)
-        # self.assertIsNotNone(self_attentions.grad) this fails but maybe it is not needed based on the decoder logic?
+        self.assertIsNotNone(encoder_self_attentions.grad)
+        self.assertIsNotNone(decoder_cross_attentions.grad)
+        self.assertIsNone(decoder_self_attentions.grad)
 
     def test_forward_auxiliary_loss(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
