@@ -26,12 +26,14 @@ if is_torch_available():
 def _build_checkpoint_conversion_mapping():
     mapping = {
         "mixtral": [
+            WeightRenaming(r"\.block_sparse_moe\.", ".mlp."),
+            WeightRenaming(r"model\.layers\.", "layers."),
             WeightConverter(
                 source_keys=[
-                    "mlp.experts.*.w1.weight",
-                    "mlp.experts.*.w3.weight",
+                    "experts.*.w1.weight",
+                    "experts.*.w3.weight",
                 ],  # you give me a list of 2 keys, I collect a list of a list of tensors
-                target_keys="mlp.experts.gate_up_proj",  # target key gets the list of two tensors
+                target_keys="experts.gate_up_proj",  # target key gets the list of two tensors
                 operations=[
                     MergeModulelist(
                         dim=0
@@ -55,7 +57,14 @@ def _build_checkpoint_conversion_mapping():
             #     "self_attn.qkv_proj",
             #     operations=[Concatenate(dim=0)],  # more like stack?
             # ),
-            WeightRenaming("*.block_sparse_moe.", "*.mlp."),
+
+            # TODO @ArthurZucker support this kind of patterns
+            # WeightConverter(
+            #     "embed_tokens.weight",
+            #     ["embed_tokens.weight", "lm_head.weight"],
+            #     operations=[Copy()],  # more like stack?
+            # ),
+
         ],
         "qwen2_moe": [
             WeightConverter(
