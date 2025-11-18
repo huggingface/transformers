@@ -2193,14 +2193,14 @@ class Trainer:
         """Calculates total batch size (micro_batch * grad_accum * dp_world_size).
 
         Accounts for all parallelism dimensions: TP, CP, and SP.
-        
+
         Formula: dp_world_size = world_size // (tp_size * cp_size * sp_size)
-        
+
         Where:
         - TP (Tensor Parallelism): Model layers split across GPUs
         - CP (Context Parallelism): Sequences split using Ring Attention (FSDP2)
         - SP (Sequence Parallelism): Sequences split using ALST/Ulysses (DeepSpeed)
-        
+
         All dimensions are separate and multiplicative: world_size = dp_size * tp_size * cp_size * sp_size
         """
 
