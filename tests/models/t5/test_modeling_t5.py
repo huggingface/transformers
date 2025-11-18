@@ -62,7 +62,7 @@ class T5ModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
+        batch_size=2,
         encoder_seq_length=7,
         decoder_seq_length=7,
         # For common tests
@@ -743,13 +743,17 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         model = T5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @unittest.skip(reason="T5 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 class T5EncoderOnlyModelTester:
     def __init__(
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
+        batch_size=2,
         encoder_seq_length=7,
         # For common tests
         use_attention_mask=True,

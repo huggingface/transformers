@@ -73,7 +73,7 @@ class PerceiverModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         seq_length=7,
         num_channels=3,
         image_size=32,

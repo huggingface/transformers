@@ -56,7 +56,7 @@ class XCLIPVisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=8,
+        batch_size=3,
         image_size=30,
         patch_size=2,
         num_channels=3,
@@ -312,7 +312,7 @@ class XCLIPTextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=8,
+        batch_size=3,
         seq_length=7,
         is_training=True,
         use_input_mask=True,

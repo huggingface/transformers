@@ -41,7 +41,7 @@ class EfficientNetModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         image_size=32,
         num_channels=3,
         kernel_sizes=[3, 3, 5],

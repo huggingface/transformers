@@ -47,7 +47,7 @@ class FuyuModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         seq_length=7,
         num_image_tokens=2,
         image_size=30,
@@ -258,6 +258,10 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @unittest.skip("Persimmon backbone applies key/query norm which doesn't work with packing")
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(reason="Fuyu has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
 

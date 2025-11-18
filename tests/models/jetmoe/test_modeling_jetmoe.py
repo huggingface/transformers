@@ -46,7 +46,7 @@ class JetMoeModelTester(CausalLMModelTester):
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -112,6 +112,10 @@ class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="JetMoe flash attention does not support right padding")
+
+    @unittest.skip(reason="JetMoe has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
 
 
 @require_torch

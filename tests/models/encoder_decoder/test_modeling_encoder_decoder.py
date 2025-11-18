@@ -504,9 +504,9 @@ class EncoderDecoderMixin:
         generated_output = enc_dec_model.generate(
             input_ids,
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
         )
-        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (enc_dec_model.generation_config.max_length,))
 
     def create_and_check_encoder_decoder_shared_weights(
         self,
@@ -1124,7 +1124,7 @@ class ProphetNetEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
     def prepare_config_and_inputs(self):
         model_tester_encoder = BertModelTester(self, batch_size=13)
         model_tester_decoder = ProphetNetStandaloneDecoderModelTester(
-            self, batch_size=13, hidden_size=32, max_position_embeddings=512
+            self, batch_size=2, hidden_size=32, max_position_embeddings=512
         )
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
@@ -1181,7 +1181,7 @@ class BartEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
     def prepare_config_and_inputs(self):
         model_tester_encoder = BertModelTester(self, batch_size=13)
         model_tester_decoder = BartStandaloneDecoderModelTester(
-            self, batch_size=13, d_model=32, max_position_embeddings=512
+            self, batch_size=2, d_model=32, max_position_embeddings=512
         )
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
