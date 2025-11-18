@@ -42,7 +42,7 @@ class DINOv3ConvNextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         image_size=32,
         num_channels=3,
         hidden_sizes=[10, 20, 30, 40],

@@ -50,7 +50,7 @@ class ReformerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=32,
         text_seq_length=None,
         is_training=True,
@@ -770,7 +770,7 @@ class ReformerLSHAttnModelTest(
     def setUp(self):
         self.model_tester = ReformerModelTester(
             self,
-            batch_size=2,
+            batch_size=13,
             seq_length=13,
             use_input_mask=True,
             use_labels=True,

@@ -60,7 +60,7 @@ class KyutaiSpeechToTextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         text_seq_length=1,
         input_values_length=192,  # gives 3 audio tokens, corresponding to the default in GenerationTesterMixin

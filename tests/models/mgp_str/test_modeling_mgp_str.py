@@ -44,7 +44,7 @@ class MgpstrModelTester:
         self,
         parent,
         is_training=False,
-        batch_size=2,
+        batch_size=13,
         image_size=(32, 128),
         patch_size=4,
         num_channels=3,
