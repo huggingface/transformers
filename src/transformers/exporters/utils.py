@@ -701,7 +701,6 @@ def patch_torch_for_onnx_export():
             return original_torch_where(condition, x, y)
 
     torch.where = patched_torch_where
-    torch.Tensor.where = patched_torch_where
 
     # Patch torch.unsqueeze to support complex tensors during export
     original_unsqueeze = torch.unsqueeze
@@ -721,4 +720,6 @@ def patch_torch_for_onnx_export():
         yield
     finally:
         torch.where = original_torch_where
+
         torch.unsqueeze = original_unsqueeze
+        torch.Tensor.unsqueeze = original_unsqueeze
