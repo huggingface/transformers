@@ -20,9 +20,9 @@ from ..utils import logging
 from ..utils.export_config import DynamoConfig
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 from .base import HfExporter
+from .patch_utils import patch_model_for_export
 from .utils import (
     get_auto_dynamic_shapes,
-    patch_model_for_export,
     prepare_for_export,
     register_dynamic_cache_for_export,
     register_encoder_decoder_cache_for_export,
@@ -120,6 +120,7 @@ class DynamoExporter(HfExporter):
 
         register_dynamic_cache_for_export()
         register_encoder_decoder_cache_for_export()
+
         with patch_model_for_export(model):
             exported_program: ExportedProgram = torch.export.export(
                 model,
@@ -129,4 +130,5 @@ class DynamoExporter(HfExporter):
                 strict=self.export_config.strict,
                 prefer_deferred_runtime_asserts_over_guards=self.export_config.prefer_deferred_runtime_asserts_over_guards,
             )
+
         return exported_program
