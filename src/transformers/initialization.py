@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import sys
 from collections import defaultdict
 from contextlib import contextmanager
 
@@ -162,6 +161,16 @@ def copy_(tensor: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
     return tensor
 
 
+# Here, we need to check several modules imported, and hot patch all of them, as sometimes torch does
+# something like `from torch.nn.init import xavier_uniform_` in their internals (e.g in torch.nn.modules.activations,
+# where MultiHeadAttention lives), so the function name is binded at import time and just doing
+# `setattr(torch.nn.init, name, gloabls()[name])` is thus not enough
+TORCH_MODULES_TO_PATCH = (
+    torch.nn.init,
+    torch.nn.modules.activation,
+)
+
+
 @contextmanager
 def guard_torch_init_functions():
     """
@@ -174,18 +183,14 @@ def guard_torch_init_functions():
     originals = defaultdict(dict)
     try:
         # Replace all torch funcs by the ones in this file
-        for name in TORCH_INIT_FUNCTIONS.keys():
-            # Here, we need to check all modules imported, and hot patch all of them, as usually torch does
-            # something like `from torch.nn.init import xavier_uniform_` in their internals (e.g in torch.nn.modules,
-            # where MultiHeadAttention lives), so the function name is binded at import time and just doing
-            # `setattr(torch.nn.init, name, gloabls()[name])` is thus not enough
-            for module in sys.modules.copy().values():
-                if module and hasattr(module, name):
-                    originals[module][name] = getattr(module, name)
-                    setattr(module, name, globals()[name])
+        for func_name in TORCH_INIT_FUNCTIONS.keys():
+            for module in TORCH_MODULES_TO_PATCH:
+                if hasattr(module, func_name):
+                    originals[module][func_name] = getattr(module, func_name)
+                    setattr(module, func_name, globals()[func_name])
         yield
     finally:
         # Set back the original functions on all modules
         for module, functions in originals.items():
-            for name, func in functions.items():
-                setattr(module, name, func)
+            for func_name, func in functions.items():
+                setattr(module, func_name, func)
