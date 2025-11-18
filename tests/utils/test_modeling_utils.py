@@ -2795,6 +2795,8 @@ class TestAttentionImplementation(unittest.TestCase):
 
         _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
 
+    # TODO (ydshieh): use another model
+    @unittest.skip("model deleted")
     def test_error_no_flash_available(self):
         with self.assertRaises(ValueError) as cm:
             _ = AutoModel.from_pretrained(
@@ -2803,6 +2805,8 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
 
+    # TODO (ydshieh): use another model
+    @unittest.skip("model deleted")
     def test_error_no_flash_available_with_config(self):
         with self.assertRaises(ValueError) as cm:
             config = AutoConfig.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
@@ -2813,6 +2817,8 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
 
+    # TODO (ydshieh): use another model
+    @unittest.skip("model deleted")
     def test_error_wrong_attn_implementation(self):
         with self.assertRaises(ValueError) as cm:
             _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="foo")
@@ -2884,6 +2890,8 @@ class TestAttentionImplementation(unittest.TestCase):
             in cl.out
         )
 
+    # TODO (ydshieh): use another model
+    @unittest.skip("model deleted")
     def test_not_available_kernels(self):
         if is_kernels_available():
             self.skipTest(reason="Please uninstall `kernels` package to run `test_not_available_kernels`")
