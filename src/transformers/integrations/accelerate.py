@@ -18,12 +18,14 @@ and simplicity/ease of use.
 
 import copy
 import inspect
+import itertools
 import os
 import re
 from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Optional, Union
 
+from safetensors import safe_open
 from safetensors.torch import save_file
 
 from ..utils import (
@@ -468,6 +470,23 @@ def expand_device_map(device_map, param_names):
     return new_device_map
 
 
+def update_param_name(param_name: str, weight_pattern_alt, weight_pattern_by_group_name, source_to_target):
+    from ..core_model_loading import match_glob
+
+    if weight_pattern_alt is None:
+        return param_name
+
+    matched_pattern = match_glob(param_name, weight_pattern_alt, weight_pattern_by_group_name)
+    if matched_pattern is not None:
+        converter = source_to_target[matched_pattern]
+        # Only change name if it's a simple renaming, i.e. no custom Ops
+        if len(converter.source_keys) == 1 and len(converter.target_keys) == 1:
+            source_pattern = converter.source_keys[0]
+            target_pattern = converter.target_keys[0]
+            return re.sub(source_pattern, target_pattern, param_name)
+    return param_name
+
+
 def accelerate_disk_offload(
     disk_offload_folder: str | None,
     checkpoint_files: list[str] | None,
@@ -475,10 +494,19 @@ def accelerate_disk_offload(
     expected_keys: list[str],
     sharded_metadata: dict | None,
     dtype: torch.dtype | None,
+    weight_mapping=None,
 ):
+    from ..core_model_loading import build_glob_alt
+
     if disk_offload_folder is not None:
         os.makedirs(disk_offload_folder, exist_ok=True)
     is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
+
+    _patterns, weight_pattern_alt, weight_pattern_by_group_name = None, None, None
+    if weight_mapping is not None:
+        _patterns = list(itertools.chain.from_iterable([k.source_keys for k in weight_mapping]))
+        source_to_target = {sk: k for k in weight_mapping for sk in k.source_keys}
+        weight_pattern_alt, weight_pattern_by_group_name = build_glob_alt(_patterns)
 
     # In this case, the offload index is simply the existing safetensors (except if using custom weight loading
     # Operation, e.g. the MoE models, where we need to resave the weights that were changed at loading time)
@@ -486,18 +514,26 @@ def accelerate_disk_offload(
         param_device_map = expand_device_map(device_map, expected_keys)
         str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
         if sharded_metadata is None:
-            weight_map = dict.fromkeys(expected_keys, checkpoint_files[0])
+            weight_map = dict.fromkeys(safe_open(checkpoint_files[0], framework="pt").keys(), checkpoint_files[0])
         else:
             folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
             weight_map = {k: os.path.join(folder, v) for k, v in weight_map.items()}
+
+        # Update the weight names according to the `weight_mapping`
+        weight_renaming_map = {
+            update_param_name(k, weight_pattern_alt, weight_pattern_by_group_name, source_to_target): k
+            for k in weight_map
+        }
+
+        # Prepare the index using existing safetensors files
         disk_offload_index = {
-            name: {
-                "safetensors_file": file,
-                "weight_name": name,
+            target_name: {
+                "safetensors_file": weight_map[source_name],
+                "weight_name": source_name,
                 "dtype": str_dtype,
             }
-            for name, file in weight_map.items()
-            if param_device_map[name] == "disk"
+            for target_name, source_name in weight_renaming_map.items()
+            if param_device_map[target_name] == "disk"
         }
     # In this case we will resave every offloaded weight
     else:

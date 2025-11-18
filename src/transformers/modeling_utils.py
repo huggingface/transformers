@@ -4075,6 +4075,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 expected_keys,
                 sharded_metadata,
                 dtype,
+                weight_mapping,
             )
 
         # Warmup cuda to load the weights much faster on devices
