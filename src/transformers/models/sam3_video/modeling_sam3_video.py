@@ -1,3 +1,19 @@
+# coding=utf-8
+# Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 from collections import OrderedDict, defaultdict
 from copy import deepcopy
 from typing import Any, Optional, Union
@@ -424,9 +440,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         self.new_det_thresh = config.new_det_thresh
         self.recondition_on_trk_masks = config.recondition_on_trk_masks
         # hotstart parameters
-        if config.hotstart_delay > 0:
-            assert config.hotstart_unmatch_thresh <= config.hotstart_delay
-            assert config.hotstart_dup_thresh <= config.hotstart_delay
         self.hotstart_delay = config.hotstart_delay
         self.hotstart_unmatch_thresh = config.hotstart_unmatch_thresh
         self.hotstart_dup_thresh = config.hotstart_dup_thresh
@@ -492,7 +505,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         )
         run_nms = self.det_nms_thresh > 0.0
         if run_nms:
-            assert detector_outputs["pred_logits"].size(0) == 1
             keep = nms_masks(
                 pred_probs=detector_outputs["pred_logits"][0].sigmoid(),
                 pred_masks=detector_outputs["pred_masks"][0],
@@ -544,7 +556,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         if len(low_res_masks_list) > 0:
             low_res_masks = torch.cat(low_res_masks_list, dim=0)
             obj_scores = torch.cat(obj_scores_list, dim=0)
-            assert low_res_masks.shape[1:] == (H_mask, W_mask)
 
             # Apply hole filling to the masks
             low_res_masks = fill_holes_in_mask_scores(
@@ -587,12 +598,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         iou_threshold = self.assoc_iou_thresh
         iou_threshold_trk = self.trk_assoc_iou_thresh
         new_det_thresh = self.new_det_thresh
-
-        assert det_masks.is_floating_point(), "float tensor expected (do not binarize)"
-        assert trk_masks.is_floating_point(), "float tensor expected (do not binarize)"
-        assert trk_masks.size(0) == len(trk_obj_ids)
-        assert det_scores.ndim == 1, "det_scores should be 1D tensor"
-        assert det_scores.size(0) == det_masks.size(0), "scores and masks must match"
 
         trk_obj_ids_tensor = (
             torch.tensor(trk_obj_ids, dtype=torch.long, device=det_masks.device)
@@ -707,7 +712,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         for obj_id in new_det_obj_ids:
             if obj_id not in obj_first_frame_idx:
                 obj_first_frame_idx[obj_id] = frame_idx
-            assert obj_id not in trk_keep_alive
             trk_keep_alive[int(obj_id)] = self.init_trk_keep_alive
 
         matched_trks = set()
@@ -859,7 +863,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         reverse: bool = False,
     ):
         # Suppress overlapping masks for objects that were most recently occluded
-        assert binary_low_res_masks.dtype == torch.bool, f"Expected boolean tensor, got {binary_low_res_masks.dtype}"
         to_suppress = torch.zeros(
             binary_low_res_masks.size(0),
             device=binary_low_res_masks.device,
@@ -917,9 +920,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         binary_tracker_low_res_masks_global = tracker_low_res_masks_global > 0
         batch_size = tracker_low_res_masks_global.size(0)
         if batch_size > 0:
-            assert len(obj_ids_global) == batch_size, (
-                f"Mismatch in number of objects: {len(obj_ids_global)} vs {batch_size}"
-            )
             NEVER_OCCLUDED = -1
             ALWAYS_OCCLUDED = 100000  # This value should be larger than any possible frame index, indicates that the object was removed by hotstart logic
             last_occluded_prev = torch.cat(
@@ -1119,7 +1119,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             scores_for_new_dets = det_scores[new_det_inds_tensor]
             _, top_inds = torch.topk(scores_for_new_dets, k=new_det_num_to_keep, largest=True)
             new_det_out_inds = [new_det_out_inds[i] for i in top_inds]
-            assert len(new_det_out_inds) == new_det_num_to_keep
             new_det_num = len(new_det_out_inds)
 
         # assign object IDs to new detections
@@ -1244,9 +1243,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         reverse: bool = False,
     ):
         """Add a new object to SAM2 inference states."""
-        assert len(new_obj_ids) == new_obj_masks.size(0)
-        assert new_obj_masks.is_floating_point()
-
         new_obj_masks = new_obj_masks >= 0.5
         for obj_id, mask in zip(new_obj_ids, new_obj_masks):
             obj_idx = inference_session.obj_id_to_idx(obj_id)
@@ -1502,7 +1498,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         return processing_order, end_frame_idx
 
     @torch.inference_mode()
-    def propagate_in_video(
+    def propagate_in_video_iterator(
         self,
         inference_session: Sam3VideoInferenceSession,
         start_frame_idx=0,
@@ -1551,7 +1547,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
 @torch.jit.script
 def fast_diag_box_iou(boxes1, boxes2):
-    assert len(boxes1) == len(boxes2)
     box1_xy = boxes1[:, 2:]
     box1_XY = boxes1[:, :2]
     box2_xy = boxes2[:, 2:]
@@ -1577,7 +1572,6 @@ def mask_iou(pred_masks: torch.Tensor, gt_masks: torch.Tensor) -> torch.Tensor:
     Returns:
       - ious: (N, M) float Tensor, containing IoUs for each pair of predicted and ground truth masks
     """
-    assert pred_masks.dtype == gt_masks.dtype == torch.bool
     N, H, W = pred_masks.shape
     M, _, _ = gt_masks.shape
 

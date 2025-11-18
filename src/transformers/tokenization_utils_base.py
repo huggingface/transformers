@@ -2833,7 +2833,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
 
-        print(f"max_length: {max_length}")
         # Set max length if needed
         if max_length is None:
             if padding_strategy == PaddingStrategy.MAX_LENGTH:
@@ -2848,7 +2847,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     padding_strategy = PaddingStrategy.DO_NOT_PAD
                 else:
                     max_length = self.model_max_length
-            print("truncation_strategy: ", truncation_strategy)
+
             if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
                 if self.model_max_length > LARGE_INTEGER:
                     if verbose:
