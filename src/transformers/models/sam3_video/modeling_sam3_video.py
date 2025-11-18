@@ -16,6 +16,7 @@
 
 from collections import OrderedDict, defaultdict
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 import torch
@@ -26,7 +27,7 @@ from tqdm.auto import tqdm
 from transformers.models.sam3.modeling_sam3 import Sam3VisionNeck
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoModel
 from .configuration_sam3_video import Sam3VideoConfig
 
@@ -408,6 +409,36 @@ class Sam3VideoInferenceSession:
         self.cache.clear_all()
 
 
+@dataclass
+@auto_docstring(custom_intro="Base class for the Sam3Video model's output.")
+class Sam3VideoSegmentationOutput(ModelOutput):
+    r"""
+    object_ids (`list[int]`, *optional*):
+        List of object IDs being tracked in the current frame.
+    obj_id_to_mask (`dict[int, torch.FloatTensor]`, *optional*):
+        Dictionary mapping object IDs to their predicted low-resolution masks.
+        Each mask has shape `(1, H_low, W_low)`.
+    obj_id_to_score (`dict[int, float]`, *optional*):
+        Dictionary mapping object IDs to their detection scores.
+    obj_id_to_tracker_score (`dict[int, float]`, *optional*):
+        Dictionary mapping object IDs to their tracker scores for the current frame.
+    removed_obj_ids (`set[int]`, *optional*):
+        Set of object IDs that have been removed (e.g., via hotstart heuristics).
+    suppressed_obj_ids (`set[int]`, *optional*):
+        Set of object IDs that have been suppressed in the current frame.
+    frame_idx (`int`, *optional*):
+        The frame index of the video.
+    """
+
+    object_ids: Optional[list[int]] = None
+    obj_id_to_mask: Optional[dict[int, torch.FloatTensor]] = None
+    obj_id_to_score: Optional[dict[int, float]] = None
+    obj_id_to_tracker_score: Optional[dict[int, float]] = None
+    removed_obj_ids: Optional[set[int]] = None
+    suppressed_obj_ids: Optional[set[int]] = None
+    frame_idx: Optional[int] = None
+
+
 class Sam3VideoPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -693,8 +724,14 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         empty_trk_obj_ids: list[int],
         unmatched_trk_obj_ids: list[int],
         extra_metadata: dict[str, Any],
+        streaming: bool = False,
     ):
-        """Handle hotstart heuristics to remove unmatched or duplicated objects."""
+        """
+        Handle hotstart heuristics to remove unmatched or duplicated objects.
+
+        In streaming mode, hotstart removal logic is disabled since we don't have
+        future frames to make informed decisions about object removal.
+        """
         # obj_id --> first frame index where the object was detected
         obj_first_frame_idx = extra_metadata["obj_first_frame_idx"]
         # obj_id --> [mismatched frame indices]
@@ -738,30 +775,33 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         # doesn't match any FA detection; it excludes those frames where SAM2 gives an empty mask
         # b) remove a masklet if it first appears after `hotstart_diff` and is unmatched for more
         # than `self.hotstart_unmatch_thresh` frames
-        for obj_id, frame_indices in unmatched_frame_inds.items():
-            if obj_id in removed_obj_ids or obj_id in obj_ids_newly_removed:
-                continue  # skip if the object is already removed
-            if len(frame_indices) >= self.hotstart_unmatch_thresh:
-                is_within_hotstart = (obj_first_frame_idx[obj_id] > hotstart_diff and not reverse) or (
-                    obj_first_frame_idx[obj_id] < hotstart_diff and reverse
-                )
-                if is_within_hotstart:
-                    obj_ids_newly_removed.add(obj_id)
-                    logger.info(
-                        f"Removing object {obj_id} at frame {frame_idx} "
-                        f"since it is unmatched for frames: {frame_indices}"
+        # NOTE: In streaming mode, we skip hotstart removal logic since we don't have future frames
+        if not streaming:
+            for obj_id, frame_indices in unmatched_frame_inds.items():
+                if obj_id in removed_obj_ids or obj_id in obj_ids_newly_removed:
+                    continue  # skip if the object is already removed
+                if len(frame_indices) >= self.hotstart_unmatch_thresh:
+                    is_within_hotstart = (obj_first_frame_idx[obj_id] > hotstart_diff and not reverse) or (
+                        obj_first_frame_idx[obj_id] < hotstart_diff and reverse
                     )
-            if (
-                trk_keep_alive[obj_id] <= 0  # Object has not been matched for too long
-                and not self.suppress_unmatched_only_within_hotstart
-                and obj_id not in removed_obj_ids
-                and obj_id not in obj_ids_newly_removed
-            ):
-                logger.debug(f"Suppressing object {obj_id} at frame {frame_idx}, due to being unmatched")
-                suppressed_obj_ids.add(obj_id)
+                    if is_within_hotstart:
+                        obj_ids_newly_removed.add(obj_id)
+                        logger.info(
+                            f"Removing object {obj_id} at frame {frame_idx} "
+                            f"since it is unmatched for frames: {frame_indices}"
+                        )
+                if (
+                    trk_keep_alive[obj_id] <= 0  # Object has not been matched for too long
+                    and not self.suppress_unmatched_only_within_hotstart
+                    and obj_id not in removed_obj_ids
+                    and obj_id not in obj_ids_newly_removed
+                ):
+                    logger.debug(f"Suppressing object {obj_id} at frame {frame_idx}, due to being unmatched")
+                    suppressed_obj_ids.add(obj_id)
 
         # Step 3: removed tracks that overlaps with another track for `hotstart_dup_thresh` frames
         # a) find overlaps tracks -- we consider overlap if they match to the same detection
+        # NOTE: In streaming mode, we still track overlaps for metadata but skip removal logic
         for _, matched_trk_obj_ids in det_to_matched_trk_obj_ids.items():
             if len(matched_trk_obj_ids) < 2:
                 continue  # only count detections that are matched to multiple (>=2) masklets
@@ -779,18 +819,20 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
         # b) remove a masklet if it first appears after `hotstart_diff` and it overlaps with another
         # masklet (that appears earlier) for more than `self.hotstart_dup_thresh` frames
-        for (first_obj_id, obj_id), frame_indices in overlap_pair_to_frame_inds.items():
-            if obj_id in removed_obj_ids or obj_id in obj_ids_newly_removed:
-                continue  # skip if the object is already removed
-            if (obj_first_frame_idx[obj_id] > hotstart_diff and not reverse) or (
-                obj_first_frame_idx[obj_id] < hotstart_diff and reverse
-            ):
-                if len(frame_indices) >= self.hotstart_dup_thresh:
-                    obj_ids_newly_removed.add(obj_id)
-                    logger.info(
-                        f"Removing object {obj_id} at frame {frame_idx} "
-                        f"since it overlaps with another track {first_obj_id} at frames: {frame_indices}"
-                    )
+        # NOTE: In streaming mode, we skip hotstart removal logic since we don't have future frames
+        if not streaming:
+            for (first_obj_id, obj_id), frame_indices in overlap_pair_to_frame_inds.items():
+                if obj_id in removed_obj_ids or obj_id in obj_ids_newly_removed:
+                    continue  # skip if the object is already removed
+                if (obj_first_frame_idx[obj_id] > hotstart_diff and not reverse) or (
+                    obj_first_frame_idx[obj_id] < hotstart_diff and reverse
+                ):
+                    if len(frame_indices) >= self.hotstart_dup_thresh:
+                        obj_ids_newly_removed.add(obj_id)
+                        logger.info(
+                            f"Removing object {obj_id} at frame {frame_idx} "
+                            f"since it overlaps with another track {first_obj_id} at frames: {frame_indices}"
+                        )
 
         removed_obj_ids.update(obj_ids_newly_removed)
         return obj_ids_newly_removed, extra_metadata
@@ -1077,6 +1119,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         det_out: dict[str, Tensor],
         tracker_low_res_masks_global: Tensor,
         tracker_obj_scores_global: Tensor,
+        streaming: bool = False,
     ):
         # initialize new metadata from previous metadata (its values will be updated later)
         tracker_metadata_new = {
@@ -1147,6 +1190,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             empty_trk_obj_ids=empty_trk_obj_ids,
             unmatched_trk_obj_ids=unmatched_trk_obj_ids,
             extra_metadata=extra_metadata_new,
+            streaming=streaming,
         )
         tracker_metadata_new["extra_metadata"] = extra_metadata_new
 
@@ -1344,12 +1388,14 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         inference_session: Sam3VideoInferenceSession,
         frame_idx: int,
         reverse: bool,
+        streaming: bool = False,
     ):
         """
         This function handles one-step inference for the DenseTracking model.
 
         - `inference_session` contains all the information needed for inference, including the input video frames, text prompts, and any other relevant metadata
         - The function processes detection and tracking for a single frame
+        - `streaming` indicates whether this is streaming inference mode (frames provided one at a time)
         """
 
         pixel_values = inference_session.get_frame(frame_idx).unsqueeze(0)
@@ -1391,6 +1437,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             det_out=det_out,
             tracker_low_res_masks_global=tracker_low_res_masks_global,
             tracker_obj_scores_global=tracker_obj_scores_global,
+            streaming=streaming,
         )
 
         # Step 4: based on `tracker_update_plan`, execute the update w.r.t. the tracker states
@@ -1412,11 +1459,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             reconditioned_obj_ids=reconditioned_obj_ids,
         )
         obj_id_to_score = tracker_metadata_new["obj_id_to_score"]
-        # a few statistics for the current frame as a part of the output
-        frame_stats = {
-            "num_obj_tracked": len(tracker_metadata_new["obj_ids"]),
-            "num_obj_dropped": tracker_update_plan["num_obj_dropped_due_to_limit"],
-        }
         # add tracker scores to metadata, it should be fired for frames except the first frame
         if tracker_obj_scores_global.shape[0] > 0:
             # Convert tracker_obj_scores_global to sigmoid scores before updating
@@ -1430,37 +1472,53 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             obj_id_to_mask,  # a dict: obj_id --> output mask
             obj_id_to_score,  # a dict: obj_id --> output score (prob)
             tracker_metadata_new,
-            frame_stats,
             tracker_obj_scores_global,  # a dict: obj_id --> tracker frame-level scores
         )
 
-    def forward(self, inference_session: Sam3VideoInferenceSession, frame_idx: int, reverse: bool = False):
+    @torch.inference_mode()
+    @auto_docstring(custom_intro="Propagate the objects through a streamed video frame.")
+    def forward(
+        self,
+        inference_session: Sam3VideoInferenceSession,
+        frame_idx: Optional[int] = None,
+        frame: Optional[torch.Tensor] = None,
+        reverse: bool = False,
+    ):
+        r"""
+        inference_session (`Sam3VideoInferenceSession`):
+            The video inference session object.
+        frame_idx (`int`, *optional*):
+            The index of the frame on which to run inference. No need to provide when inferring
+            on a new streamed frame.
+        frame (`torch.Tensor`, *optional*):
+            The frame to process. Provide when streaming.
+        reverse (`bool`, *optional*, defaults to `False`):
+            Whether to propagate in reverse.
+        """
+        if frame is not None:
+            frame_idx = inference_session.add_new_frame(frame, frame_idx)
+
+        if frame_idx is None:
+            raise ValueError("frame_idx must be provided when frame is not provided for streaming.")
+
         (
             obj_id_to_mask,
             obj_id_to_score,
             tracker_metadata_new,
-            frame_stats,
             _,
         ) = self._det_track_one_frame(
             inference_session=inference_session,
             frame_idx=frame_idx,
             reverse=reverse,
+            streaming=frame is not None,
         )
         # use a dummy string in "previous_stages_out" to indicate this frame has outputs
         # inference_session.previous_stages_out[frame_idx] = "_THIS_FRAME_HAS_OUTPUTS_"
 
-        out = {
-            "obj_id_to_mask": obj_id_to_mask,
-            "obj_id_to_score": obj_id_to_score,  # first frame detection score
-            "obj_id_to_tracker_score": tracker_metadata_new["obj_id_to_tracker_score_frame_wise"][frame_idx],
-        }
-
         extra_metadata = tracker_metadata_new["extra_metadata"]
         removed_obj_ids = extra_metadata["removed_obj_ids"]
-        out["removed_obj_ids"] = removed_obj_ids
-        out["suppressed_obj_ids"] = extra_metadata["suppressed_obj_ids"][frame_idx]
-        out["frame_stats"] = frame_stats
-        out["unconfirmed_obj_ids"] = []
+
+        # Update inference session state
         inference_session.obj_id_to_score = obj_id_to_score
         inference_session.obj_id_to_tracker_score_frame_wise = tracker_metadata_new[
             "obj_id_to_tracker_score_frame_wise"
@@ -1475,7 +1533,16 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         inference_session.overlap_pair_to_frame_inds = extra_metadata["overlap_pair_to_frame_inds"]
         inference_session.removed_obj_ids = removed_obj_ids
         inference_session.suppressed_obj_ids[frame_idx] = extra_metadata["suppressed_obj_ids"][frame_idx]
-        return out
+
+        return Sam3VideoSegmentationOutput(
+            object_ids=list(tracker_metadata_new["obj_ids"]),
+            obj_id_to_mask=obj_id_to_mask,
+            obj_id_to_score=obj_id_to_score,
+            obj_id_to_tracker_score=tracker_metadata_new["obj_id_to_tracker_score_frame_wise"][frame_idx],
+            removed_obj_ids=removed_obj_ids,
+            suppressed_obj_ids=extra_metadata["suppressed_obj_ids"][frame_idx],
+            frame_idx=frame_idx,
+        )
 
     def _get_processing_order(
         self,
@@ -1510,6 +1577,9 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         Propagate the prompts to get grounding results for the entire video. This method
         is a generator and yields inference outputs for all frames in the range specified
         by `start_frame_idx`, `max_frame_num_to_track`, and `reverse`.
+
+        Yields:
+            `Sam3VideoSegmentationOutput`: The segmentation output for each frame.
         """
         processing_order, end_frame_idx = self._get_processing_order(
             inference_session,
@@ -1520,13 +1590,13 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
         hotstart_buffer = []
         for frame_idx in tqdm(processing_order):
-            out = self(inference_session, frame_idx, reverse)
+            out = self(inference_session=inference_session, frame_idx=frame_idx, reverse=reverse)
 
             if self.hotstart_delay > 0:
                 # accumulate the outputs for the first `hotstart_delay` frames
-                hotstart_buffer.append([frame_idx, out])
+                hotstart_buffer.append(out)
                 # update the object IDs removed by hotstart so that we don't output them
-                inference_session.hotstart_removed_obj_ids.update(out["removed_obj_ids"])
+                inference_session.hotstart_removed_obj_ids.update(out.removed_obj_ids)
 
                 if frame_idx == end_frame_idx:
                     # we reached the end of propagation -- yield all frames in the buffer
@@ -1540,10 +1610,10 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                     # not enough frames yet -- skip yielding
                     yield_list = []
             else:
-                yield_list = [(frame_idx, out)]  # output the current frame
+                yield_list = [out]  # output the current frame
 
-            for yield_frame_idx, yield_out in yield_list:
-                yield yield_frame_idx, yield_out
+            for yield_out in yield_list:
+                yield yield_out
 
 
 @torch.jit.script
@@ -1735,4 +1805,9 @@ def _get_connected_components_with_padding(mask):
     return labels, counts
 
 
-__all__ = ["Sam3VideoModel", "Sam3VideoPreTrainedModel", "Sam3VideoInferenceSession"]
+__all__ = [
+    "Sam3VideoModel",
+    "Sam3VideoPreTrainedModel",
+    "Sam3VideoInferenceSession",
+    "Sam3VideoSegmentationOutput",
+]

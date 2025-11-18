@@ -19,7 +19,7 @@ from torchvision.ops import masks_to_boxes
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType
 from ...utils.import_utils import requires
 from ...video_utils import VideoInput
@@ -60,30 +60,21 @@ class Sam3VideoProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         segmentation_maps: Optional[ImageInput] = None,
-        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
-        input_boxes_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
         original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchEncoding:
         r"""
-        This method uses [`Sam3VideoImageProcessorFast.__call__`] method to prepare image(s) for the model. It also prepares bounding boxes for the model if they are provided.
+        This method uses [`Sam3VideoImageProcessorFast.__call__`] method to prepare image(s) for the model.
 
         Args:
             images (`ImageInput`, *optional*):
                 The image(s) to process.
-            text (`str`, `list[str]`, `list[list[str]]`, *optional*):
-                The text to process.
             segmentation_maps (`ImageInput`, *optional*):
-                The segmentation maps to process.
-            input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
-                The bounding boxes to process.
-            input_boxes_labels (`list[list[int]]`, `torch.Tensor`, *optional*):
-                The labels for the bounding boxes.
+                The segmentation maps to process (optional, for image processor).
             original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
-                The original sizes of the images.
+                The original sizes of the images. Only used when images is not provided.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return.
             **kwargs:
@@ -93,9 +84,7 @@ class Sam3VideoProcessor(ProcessorMixin):
             A [`BatchEncoding`] with the following fields:
             - `pixel_values` (`torch.Tensor`): The processed image(s).
             - `original_sizes` (`list[list[float]]`): The original sizes of the images.
-            - `labels` (`torch.Tensor`): The processed segmentation maps (if provided).
-            - `input_boxes_labels` (`torch.Tensor`): The processed labels for the bounding boxes.
-            - `input_boxes` (`torch.Tensor`): The processed bounding boxes.
+            - `labels` (`torch.Tensor`, *optional*): The processed segmentation maps (if provided).
         """
         if images is not None:
             encoding_image_processor = self.image_processor(
@@ -117,11 +106,6 @@ class Sam3VideoProcessor(ProcessorMixin):
             raise ValueError(
                 "original_sizes must be of length 1 or len(images). If you are passing a single image, you must pass a single original_size."
             )
-        text = self._resolve_text_prompts(text, input_boxes)
-
-        encoding_image_processor.update(
-            self.tokenizer(text, return_tensors=return_tensors, padding="max_length", max_length=32)
-        )
 
         return encoding_image_processor
 
@@ -228,11 +212,49 @@ class Sam3VideoProcessor(ProcessorMixin):
     def postprocess_outputs(
         self,
         inference_session,
-        out,
+        model_outputs,
+        original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
     ):
-        obj_id_to_mask = out["obj_id_to_mask"]  # low res masks (1, H_low, W_low)
+        """
+        Post-process model outputs to get final masks, boxes, and scores.
+
+        Args:
+            inference_session (`Sam3VideoInferenceSession`):
+                The inference session object.
+            model_outputs (`Sam3VideoSegmentationOutput`):
+                The raw model output from `Sam3VideoModel.forward()`.
+            original_sizes (`list[list[float]]` or `torch.Tensor`, *optional*):
+                Optional original frame sizes [height, width]. Required for streaming inference
+                when video_height/video_width are not set in the session.
+
+        Returns:
+            `dict`: A dictionary containing the following keys:
+                - **object_ids** (`torch.Tensor` of shape `(num_objects,)`): Object IDs for each detected object.
+                - **scores** (`torch.Tensor` of shape `(num_objects,)`): Detection scores for each object.
+                - **boxes** (`torch.Tensor` of shape `(num_objects, 4)`): Bounding boxes in XYXY format
+                  (top_left_x, top_left_y, bottom_right_x, bottom_right_y).
+                - **masks** (`torch.Tensor` of shape `(num_objects, height, width)`): Binary segmentation masks
+                  for each object at the original video resolution.
+        """
+        obj_id_to_mask = model_outputs["obj_id_to_mask"]  # low res masks (1, H_low, W_low)
         curr_obj_ids = sorted(obj_id_to_mask.keys())
-        H_video, W_video = inference_session.video_height, inference_session.video_width
+
+        # Get video dimensions - use original_sizes for streaming inference if session doesn't have them
+        if inference_session.video_height is not None and inference_session.video_width is not None:
+            H_video, W_video = inference_session.video_height, inference_session.video_width
+        elif original_sizes is not None:
+            if isinstance(original_sizes, torch.Tensor):
+                original_sizes = original_sizes.cpu().tolist()
+            # original_sizes is a list of [height, width] pairs, take the first one
+            if isinstance(original_sizes[0], list):
+                H_video, W_video = int(original_sizes[0][0]), int(original_sizes[0][1])
+            else:
+                H_video, W_video = int(original_sizes[0]), int(original_sizes[1])
+        else:
+            raise ValueError(
+                "Either inference_session.video_height/video_width must be set, "
+                "or original_sizes must be provided for streaming inference."
+            )
         if len(curr_obj_ids) == 0:
             out_obj_ids = torch.zeros(0, dtype=torch.int64)
             out_probs = torch.zeros(0, dtype=torch.float32)
@@ -240,10 +262,14 @@ class Sam3VideoProcessor(ProcessorMixin):
             out_boxes_xyxy = torch.zeros(0, 4, dtype=torch.float32)
         else:
             out_obj_ids = torch.tensor(curr_obj_ids, dtype=torch.int64)
-            out_probs = torch.tensor([out["obj_id_to_score"][obj_id] for obj_id in curr_obj_ids])
+            out_probs = torch.tensor([model_outputs["obj_id_to_score"][obj_id] for obj_id in curr_obj_ids])
             out_tracker_probs = torch.tensor(
                 [
-                    (out["obj_id_to_tracker_score"][obj_id] if obj_id in out["obj_id_to_tracker_score"] else 0.0)
+                    (
+                        model_outputs["obj_id_to_tracker_score"][obj_id]
+                        if obj_id in model_outputs["obj_id_to_tracker_score"]
+                        else 0.0
+                    )
                     for obj_id in curr_obj_ids
                 ]
             )
@@ -263,8 +289,8 @@ class Sam3VideoProcessor(ProcessorMixin):
             keep = out_binary_masks.any(dim=(1, 2)).cpu()  # remove masks with 0 areas
             # hide outputs for those object IDs in `obj_ids_to_hide`
             obj_ids_to_hide = []
-            if out["suppressed_obj_ids"] is not None:
-                obj_ids_to_hide.extend(list(out["suppressed_obj_ids"]))
+            if model_outputs["suppressed_obj_ids"] is not None:
+                obj_ids_to_hide.extend(list(model_outputs["suppressed_obj_ids"]))
             if len(inference_session.hotstart_removed_obj_ids) > 0:
                 obj_ids_to_hide.extend(list(inference_session.hotstart_removed_obj_ids))
             if len(obj_ids_to_hide) > 0:
@@ -281,11 +307,6 @@ class Sam3VideoProcessor(ProcessorMixin):
             out_binary_masks = torch.index_select(out_binary_masks, 0, keep_idx_gpu)
 
             out_boxes_xyxy = masks_to_boxes(out_binary_masks)
-            # normalize boxes
-            out_boxes_xyxy[..., 0] /= W_video
-            out_boxes_xyxy[..., 1] /= H_video
-            out_boxes_xyxy[..., 2] /= W_video
-            out_boxes_xyxy[..., 3] /= H_video
 
         # apply non-overlapping constraints on the existing masklets
         if out_binary_masks.shape[0] > 1:
@@ -299,11 +320,10 @@ class Sam3VideoProcessor(ProcessorMixin):
             ) > 0
 
         outputs = {
-            "out_obj_ids": out_obj_ids,
-            "out_probs": out_probs,
-            "out_boxes_xyxy": out_boxes_xyxy,
-            "out_binary_masks": out_binary_masks,
-            "frame_stats": out.get("frame_stats", None),
+            "object_ids": out_obj_ids,
+            "scores": out_probs,
+            "boxes": out_boxes_xyxy,
+            "masks": out_binary_masks,
         }
         return outputs
 
