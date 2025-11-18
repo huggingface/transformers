@@ -693,9 +693,6 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
         """
         return _post_process_for_mask_generation(all_masks, all_scores, all_boxes, crops_nms_thresh)
 
-    def pad_image(self):
-        raise NotImplementedError("No pad_image for SAM 2.")
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
