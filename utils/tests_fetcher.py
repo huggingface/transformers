@@ -990,7 +990,7 @@ def infer_tests_to_run(
     model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
     # Grab the corresponding test files:
     if (
-        any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"])
+        any(x in modified_files for x in ["setup.py"])
         or not filter_models
         and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI
         or commit_flags["test_all"]

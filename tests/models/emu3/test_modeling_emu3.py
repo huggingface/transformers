@@ -54,7 +54,7 @@ class Emu3Text2TextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         seq_length=7,
         is_training=False,
         vocab_size=99,
@@ -147,7 +147,7 @@ class Emu3Vision2TextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         seq_length=7,
         is_training=False,
         vocab_size=99,

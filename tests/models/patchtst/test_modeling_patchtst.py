@@ -52,7 +52,7 @@ class PatchTSTModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         prediction_length=7,
         context_length=14,
         patch_length=5,

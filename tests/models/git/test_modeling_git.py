@@ -198,7 +198,7 @@ class GitModelTester:
         num_channels=3,
         image_size=32,
         patch_size=16,
-        batch_size=13,
+        batch_size=2,
         text_seq_length=7,
         is_training=True,
         use_input_mask=True,

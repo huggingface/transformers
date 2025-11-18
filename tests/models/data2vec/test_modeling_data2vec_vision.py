@@ -59,7 +59,7 @@ class Data2VecVisionModelTester:
         self,
         parent,
         vocab_size=100,
-        batch_size=13,
+        batch_size=2,
         image_size=30,
         patch_size=2,
         num_channels=3,

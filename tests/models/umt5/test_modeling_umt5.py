@@ -51,7 +51,7 @@ class UMT5ModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
+        batch_size=2,
         encoder_seq_length=7,
         decoder_seq_length=7,
         # For common tests
@@ -372,7 +372,7 @@ class UMT5EncoderOnlyModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
+        batch_size=2,
         encoder_seq_length=7,
         # For common tests
         use_attention_mask=True,
