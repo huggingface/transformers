@@ -179,7 +179,7 @@ def guard_torch_init_functions():
             # something like `from torch.nn.init import xavier_uniform_` in their internals (e.g in torch.nn.modules,
             # where MultiHeadAttention lives), so the function name is binded at import time and just doing
             # `setattr(torch.nn.init, name, gloabls()[name])` is thus not enough
-            for module in sys.modules.values():
+            for module in sys.modules.copy().values():
                 if module and hasattr(module, name):
                     originals[module][name] = getattr(module, name)
                     setattr(module, name, globals()[name])
