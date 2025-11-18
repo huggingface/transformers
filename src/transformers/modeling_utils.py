@@ -1456,6 +1456,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
             self.config._attn_implementation, is_init_check=True
         )
+        if self.can_generate():
+            self.generation_config = GenerationConfig.from_model_config(config)
 
         # for initialization of the loss
         loss_type = self.__class__.__name__
@@ -1470,8 +1472,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         self.name_or_path = config.name_or_path
         self.warnings_issued = {}
-        self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
-
         # Overwrite the class attribute to make it an instance attribute, so models like
         # `InstructBlipForConditionalGeneration` can dynamically update it without modifying the class attribute
         # when a different component (e.g. language_model) is used.
@@ -3174,19 +3174,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Save the config
         if is_main_process:
             if not _hf_peft_config_loaded:
-                # If the model config has set attributes that should be in the generation config, move them there.
-                misplaced_generation_parameters = model_to_save.config._get_non_default_generation_parameters()
-                if self.can_generate() and len(misplaced_generation_parameters) > 0:
-                    warnings.warn(
-                        "Moving the following attributes in the config to the generation config: "
-                        f"{misplaced_generation_parameters}. You are seeing this warning because you've set "
-                        "generation parameters in the model config, as opposed to in the generation config.",
-                        UserWarning,
-                    )
-                    for param_name, param_value in misplaced_generation_parameters.items():
-                        setattr(model_to_save.generation_config, param_name, param_value)
-                        setattr(model_to_save.config, param_name, None)
-
                 model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
                 model_to_save.generation_config.save_pretrained(save_directory)
