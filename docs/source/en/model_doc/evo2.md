@@ -22,23 +22,43 @@ limitations under the License.
 
 ## Overview
 
-The Evo2 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Evo2 model was proposed in [Genome modeling and design across all domains of life with Evo 2](https://www.biorxiv.org/content/10.1101/2024.02.27.582234v1) by Garyk Brixi, Matthew G. Durrant, Jerome Ku, Michael Poli, et al.
+It is a biological foundation model trained on 9.3 trillion DNA base pairs from a curated genomic atlas spanning all domains of life.
 
 The abstract from the paper is the following:
 
-<INSERT PAPER ABSTRACT HERE>
+Evo 2 is a biological foundation model trained on 9.3 trillion DNA base pairs from a curated genomic atlas spanning all domains of life. The model features 7B and 40B parameter architectures and can process sequences up to 1 million base pairs at nucleotide-level resolution. It learns from DNA sequences alone to accurately predict the functional impacts of genetic variation, including noncoding pathogenic mutations and clinically significant BRCA1 variants, without task-specific finetuning. Mechanistic interpretability analyses reveal that Evo 2 autonomously learns a breadth of biological features, such as exon-intron boundaries, transcription factor binding sites, protein structural elements, and prophage genomic regions. Beyond its predictive capabilities, Evo 2 can generate mitochondrial, prokaryotic, and eukaryotic sequences at genome scale with greater naturalness and coherence than previous methods. Guiding Evo 2 via inference-time search enables controllable generation of epigenomic structure, for which the first inference-time scaling results in biology are demonstrated. The project makes Evo 2 fully open, including model parameters, training code, inference code, and the OpenGenome2 dataset, to accelerate the exploration and design of biological complexity.
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- Evo 2 is a genomic foundation model, meaning it is designed to process and generate DNA sequences.
+- It uses the StripedHyena architecture, which combines attention with Hyena filters to handle long contexts efficiently.
+- The model is trained on a massive dataset of 9.3 trillion base pairs.
+- It can handle context lengths up to 1 million base pairs (though this specific implementation may be limited by available memory).
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [arcinstitute](https://huggingface.co/arcinstitute).
+The original code can be found [here](https://github.com/ArcInstitute/evo2).
+The model was converted to Hugging Face format by [McClain Thiel](mailto:mcclain.thiel@gmail.com).
 
 ## Usage examples
 
-<INSERT SOME NICE EXAMPLES HERE>
+```python
+from transformers import Evo2Config, Evo2ForCausalLM, Evo2Tokenizer
+
+# Initialize model and tokenizer
+config = Evo2Config()
+model = Evo2ForCausalLM(config)
+tokenizer = Evo2Tokenizer()
+
+# Encode input DNA sequence
+sequence = "ACGTACGT"
+input_ids = tokenizer.encode(sequence, return_tensors="pt")
+
+# Generate
+output = model.generate(input_ids, max_length=20)
+generated_sequence = tokenizer.decode(output[0])
+print(generated_sequence)
+```
 
 ## Evo2Config
 

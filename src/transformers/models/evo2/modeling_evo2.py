@@ -218,13 +218,14 @@ class Evo2Attention(nn.Module):
 
 
 class Evo2HyenaFilter(nn.Module):
-    def __init__(self, config: Evo2Config):
+    def __init__(self, config: Evo2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
         self.order = config.hyena_order
         self.short_filter_length = config.hyena_kernel_size
         self.hyena_flip_x1x2 = config.hyena_flip_x1x2
+        self.layer_idx = layer_idx
 
         # Projections: hidden_size -> 3 * hidden_size (for x, y, z)
         self.projections = nn.Linear(self.hidden_size, self.order * self.hidden_size, bias=False)
@@ -241,12 +242,26 @@ class Evo2HyenaFilter(nn.Module):
         self.hyena_filter_groups = config.hyena_filters  
         self.channels_per_group = self.hidden_size // self.hyena_filter_groups
         
-        # These parameters are optional and will be set dynamically when loading weights
-        # We register them as None initially
+        # Register parameters based on layer configuration
         self.h = None
         self.D = None
         self.log_poles = None
         self.residues = None
+
+        if config.hyena_filter_configurations is not None and layer_idx < len(config.hyena_filter_configurations):
+            layer_config = config.hyena_filter_configurations[layer_idx]
+            
+            if layer_config.get("h_shape"):
+                self.h = nn.Parameter(torch.randn(layer_config["h_shape"]))
+            
+            if layer_config.get("D_shape"):
+                self.D = nn.Parameter(torch.randn(layer_config["D_shape"]))
+            
+            if layer_config.get("log_poles_shape"):
+                self.log_poles = nn.Parameter(torch.randn(layer_config["log_poles_shape"]))
+            
+            if layer_config.get("residues_shape"):
+                self.residues = nn.Parameter(torch.randn(layer_config["residues_shape"]))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch, seq_len, _ = hidden_states.shape
@@ -409,7 +424,7 @@ class Evo2HyenaBlock(nn.Module):
     def __init__(self, config: Evo2Config, layer_idx: int):
         super().__init__()
         self.input_layernorm = Evo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.filter = Evo2HyenaFilter(config)
+        self.filter = Evo2HyenaFilter(config, layer_idx)
         self.post_attention_layernorm = Evo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = Evo2ParallelGatedMLP(config, layer_idx)
         self.hidden_dropout = nn.Dropout(config.hidden_dropout)

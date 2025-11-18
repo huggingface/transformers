@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence, List, Dict, Any
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import standardize_rope_params
@@ -100,6 +100,7 @@ class Evo2Config(PretrainedConfig):
         hyena_hidden_size: Optional[int] = None,
         hyena_order: int = 4,
         hyena_flip_x1x2: bool = False,
+        hyena_filter_configurations: Optional[List[Dict[str, Any]]] = None,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         pad_token_id: int = 1,
@@ -133,6 +134,7 @@ class Evo2Config(PretrainedConfig):
         self.hyena_hidden_size = hyena_hidden_size if hyena_hidden_size is not None else hidden_size
         self.hyena_order = hyena_order
         self.hyena_flip_x1x2 = hyena_flip_x1x2
+        self.hyena_filter_configurations = hyena_filter_configurations
         self.initializer_range = initializer_range
         self.use_cache = use_cache
 

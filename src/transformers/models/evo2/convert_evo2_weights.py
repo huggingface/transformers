@@ -15,6 +15,7 @@ import argparse
 import os
 
 import torch
+from torch import nn
 from huggingface_hub import hf_hub_download
 
 from transformers import Evo2Config, Evo2ForCausalLM
@@ -26,11 +27,32 @@ def convert_original_weights_to_transformers(original_weights):
     # Create config based on the original model architecture (Evo2-1b-base)
     # vocab_size=512, hidden_size=1920, 25 layers (21 hyena + 4 attention every 7th layer starting from 3)
     layer_types = []
+    hyena_filter_configurations = []
+    
     for i in range(25):
         if i % 7 == 3:
             layer_types.append("attention")
+            hyena_filter_configurations.append({}) # Empty config for attention layers
         else:
             layer_types.append("hyena")
+            
+            # Determine filter configuration for this layer
+            orig_prefix = f"blocks.{i}.filter"
+            layer_config = {}
+            
+            if f"{orig_prefix}.h" in original_weights:
+                layer_config["h_shape"] = original_weights[f"{orig_prefix}.h"].shape
+            
+            if f"{orig_prefix}.D" in original_weights:
+                layer_config["D_shape"] = original_weights[f"{orig_prefix}.D"].shape
+                
+            if f"{orig_prefix}.log_poles" in original_weights:
+                layer_config["log_poles_shape"] = original_weights[f"{orig_prefix}.log_poles"].shape
+                
+            if f"{orig_prefix}.residues" in original_weights:
+                layer_config["residues_shape"] = original_weights[f"{orig_prefix}.residues"].shape
+                
+            hyena_filter_configurations.append(layer_config)
 
     config = Evo2Config(
         vocab_size=512,
@@ -44,6 +66,7 @@ def convert_original_weights_to_transformers(original_weights):
         hyena_order=3,  # 5760 / 1920 = 3
         hyena_kernel_size=3,  # Short filter kernel size
         tie_word_embeddings=True,
+        hyena_filter_configurations=hyena_filter_configurations,
     )
 
     # Initialize new state dict
@@ -112,11 +135,6 @@ def convert_original_weights_to_transformers(original_weights):
             ]
 
             # Long filter parameters (FIR or IIR)
-            # These are not standard nn.Parameters in our implementation but we can load them into the state dict
-            # and then manually assign them in the model if needed, or just save them as part of the state dict
-            # since we registered them as buffers/parameters in the model (or should have).
-            # In our implementation, they are initialized as None. We need to make sure they are loaded.
-            
             if f"{orig_prefix}.filter.h" in original_weights:
                 new_state_dict[f"model.layers.{layer_idx}.block.filter.h"] = original_weights[
                     f"{orig_prefix}.filter.h"
@@ -164,8 +182,10 @@ def main():
     print("Loading into Evo2ForCausalLM...")
     model = Evo2ForCausalLM(config)
     
-    # Load state dict (strict=False because Hyena layers have optional parameters that might be missing if unused)
-    # But we want to make sure we load everything we have.
+    # Load state dict
+    # strict=True should work now for the filter parameters!
+    # But we might still have some minor mismatches if we missed anything else (like rotary inv_freq buffers if they are persistent)
+    # Let's try strict=False but print what's missing to verify.
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
     
     print(f"Missing keys: {len(missing_keys)}")
@@ -175,24 +195,7 @@ def main():
     if len(unexpected_keys) > 0:
         print(unexpected_keys[:10])
 
-    # Manually assign filter parameters (h, D, log_poles, residues) if they were not loaded by load_state_dict
-    # because they were None in the model init.
-    # Actually, since we put them in new_state_dict, load_state_dict might complain if the model attributes are None.
-    # We might need to initialize them in the model first or just assign them directly.
-    
-    for layer_idx in range(config.num_hidden_layers):
-        if config.layer_types[layer_idx] == "hyena":
-            filter_module = model.model.layers[layer_idx].block.filter
-            orig_prefix = f"blocks.{layer_idx}.filter"
-            
-            if f"{orig_prefix}.h" in original_weights:
-                filter_module.h = nn.Parameter(original_weights[f"{orig_prefix}.h"])
-            if f"{orig_prefix}.D" in original_weights:
-                filter_module.D = nn.Parameter(original_weights[f"{orig_prefix}.D"])
-            if f"{orig_prefix}.log_poles" in original_weights:
-                filter_module.log_poles = nn.Parameter(original_weights[f"{orig_prefix}.log_poles"])
-            if f"{orig_prefix}.residues" in original_weights:
-                filter_module.residues = nn.Parameter(original_weights[f"{orig_prefix}.residues"])
+    # We no longer need manual assignment!
 
     print(f"Saving to {args.output_dir}...")
     model.save_pretrained(args.output_dir)
