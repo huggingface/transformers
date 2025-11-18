@@ -103,12 +103,15 @@ class RichInterface:
         self.model_id = model_id
         self.user_id = user_id
 
-    async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, int]:
+    async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, Optional[str], Optional[int]]:
         self._console.print(f"[bold blue]<{self.model_id}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
             text = ""
+            finish_reason: Optional[str] = None
+            completion_tokens: Optional[int] = None
             async for token in await stream:
                 outputs = token.choices[0].delta.content
+                finish_reason = getattr(token.choices[0], 'finish_reason', finish_reason)
 
                 if not outputs:
                     continue
@@ -147,7 +150,7 @@ class RichInterface:
 
         self._console.print()
 
-        return text
+        return text, finish_reason
 
     def input(self) -> str:
         """Gets user input from the console."""
@@ -168,6 +171,18 @@ class RichInterface:
         """Prints text in a given color to the console."""
         self._console.print(f"[bold {color}]{text}")
         self._console.print()
+
+    def confirm(self, message: str, default: bool = False) -> bool:
+        """Displays a yes/no prompt to the user, returning True for confirmation."""
+        default_hint = "Y/n" if default else "y/N"
+        response = self._console.input(f"[bold yellow]{message} ({default_hint}): ")
+        self._console.print()
+
+        response = response.strip().lower()
+        if not response:
+            return default
+
+        return response in {"y", "yes"}
 
     def print_help(self, minimal: bool = False):
         """Prints the help message to the console."""
@@ -362,9 +377,15 @@ class Chat:
         config = self.config
 
         async with AsyncInferenceClient(base_url=self.base_url) as client:
+            pending_user_input: Optional[str] = None
             while True:
                 try:
-                    user_input = interface.input()
+                    if pending_user_input is not None:
+                        user_input = pending_user_input
+                        pending_user_input = None
+                        interface.print_user_message(user_input)
+                    else:
+                        user_input = interface.input()
 
                     # User commands
                     if user_input == "!exit":
@@ -448,9 +469,25 @@ class Chat:
                         },
                     )
 
-                    model_output = await interface.stream_output(stream)
+                    model_output, finish_reason, completion_tokens = await interface.stream_output(stream)
 
                     chat.append({"role": "assistant", "content": model_output})
+
+                    if finish_reason == "length":
+                        limit_hint = completion_tokens or config.max_new_tokens
+                        if limit_hint is not None:
+                            limit_message = (
+                                "Generation stopped after reaching the token limit"
+                                f" ({limit_hint} tokens)."
+                            )
+                        else:
+                            limit_message = "Generation stopped after reaching the token limit."
+
+                        interface.print_color(limit_message, "yellow")
+
+                        if interface.confirm("Continue generating?"):
+                            pending_user_input = "Please continue. Do not repeat text.”"
+                            continue
                 except KeyboardInterrupt:
                     break
 

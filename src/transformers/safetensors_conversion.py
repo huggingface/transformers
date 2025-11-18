@@ -3,6 +3,7 @@ from typing import Optional
 import httpx
 from huggingface_hub import Discussion, HfApi, get_repo_discussions
 
+from build.lib.transformers.utils import is_offline_mode
 from .utils import cached_file, http_user_agent, logging
 
 

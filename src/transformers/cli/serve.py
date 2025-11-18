@@ -486,6 +486,7 @@ class Serve:
 
         @app.post("/v1/chat/completions")
         def chat_completion(request: Request, body: dict):
+            print(body)
             self.validate_chat_completion_request(request=body)
 
             if self.continuous_batching:
