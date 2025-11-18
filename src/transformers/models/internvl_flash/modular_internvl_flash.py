@@ -49,6 +49,11 @@ from ..llava.modeling_llava import (
 
 import torch.nn as nn
 
+class InternvlFlashVisionAttention(InternVLVisionAttention):
+    pass
+
+class InternvlFlashVisionConfig(InternVLVisionConfig):
+    pass
 class InternVLFlashMLP(nn.Module):
     def __init__(self, in_dim, out_dim, dropout=0.0):
         super().__init__()
@@ -123,13 +128,13 @@ class InternVLFlashCrossAttentionPooling(nn.Module):
     def __init__(self, dim):
         super().__init__()
         self.query_token = nn.Parameter(torch.randn(1, dim))  # [1, D]
-        self.attn1 = InternVLVisionAttention(InternVLVisionConfig)
+        self.attn1 = InternvlFlashVisionAttention(InternvlFlashVisionConfig)
         self.norm1 = nn.LayerNorm(dim)
-        self.attn2 = InternVLVisionAttention(InternVLVisionConfig)
+        self.attn2 = InternvlFlashVisionAttention(InternvlFlashVisionConfig)
         self.norm2 = nn.LayerNorm(dim)
-        self.attn3 = InternVLVisionAttention(InternVLVisionConfig)
+        self.attn3 = InternvlFlashVisionAttention(InternvlFlashVisionConfig)
         self.norm3 = nn.LayerNorm(dim)
-        self.attn4 = InternVLVisionAttention(InternVLVisionConfig)
+        self.attn4 = InternvlFlashVisionAttention(InternvlFlashVisionConfig)
         self.norm4 = nn.LayerNorm(dim)
 
     def forward(self, batched_tokens: list[torch.Tensor]):
@@ -167,14 +172,13 @@ class InternVLFlashCrossAttentionPooling(nn.Module):
         return out4.squeeze(1)
 
 
-class InternvlFlashVisionConfig(InternVLVisionConfig):
-    pass
-
-
 class InternvlFlashConfig(InternVLConfig):
     pass
 
-
+class InternvlFlashMultiModalProjector(InternVLMultiModalProjector):
+    pass 
+class InternvlFlashModelOutputWithPast(InternVLModelOutputWithPast):
+    pass
 @auto_docstring
 class InternvlFlashVisionModel(InternVLVisionModel):
     pass
@@ -190,7 +194,7 @@ class InternvlFlashModel(InternVLModel):
         self.gating = InternVLFlashGating(hidden_size=vit_hidden_size)
 
         llm_hidden_size = config.text_config.hidden_size
-        self.multi_modal_projector = InternVLMultiModalProjector(config)
+        self.multi_modal_projector = InternvlFlashMultiModalProjector(config)
         self.mlp2 = InternVLFlashMLP2(vit_hidden_size, llm_hidden_size, config)
         self.flash_relative_threshold = config.flash_relative_threshold
         self.flash_absolute_threshold = config.flash_absolute_threshold
@@ -381,7 +385,7 @@ class InternvlFlashModel(InternVLModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, InternVLModelOutputWithPast]:
+    ) -> Union[tuple, InternvlFlashModelOutputWithPast]:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         # image feature is vit embeds
@@ -429,7 +433,7 @@ class InternvlFlashModel(InternVLModel):
             **kwargs,
         )
 
-        return InternVLModelOutputWithPast(
+        return InternvlFlashModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,

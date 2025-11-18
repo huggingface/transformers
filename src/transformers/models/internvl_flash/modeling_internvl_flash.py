@@ -32,134 +32,13 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_int
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_internvl_flash import InternvlFlashConfig, InternvlFlashVisionConfig
-
-
-class InternVLFlashMLP(nn.Module):
-    def __init__(self, in_dim, out_dim, dropout=0.0):
-        super().__init__()
-        self.dense_in = nn.Linear(in_dim, out_dim)
-        self.act_fn = nn.GELU()
-        self.dropout_in = nn.Dropout(dropout)
-        self.dense_out = nn.Linear(out_dim, in_dim)
-        self.dropout_out = nn.Dropout(dropout)
-        self.norm = nn.LayerNorm(in_dim)
-
-    def forward(self, hidden_states):
-        hidden_states = self.dense_in(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.dropout_in(hidden_states)
-        hidden_states = self.dense_out(hidden_states)
-        hidden_states = self.dropout_out(hidden_states)
-        hidden_states = self.norm(hidden_states)
-
-        return hidden_states
-
-
-class InternVLFlashMLP2(nn.Module):
-    def __init__(self, vit_hidden_size, llm_hidden_size, config):
-        super().__init__()
-
-        in_dim = vit_hidden_size * int(1 / config.downsample_ratio) ** 4
-        mid_dim = llm_hidden_size * 2
-        out_dim = llm_hidden_size
-        self.norm = nn.LayerNorm(in_dim)
-        self.dense1 = nn.Linear(in_dim, mid_dim)
-        self.act_fn1 = nn.GELU()
-        self.dropout1 = nn.Dropout(0.1)
-        self.dense2 = nn.Linear(mid_dim, mid_dim)
-        self.act_fn2 = nn.GELU()
-        self.dropout2 = nn.Dropout(0.1)
-        self.dense3 = nn.Linear(mid_dim, out_dim)
-
-    def forward(self, hidden_states):
-        hidden_states = self.norm(hidden_states)
-        hidden_states = self.dense1(hidden_states)
-        hidden_states = self.act_fn1(hidden_states)
-        hidden_states = self.dropout1(hidden_states)
-        hidden_states = self.dense2(hidden_states)
-        hidden_states = self.act_fn2(hidden_states)
-        hidden_states = self.dropout2(hidden_states)
-        hidden_states = self.dense3(hidden_states)
-
-        return hidden_states
-
-
-class InternVLFlashGating(nn.Module):
-    def __init__(self, hidden_size=2048, expansion_factor=4, dropout=0.1, use_checkpoint=True):
-        super().__init__()
-        self.use_checkpoint = use_checkpoint
-        mid_dim = hidden_size * expansion_factor
-
-        self.block1 = InternVLFlashMLP(hidden_size, mid_dim)
-        self.block2 = InternVLFlashMLP(hidden_size, mid_dim)
-        self.block3 = InternVLFlashMLP(hidden_size, mid_dim)
-        self.block4 = InternVLFlashMLP(hidden_size, mid_dim)
-        self.gate_norm = nn.LayerNorm(hidden_size)
-        self.gate_proj = nn.Linear(hidden_size, 2)
-
-    def forward(self, x):
-        x = x + self.block1(x)
-        x = x + self.block2(x)
-        x = x + self.block3(x)
-        x = x + self.block4(x)
-        logits = self.gate_proj(self.gate_norm(x))
-        probs = torch.softmax(logits, dim=-1)  # 每个 token 的 expert 选择概率
-        return probs
-
-
-class InternVLFlashCrossAttentionPooling(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        self.query_token = nn.Parameter(torch.randn(1, dim))  # [1, D]
-        self.attn1 = InternVLVisionAttention(InternVLVisionConfig)
-        self.norm1 = nn.LayerNorm(dim)
-        self.attn2 = InternVLVisionAttention(InternVLVisionConfig)
-        self.norm2 = nn.LayerNorm(dim)
-        self.attn3 = InternVLVisionAttention(InternVLVisionConfig)
-        self.norm3 = nn.LayerNorm(dim)
-        self.attn4 = InternVLVisionAttention(InternVLVisionConfig)
-        self.norm4 = nn.LayerNorm(dim)
-
-    def forward(self, batched_tokens: list[torch.Tensor]):
-        """
-        batched_tokens: List of Tensors of shape [Ti, D], length = B
-        """
-        B = len(batched_tokens)
-        if B == 0:
-            return torch.empty(
-                0, self.query_token.shape[-1], device=self.query_token.device, dtype=self.query_token.dtype
-            )
-
-        D = batched_tokens[0].shape[-1]
-        device = batched_tokens[0].device
-        # 1. Padding
-        max_len = max(t.shape[0] for t in batched_tokens)
-        dtype = self.query_token.dtype
-        padded = torch.zeros(B, max_len, D, dtype=dtype, device=device)
-        padding_mask = torch.ones(B, max_len, dtype=torch.bool, device=device)
-        for i, t in enumerate(batched_tokens):
-            L = t.shape[0]
-            padded[i, :L] = t
-            padding_mask[i, :L] = False
-        # 2. Query token: [B, 1, D]
-        query = self.query_token.unsqueeze(0).expand(B, -1, -1)  # learnable token for each sample
-        # 3. Attention layers
-        out1, _ = self.attn1(query, padded, padded, key_padding_mask=padding_mask)  # [B, 1, D]
-        out1 = self.norm1(out1)
-        out2, _ = self.attn2(out1, padded, padded, key_padding_mask=padding_mask)  # [B, 1, D]
-        out2 = self.norm2(out2)
-        out3, _ = self.attn3(out2, padded, padded, key_padding_mask=padding_mask)  # [B, 1, D]
-        out3 = self.norm3(out3)
-        out4, _ = self.attn4(out3, padded, padded, key_padding_mask=padding_mask)  # [B, 1, D]
-        out4 = self.norm4(out4)
-        return out4.squeeze(1)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -281,6 +160,166 @@ class InternvlFlashVisionAttention(nn.Module):
         output = self.projection_dropout(output)
 
         return output, attn_weights
+
+
+class InternVLFlashMLP(nn.Module):
+    def __init__(self, in_dim, out_dim, dropout=0.0):
+        super().__init__()
+        self.dense_in = nn.Linear(in_dim, out_dim)
+        self.act_fn = nn.GELU()
+        self.dropout_in = nn.Dropout(dropout)
+        self.dense_out = nn.Linear(out_dim, in_dim)
+        self.dropout_out = nn.Dropout(dropout)
+        self.norm = nn.LayerNorm(in_dim)
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense_in(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.dropout_in(hidden_states)
+        hidden_states = self.dense_out(hidden_states)
+        hidden_states = self.dropout_out(hidden_states)
+        hidden_states = self.norm(hidden_states)
+
+        return hidden_states
+
+
+class InternVLFlashMLP2(nn.Module):
+    def __init__(self, vit_hidden_size, llm_hidden_size, config):
+        super().__init__()
+
+        in_dim = vit_hidden_size * int(1 / config.downsample_ratio) ** 4
+        mid_dim = llm_hidden_size * 2
+        out_dim = llm_hidden_size
+        self.norm = nn.LayerNorm(in_dim)
+        self.dense1 = nn.Linear(in_dim, mid_dim)
+        self.act_fn1 = nn.GELU()
+        self.dropout1 = nn.Dropout(0.1)
+        self.dense2 = nn.Linear(mid_dim, mid_dim)
+        self.act_fn2 = nn.GELU()
+        self.dropout2 = nn.Dropout(0.1)
+        self.dense3 = nn.Linear(mid_dim, out_dim)
+
+    def forward(self, hidden_states):
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.dense1(hidden_states)
+        hidden_states = self.act_fn1(hidden_states)
+        hidden_states = self.dropout1(hidden_states)
+        hidden_states = self.dense2(hidden_states)
+        hidden_states = self.act_fn2(hidden_states)
+        hidden_states = self.dropout2(hidden_states)
+        hidden_states = self.dense3(hidden_states)
+
+        return hidden_states
+
+
+class InternVLFlashGating(nn.Module):
+    def __init__(self, hidden_size=2048, expansion_factor=4, dropout=0.1, use_checkpoint=True):
+        super().__init__()
+        self.use_checkpoint = use_checkpoint
+        mid_dim = hidden_size * expansion_factor
+
+        self.block1 = InternVLFlashMLP(hidden_size, mid_dim)
+        self.block2 = InternVLFlashMLP(hidden_size, mid_dim)
+        self.block3 = InternVLFlashMLP(hidden_size, mid_dim)
+        self.block4 = InternVLFlashMLP(hidden_size, mid_dim)
+        self.gate_norm = nn.LayerNorm(hidden_size)
+        self.gate_proj = nn.Linear(hidden_size, 2)
+
+    def forward(self, x):
+        x = x + self.block1(x)
+        x = x + self.block2(x)
+        x = x + self.block3(x)
+        x = x + self.block4(x)
+        logits = self.gate_proj(self.gate_norm(x))
+        probs = torch.softmax(logits, dim=-1)  # 每个 token 的 expert 选择概率
+        return probs
+
+
+class InternVLFlashCrossAttentionPooling(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.query_token = nn.Parameter(torch.randn(1, dim))  # [1, D]
+        self.attn1 = InternvlFlashVisionAttention(InternvlFlashVisionConfig)
+        self.norm1 = nn.LayerNorm(dim)
+        self.attn2 = InternvlFlashVisionAttention(InternvlFlashVisionConfig)
+        self.norm2 = nn.LayerNorm(dim)
+        self.attn3 = InternvlFlashVisionAttention(InternvlFlashVisionConfig)
+        self.norm3 = nn.LayerNorm(dim)
+        self.attn4 = InternvlFlashVisionAttention(InternvlFlashVisionConfig)
+        self.norm4 = nn.LayerNorm(dim)
+
+    def forward(self, batched_tokens: list[torch.Tensor]):
+        """
+        batched_tokens: List of Tensors of shape [Ti, D], length = B
+        """
+        B = len(batched_tokens)
+        if B == 0:
+            return torch.empty(
+                0, self.query_token.shape[-1], device=self.query_token.device, dtype=self.query_token.dtype
+            )
+
+        D = batched_tokens[0].shape[-1]
+        device = batched_tokens[0].device
+        # 1. Padding
+        max_len = max(t.shape[0] for t in batched_tokens)
+        dtype = self.query_token.dtype
+        padded = torch.zeros(B, max_len, D, dtype=dtype, device=device)
+        padding_mask = torch.ones(B, max_len, dtype=torch.bool, device=device)
+        for i, t in enumerate(batched_tokens):
+            L = t.shape[0]
+            padded[i, :L] = t
+            padding_mask[i, :L] = False
+        # 2. Query token: [B, 1, D]
+        query = self.query_token.unsqueeze(0).expand(B, -1, -1)  # learnable token for each sample
+        # 3. Attention layers
+        out1, _ = self.attn1(query, padded, padded, key_padding_mask=padding_mask)  # [B, 1, D]
+        out1 = self.norm1(out1)
+        out2, _ = self.attn2(out1, padded, padded, key_padding_mask=padding_mask)  # [B, 1, D]
+        out2 = self.norm2(out2)
+        out3, _ = self.attn3(out2, padded, padded, key_padding_mask=padding_mask)  # [B, 1, D]
+        out3 = self.norm3(out3)
+        out4, _ = self.attn4(out3, padded, padded, key_padding_mask=padding_mask)  # [B, 1, D]
+        out4 = self.norm4(out4)
+        return out4.squeeze(1)
+
+
+class InternvlFlashMultiModalProjector(nn.Module):
+    def __init__(self, config: InternvlFlashConfig):
+        super().__init__()
+        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size * int(1 / config.downsample_ratio) ** 2)
+        self.linear_1 = nn.Linear(
+            config.vision_config.hidden_size * int(1 / config.downsample_ratio) ** 2, config.text_config.hidden_size
+        )
+        self.act = ACT2FN[config.projector_hidden_act]
+        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size)
+
+    def forward(self, image_features):
+        hidden_states = self.layer_norm(image_features)
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for InternvlFlash outputs, with hidden states and attentions.
+    """
+)
+class InternvlFlashModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -615,7 +654,7 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
     def __init__(self, config: InternvlFlashConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
-        self.multi_modal_projector = InternVLMultiModalProjector(config)
+        self.multi_modal_projector = InternvlFlashMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
 
         vit_hidden_size = config.vision_config.hidden_size
@@ -733,7 +772,7 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, InternVLModelOutputWithPast]:
+    ) -> Union[tuple, InternvlFlashModelOutputWithPast]:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         # image feature is vit embeds
@@ -781,7 +820,7 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
             **kwargs,
         )
 
-        return InternVLModelOutputWithPast(
+        return InternvlFlashModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
