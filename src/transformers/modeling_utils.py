@@ -2351,7 +2351,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     # Will dynamically check the config if it has changed
                     submodel_tied_weights = submodule.get_expanded_tied_weights_keys(all_submodels=False)
                     if prefix != "":
-                        submodel_tied_weights = {f"{prefix}.{k}": f"{prefix}.{v}" for k, v in submodel_tied_weights.items()}
+                        submodel_tied_weights = {
+                            f"{prefix}.{k}": f"{prefix}.{v}" for k, v in submodel_tied_weights.items()
+                        }
                     expanded_tied_weights.update(submodel_tied_weights)
             return expanded_tied_weights
 
@@ -2390,7 +2392,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             # we cycle source as it should be dispatch in many target if regex
             for target_n, source_n in zip(target_params, cycle(source_params)):
-                expanded_tied_weights[target_n] = source_n
+                # If the source is already registed as a target, use the original corresponding source. This should never
+                # happen in general, but some models such as `d_fine` have complicated regex patterns, so it end up being
+                # the case for simplicity of the regexes. Fix it silently here
+                if source_n in expanded_tied_weights.keys():
+                    # Use original source instead of having keys both as source and targets
+                    expanded_tied_weights[target_n] = expanded_tied_weights[source_n]
+                # Usual case, everything is already correct
+                else:
+                    expanded_tied_weights[target_n] = source_n
 
         return expanded_tied_weights
 
@@ -2460,8 +2470,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             setattr(parent, name, source_param)
             self._adjust_bias(parent, source_param)
             if missing_keys is not None:
-                source_is_there = not re.search(source_param_name, "\n".join(missing_keys), flags=re.MULTILINE)
-                target_is_there = not re.search(target_param_name, "\n".join(missing_keys), flags=re.MULTILINE)
+                source_is_there = source_param_name not in missing_keys
+                target_is_there = target_param_name not in missing_keys
                 if source_is_there:
                     missing_keys.discard(target_param_name)
                 # If the source is not present, the checkpoint is corrupted
