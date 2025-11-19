@@ -24,7 +24,6 @@ if is_torchao_available():
 
 logger = logging.get_logger(__name__)
 
-
 class TorchAoQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer

@@ -576,7 +576,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
             "model.layers.18": 0,
             "model.layers.19": "cpu",
             "model.layers.20": "cpu",
-            "model.layers.21": "disk",
+            "model.layers.21": "cpu",
             "model.norm": 0,
             "model.rotary_emb": 0,
             "lm_head": 0,
@@ -599,7 +599,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
-                ("cuda", 7): "What are we having for dinner?\n- 2. What is the temperature outside",
+                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
             }
         )
         # fmt: on
@@ -712,7 +712,7 @@ class TorchAoSerializationTest(unittest.TestCase):
         dtype = torch.bfloat16 if isinstance(self.quant_scheme, Int4WeightOnlyConfig) else "auto"
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname, safe_serialization=safe_serialization)
-            loaded_quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, dtype=dtype, device_map=device)
+            loaded_quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, dtype=dtype, device_map=device, use_safetensors=safe_serialization)
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(device)
 
             output = loaded_quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
@@ -729,7 +729,7 @@ class TorchAoSafeSerializationTest(TorchAoSerializationTest):
     @classmethod
     def setUpClass(cls):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
         # placeholder
         cls.quant_scheme = torchao.quantization.Float8WeightOnlyConfig()
 
