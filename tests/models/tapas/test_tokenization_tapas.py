@@ -34,11 +34,10 @@ from transformers.models.tapas.tokenization_tapas import (
 from transformers.testing_utils import (
     require_pandas,
     require_tokenizers,
-    require_torch,
     slow,
 )
 
-from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english, merge_model_tokenizer_mappings
+from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 
 @require_tokenizers
@@ -892,7 +891,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Do the same test as modeling common.
                 self.assertIn(0, output["token_type_ids"][0])
-
 
     @unittest.skip(reason="TAPAS doesn't handle pre-tokenized inputs.")
     def test_pretokenized_inputs(self):

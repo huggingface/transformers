@@ -99,7 +99,6 @@ class BioGptTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
 
-
         with tempfile.TemporaryDirectory() as tmpdir:
             vocab_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["vocab_file"])
             merges_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["merges_file"])

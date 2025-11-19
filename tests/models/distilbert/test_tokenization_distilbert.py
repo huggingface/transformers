@@ -15,11 +15,12 @@
 
 from transformers import AutoTokenizer
 from transformers.models.distilbert.tokenization_distilbert import DistilBertTokenizer
-from transformers.testing_utils import require_tokenizers, slow
+from transformers.testing_utils import require_tokenizers
 
 from ..bert import test_tokenization_bert
 
-#TODO: Ita remove this test file?
+
+# TODO: Ita remove this test file?
 @require_tokenizers
 class DistilBertTokenizationTest(test_tokenization_bert.BertTokenizationTest):
     tokenizer_class = DistilBertTokenizer

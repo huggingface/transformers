@@ -51,6 +51,7 @@ from transformers.tokenization_utils_tokenizers import TokenizersExtractor
 from .test_sentencepiece_backend_mixin import SentencePieceBackendTesterMixin
 from .test_tokenizers_backend_mixin import TokenizersBackendTesterMixin
 
+
 NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilingual"]
 
 SMALL_TRAINING_CORPUS = [
@@ -252,13 +253,13 @@ Hey how are you doing"""
             cls._data = f_data.read().replace("\n\n", "\n").strip()
 
         cls.tmpdirname = tempfile.mkdtemp()
-        
+
         # save the first pretrained tokenizer to tmpdirname for tests to use
         if cls.from_pretrained_id and cls.tokenizer_class is not None:
             try:
                 tokenizer = AutoTokenizer.from_pretrained(
                     cls.from_pretrained_id[0],
-                    **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {})
+                    **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {}),
                 )
                 tokenizer.save_pretrained(cls.tmpdirname)
             except Exception:
@@ -316,27 +317,26 @@ Hey how are you doing"""
     def get_extracted_tokenizer(self, reference_tokenizer=None):
         """
         Build a tokenizer from extracted vocab/merges using TokenizersExtractor.
-        
+
         Args:
             reference_tokenizer: Optional tokenizer to copy special tokens from.
                                 If None, uses get_tokenizer().
-        
+
         Returns:
             Tokenizer built from extracted vocab/merges, or None if extraction fails.
         """
-        from transformers.tokenization_utils_tokenizers import TokenizersExtractor
-        
+
         if reference_tokenizer is None:
             reference_tokenizer = self.get_tokenizer()
-        
+
         try:
             tokenizer_json_path = os.path.join(self.tmpdirname, "tokenizer.json")
             if not os.path.exists(tokenizer_json_path):
                 return None
-            
+
             extractor = TokenizersExtractor(tokenizer_json_path)
             vocab_ids, vocab_scores, merges, added_tokens_decoder = extractor.extract()
-            
+
             # Convert added_tokens list to added_tokens_decoder dict format
             # This matches the format used by from_pretrained() from tokenizer_config.json
             tokenizer_from_extractor = self.tokenizer_class(
@@ -345,9 +345,9 @@ Hey how are you doing"""
                 do_lower_case=False,
                 keep_accents=True,
                 added_tokens_decoder={token_id: token_info for token_id, token_info in added_tokens_decoder.items()},
-                **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {})
+                **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
             )
-            
+
             return tokenizer_from_extractor
         except (TypeError, Exception):
             # fail and raise the error
@@ -358,17 +358,17 @@ Hey how are you doing"""
         Build a tokenizer from extracted vocab/merges using SentencePieceExtractor.
         """
         from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
-        
+
         try:
             sentencepiece_model_path = os.path.join(self.tmpdirname, "tokenizer.model")
             if not os.path.exists(sentencepiece_model_path):
                 return None
-            
+
             extractor = SentencePieceExtractor(sentencepiece_model_path)
             vocab_ids, vocab_scores, merges = extractor.extract()
-            
+
             tokenizer_from_extractor = self.tokenizer_class(vocab=vocab_ids, merges=merges)
-            
+
             return tokenizer_from_extractor
         except (TypeError, Exception):
             return None
@@ -728,7 +728,7 @@ Hey how are you doing"""
             self.from_pretrained_id[0],
             do_lower_case=False,
             keep_accents=True,
-            **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {})
+            **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
         self._run_integration_checks(tokenizer_original, "original")
 
@@ -754,7 +754,7 @@ Hey how are you doing"""
             self.from_pretrained_id[0],
             do_lower_case=False,
             keep_accents=True,
-            **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {})
+            **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
         tokenizer_from_extractor = self.get_extracted_tokenizer(reference_tokenizer=tokenizer_original)
         if tokenizer_from_extractor is None:

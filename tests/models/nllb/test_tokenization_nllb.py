@@ -13,12 +13,10 @@
 # limitations under the License.
 
 import os
-import shutil
 import tempfile
 import unittest
 
 from transformers import (
-    SPIECE_UNDERLINE,
     AddedToken,
     BatchEncoding,
     NllbTokenizer,
@@ -53,11 +51,190 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "facebook/nllb-200-distilled-600M"
     tokenizer_class = NllbTokenizer
 
-    integration_expected_tokens = ['▁This', '▁is', '▁a', '▁test', '▁', '😊', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fals', 'é', '.', '▁生活', '的', '真', '<unk>', '是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '▁', '<s>', '▁hi', '<s>', '▁there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁enc', 'od', 'ed', ':', '▁Hello', '.', '▁But', '▁ir', 'd', '▁and', '▁ปี', '▁ir', 'd', '▁ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']
-    integration_expected_token_ids = [9680, 248, 9, 7356, 248059, 253515, 117, 1398, 79519, 108, 855, 45299, 248079, 540, 3423, 248, 52428, 248132, 248075, 182892, 248506, 249573, 3, 249221, 2867, 94124, 2867, 94124, 94124, 248059, 0, 435, 0, 6370, 1617, 45893, 191422, 12516, 280, 242514, 12025, 129, 76, 248144, 94124, 248075, 9062, 528, 248072, 540, 99681, 528, 248072, 34744, 27426, 11657, 2442, 1259, 34512]
-    expected_tokens_from_ids = ['▁This', '▁is', '▁a', '▁test', '▁', '😊', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fals', 'é', '.', '▁生活', '的', '真', '<unk>', '是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '▁', '<s>', '▁hi', '<s>', '▁there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁enc', 'od', 'ed', ':', '▁Hello', '.', '▁But', '▁ir', 'd', '▁and', '▁ปี', '▁ir', 'd', '▁ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']
-    integration_expected_decoded_text = 'This is a test 😊 I was born in 92000, and this is falsé. 生活的真<unk>是 Hi Hello Hi Hello Hello <s> hi<s> there The following string should be properly encoded: Hello. But ird and ปี ird ด Hey how are you doing'
- 
+    integration_expected_tokens = [
+        "▁This",
+        "▁is",
+        "▁a",
+        "▁test",
+        "▁",
+        "😊",
+        "▁I",
+        "▁was",
+        "▁born",
+        "▁in",
+        "▁9",
+        "2000",
+        ",",
+        "▁and",
+        "▁this",
+        "▁is",
+        "▁fals",
+        "é",
+        ".",
+        "▁生活",
+        "的",
+        "真",
+        "<unk>",
+        "是",
+        "▁Hi",
+        "▁Hello",
+        "▁Hi",
+        "▁Hello",
+        "▁Hello",
+        "▁",
+        "<s>",
+        "▁hi",
+        "<s>",
+        "▁there",
+        "▁The",
+        "▁following",
+        "▁string",
+        "▁should",
+        "▁be",
+        "▁properly",
+        "▁enc",
+        "od",
+        "ed",
+        ":",
+        "▁Hello",
+        ".",
+        "▁But",
+        "▁ir",
+        "d",
+        "▁and",
+        "▁ปี",
+        "▁ir",
+        "d",
+        "▁ด",
+        "▁Hey",
+        "▁how",
+        "▁are",
+        "▁you",
+        "▁doing",
+    ]
+    integration_expected_token_ids = [
+        9680,
+        248,
+        9,
+        7356,
+        248059,
+        253515,
+        117,
+        1398,
+        79519,
+        108,
+        855,
+        45299,
+        248079,
+        540,
+        3423,
+        248,
+        52428,
+        248132,
+        248075,
+        182892,
+        248506,
+        249573,
+        3,
+        249221,
+        2867,
+        94124,
+        2867,
+        94124,
+        94124,
+        248059,
+        0,
+        435,
+        0,
+        6370,
+        1617,
+        45893,
+        191422,
+        12516,
+        280,
+        242514,
+        12025,
+        129,
+        76,
+        248144,
+        94124,
+        248075,
+        9062,
+        528,
+        248072,
+        540,
+        99681,
+        528,
+        248072,
+        34744,
+        27426,
+        11657,
+        2442,
+        1259,
+        34512,
+    ]
+    expected_tokens_from_ids = [
+        "▁This",
+        "▁is",
+        "▁a",
+        "▁test",
+        "▁",
+        "😊",
+        "▁I",
+        "▁was",
+        "▁born",
+        "▁in",
+        "▁9",
+        "2000",
+        ",",
+        "▁and",
+        "▁this",
+        "▁is",
+        "▁fals",
+        "é",
+        ".",
+        "▁生活",
+        "的",
+        "真",
+        "<unk>",
+        "是",
+        "▁Hi",
+        "▁Hello",
+        "▁Hi",
+        "▁Hello",
+        "▁Hello",
+        "▁",
+        "<s>",
+        "▁hi",
+        "<s>",
+        "▁there",
+        "▁The",
+        "▁following",
+        "▁string",
+        "▁should",
+        "▁be",
+        "▁properly",
+        "▁enc",
+        "od",
+        "ed",
+        ":",
+        "▁Hello",
+        ".",
+        "▁But",
+        "▁ir",
+        "d",
+        "▁and",
+        "▁ปี",
+        "▁ir",
+        "d",
+        "▁ด",
+        "▁Hey",
+        "▁how",
+        "▁are",
+        "▁you",
+        "▁doing",
+    ]
+    integration_expected_decoded_text = "This is a test 😊 I was born in 92000, and this is falsé. 生活的真<unk>是 Hi Hello Hi Hello Hello <s> hi<s> there The following string should be properly encoded: Hello. But ird and ปี ird ด Hey how are you doing"
 
     # @classmethod
     # def setUpClass(cls):
@@ -70,7 +247,6 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     #     # Create tokenizer with extracted vocab
     #     tokenizer = NllbTokenizer(vocab=vocab_scores)
     #     tokenizer.save_pretrained(cls.tmpdirname)
-
 
     @require_torch
     def test_prepare_seq2seq_batch(self):
@@ -130,15 +306,12 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.get_tokenizer(
-                    pretrained_name, additional_special_tokens=added_tokens, **kwargs
-                )
+                tokenizer_r = self.get_tokenizer(pretrained_name, additional_special_tokens=added_tokens, **kwargs)
                 r_output = tokenizer_r.encode("Hey this is a <special> token")
 
                 special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
 
                 self.assertTrue(special_token_id in r_output)
-
 
     @unittest.skip(reason="Need to fix this after #26538")
     def test_training_new_tokenizer(self):
@@ -178,11 +351,17 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             if vocab_file and os.path.exists(vocab_file):
                 extractor = SentencePieceExtractor(vocab_file)
                 vocab_ids, vocab_scores, merges = extractor.extract()
-                tok3 = NllbTokenizer(vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=None)
+                tok3 = NllbTokenizer(
+                    vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=None
+                )
                 self.assertEqual(len(tok3), 256204)  # legacy
-                tok4 = NllbTokenizer(vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=[])
+                tok4 = NllbTokenizer(
+                    vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=[]
+                )
                 self.assertEqual(len(tok4), 256002)
-                tok5 = NllbTokenizer(vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=[code1, code2])
+                tok5 = NllbTokenizer(
+                    vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=[code1, code2]
+                )
                 self.assertEqual(len(tok5), 256004)
 
 

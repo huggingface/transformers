@@ -18,6 +18,7 @@ import unittest
 from transformers.models.mluke.tokenization_mluke import MLukeTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow
 from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
+
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
@@ -55,7 +56,6 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         output_text = "lower newer"
         return input_text, output_text
 
-  
     def mluke_dict_integration_testing(self):
         tokenizer = self.get_tokenizer()
 

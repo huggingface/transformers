@@ -21,13 +21,12 @@ from parameterized import parameterized
 
 from transformers import (
     AddedToken,
-    PreTrainedTokenizerBase,
     LayoutXLMTokenizer,
+    PreTrainedTokenizerBase,
     is_mlx_available,
     is_torch_available,
     logging,
 )
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 from transformers.testing_utils import (
     get_tests_dir,
     require_pandas,
@@ -36,13 +35,14 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
-from ...test_tokenizers_backend_mixin import SMALL_TRAINING_CORPUS
 from ...test_tokenization_common import (
     TokenizerTesterMixin,
     filter_non_english,
     merge_model_tokenizer_mappings,
 )
+from ...test_tokenizers_backend_mixin import SMALL_TRAINING_CORPUS
 
 
 logger = logging.get_logger(__name__)
@@ -144,7 +144,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Get the batch size
         first_key = list(batch_encode_plus_sequences.keys())[0]
         batch_size = len(batch_encode_plus_sequences[first_key])
-        
+
         # Convert to list of dicts
         encode_plus_sequences = []
         for i in range(batch_size):
@@ -153,7 +153,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 if key != "encodings":  # Skip the encodings attribute
                     single_sequence[key] = value[i]
             encode_plus_sequences.append(single_sequence)
-        
+
         return encode_plus_sequences
 
     def get_input_output_texts(self, tokenizer):
@@ -172,7 +172,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 words = ["hello", "world"]
                 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
-                
+
                 # LayoutXLM doesn't use add_bos_token, it uses post_processor
                 # Just verify it can encode without error
                 encoded = tokenizer.encode(words, boxes=boxes)
@@ -185,7 +185,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 words = ["hello", "world"]
                 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
-                
+
                 # LayoutXLM doesn't use add_bos_token, it uses post_processor
                 # Just verify it can encode without error
                 encoded = tokenizer.encode(words, boxes=boxes)
@@ -198,20 +198,20 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Verify the pad_token was set correctly
         self.assertEqual(tokenizer.pad_token, "[PAD]")
         self.assertIsNotNone(tokenizer.pad_token_id)
-        
+
         # Test with two sequences of different lengths to trigger padding
         seq_0 = ["Test", "this", "method"]
         seq_1 = ["With", "these", "inputs", "and", "some", "extra"]
         boxes_0 = [[1, 2, 3, 4] for _ in seq_0]
         boxes_1 = [[1, 2, 3, 4] for _ in seq_1]
-        
+
         # Test padding works with the custom pad_token
         output_with_padding = tokenizer(
             [seq_0, seq_1],
             boxes=[boxes_0, boxes_1],
             padding=True,
         )
-        
+
         # Check padding was applied correctly
         self.assertEqual(len(output_with_padding["input_ids"][0]), len(output_with_padding["input_ids"][1]))
 
@@ -808,7 +808,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
 
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
-
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
@@ -1469,8 +1468,18 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(getattr(new_tokenizer, f"{token}_id"), new_id)
 
         # Check if the AddedToken / string format has been kept
-        tokenizer_special_tokens = [tok for value in tokenizer._special_tokens_map.values() if value for tok in (value if isinstance(value, (list, tuple)) else [value])]
-        new_tokenizer_special_tokens = [tok for value in new_tokenizer._special_tokens_map.values() if value for tok in (value if isinstance(value, (list, tuple)) else [value])]
+        tokenizer_special_tokens = [
+            tok
+            for value in tokenizer._special_tokens_map.values()
+            if value
+            for tok in (value if isinstance(value, (list, tuple)) else [value])
+        ]
+        new_tokenizer_special_tokens = [
+            tok
+            for value in new_tokenizer._special_tokens_map.values()
+            if value
+            for tok in (value if isinstance(value, (list, tuple)) else [value])
+        ]
 
         for special_token in tokenizer_special_tokens:
             if isinstance(special_token, AddedToken) and special_token.content not in special_tokens_map:

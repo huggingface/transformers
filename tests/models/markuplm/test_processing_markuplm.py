@@ -22,9 +22,9 @@ from functools import cached_property
 from transformers import (
     MarkupLMProcessor,
     MarkupLMTokenizer,
-    PythonBackend,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
+    PythonBackend,
 )
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_bs4, require_tokenizers, require_torch, slow

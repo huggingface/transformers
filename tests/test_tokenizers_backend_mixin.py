@@ -10,6 +10,7 @@ from parameterized import parameterized
 from transformers import TokenizersBackend
 from transformers.tokenization_python import AddedToken
 
+
 SMALL_TRAINING_CORPUS = [
     ["This is the first sentence.", "This is the second one."],
     ["This sentence (contains #) over symbols and numbers 12 3.", "But not this one."],

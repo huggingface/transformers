@@ -17,8 +17,9 @@ from functools import cached_property
 
 from transformers import BigBirdTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
-from ...test_tokenization_common import TokenizerTesterMixin
 from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
+
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SPIECE_UNDERLINE = "▁"
@@ -36,7 +37,6 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-
 
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
         vocab_ids, vocab_scores, merges = extractor.extract()
@@ -63,7 +63,6 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
-
 
     def test_full_tokenizer(self):
         tokenizer = BigBirdTokenizer(SAMPLE_VOCAB, keep_accents=True)

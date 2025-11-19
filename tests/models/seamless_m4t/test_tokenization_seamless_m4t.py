@@ -15,14 +15,11 @@
 import unittest
 
 from transformers import (
-    SPIECE_UNDERLINE,
     AddedToken,
-    AutoTokenizer,
     BatchEncoding,
     SeamlessM4TTokenizer,
     is_torch_available,
 )
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -30,6 +27,7 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
 )
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -56,11 +54,190 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = SeamlessM4TTokenizer
     test_rust_tokenizer = True
 
-    integration_expected_tokens = ['▁This', '▁is', '▁a', '▁test', '▁', '😊', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fals', 'é', '.', '▁生活', '的', '真', '<unk>', '是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '<s>', '▁hi', '<s>', 'th', 'ere', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁enc', 'od', 'ed', ':', '▁Hello', '.', '▁But', '▁ir', 'd', '▁and', '▁ปี', '▁ir', 'd', '▁ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']
-    integration_expected_token_ids = [9680, 248, 9, 7356, 248059, 253515, 117, 1398, 79519, 108, 855, 45299, 248079, 540, 3423, 248, 52428, 248132, 248075, 182892, 248506, 249573, 1, 249221, 2867, 94124, 2867, 94124, 94124, 2, 435, 2, 419, 275, 1617, 45893, 191422, 12516, 280, 242514, 12025, 129, 76, 248144, 94124, 248075, 9062, 528, 248072, 540, 99681, 528, 248072, 34744, 27426, 11657, 2442, 1259, 34512]
-    expected_tokens_from_ids = ['▁This', '▁is', '▁a', '▁test', '▁', '😊', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fals', 'é', '.', '▁生活', '的', '真', '<unk>', '是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '<s>', '▁hi', '<s>', 'th', 'ere', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁enc', 'od', 'ed', ':', '▁Hello', '.', '▁But', '▁ir', 'd', '▁and', '▁ปี', '▁ir', 'd', '▁ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']
-    integration_expected_decoded_text = 'This is a test 😊 I was born in 92000, and this is falsé. 生活的真<unk>是 Hi Hello Hi Hello Hello<s> hi<s>there The following string should be properly encoded: Hello. But ird and ปี ird ด Hey how are you doing'
-
+    integration_expected_tokens = [
+        "▁This",
+        "▁is",
+        "▁a",
+        "▁test",
+        "▁",
+        "😊",
+        "▁I",
+        "▁was",
+        "▁born",
+        "▁in",
+        "▁9",
+        "2000",
+        ",",
+        "▁and",
+        "▁this",
+        "▁is",
+        "▁fals",
+        "é",
+        ".",
+        "▁生活",
+        "的",
+        "真",
+        "<unk>",
+        "是",
+        "▁Hi",
+        "▁Hello",
+        "▁Hi",
+        "▁Hello",
+        "▁Hello",
+        "<s>",
+        "▁hi",
+        "<s>",
+        "th",
+        "ere",
+        "▁The",
+        "▁following",
+        "▁string",
+        "▁should",
+        "▁be",
+        "▁properly",
+        "▁enc",
+        "od",
+        "ed",
+        ":",
+        "▁Hello",
+        ".",
+        "▁But",
+        "▁ir",
+        "d",
+        "▁and",
+        "▁ปี",
+        "▁ir",
+        "d",
+        "▁ด",
+        "▁Hey",
+        "▁how",
+        "▁are",
+        "▁you",
+        "▁doing",
+    ]
+    integration_expected_token_ids = [
+        9680,
+        248,
+        9,
+        7356,
+        248059,
+        253515,
+        117,
+        1398,
+        79519,
+        108,
+        855,
+        45299,
+        248079,
+        540,
+        3423,
+        248,
+        52428,
+        248132,
+        248075,
+        182892,
+        248506,
+        249573,
+        1,
+        249221,
+        2867,
+        94124,
+        2867,
+        94124,
+        94124,
+        2,
+        435,
+        2,
+        419,
+        275,
+        1617,
+        45893,
+        191422,
+        12516,
+        280,
+        242514,
+        12025,
+        129,
+        76,
+        248144,
+        94124,
+        248075,
+        9062,
+        528,
+        248072,
+        540,
+        99681,
+        528,
+        248072,
+        34744,
+        27426,
+        11657,
+        2442,
+        1259,
+        34512,
+    ]
+    expected_tokens_from_ids = [
+        "▁This",
+        "▁is",
+        "▁a",
+        "▁test",
+        "▁",
+        "😊",
+        "▁I",
+        "▁was",
+        "▁born",
+        "▁in",
+        "▁9",
+        "2000",
+        ",",
+        "▁and",
+        "▁this",
+        "▁is",
+        "▁fals",
+        "é",
+        ".",
+        "▁生活",
+        "的",
+        "真",
+        "<unk>",
+        "是",
+        "▁Hi",
+        "▁Hello",
+        "▁Hi",
+        "▁Hello",
+        "▁Hello",
+        "<s>",
+        "▁hi",
+        "<s>",
+        "th",
+        "ere",
+        "▁The",
+        "▁following",
+        "▁string",
+        "▁should",
+        "▁be",
+        "▁properly",
+        "▁enc",
+        "od",
+        "ed",
+        ":",
+        "▁Hello",
+        ".",
+        "▁But",
+        "▁ir",
+        "d",
+        "▁and",
+        "▁ปี",
+        "▁ir",
+        "d",
+        "▁ด",
+        "▁Hey",
+        "▁how",
+        "▁are",
+        "▁you",
+        "▁doing",
+    ]
+    integration_expected_decoded_text = "This is a test 😊 I was born in 92000, and this is falsé. 生活的真<unk>是 Hi Hello Hi Hello Hello<s> hi<s>there The following string should be properly encoded: Hello. But ird and ปี ird ด Hey how are you doing"
 
     def test_batch_encode_plus_batch_sequence_length(self):
         # Override the parent test because SeamlessM4T uses padding=True by default
@@ -75,10 +252,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # For SeamlessM4T, encode with explicit padding=False for individual sequences too
         encoded_sequences = [tokenizer(sequence, padding=False) for sequence in sequences]
         encoded_sequences_batch = tokenizer(sequences, padding=False)
-        self.assertListEqual(
-            encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch)
-        )
-
+        self.assertListEqual(encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch))
 
     def test_padding_to_multiple_of(self):
         tokenizers = self.get_tokenizers()
@@ -175,7 +349,6 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 4)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-
     # Copied from tests.models.nllb.test_tokenization_nllb.NllbTokenizationTest.test_special_tokens_initialization
     def test_special_tokens_initialization(self):
         # Adapted for v5 - test with tokenizer class directly
@@ -264,7 +437,7 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         input_ids = self.tokenizer.encode("       . Hello")
         self.assertEqual(input_ids, [3, 256145, 81, 94124, 3])
         tokens = self.tokenizer.tokenize(" . Hello")
-        self.assertEqual(tokens, ['▁.', '▁Hello'])
+        self.assertEqual(tokens, ["▁.", "▁Hello"])
 
         # `'▁'` is also a whitespace
         input_ids = self.tokenizer.encode("▁He is not")
@@ -280,11 +453,9 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         # make sure that the output after the extra id is the same as if
         # extra_id was not there
         input_ids = self.tokenizer.encode("▁He is not             ▁He")
-        self.assertEqual(input_ids,[3, 256145, 1808, 248, 2294, 1808, 3])
+        self.assertEqual(input_ids, [3, 256145, 1808, 248, 2294, 1808, 3])
         tokens = self.tokenizer.tokenize("▁He is not              ▁He")
         self.assertEqual(tokens, ["▁He", "▁is", "▁not", "▁He"])  # spaces are eaten by spm even if not start
-
-
 
     def test_language_codes(self):
         self.assertEqual(self.tokenizer.convert_tokens_to_ids("__ace_Latn__"), 256002)
@@ -412,7 +583,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         # make sure `'▁'` is prepended properly
         input_ids = self.tokenizer.encode(". Hello")
         self.assertEqual(input_ids, [3, 1, 8, 5, 157, 87, 21, 3])
-        
+
         tokens = self.tokenizer.tokenize(". Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
@@ -425,13 +596,12 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokens = self.tokenizer.tokenize("▁")
         self.assertEqual(tokens, [])
 
-  
     def test_character_after_special_token(self):
         # Make sure that `tokenizer.tokenize` is similar to
         # adding the equivalent special token to the vocab
         input_ids = self.tokenizer.encode("Hey <s>I")
         self.assertEqual(input_ids, [3, 1, 157, 31, 2, 101, 3])
-        
+
         tokens = self.tokenizer.tokenize("<s>I")
         self.assertEqual(tokens, ["<s>", "I"])
 

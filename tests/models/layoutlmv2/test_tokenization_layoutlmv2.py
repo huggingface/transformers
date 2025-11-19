@@ -24,11 +24,10 @@ from parameterized import parameterized
 from transformers import (
     AddedToken,
     LayoutLMv2Tokenizer,
+    PreTrainedTokenizerBase,
     is_mlx_available,
     is_torch_available,
     logging,
-    PreTrainedTokenizer,
-    PreTrainedTokenizerBase,
 )
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import (
     VOCAB_FILES_NAMES,
@@ -42,10 +41,10 @@ from transformers.testing_utils import (
 )
 
 from ...test_tokenization_common import (
+    SMALL_TRAINING_CORPUS,
     TokenizerTesterMixin,
     filter_non_english,
     merge_model_tokenizer_mappings,
-    SMALL_TRAINING_CORPUS,
 )
 
 
@@ -151,14 +150,14 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-        
+
         # Load vocab from file and pass to tokenizer
         vocab = {}
         with open(cls.vocab_file, "r", encoding="utf-8") as reader:
             for index, line in enumerate(reader):
                 token = line.rstrip("\n")
                 vocab[token] = index
-        
+
         tokenizer = cls.tokenizer_class(vocab=vocab)
         tokenizer.save_pretrained(cls.tmpdirname)
 
@@ -172,7 +171,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Get the batch size
         first_key = list(batch_encode_plus_sequences.keys())[0]
         batch_size = len(batch_encode_plus_sequences[first_key])
-        
+
         # Convert to list of dicts
         encode_plus_sequences = []
         for i in range(batch_size):
@@ -181,7 +180,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 if key != "encodings":  # Skip the encodings attribute
                     single_sequence[key] = value[i]
             encode_plus_sequences.append(single_sequence)
-        
+
         return encode_plus_sequences
 
     @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
@@ -575,12 +574,8 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode_plus - Pair input
                 question, words, boxes = self.get_question_words_and_boxes()
-                input_r = tokenizer_r(
-                    question, words, boxes=boxes, max_length=max_length, padding="max_length"
-                )
-                input_p = tokenizer_p(
-                    question, words, boxes=boxes, max_length=max_length, padding="max_length"
-                )
+                input_r = tokenizer_r(question, words, boxes=boxes, max_length=max_length, padding="max_length")
+                input_p = tokenizer_p(question, words, boxes=boxes, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
                 self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
                 input_r = tokenizer_r(question, words, boxes=boxes, padding="longest")
@@ -713,7 +708,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
-   
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -745,8 +739,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 words, boxes = self.get_words_and_boxes_batch()
 
                 encoded_sequences = [
-                    tokenizer(words_example, boxes=boxes_example)
-                    for words_example, boxes_example in zip(words, boxes)
+                    tokenizer(words_example, boxes=boxes_example) for words_example, boxes_example in zip(words, boxes)
                 ]
                 encoded_sequences_batch = tokenizer.batch_encode_plus(words, is_pair=False, boxes=boxes, padding=False)
                 self.assertListEqual(
@@ -761,9 +754,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self._check_no_pad_token_padding(tokenizer, words)
 
                 encoded_sequences_padded = [
-                    tokenizer(
-                        words_example, boxes=boxes_example, max_length=maximum_length, padding="max_length"
-                    )
+                    tokenizer(words_example, boxes=boxes_example, max_length=maximum_length, padding="max_length")
                     for words_example, boxes_example in zip(words, boxes)
                 ]
 
@@ -820,9 +811,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self._check_no_pad_token_padding(tokenizer, words)
 
                 encoded_sequences = [
-                    tokenizer(
-                        words_example, boxes=boxes_example, max_length=max_length, padding="max_length"
-                    )
+                    tokenizer(words_example, boxes=boxes_example, max_length=max_length, padding="max_length")
                     for words_example, boxes_example in zip(words, boxes)
                 ]
                 encoded_sequences_batch = tokenizer.batch_encode_plus(
@@ -845,9 +834,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self._check_no_pad_token_padding(tokenizer, words)
 
                 encoded_sequences = [
-                    tokenizer(
-                        words_example, boxes=boxes_example, max_length=max_length, padding="max_length"
-                    )
+                    tokenizer(words_example, boxes=boxes_example, max_length=max_length, padding="max_length")
                     for words_example, boxes_example in zip(words, boxes)
                 ]
                 encoded_sequences_batch = tokenizer.batch_encode_plus(
@@ -1151,8 +1138,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     model(**encoded_sequence)
                     model(**batch_encoded_sequence)
 
- 
-
     def test_compare_add_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -1251,7 +1236,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assertTrue(special_token_id in r_output)
 
-             
     def test_training_new_tokenizer(self):
         tokenizer = self.get_tokenizer()
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
@@ -1286,7 +1270,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
 
     def test_training_new_tokenizer_with_special_tokens_change(self):
-  
         tokenizer = self.get_tokenizer()
         # Test with a special tokens map
         class_signature = inspect.signature(tokenizer.__class__)
@@ -1393,7 +1376,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_dict = tokenizer(words, boxes=boxes, add_special_tokens=True)
 
                 self.assertEqual(input_dict, prepared_input_dict)
-
 
     def test_batch_encode_dynamic_overflowing(self):
         """
@@ -2165,11 +2147,27 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [34, 42, 66, 69],
         ]
         expected_tokens = [
-            "a", "weird", "##ly", "test", "hello", "my", "name", "is", "bob",
+            "a",
+            "weird",
+            "##ly",
+            "test",
+            "hello",
+            "my",
+            "name",
+            "is",
+            "bob",
         ]
         expected_ids = [1037, 6881, 2135, 3231, 7592, 2026, 2171, 2003, 3960]
         expected_tokens_from_ids = [
-            "a", "weird", "##ly", "test", "hello", "my", "name", "is", "bob",
+            "a",
+            "weird",
+            "##ly",
+            "test",
+            "hello",
+            "my",
+            "name",
+            "is",
+            "bob",
         ]
         expected_decoded_text = "a weirdly test hello my name is bob"
 
@@ -2208,11 +2206,27 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
 
         expected_tokens = [
-            "a", "weird", "##ly", "test", "hello", "my", "name", "is", "bob",
+            "a",
+            "weird",
+            "##ly",
+            "test",
+            "hello",
+            "my",
+            "name",
+            "is",
+            "bob",
         ]
         expected_ids = [1037, 6881, 2135, 3231, 7592, 2026, 2171, 2003, 3960]
         expected_tokens_from_ids = [
-            "a", "weird", "##ly", "test", "hello", "my", "name", "is", "bob",
+            "a",
+            "weird",
+            "##ly",
+            "test",
+            "hello",
+            "my",
+            "name",
+            "is",
+            "bob",
         ]
         expected_decoded_text = "a weirdly test hello my name is bob"
 

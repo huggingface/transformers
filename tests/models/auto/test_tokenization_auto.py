@@ -28,7 +28,6 @@ from transformers import (
     BertConfig,
     BertTokenizer,
     BertTokenizerFast,
-    BertTokenizerLegacy,
     CTRLTokenizer,
     GPT2Tokenizer,
     PreTrainedTokenizerFast,
@@ -345,7 +344,10 @@ class AutoTokenizerTest(unittest.TestCase):
                 with open(os.path.join(tmp_dir, "tokenizer_config.json"), "r") as f:
                     tokenizer_config = json.load(f)
                 # Assert we're pointing at local code and not another remote repo
-                self.assertEqual(tokenizer_config["auto_map"]["AutoTokenizer"], ["tokenization.NewTokenizer", "tokenization_fast.NewTokenizerFast"])
+                self.assertEqual(
+                    tokenizer_config["auto_map"]["AutoTokenizer"],
+                    ["tokenization.NewTokenizer", "tokenization_fast.NewTokenizerFast"],
+                )
             self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizerFast")
             self.assertTrue(reloaded_tokenizer.special_attribute_present)
         else:
@@ -363,7 +365,6 @@ class AutoTokenizerTest(unittest.TestCase):
     def test_from_pretrained_dynamic_tokenizer_conflict(self):
         class NewTokenizer(BertTokenizer):
             special_attribute_present = False
-
 
         try:
             AutoConfig.register("custom", CustomConfig)

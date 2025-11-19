@@ -28,8 +28,8 @@ from transformers import (
     BatchEncoding,
     BertTokenizer,
     LlamaTokenizer,
-    PythonBackend,
     PreTrainedTokenizerFast,
+    PythonBackend,
     TensorType,
     TokenSpan,
     is_tokenizers_available,
@@ -55,7 +55,7 @@ class TokenizerUtilsTest(unittest.TestCase):
         # max_model_input_sizes is a legacy attribute that may not exist on all tokenizers
         if not hasattr(tokenizer_class, "max_model_input_sizes"):
             return
-        
+
         s3_models = list(tokenizer_class.max_model_input_sizes.keys())
         for model_name in s3_models[:1]:
             tokenizer = tokenizer_class.from_pretrained(model_name)
@@ -218,9 +218,7 @@ class TokenizerUtilsTest(unittest.TestCase):
             "eoi_token": "<image_end>",
             "image_token": "<image>",
         }
-        tokenizer = LlamaTokenizer.from_pretrained(
-            "huggyllama/llama-7b", extra_special_tokens=extra_special_tokens
-        )
+        tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", extra_special_tokens=extra_special_tokens)
         self.assertTrue(tokenizer.image_token == "<image>")
         self.assertTrue(tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("<image>"))
 

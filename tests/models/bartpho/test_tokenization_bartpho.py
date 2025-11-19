@@ -12,10 +12,9 @@
 # limitations under the License.
 
 
-import unittest
 import os
-import shutil
 import tempfile
+import unittest
 
 from transformers.models.bartpho.tokenization_bartpho import VOCAB_FILES_NAMES, BartphoTokenizer
 from transformers.testing_utils import get_tests_dir
@@ -43,17 +42,17 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         """Create a fresh tokenizer for each test instead of loading from saved."""
         kwargs.update(cls.special_tokens_map)
-        
+
         # Create a temporary directory for this tokenizer
         tmpdir = tempfile.mkdtemp()
         vocab = ["▁This", "▁is", "▁a", "▁t", "est"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        
+
         monolingual_vocab_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["monolingual_vocab_file"])
         with open(monolingual_vocab_file, "w", encoding="utf-8") as fp:
             for token in vocab_tokens:
                 fp.write(f"{token} {vocab_tokens[token]}\n")
-        
+
         return BartphoTokenizer(SAMPLE_VOCAB, monolingual_vocab_file, **kwargs)
 
     def get_input_output_texts(self, tokenizer):

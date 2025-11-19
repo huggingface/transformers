@@ -31,10 +31,10 @@ from transformers import (
     logging,
 )
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES, MarkupLMTokenizer
+from transformers.testing_utils import require_tokenizers, slow
 from transformers.tokenization_utils_tokenizers import TokenizersExtractor
-from transformers.testing_utils import require_tokenizers, require_torch, slow
 
-from ...test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixin, merge_model_tokenizer_mappings
+from ...test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixin
 
 
 logger = logging.get_logger(__name__)
@@ -49,13 +49,86 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_kwargs = {"cls_token": "<s>"}
     test_seq2seq = False
 
-    input_text = 'Hello😊 <s>intro</s> falsé-world! 生活的真谛'
-    integration_expected_tokens = ['Hello', 'ðŁĺ', 'Ĭ', 'Ġ', '<s>', 'int', 'ro', '</s>', 'Ġfals', 'Ã©', '-', 'world', '!', 'Ġç', 'Ķ', 'Ł', 'æ', '´', '»', 'çļĦ', 'çľ', 'Ł', 'è', '°', 'Ľ']
-    integration_expected_token_ids = [31414, 18636, 27969, 0, 2544, 1001, 2, 506, 1536, 1140, 12, 8331, 328, 48998, 37127, 20024, 2023, 44574, 49122, 4333, 36484, 7487, 3726]
-    expected_tokens_from_ids = ['Hello', 'ðŁĺ', 'Ĭ', '<s>', 'int', 'ro', '</s>', 'f', 'als', 'Ã©', '-', 'world', '!', 'çĶŁ', 'æ', '´', '»', 'çļĦ', 'çľ', 'Ł', 'è', '°', 'Ľ']
-    integration_expected_decoded_text = 'Hello😊<s>intro</s>falsé-world!生活的真谛'
-    text_from_tokens = 'Hello😊 <s>intro</s> falsé-world! 生活的真谛'
-
+    input_text = "Hello😊 <s>intro</s> falsé-world! 生活的真谛"
+    integration_expected_tokens = [
+        "Hello",
+        "ðŁĺ",
+        "Ĭ",
+        "Ġ",
+        "<s>",
+        "int",
+        "ro",
+        "</s>",
+        "Ġfals",
+        "Ã©",
+        "-",
+        "world",
+        "!",
+        "Ġç",
+        "Ķ",
+        "Ł",
+        "æ",
+        "´",
+        "»",
+        "çļĦ",
+        "çľ",
+        "Ł",
+        "è",
+        "°",
+        "Ľ",
+    ]
+    integration_expected_token_ids = [
+        31414,
+        18636,
+        27969,
+        0,
+        2544,
+        1001,
+        2,
+        506,
+        1536,
+        1140,
+        12,
+        8331,
+        328,
+        48998,
+        37127,
+        20024,
+        2023,
+        44574,
+        49122,
+        4333,
+        36484,
+        7487,
+        3726,
+    ]
+    expected_tokens_from_ids = [
+        "Hello",
+        "ðŁĺ",
+        "Ĭ",
+        "<s>",
+        "int",
+        "ro",
+        "</s>",
+        "f",
+        "als",
+        "Ã©",
+        "-",
+        "world",
+        "!",
+        "çĶŁ",
+        "æ",
+        "´",
+        "»",
+        "çļĦ",
+        "çľ",
+        "Ł",
+        "è",
+        "°",
+        "Ľ",
+    ]
+    integration_expected_decoded_text = "Hello😊<s>intro</s>falsé-world!生活的真谛"
+    text_from_tokens = "Hello😊 <s>intro</s> falsé-world! 生活的真谛"
 
     @classmethod
     def setUpClass(cls):
@@ -872,7 +945,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             if parameter.default != inspect.Parameter.empty:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
 
-  
     def test_special_tokens_mask_input_pairs(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -1080,9 +1152,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Assert there is online added_tokens special_tokens
                 self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
 
-   
     def test_embedded_special_tokens(self):
-
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
@@ -1196,7 +1266,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 special_token_id = tokenizer_r.encode(["<special>"], xpaths=["html/body"], add_special_tokens=False)[0]
 
                 self.assertTrue(special_token_id in r_output)
-
 
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
@@ -1315,7 +1384,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             elif special_token not in special_tokens_map:
                 # The special token must appear identically in the list of the new tokenizer.
                 self.assertTrue(
-                    special_token in new_tokenizer.all_special_tokens,all_special_tokens,
+                    special_token in new_tokenizer.all_special_tokens,
+                    all_special_tokens,
                     f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
                 )
 
@@ -1334,8 +1404,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         if tokenizer.backend_tokenizer.normalizer is not None:
             expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
         self.assertEqual(expected_result, decoded_input)
-
-  
 
     def test_batch_encode_dynamic_overflowing(self):
         """

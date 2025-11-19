@@ -194,10 +194,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [f"<extra_id_{i}>" for i in range(100)] + [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.get_tokenizer(
-                    pretrained_name, additional_special_tokens=added_tokens, **kwargs
-                )
-        
+                tokenizer_r = self.get_tokenizer(pretrained_name, additional_special_tokens=added_tokens, **kwargs)
 
                 r_output = tokenizer_r.encode("Hey this is a <special> token")
 
@@ -209,7 +206,6 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
         tokenizer_list = []
         tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))
-
 
         for tokenizer_class, tokenizer_utils in tokenizer_list:
             with tempfile.TemporaryDirectory() as tmp_dir:

@@ -18,9 +18,9 @@ import unittest
 from functools import cached_property
 
 from transformers import (
-    PythonBackend,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
+    PythonBackend,
     UdopProcessor,
     UdopTokenizer,
     UdopTokenizerFast,

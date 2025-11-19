@@ -228,12 +228,8 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 added_tokens_extra_ids = [f"<extra_id_{i}>" for i in range(125)]
 
-                special_tokens_map["extra_special_tokens"] = added_tokens_extra_ids + [
-                    "an_extra_special_token"
-                ]
-                tokenizer_config["extra_special_tokens"] = added_tokens_extra_ids + [
-                    "an_extra_special_token"
-                ]
+                special_tokens_map["extra_special_tokens"] = added_tokens_extra_ids + ["an_extra_special_token"]
+                tokenizer_config["extra_special_tokens"] = added_tokens_extra_ids + ["an_extra_special_token"]
 
                 with open(os.path.join(tmp_dir, "special_tokens_map.json"), "w", encoding="utf-8") as outfile:
                     json.dump(special_tokens_map, outfile)
@@ -246,9 +242,7 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer_without_change_in_init = tokenizer_class.from_pretrained(
                     tmp_dir,
                 )
-                self.assertIn(
-                    "an_extra_special_token", tokenizer_without_change_in_init.extra_special_tokens
-                )
+                self.assertIn("an_extra_special_token", tokenizer_without_change_in_init.extra_special_tokens)
                 # self.assertIn("an_extra_special_token",tokenizer_without_change_in_init.get_vocab()) # ByT5Tokenization no vocab
                 self.assertEqual(
                     ["an_extra_special_token"],
@@ -267,9 +261,7 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertIn("a_new_extra_special_token", tokenizer.extra_special_tokens)
                 self.assertEqual(
                     ["a_new_extra_special_token"],
-                    tokenizer.convert_ids_to_tokens(
-                        tokenizer.convert_tokens_to_ids(["a_new_extra_special_token"])
-                    ),
+                    tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(["a_new_extra_special_token"])),
                 )
 
     def test_decode_single_bytes(self):

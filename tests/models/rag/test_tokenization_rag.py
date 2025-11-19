@@ -18,7 +18,7 @@ import shutil
 import tempfile
 from unittest import TestCase
 
-from transformers import RobertaTokenizer, DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast
+from transformers import DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast, RobertaTokenizer
 from transformers.models.bart.configuration_bart import BartConfig
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.models.dpr.configuration_dpr import DPRConfig

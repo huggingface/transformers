@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import unittest
 
 from datasets import load_dataset
@@ -21,7 +20,6 @@ from transformers import TokenizersBackend
 from transformers.testing_utils import require_jinja, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
 
 
 @require_tokenizers
@@ -34,19 +32,163 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_vocab_key = "tokenizer_file"
     special_tokens_map = {"bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "<pad>"}
 
-
     # Integration test data - expected outputs for the default input string
-    integration_expected_tokens = ['This', 'Ġis', 'Ġa', 'Ġtest', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ9', '2000', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.Ċ', 'çĶŁæ´»çļĦ', 'çľŁ', 'è°', 'Ľ', 'æĺ¯', 'Ċ', 'Hi', 'Ġ', 'ĠHello', 'Ċ', 'Hi', 'ĠĠ', 'ĠHello', 'ĊĊ', 'ĠĊ', 'ĠĠĊ', 'ĠHello', 'Ċ', '<s>', 'Ċ', 'hi', '<s>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġenc', 'od', 'ed:', 'ĠHello', '.Ċ', 'But', 'Ġir', 'd', 'Ġand', 'Ġà¸', 'Ľ', 'à¸µ', 'ĠĠ', 'Ġir', 'd', 'ĠĠ', 'Ġà¸', 'Ķ', 'Ċ', 'Hey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']
-    integration_expected_token_ids = [6168, 632, 267, 4006, 189, 44, 1620, 34181, 361, 1575, 14739, 15, 530, 1119, 632, 31684, 311, 336, 71167, 4137, 1927, 239, 644, 189, 30050, 210, 86153, 189, 30050, 250, 86153, 603, 5306, 33249, 86153, 189, 1, 189, 2807, 1, 51596, 189, 2175, 6747, 5148, 3403, 722, 34975, 2681, 532, 29315, 86153, 336, 6475, 2881, 71, 530, 44381, 239, 105442, 250, 2881, 71, 250, 44381, 232, 189, 40440, 4143, 1306, 1152, 12491]
+    integration_expected_tokens = [
+        "This",
+        "Ġis",
+        "Ġa",
+        "Ġtest",
+        "Ċ",
+        "I",
+        "Ġwas",
+        "Ġborn",
+        "Ġin",
+        "Ġ9",
+        "2000",
+        ",",
+        "Ġand",
+        "Ġthis",
+        "Ġis",
+        "Ġfals",
+        "Ã©",
+        ".Ċ",
+        "çĶŁæ´»çļĦ",
+        "çľŁ",
+        "è°",
+        "Ľ",
+        "æĺ¯",
+        "Ċ",
+        "Hi",
+        "Ġ",
+        "ĠHello",
+        "Ċ",
+        "Hi",
+        "ĠĠ",
+        "ĠHello",
+        "ĊĊ",
+        "ĠĊ",
+        "ĠĠĊ",
+        "ĠHello",
+        "Ċ",
+        "<s>",
+        "Ċ",
+        "hi",
+        "<s>",
+        "there",
+        "Ċ",
+        "The",
+        "Ġfollowing",
+        "Ġstring",
+        "Ġshould",
+        "Ġbe",
+        "Ġproperly",
+        "Ġenc",
+        "od",
+        "ed:",
+        "ĠHello",
+        ".Ċ",
+        "But",
+        "Ġir",
+        "d",
+        "Ġand",
+        "Ġà¸",
+        "Ľ",
+        "à¸µ",
+        "ĠĠ",
+        "Ġir",
+        "d",
+        "ĠĠ",
+        "Ġà¸",
+        "Ķ",
+        "Ċ",
+        "Hey",
+        "Ġhow",
+        "Ġare",
+        "Ġyou",
+        "Ġdoing",
+    ]
+    integration_expected_token_ids = [
+        6168,
+        632,
+        267,
+        4006,
+        189,
+        44,
+        1620,
+        34181,
+        361,
+        1575,
+        14739,
+        15,
+        530,
+        1119,
+        632,
+        31684,
+        311,
+        336,
+        71167,
+        4137,
+        1927,
+        239,
+        644,
+        189,
+        30050,
+        210,
+        86153,
+        189,
+        30050,
+        250,
+        86153,
+        603,
+        5306,
+        33249,
+        86153,
+        189,
+        1,
+        189,
+        2807,
+        1,
+        51596,
+        189,
+        2175,
+        6747,
+        5148,
+        3403,
+        722,
+        34975,
+        2681,
+        532,
+        29315,
+        86153,
+        336,
+        6475,
+        2881,
+        71,
+        530,
+        44381,
+        239,
+        105442,
+        250,
+        2881,
+        71,
+        250,
+        44381,
+        232,
+        189,
+        40440,
+        4143,
+        1306,
+        1152,
+        12491,
+    ]
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        
+
         tokenizer = TokenizersBackend.from_pretrained("bigscience/tokenizer")
         tokenizer.save_pretrained(cls.tmpdirname)
-        cls.tokenizers_list = [
-            (cls.rust_tokenizer_class, cls.tmpdirname, {})
-        ]
+        cls.tokenizers_list = [(cls.rust_tokenizer_class, cls.tmpdirname, {})]
 
     def test_encodings_from_sample_data(self):
         """

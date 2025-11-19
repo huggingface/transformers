@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import inspect
-import json
 import os
 import re
 import shutil
@@ -33,18 +32,14 @@ from transformers.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_N
 from transformers.testing_utils import (
     require_pandas,
     require_tokenizers,
-    require_torch,
     slow,
 )
-
-from ...test_tokenization_common import (
-    TokenizerTesterMixin,
-    merge_model_tokenizer_mappings,
-    SMALL_TRAINING_CORPUS,
-)
-
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
+from ...test_tokenization_common import (
+    SMALL_TRAINING_CORPUS,
+    TokenizerTesterMixin,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -83,11 +78,27 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
 
         expected_tokens = [
-            "Ġa", "Ġweird", "ly", "Ġtest", "Ġhello", "Ġmy", "Ġname", "Ġis", "Ġbob",
+            "Ġa",
+            "Ġweird",
+            "ly",
+            "Ġtest",
+            "Ġhello",
+            "Ġmy",
+            "Ġname",
+            "Ġis",
+            "Ġbob",
         ]
         expected_ids = [10, 7735, 352, 1296, 20760, 127, 766, 16, 22401]
         expected_tokens_from_ids = [
-            "Ġa", "Ġweird", "ly", "Ġtest", "Ġhello", "Ġmy", "Ġname", "Ġis", "Ġbob",
+            "Ġa",
+            "Ġweird",
+            "ly",
+            "Ġtest",
+            "Ġhello",
+            "Ġmy",
+            "Ġname",
+            "Ġis",
+            "Ġbob",
         ]
         expected_decoded_text = " a weirdly test hello my name is bob"
 
@@ -123,11 +134,27 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
 
         expected_tokens = [
-            "Ġa", "Ġweird", "ly", "Ġtest", "Ġhello", "Ġmy", "Ġname", "Ġis", "Ġbob",
+            "Ġa",
+            "Ġweird",
+            "ly",
+            "Ġtest",
+            "Ġhello",
+            "Ġmy",
+            "Ġname",
+            "Ġis",
+            "Ġbob",
         ]
         expected_ids = [10, 7735, 352, 1296, 20760, 127, 766, 16, 22401]
         expected_tokens_from_ids = [
-            "Ġa", "Ġweird", "ly", "Ġtest", "Ġhello", "Ġmy", "Ġname", "Ġis", "Ġbob",
+            "Ġa",
+            "Ġweird",
+            "ly",
+            "Ġtest",
+            "Ġhello",
+            "Ġmy",
+            "Ġname",
+            "Ġis",
+            "Ġbob",
         ]
         expected_decoded_text = " a weirdly test hello my name is bob"
 
@@ -239,7 +266,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Create tokenizer and save it (which will create all necessary files including tokenizer.json)
         tokenizer = cls.tokenizer_class(vocab=vocab_tokens, merges=merges_list, **cls.special_tokens_map)
         tokenizer.save_pretrained(cls.tmpdirname)
-        
+
         cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
 
@@ -265,7 +292,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Get the batch size
         first_key = list(batch_encode_plus_sequences.keys())[0]
         batch_size = len(batch_encode_plus_sequences[first_key])
-        
+
         # Convert to list of dicts
         encode_plus_sequences = []
         for i in range(batch_size):
@@ -274,7 +301,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 if key != "encodings":  # Skip the encodings attribute
                     single_sequence[key] = value[i]
             encode_plus_sequences.append(single_sequence)
-        
+
         return encode_plus_sequences
 
     @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
@@ -782,7 +809,6 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
-
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -962,7 +988,6 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         max_length=12,
                         pad_to_multiple_of=8,
                     )
-
 
     def test_special_tokens_mask_input_pairs(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -1171,7 +1196,6 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Assert there is online added_tokens special_tokens
                 self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
 
-
     def test_compare_add_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -1269,6 +1293,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )[0]
 
                 self.assertTrue(special_token_id in r_output)
+
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
@@ -1409,7 +1434,6 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip(reason="LayoutLMv3Tokenizer no longer has separate slow tokenizer with prepare_for_model")
     def test_prepare_for_model(self):
         pass
-
 
     def test_batch_encode_dynamic_overflowing(self):
         """

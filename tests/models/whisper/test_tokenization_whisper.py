@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import unittest
-import json
 
 import numpy as np
 
@@ -44,7 +43,6 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import os
         super().setUpClass()
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
         tokenizer.pad_token_id = 50256
@@ -230,7 +228,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         prompt = "This is test prompt text."
         tokenizer_prompt_ids = tokenizer.get_prompt_ids(prompt)
-        
+
         # Just check that we can get prompt ids
         self.assertIsNotNone(tokenizer_prompt_ids)
 

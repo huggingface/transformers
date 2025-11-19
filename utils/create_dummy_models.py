@@ -38,8 +38,8 @@ from transformers import (
     TOKENIZER_MAPPING,
     AutoTokenizer,
     LayoutLMv3TokenizerFast,
-    PythonBackend,
     PreTrainedTokenizerFast,
+    PythonBackend,
     logging,
 )
 from transformers.feature_extraction_utils import FeatureExtractionMixin

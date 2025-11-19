@@ -13,16 +13,14 @@
 # limitations under the License.
 
 
-import itertools
 import json
-import os
 import unittest
 
-from transformers import AddedToken, AutoTokenizer, RobertaTokenizer
-from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_tokenizers, slow
+from transformers import AutoTokenizer, RobertaTokenizer
+from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
+
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -49,11 +47,192 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
-    
     # Integration test data - expected outputs for the default input string
-    integration_expected_tokens = ['This', 'Ġis', 'Ġa', 'Ġtest', 'ĠðŁĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ92', '000', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.', 'Ċ', 'çĶŁ', 'æ', '´', '»', 'çļĦ', 'çľ', 'Ł', 'è', '°', 'Ľ', 'æĺ¯', 'Ċ', 'Hi', 'Ġ', 'ĠHello', 'Ċ', 'Hi', 'Ġ', 'Ġ', 'ĠHello', 'ĊĊ', 'Ġ', 'Ċ', 'Ġ', 'Ġ', 'Ċ', 'ĠHello', 'Ċ', '<s>', 'Ċ', 'hi', '<s>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠHello', '.', 'Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸', 'Ľ', 'à¸', 'µ', 'Ġ', 'Ġ', 'Ġ', 'ird', 'Ġ', 'Ġ', 'Ġ', 'à¸', 'Ķ', 'Ċ', 'Hey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']
-    integration_expected_token_ids = [713, 16, 10, 1296, 17841, 27969, 50118, 100, 21, 2421, 11, 8403, 151, 6, 8, 42, 16, 22461, 1140, 4, 50118, 48998, 37127, 20024, 2023, 44574, 49122, 4333, 36484, 7487, 3726, 48569, 50118, 30086, 1437, 20920, 50118, 30086, 1437, 1437, 20920, 50140, 1437, 50118, 1437, 1437, 50118, 20920, 50118, 0, 50118, 3592, 0, 8585, 50118, 133, 511, 6755, 197, 28, 5083, 45320, 35, 20920, 4, 50118, 1708, 1437, 8602, 8, 1437, 24107, 3726, 24107, 8906, 1437, 1437, 1437, 8602, 1437, 1437, 1437, 24107, 10674, 50118, 13368, 141, 32, 47, 608]
-    integration_expected_decoded_text = 'This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing'
+    integration_expected_tokens = [
+        "This",
+        "Ġis",
+        "Ġa",
+        "Ġtest",
+        "ĠðŁĺ",
+        "Ĭ",
+        "Ċ",
+        "I",
+        "Ġwas",
+        "Ġborn",
+        "Ġin",
+        "Ġ92",
+        "000",
+        ",",
+        "Ġand",
+        "Ġthis",
+        "Ġis",
+        "Ġfals",
+        "Ã©",
+        ".",
+        "Ċ",
+        "çĶŁ",
+        "æ",
+        "´",
+        "»",
+        "çļĦ",
+        "çľ",
+        "Ł",
+        "è",
+        "°",
+        "Ľ",
+        "æĺ¯",
+        "Ċ",
+        "Hi",
+        "Ġ",
+        "ĠHello",
+        "Ċ",
+        "Hi",
+        "Ġ",
+        "Ġ",
+        "ĠHello",
+        "ĊĊ",
+        "Ġ",
+        "Ċ",
+        "Ġ",
+        "Ġ",
+        "Ċ",
+        "ĠHello",
+        "Ċ",
+        "<s>",
+        "Ċ",
+        "hi",
+        "<s>",
+        "there",
+        "Ċ",
+        "The",
+        "Ġfollowing",
+        "Ġstring",
+        "Ġshould",
+        "Ġbe",
+        "Ġproperly",
+        "Ġencoded",
+        ":",
+        "ĠHello",
+        ".",
+        "Ċ",
+        "But",
+        "Ġ",
+        "ird",
+        "Ġand",
+        "Ġ",
+        "à¸",
+        "Ľ",
+        "à¸",
+        "µ",
+        "Ġ",
+        "Ġ",
+        "Ġ",
+        "ird",
+        "Ġ",
+        "Ġ",
+        "Ġ",
+        "à¸",
+        "Ķ",
+        "Ċ",
+        "Hey",
+        "Ġhow",
+        "Ġare",
+        "Ġyou",
+        "Ġdoing",
+    ]
+    integration_expected_token_ids = [
+        713,
+        16,
+        10,
+        1296,
+        17841,
+        27969,
+        50118,
+        100,
+        21,
+        2421,
+        11,
+        8403,
+        151,
+        6,
+        8,
+        42,
+        16,
+        22461,
+        1140,
+        4,
+        50118,
+        48998,
+        37127,
+        20024,
+        2023,
+        44574,
+        49122,
+        4333,
+        36484,
+        7487,
+        3726,
+        48569,
+        50118,
+        30086,
+        1437,
+        20920,
+        50118,
+        30086,
+        1437,
+        1437,
+        20920,
+        50140,
+        1437,
+        50118,
+        1437,
+        1437,
+        50118,
+        20920,
+        50118,
+        0,
+        50118,
+        3592,
+        0,
+        8585,
+        50118,
+        133,
+        511,
+        6755,
+        197,
+        28,
+        5083,
+        45320,
+        35,
+        20920,
+        4,
+        50118,
+        1708,
+        1437,
+        8602,
+        8,
+        1437,
+        24107,
+        3726,
+        24107,
+        8906,
+        1437,
+        1437,
+        1437,
+        8602,
+        1437,
+        1437,
+        1437,
+        24107,
+        10674,
+        50118,
+        13368,
+        141,
+        32,
+        47,
+        608,
+    ]
+    integration_expected_decoded_text = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
 
     @classmethod
     def setUpClass(cls):
@@ -96,7 +275,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             line = line.strip()
             if line and not line.startswith("#"):
                 cls.merges.append(tuple(line.split()))
-        
+
         tok_from_vocab = RobertaTokenizer(vocab=cls.vocab_tokens, merges=cls.merges, unk_token="<unk>")
 
         cls.tokenizers = [tok_auto, tok_from_vocab]
@@ -165,7 +344,6 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     #     mask_loc = encoded.index(mask_ind)
     #     first_char = tokenizer.convert_ids_to_tokens(encoded[mask_loc + 1])[0]
     #     self.assertNotEqual(first_char, space_encoding)
-
 
     # def test_change_add_prefix_space_and_trim_offsets_args(self):
     #     for trim_offsets, add_prefix_space in itertools.product([True, False], repeat=2):

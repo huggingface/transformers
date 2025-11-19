@@ -18,9 +18,9 @@ import os
 import unittest
 
 from transformers import ClvpTokenizer
+from transformers.testing_utils import slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
-from transformers.testing_utils import slow
 
 
 class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -142,7 +142,7 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=15):
         if not self.test_rust_tokenizer:
             self.skipTest(reason="test_rust_tokenizer is set to False")
-        
+
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)

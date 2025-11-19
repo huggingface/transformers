@@ -142,13 +142,67 @@ class BertGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
 
- #   @slow
+    #   @slow
     def test_tokenization_base_hard_symbols(self):
         symbols = (
             'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will'
             " add words that should not exist and be tokenized to <unk>, such as saoneuhaoesuth"
         )
-        original_tokenizer_encodings = [871, 419, 358, 946, 991, 2521, 452, 358, 1357, 387, 7751, 3536, 112, 985, 456, 126, 865, 938, 5400, 5734, 458, 1368, 467, 786, 2462, 5246, 1159, 633, 865, 4519, 457, 582, 852, 2557, 427, 916, 508, 2253, 391, 408, 11342, 1244, 385, 100, 938, 985, 456, 574, 362, 12597, 3200, 3129, 1172]
+        original_tokenizer_encodings = [
+            871,
+            419,
+            358,
+            946,
+            991,
+            2521,
+            452,
+            358,
+            1357,
+            387,
+            7751,
+            3536,
+            112,
+            985,
+            456,
+            126,
+            865,
+            938,
+            5400,
+            5734,
+            458,
+            1368,
+            467,
+            786,
+            2462,
+            5246,
+            1159,
+            633,
+            865,
+            4519,
+            457,
+            582,
+            852,
+            2557,
+            427,
+            916,
+            508,
+            2253,
+            391,
+            408,
+            11342,
+            1244,
+            385,
+            100,
+            938,
+            985,
+            456,
+            574,
+            362,
+            12597,
+            3200,
+            3129,
+            1172,
+        ]
 
         self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
 

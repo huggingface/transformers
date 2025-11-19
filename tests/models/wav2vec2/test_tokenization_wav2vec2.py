@@ -374,7 +374,7 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "facebook/wav2vec2-base-960h"
     tokenizer_class = Wav2Vec2CTCTokenizer
     test_rust_tokenizer = False
-    
+
     def test_pretokenized_inputs(self):
         # Skip this test for Wav2Vec2 - it's a character-level tokenizer where spaces
         # become word delimiters, so pretokenized inputs can't match string tokenization
