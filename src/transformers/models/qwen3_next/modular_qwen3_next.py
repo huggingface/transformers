@@ -222,6 +222,9 @@ class Qwen3NextRMSNorm(Gemma3RMSNorm):
 class Qwen3NextAttention(Qwen3MoeAttention):
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim * 2, bias=config.attention_bias
+        )
         del self.sliding_window
 
     def forward(

@@ -661,11 +661,6 @@ def is_flash_linear_attention_available():
 
 
 @lru_cache
-def is_rotary_emb_available() -> bool:
-    return is_torch_xpu_available() and _is_package_available("rotary_emb")
-
-
-@lru_cache
 def is_causal_conv1d_available() -> bool:
     return is_torch_cuda_available() and _is_package_available("causal_conv1d")
 
