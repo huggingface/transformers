@@ -619,7 +619,7 @@ def convert_and_load_state_dict_in_model(
 
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
-    if quantizer:
+    if hf_quantizer:
         pass  # TODO @ArthurZucker handle dequantization that needs to add a weight converter?
 
     all_mappings: dict[str, Union[WeightRenaming | WeightConverter]] = {}
