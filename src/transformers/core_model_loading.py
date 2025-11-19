@@ -153,7 +153,7 @@ class ConversionOps:
     def convert(
         self,
         value: dict[str, Any],
-        *,
+        
         source_keys: list[str],
         target_keys: list[str],
         target_key: str,
@@ -177,7 +177,7 @@ class Chunk(ConversionOps):
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
-        *,
+        
         source_keys: list[str],
         target_keys: list[str],
         target_key: str,
@@ -203,7 +203,7 @@ class Concatenate(ConversionOps):
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
-        *,
+        
         source_keys: list[str],
         target_keys: list[str],
         target_key: str,
@@ -232,7 +232,7 @@ class MergeModulelist(Concatenate):
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
-        *,
+        
         source_keys: list[str],
         target_keys: list[str],
         target_key: str,
@@ -262,7 +262,7 @@ class SplitModulelist(ConversionOps):
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
-        *,
+        
         source_keys: list[str],
         target_keys: list[str],
         target_key: str,
@@ -301,7 +301,7 @@ class PermuteForRope(ConversionOps):
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
-        *,
+        
         source_keys: list[str],
         target_keys: list[str],
         target_key: str,
@@ -315,28 +315,10 @@ class PermuteForRope(ConversionOps):
             output[key] = [self._apply(tensors[0])]
         return output
 
-
 @dataclass(slots=True)
-class WeightConverter:
-    r"""
-    A weight convert that acts on a pattern of source keys.
-    The keys need to be collected based on the target keys.
-
-    With wild card, glob patterns are matched, so you have to be detailed with what to match. If you match:
-    `model.layers.*.experts.*` -> it will act on all of them
-    {"model.layers.*.experts.*": []}
-    but
-    `experts.*.mlp` will be layer specific.
-    {"model.layers.1.experts.*": [], }
-    - source_keys: str | list[str] (wildcards '*' match digits)
-    - target_keys: str | list[str] | None
-    - distributed_operation / operations / quantization_operations are ALWAYS lists.
-
-    """
-
+class WeightTransform:
     source_keys: Union[str, list[str]] = field(init=True)
     target_keys: Union[str, list[str]] = field(init=True)
-    operations: list[ConversionOps] = field(default_factory=list, repr=False)
 
     distributed_operation: Optional[TensorParallelLayer] = None
     quantization_operation: Optional[ConversionOps] = None
@@ -350,13 +332,6 @@ class WeightConverter:
         if isinstance(self.target_keys, str):
             self.target_keys = [self.target_keys]
 
-        if bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
-            raise ValueError(
-                f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
-            )
-
-        if not self.operations:
-            raise ValueError("WeightConverter requires at least one operation.")
 
     def add_tensor(self, target_key: str, original_key: str, source_pattern: str, future: Future):
         bucket = self.collected_tensors.setdefault(source_pattern, [])
@@ -364,6 +339,44 @@ class WeightConverter:
 
         bucket = self.layer_targets.setdefault(target_key, set())
         bucket.add(original_key)
+
+@dataclass(slots=True)
+class WeightRenaming(WeightTransform):
+    # Special case of WeightTransform that only renames keys without any conversion.
+
+    def convert(self, layer_name: str, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
+        misc = {}
+        for pattern, futures in self.collected_tensors.items():
+            self.collected_tensors[pattern] = [future.result() for future in futures]
+
+        collected_tensors = self.collected_tensors
+        if quantizer is not None and self.quantization_operation is not None:
+            with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
+                collected_tensors = self.quantization_operation.convert(
+                    self.collected_tensors,
+                    source_keys=self.source_keys,
+                    target_keys=self.target_keys,
+                    target_key=layer_name,
+                    config=config,
+                    quant_config=quantizer.quantization_config,
+                    missing_keys=missing_keys,
+                )
+
+        return collected_tensors, misc
+
+
+@dataclass(slots=True)
+class WeightConverter(WeightTransform):
+    operations: list[ConversionOps] = field(default_factory=list, repr=False)
+    def __post_init__(self):
+        super().__post_init__()
+        if bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
+            raise ValueError(
+                f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
+            )
+        if not self.operations:
+            raise ValueError("WeightConverter requires at least one operation.")
+
 
     def convert(self, layer_name: str, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
         misc = {}
@@ -392,52 +405,6 @@ class WeightConverter:
                     missing_keys=missing_keys,
                 )
         return collected_tensors, misc
-
-
-@dataclass(slots=True)
-class WeightRenaming:
-    source_keys: Union[str, list[str]] = field(init=True)
-    target_keys: Union[str, list[str]] = field(init=True)
-
-    distributed_operation: Optional[TensorParallelLayer] = None
-    quantization_operation: Optional[ConversionOps] = None
-
-    collected_tensors: dict[str, list[Future]] = field(default_factory=dict, init=False)
-    layer_targets: dict[str, set[str]] = field(default_factory=dict, init=False)
-
-    def __post_init__(self):
-        if isinstance(self.source_keys, str):
-            self.source_keys = [self.source_keys]
-        if isinstance(self.target_keys, str):
-            self.target_keys = [self.target_keys]
-
-    def add_tensor(self, target_key: str, original_key: str, source_pattern: str, future: Future):
-        bucket = self.collected_tensors.setdefault(source_pattern, [])
-        bucket += [future]
-
-        bucket = self.layer_targets.setdefault(target_key, set())
-        bucket.add(original_key)
-
-    def convert(self, layer_name: str, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
-        misc = {}
-        for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = [future.result() for future in futures]
-
-        collected_tensors = self.collected_tensors
-        if quantizer is not None and self.quantization_operation is not None:
-            with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
-                collected_tensors = self.quantization_operation.convert(
-                    self.collected_tensors,
-                    source_keys=self.source_keys,
-                    target_keys=self.target_keys,
-                    target_key=layer_name,
-                    config=config,
-                    quant_config=quantizer.quantization_config,
-                    missing_keys=missing_keys,
-                )
-
-        return collected_tensors, misc
-
 
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
@@ -605,18 +572,19 @@ def convert_and_load_state_dict_in_model(
 
     The `all_weight_mappings` will look like this:
     {
-        "model.layers.0.attention.qkv.weight": WeightConverter(
-                                                source_keys=["qkv"],
-                                                target_keys=["q", "k","v"],
-                                                operations=[Chunk(dim=0, chunks=3)]),
-                                                collected_tensors={
-                                                    "qkv": [Future, Future, Future]},
-                                                layer_targets={
-                                                    "model.layers.0.attention.q.weight": {"model.layers.0.attention.qkv.weight"},
-                                                    "model.layers.0.attention.k.weight": {"model.layers.0.attention.qkv.weight"},
-                                                    "model.layers.0.attention.v.weight": {"model.layers.0.attention.qkv.weight"},
-                                                }
-                                            ),
+        "model.layers.0.attention.qkv.weight":
+            WeightConverter(
+                source_keys=["qkv"],
+                target_keys=["q", "k","v"],
+                operations=[Chunk(dim=0, chunks=3)]),
+                collected_tensors={
+                    "qkv": [Future, Future, Future]},
+                layer_targets={
+                    "model.layers.0.attention.q.weight": {"model.layers.0.attention.qkv.weight"},
+                    "model.layers.0.attention.k.weight": {"model.layers.0.attention.qkv.weight"},
+                    "model.layers.0.attention.v.weight": {"model.layers.0.attention.qkv.weight"},
+                }
+            ),
         ...
     }
 
