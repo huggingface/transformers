@@ -754,8 +754,9 @@ class MinPLogitsWarper(LogitsProcessor):
         # Create a mask for tokens that have a probability less than the scaled min_p
         tokens_to_remove = probs < scaled_min_p
 
-        # Keep at least min_tokens_to_keep
-        sorted_indices = torch.topk(probs, self.min_tokens_to_keep, dim=-1).indices
+        # Keep at least min_tokens_to_keep tokens (clip k to vocab size if needed, avoids index out of range)
+        k = min(self.min_tokens_to_keep, probs.shape[-1])
+        sorted_indices = torch.topk(probs, k, dim=-1).indices
         tokens_to_remove.scatter_(-1, sorted_indices, False)
 
         scores_processed = scores.masked_fill(tokens_to_remove, self.filter_value)
