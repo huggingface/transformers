@@ -90,7 +90,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         attention_mask = create_bidirectional_mask(
             config=self.config,
             input_embeds=hidden_states,
-            attention_mask=None,
+            attention_mask=input_features_mask,
         )
 
         # Transformer stack
