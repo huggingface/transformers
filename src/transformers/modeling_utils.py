@@ -2450,9 +2450,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tied_keys = self.get_expanded_tied_weights_keys(all_submodels=True)
 
         for target_param, source_param in tied_keys.items():
-            source_is_there = bool(missing_keys) and not re.search(
-                target_param, "\n".join(missing_keys), flags=re.MULTILINE
-            )
             source_param = self.get_parameter_or_buffer(source_param)
             if "." in target_param:
                 parent_name, name = target_param.rsplit(".", 1)
@@ -2462,17 +2459,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 parent = self
             setattr(parent, name, source_param)
             self._adjust_bias(parent, source_param)
-            if missing_keys and source_is_there:
-                missing_keys.discard(target_param)
-            else:
-                target_is_not_there = missing_keys and re.search(
-                    target_param, "\n".join(missing_keys), flags=re.MULTILINE
-                )
-                raise ValueError(
-                    "There is a problem in the way you tie your keys or the way they were saved.\n"
-                    f"source_is_there={source_is_there}, target_is_there={not target_is_not_there}, missing_keys={missing_keys},"
-                    "tie_word_embeddings/tie_encoder_decoder={(self.config.tie_word_embeddings or self.config.tie_encoder_decoder)}"
-                )
+            if missing_keys is not None:
+                source_is_there = not re.search(source_param, "\n".join(missing_keys), flags=re.MULTILINE)
+                target_is_there = not re.search(target_param, "\n".join(missing_keys), flags=re.MULTILINE)
+                if source_is_there:
+                    missing_keys.discard(target_param)
+                # If the source is not present, the checkpoint is corrupted
+                else:
+                    target_present = "not present either" if not target_is_there else "present"
+                    raise ValueError(
+                        f"This checkpoint seem corrupted. The tied weights mapping for this model specifies to tie {source_param} "
+                        f"(which should be present and is not), to {target_param} (which is {target_present})"
+                    )
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
         if getattr(output_embeddings, "bias", None) is not None and hasattr(output_embeddings, "weight"):
