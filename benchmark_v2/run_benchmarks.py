@@ -80,15 +80,15 @@ if __name__ == "__main__":
     logger.info(f"Benchmark run UUID: {benchmark_run_uuid}")
     logger.info(f"Output directory: {args.output_dir}")
 
+    # Error out if one of the arguments is not provided
+    if any(arg is None for arg in [args.batch_size, args.sequence_length, args.num_tokens_to_generate]):
+        raise ValueError(
+            "All of the arguments --batch-size, --sequence-length, and --num-tokens-to-generate are required"
+        )
+
     # We cannot compute ITL if we don't have at least two measurements
     if any(n <= 1 for n in args.num_tokens_to_generate):
         raise ValueError("--num_tokens_to_generate arguments should be larger than 1")
-
-    # Error out if one of the arguments is not provided
-    if len(args.batch_size) * len(args.sequence_length) * len(args.num_tokens_to_generate) == 0:
-        raise ValueError(
-            "At least one of the arguments --batch-size, --sequence-length, or --num-tokens-to-generate is required"
-        )
 
     # Get the configs for the given coverage level
     configs = get_config_by_level(args.level)

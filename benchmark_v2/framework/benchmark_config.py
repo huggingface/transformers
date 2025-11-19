@@ -203,6 +203,8 @@ def adapt_configs(
             config["sequence_length"] = seqlen
             config["num_tokens_to_generate"] = ntok
             config["gpu_monitoring"] = monitor
+            # Remove the old name so it gets re-inferred with the updated values
+            config.pop("name", None)
             adapted_configs.append(BenchmarkConfig.from_dict(config))
     return adapted_configs
 
