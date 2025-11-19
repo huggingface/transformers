@@ -50,8 +50,7 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         monolingual_vocab_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["monolingual_vocab_file"])
         with open(monolingual_vocab_file, "w", encoding="utf-8") as fp:
-            for token in vocab_tokens:
-                fp.write(f"{token} {vocab_tokens[token]}\n")
+            fp.writelines(f"{token} {vocab_tokens[token]}\n" for token in vocab_tokens)
 
         return BartphoTokenizer(SAMPLE_VOCAB, monolingual_vocab_file, **kwargs)
 
@@ -68,8 +67,7 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             monolingual_vocab_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["monolingual_vocab_file"])
             with open(monolingual_vocab_file, "w", encoding="utf-8") as fp:
-                for token in vocab_tokens:
-                    fp.write(f"{token} {vocab_tokens[token]}\n")
+                fp.writelines(f"{token} {vocab_tokens[token]}\n" for token in vocab_tokens)
             tokenizer = BartphoTokenizer(SAMPLE_VOCAB, monolingual_vocab_file, **special_tokens_map)
 
             text = "This is a là test"

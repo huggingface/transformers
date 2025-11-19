@@ -25,10 +25,10 @@ import os
 import re
 import warnings
 from collections import OrderedDict, UserDict
-from collections.abc import Mapping, Sequence, Sized
+from collections.abc import Callable, Mapping, Sequence, Sized
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, Union
+from typing import TYPE_CHECKING, Any, NamedTuple, Optional, Union
 
 import numpy as np
 from packaging import version
@@ -1029,8 +1029,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if isinstance(value, dict):
                     self._set_model_specific_special_tokens(special_tokens=value)
                 else:
-                    if not isinstance(value, (list, tuple)) or not all(isinstance(t, (str, AddedToken)) for t in value):
-                        raise TypeError("extra_special_tokens must be a list/tuple of str or AddedToken, or a dict mapping names to tokens")
+                    if not isinstance(value, (list, tuple)) or not all(
+                        isinstance(t, (str, AddedToken)) for t in value
+                    ):
+                        raise TypeError(
+                            "extra_special_tokens must be a list/tuple of str or AddedToken, or a dict mapping names to tokens"
+                        )
                     self._extra_special_tokens = list(value)
 
         # For backward compatibility we fallback to set model_max_length from max_len if provided
@@ -1146,7 +1150,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         special_tokens_dict = dict(special_tokens_dict)
         if "additional_special_tokens" in special_tokens_dict and "extra_special_tokens" not in special_tokens_dict:
             special_tokens_dict["extra_special_tokens"] = special_tokens_dict.pop("additional_special_tokens")
-        
+
         allowed_keys = set(self.SPECIAL_TOKENS_ATTRIBUTES) | {"extra_special_tokens"}
         tokens_to_add = []
         for key, value in special_tokens_dict.items():
@@ -1599,7 +1603,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # 3. It's a GGUF file
             vocab_files_count = len(cls.vocab_files_names)
             has_optional_tokenizer_file = vocab_files_count > 1 and "tokenizer_file" in cls.vocab_files_names
-            
+
             if vocab_files_count > 1 and not gguf_file and not has_optional_tokenizer_file:
                 raise ValueError(
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
@@ -1884,7 +1888,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             extra_special_tokens_from_config = list(extra_special_tokens_from_config)
         else:
             extra_special_tokens_from_config = None
-        
+
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
 
@@ -1893,7 +1897,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             init_kwargs["extra_special_tokens"] = init_kwargs.pop("additional_special_tokens")
         # Restore extra_special_tokens from config if kwargs overwrote it or it's missing
         elif extra_special_tokens_from_config is not None:
-            if "extra_special_tokens" not in init_kwargs or not isinstance(init_kwargs.get("extra_special_tokens"), (list, tuple)):
+            if "extra_special_tokens" not in init_kwargs or not isinstance(
+                init_kwargs.get("extra_special_tokens"), (list, tuple)
+            ):
                 init_kwargs["extra_special_tokens"] = extra_special_tokens_from_config
 
         # V5: Get model-specific special tokens from config (saved as individual keys in special_tokens_map)
@@ -1909,7 +1915,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             }
             if model_specific_tokens:
                 # If extra_special_tokens is already a list, we need to preserve it
-                if "extra_special_tokens" in init_kwargs and isinstance(init_kwargs["extra_special_tokens"], (list, tuple)):
+                if "extra_special_tokens" in init_kwargs and isinstance(
+                    init_kwargs["extra_special_tokens"], (list, tuple)
+                ):
                     # Keep the list as is, but also add model-specific tokens as a separate dict
                     # Convert to model_specific_special_tokens so __init__ handles it
                     init_kwargs["model_specific_special_tokens"] = model_specific_tokens
@@ -1958,7 +1966,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         extra_special_tokens_before_map = list(extra_special_tokens_before_map)
                     else:
                         extra_special_tokens_before_map = None
-                    
+
                     for key, value in special_tokens_map.items():
                         if key in kwargs and kwargs[key]:
                             # This value has already been redefined by the kwargs
@@ -1987,12 +1995,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                                 init_kwargs[key] = existing
                                 continue
                         init_kwargs[key] = value
-                    
+
                     # Restore extra_special_tokens from tokenizer_config.json if not in special_tokens_map.json
-                    if "extra_special_tokens" not in special_tokens_map and extra_special_tokens_before_map is not None:
-                        if "extra_special_tokens" not in init_kwargs or not isinstance(init_kwargs.get("extra_special_tokens"), (list, tuple)):
+                    if (
+                        "extra_special_tokens" not in special_tokens_map
+                        and extra_special_tokens_before_map is not None
+                    ):
+                        if "extra_special_tokens" not in init_kwargs or not isinstance(
+                            init_kwargs.get("extra_special_tokens"), (list, tuple)
+                        ):
                             init_kwargs["extra_special_tokens"] = extra_special_tokens_before_map
-                    
+
                     # Convert extra_special_tokens dict to model_specific_special_tokens if it's a dict
                     if isinstance(init_kwargs.get("extra_special_tokens"), dict):
                         init_kwargs["model_specific_special_tokens"] = init_kwargs.pop("extra_special_tokens")
@@ -2095,8 +2108,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 tokenizer._post_init()
             # If only SPM exists, try to get vocab and merges and init to load a tokenizers-backend
         else:
-            from .utils import has_file
-
             spm_filename = find_sentencepiece_model_file(
                 pretrained_model_name_or_path,
                 revision=kwargs.get("revision"),
@@ -2123,8 +2134,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if resolved_spm is not None:
                     try:
                         # Mirror AutoTokenizer fallback: extract vocab/merges from SentencePiece
-                        from .tokenization_utils_sentencepiece import SentencePieceExtractor
                         import inspect as _inspect
+
+                        from .tokenization_utils_sentencepiece import SentencePieceExtractor
 
                         class_sig = _inspect.signature(getattr(cls, "__init__", cls))
                         vocab_ids, vocab_scores, merges = SentencePieceExtractor(resolved_spm).extract()
@@ -3764,6 +3776,7 @@ def load_vocab_and_merges(pretrained_model_name_or_path, **kwargs):
             merges = None
 
     return vocab, merges, files_loaded
+
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
 PreTrainedTokenizerBase.push_to_hub = copy_func(PreTrainedTokenizerBase.push_to_hub)

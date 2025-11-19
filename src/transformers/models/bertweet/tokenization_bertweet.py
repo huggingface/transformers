@@ -324,8 +324,10 @@ class BertweetTokenizer(PreTrainedTokenizer):
         # Save BPE merges
         merge_file = os.path.join(save_directory, prefix + vocab_files_names.get("merges_file", "bpe.codes"))
         with open(merge_file, "w", encoding="utf-8") as writer:
-            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
-                writer.write(" ".join(bpe_tokens) + "\n")
+            writer.writelines(
+                " ".join(bpe_tokens) + "\n"
+                for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1])
+            )
 
         return (vocab_file, merge_file)
 

@@ -594,8 +594,7 @@ class WhisperTokenizer(TokenizersBackend):
 
         with open(merge_file, "w", encoding="utf-8") as writer:
             writer.write("#version: 0.2\n")
-            for merge_pair in self._merges:
-                writer.write(" ".join(merge_pair) + "\n")
+            writer.writelines(" ".join(merge_pair) + "\n" for merge_pair in self._merges)
 
         if self.english_spelling_normalizer is not None:
             with open(normalizer_file, "w", encoding="utf-8") as f:

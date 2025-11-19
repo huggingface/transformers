@@ -54,7 +54,6 @@ from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
     FEATURE_EXTRACTOR_NAME,
     PROCESSOR_NAME,
-    is_tokenizers_available,
 )
 
 
