@@ -23,6 +23,55 @@ from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecModel
 
 
 class HiggsAudioV2TokenizerConfig(XcodecConfig):
+    r"""
+    This is the configuration class to store the configuration of an [`HiggsAudioV2TokenizerModel`]. It is used to instantiate a
+    HiggsAudioV2Tokenizer model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the
+    [https://huggingface.co/bosonai/higgs-audio-v2-tokenizer](https://huggingface.co/bosonai/higgs-audio-v2-tokenizer) architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+            target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2, 4]`):
+                The range of different bandwidths (in kbps) the model can encode audio with.
+            sample_rate (`int`, *optional*, defaults to 16000):
+                The sampling rate at which the audio waveform should be digitalized, in hertz (Hz).
+            kernel_size (`int`, *optional*, defaults to 3):
+                Kernel size for the initial semantic convolution.
+            channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
+                Expansion factors for the number of output channels in each semantic block.
+            strides (`List[int]`, *optional*, defaults to `[1, 1]`):
+                Strides for each semantic encoder block.
+            block_dilations (`List[int]`, *optional*, defaults to `[1, 1]`):
+                Dilation factors for the residual units in semantic blocks.
+            unit_kernel_size (`int`, *optional*, defaults to 3):
+                Kernel size inside each ResidualUnit in semantic blocks.
+            codebook_size (`int`, *optional*, defaults to 1024):
+                Number of entries in each residual quantizer's codebook.
+            codebook_dim (`int`, *optional*):
+                Dimensionality of each codebook vector. Defaults to sum of hidden size of acoustic and semantic models.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                Standard deviation of the truncated normal initializer for all weight matrices.
+            acoustic_model_config (`Union[Dict, DacConfig]`, *optional*):
+                An instance of the configuration for the acoustic (DAC) model.
+            semantic_model_config (`Union[Dict, HubertConfig, WavLMConfig]`, *optional*):
+                An instance of the configuration object for the semantic (HuBERT) model.
+
+    Example:
+
+    ```python
+    >>> from transformers import HiggsAudioV2TokenizerModel, HiggsAudioV2TokenizerConfig
+
+    >>> # Initializing configuration
+    >>> configuration = HiggsAudioV2TokenizerConfig()
+
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = HiggsAudioV2TokenizerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     def __init__(
         self,
         target_bandwidths=None,
