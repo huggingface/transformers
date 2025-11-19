@@ -968,15 +968,15 @@ Hey how are you doing"""
         # Check that no error raised
         tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
-                with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    save_files = tokenizer.save_pretrained(tmp_dir_name)
-                    with open(Path(tmp_dir_name, "tokenizer_config.json"), "r") as fp:
-                        tokenizer_config = json.load(fp)
-                        tokenizer_config["chat_template"] = tokenizer.chat_template
-                    with open(Path(tmp_dir_name, "tokenizer_config.json"), "w") as fp:
-                        json.dump(tokenizer_config, fp)
-                    os.remove(Path(tmp_dir_name, "chat_template.jinja"))
-                    new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            save_files = tokenizer.save_pretrained(tmp_dir_name)
+            with open(Path(tmp_dir_name, "tokenizer_config.json"), "r") as fp:
+                tokenizer_config = json.load(fp)
+                tokenizer_config["chat_template"] = tokenizer.chat_template
+            with open(Path(tmp_dir_name, "tokenizer_config.json"), "w") as fp:
+                json.dump(tokenizer_config, fp)
+            os.remove(Path(tmp_dir_name, "chat_template.jinja"))
+            new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
 
         self.assertEqual(new_tokenizer.chat_template, dummy_template)  # Test template has persisted
         output = new_tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)

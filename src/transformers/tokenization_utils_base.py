@@ -1335,7 +1335,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
-class PreTrainedTokenizerBase(PushToHubMixin):
+class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     """
     Base class for all tokenizer backends.
     """
@@ -1444,7 +1444,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
-        super().__init__(**kwargs)
+        super().__init__()
 
         self.extra_special_tokens = kwargs.pop("extra_special_tokens", {})
         self._set_model_specific_special_tokens(special_tokens=self.extra_special_tokens)
@@ -1876,17 +1876,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
         gguf_file = kwargs.get("gguf_file")
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class, "is_fast": "Fast" in cls.__name__}
         if from_pipeline is not None:
