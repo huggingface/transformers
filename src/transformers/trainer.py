@@ -603,7 +603,7 @@ class Trainer:
                 k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values()
             )
 
-        # Override for Sequence Parallelism: SP does its own treatment of num_items_in_batch
+        # Override for Sequence Parallelism: SP computes its own good_tokens count, so skip num_items_in_batch calculation
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
             self.model_accepts_loss_kwargs = False
