@@ -3923,7 +3923,9 @@ class Trainer:
 
     def _deepspeed_sp_compute_loss(self, model, inputs, return_outputs, pc):
         """
-        How the loss is computed by Trainer under context parallelism scenario with sp_backend==deepspeed and sp_size>1. By default, all models return the loss in the first element.
+        How the loss is computed by Trainer under sequence parallelism with sp_backend=="deepspeed" and sp_size>1.
+        Performs weighted loss aggregation across SP ranks, accounting for varying numbers of valid tokens per rank
+        (e.g., when some ranks receive only padding or prompt tokens that are masked with -100).
 
         Args:
             model (`nn.Module`):
