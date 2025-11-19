@@ -12,24 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch HiggsAudioV2Tokenizer model."""
 
 import inspect
-import json
 import math
 import os
 import tempfile
 import unittest
-from pathlib import Path
 
 import numpy as np
-from datasets import Audio, load_dataset
-from parameterized import parameterized
 from pytest import mark
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
-from transformers import AutoFeatureExtractor, HiggsAudioV2TokenizerConfig
+from transformers import DacConfig, HiggsAudioV2TokenizerConfig, HubertConfig
 from transformers.testing_utils import (
     is_flaky,
     is_torch_available,
@@ -44,11 +39,11 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-    from transformers import HiggsAudioV2Tokenizer
+    from transformers import HiggsAudioV2TokenizerModel
 
 
 @require_torch
-class HiggsAudioV2TokenizerTester:
+class HiggsAudioV2TokenizerModelTester:
     def __init__(
         self,
         parent,
@@ -56,8 +51,7 @@ class HiggsAudioV2TokenizerTester:
         num_channels=1,
         sample_rate=16000,
         codebook_size=1024,
-        num_quantizers=8,
-        num_samples=960,
+        num_samples=256,
         is_training=False,
     ):
         self.parent = parent
@@ -65,14 +59,24 @@ class HiggsAudioV2TokenizerTester:
         self.num_channels = num_channels
         self.sample_rate = sample_rate
         self.codebook_size = codebook_size
-        self.num_quantizers = num_quantizers
         self.is_training = is_training
         self.num_samples = num_samples
+        self.acoustic_model_config = DacConfig(
+            decoder_hidden_size=8, encoder_hidden_size=8, codebook_size=16, downsampling_ratios=[16, 16]
+        )
+        self.semantic_model_config = HubertConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            intermediate_size=12,
+            conv_dim=(4, 4, 4, 4, 4, 4, 4),
+        )
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.num_samples], scale=1.0)
         config = self.get_config()
-        inputs_dict = {"input_values": input_values}
+        inputs_dict = {
+            "input_values": floats_tensor([self.batch_size, self.num_channels, self.num_samples], scale=1.0)
+        }
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -83,9 +87,8 @@ class HiggsAudioV2TokenizerTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         codes_length = math.ceil(self.num_samples / config.hop_length)
         inputs_dict["audio_codes"] = ids_tensor(
-            [self.batch_size, self.num_quantizers, codes_length], config.codebook_size
+            [self.batch_size, config.num_quantizers, codes_length], config.codebook_size
         )
-
         return config, inputs_dict
 
     def get_config(self):
@@ -93,19 +96,19 @@ class HiggsAudioV2TokenizerTester:
             sample_rate=self.sample_rate,
             audio_channels=self.num_channels,
             codebook_size=self.codebook_size,
-            num_quantizers=self.num_quantizers,
+            acoustic_model_config=self.acoustic_model_config,
+            semantic_model_config=self.semantic_model_config,
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
-        model = HiggsAudioV2Tokenizer(config=config).to(torch_device).eval()
-        input_values = inputs_dict["input_values"]
-        result = model(input_values)
+        model = HiggsAudioV2TokenizerModel(config=config).to(torch_device).eval()
+        result = model(input_values=inputs_dict["input_values"])
         self.parent.assertEqual(result.audio_values.shape, (self.batch_size, self.num_channels, self.num_samples))
 
 
 @require_torch
-class HiggsAudioV2TokenizerTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (HiggsAudioV2Tokenizer,) if is_torch_available() else ()
+class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (HiggsAudioV2TokenizerModel,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
@@ -123,7 +126,7 @@ class HiggsAudioV2TokenizerTest(ModelTesterMixin, unittest.TestCase):
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = HiggsAudioV2TokenizerTester(self)
+        self.model_tester = HiggsAudioV2TokenizerModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=HiggsAudioV2TokenizerConfig, common_properties=[], has_text_modality=False
         )
@@ -163,7 +166,7 @@ class HiggsAudioV2TokenizerTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config)
             self.assertTrue(model.is_gradient_checkpointing)
 
-    @unittest.skip("HiggsAudioV2Tokenizer cannot be tested with meta device")
+    @unittest.skip("HiggsAudioV2TokenizerModel cannot be tested with meta device")
     def test_can_load_with_meta_device_context_manager(self):
         pass
 
@@ -171,23 +174,23 @@ class HiggsAudioV2TokenizerTest(ModelTesterMixin, unittest.TestCase):
     def test_model_is_small(self):
         pass
 
-    @unittest.skip(reason="The HiggsAudioV2Tokenizer does not have `inputs_embeds` logics")
+    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have `inputs_embeds` logics")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="The HiggsAudioV2Tokenizer does not have `inputs_embeds` logics")
+    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have `inputs_embeds` logics")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="The HiggsAudioV2Tokenizer does not have the usual `attention` logic")
+    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have the usual `attention` logic")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="The HiggsAudioV2Tokenizer does not have the usual `attention` logic")
+    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have the usual `attention` logic")
     def test_torchscript_output_attentions(self):
         pass
 
-    @unittest.skip(reason="The HiggsAudioV2Tokenizer does not have the usual `hidden_states` logic")
+    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have the usual `hidden_states` logic")
     def test_torchscript_output_hidden_state(self):
         pass
 
@@ -282,11 +285,11 @@ class HiggsAudioV2TokenizerTest(ModelTesterMixin, unittest.TestCase):
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
 
-    @unittest.skip(reason="The HiggsAudioV2Tokenizer does not have the usual `attention` logic")
+    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have the usual `attention` logic")
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip(reason="The HiggsAudioV2Tokenizer does not have the usual `hidden_states` logic")
+    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have the usual `hidden_states` logic")
     def test_hidden_states_output(self):
         pass
 
@@ -408,114 +411,17 @@ class HiggsAudioV2TokenizerTest(ModelTesterMixin, unittest.TestCase):
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
-    @unittest.skip(reason="The HiggsAudioV2Tokenizer does not support right padding")
+    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not support right padding")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
-    @unittest.skip(reason="The HiggsAudioV2Tokenizer does not have support dynamic compile yet")
+    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):
         pass
 
 
-# Copied from transformers.tests.encodec.test_modeling_encodec.normalize
-def normalize(arr):
-    norm = np.linalg.norm(arr)
-    normalized_arr = arr / norm
-    return normalized_arr
-
-
-# Copied from transformers.tests.encodec.test_modeling_encodec.compute_rmse
-def compute_rmse(arr1, arr2):
-    arr1_np = arr1.cpu().numpy().squeeze()
-    arr2_np = arr2.cpu().numpy().squeeze()
-    max_length = min(arr1.shape[-1], arr2.shape[-1])
-    arr1_np = arr1_np[..., :max_length]
-    arr2_np = arr2_np[..., :max_length]
-    arr1_normalized = normalize(arr1_np)
-    arr2_normalized = normalize(arr2_np)
-    return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
-
-
-"""
-Integration tests for HiggsAudioV2Tokenizer
-
-Code for reproducing expected outputs can be found here:
-    https://gist.github.com/szhengac/dffa292afb669a44866642eb2cc5d3f3
-
-One reason for higher tolerances is because of different implementation of `Snake1d` within Transformer version DAC
-See here: https://gist.github.com/szhengac/dffa292afb669a44866642eb2cc5d3f3
-
-"""
-
-RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/higgs_audio_v2_tokenizer/integration_tests.json"
-
-with open(RESULTS_PATH, "r") as f:
-    raw_data = json.load(f)
-
-# convert dicts into tuples ordered to match test args
-EXPECTED_OUTPUTS_JSON = [
-    (
-        f"{d['repo_id']}",
-        d["repo_id"],
-        d["codes"],
-        d["decoded"],
-        d["codec_error"],
-        d["codec_tol"],
-        d["dec_tol"],
-    )
-    for d in raw_data
-]
-
-
-@slow
-@require_torch
-class HiggsAudioV2TokenizerIntegrationTest(unittest.TestCase):
-    @parameterized.expand(EXPECTED_OUTPUTS_JSON)
-    def test_integration(self, test_name, repo_id, exp_codes, exp_decoded, exp_codec_err, codec_tol, dec_tol):
-        # load model
-        model = HiggsAudioV2Tokenizer.from_pretrained(repo_id).to(torch_device).eval()
-        feature_extractor = AutoFeatureExtractor.from_pretrained(repo_id)
-
-        # load audio example
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        librispeech_dummy = librispeech_dummy.cast_column(
-            "audio", Audio(sampling_rate=feature_extractor.sampling_rate)
-        )
-        audio_array = librispeech_dummy[1]["audio"]["array"]
-        inputs = feature_extractor(
-            raw_audio=audio_array, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
-        ).to(torch_device)
-        x = inputs["input_values"]
-
-        with torch.no_grad():
-            # A small 1e-2 difference in terms of the output of the acoustic model causes
-            # a big difference in the final code
-            ENC_TOL = 1
-            audio_codes = model.encode(x, return_dict=False)
-            if exp_codes is not None:
-                exp_codes = torch.tensor(exp_codes).transpose(0, 1).to(torch_device)
-                torch.testing.assert_close(
-                    audio_codes.squeeze(0)[..., : exp_codes.shape[-1]],
-                    exp_codes,
-                    rtol=ENC_TOL,
-                    atol=ENC_TOL,
-                )
-
-            # dec_tol = 1e-5    # increased to 1e-4 for passing on 4 kbps
-            input_values_dec = model.decode(audio_codes).audio_values
-            if exp_decoded is not None:
-                exp_decoded = torch.tensor(exp_decoded).to(torch_device)
-                torch.testing.assert_close(
-                    input_values_dec[..., : exp_decoded.shape[-1]],
-                    exp_decoded,
-                    rtol=dec_tol,
-                    atol=dec_tol,
-                )
-
-            # compute codec error
-            codec_err = compute_rmse(input_values_dec, x)
-            torch.testing.assert_close(codec_err, exp_codec_err, rtol=codec_tol, atol=codec_tol)
-
-            # make sure forward and decode gives same result
-            audio_values_enc_dec = model(x).audio_values
-            torch.testing.assert_close(input_values_dec, audio_values_enc_dec, rtol=1e-6, atol=1e-6)
+# @slow
+# @require_torch
+# class HiggsAudioV2TokenizerIntegrationTest(unittest.TestCase):
+# TODO: @eustlb, requires first fixing Xcodec integration !!!
+# for now, it is inderectly tested in HiggsAudioV2 integration test
