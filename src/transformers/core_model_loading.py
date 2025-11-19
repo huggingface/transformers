@@ -365,7 +365,7 @@ class WeightConverter:
         bucket = self.layer_targets.setdefault(target_key, set())
         bucket.add(original_key)
 
-    def convert(self, layer_name: str, config=None, quantizer=None):
+    def convert(self, layer_name: str, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
         misc = {}
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]
@@ -389,6 +389,7 @@ class WeightConverter:
                     target_key=layer_name,
                     config=config,
                     quant_config=quantizer.quantization_config,
+                    missing_keys=missing_keys,
                 )
         return collected_tensors, misc
 
@@ -417,7 +418,7 @@ class WeightRenaming:
         bucket = self.layer_targets.setdefault(target_key, set())
         bucket.add(original_key)
 
-    def convert(self, layer_name: str, config=None, quantizer=None):
+    def convert(self, layer_name: str, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
         misc = {}
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]
@@ -432,6 +433,7 @@ class WeightRenaming:
                     target_key=layer_name,
                     config=config,
                     quant_config=quantizer.quantization_config,
+                    missing_keys=missing_keys,
                 )
 
         return collected_tensors, misc
@@ -721,7 +723,7 @@ def convert_and_load_state_dict_in_model(
             pbar.set_postfix({"Materializing param": layer_name})
             pbar.refresh()
             try:
-                realized_value, misc = mapping.convert(layer_name, config=model.config, quantizer=hf_quantizer)
+                realized_value, misc = mapping.convert(layer_name, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys)
                 for k, output_value in realized_value.items():
                     set_param_for_module(
                         model,
