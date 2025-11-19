@@ -29,8 +29,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
-from ...integrations.hub_kernels import lazy_load_kernel
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -120,6 +119,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernel_func_from_hub("rotary_fn")
 class Qwen3MoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -148,15 +148,7 @@ class Qwen3MoeAttention(nn.Module):
         self.q_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = getattr(config, "sliding_window", None)
-
-        rotary_kernel = lazy_load_kernel("rotary_emb")
-        self.rotary_fn = (
-            rotary_kernel.apply_rotary_transformers
-            if rotary_kernel is not None
-            and hasattr(rotary_kernel, "apply_rotary_transformers")
-            and rotary_kernel.apply_rotary_transformers is not None
-            else apply_rotary_pos_emb
-        )
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,

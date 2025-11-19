@@ -34,6 +34,7 @@ try:
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
+        use_kernel_func_from_hub,
     )
 
     _kernels_available = True
@@ -146,6 +147,16 @@ try:
         },
     }
 
+    _HUB_FUNC_KERNEL_MAPPING: dict[str, dict[Union[Device, str], LayerRepository]] = {
+        "rotary_fn": {
+            "xpu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers"
+                )
+            }
+        },
+    }
+
     def has_key(d, key):
         return key in d or any(isinstance(v, dict) and has_key(v, key) for v in d.values())
 
@@ -157,6 +168,7 @@ try:
                 "kernels uses an incompatible version. Please install the latest version with `pip install -U kernels`."
             )
         register_kernel_mapping(mapping)
+        register_kernel_mapping(_HUB_FUNC_KERNEL_MAPPING)
 
 
 except ImportError:
@@ -165,6 +177,12 @@ except ImportError:
     # Stub to make decorators int transformers work when `kernels`
     # is not installed.
     def use_kernel_forward_from_hub(*args, **kwargs):
+        def decorator(cls):
+            return cls
+
+        return decorator
+
+    def use_kernel_func_from_hub(*args, **kwargs):
         def decorator(cls):
             return cls
 
@@ -182,10 +200,8 @@ except ImportError:
     def register_kernel_mapping(*args, **kwargs):
         raise RuntimeError("register_kernel_mapping requires `kernels` to be installed. Run `pip install kernels`.")
 
-
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
-    "rotary_emb": {"repo_id": "kernels-community/rotary"},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, Optional[ModuleType]] = {}
@@ -301,6 +317,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, Optional[ModuleType]] 
 __all__ = [
     "LayerRepository",
     "use_kernel_forward_from_hub",
+    "use_kernel_func_from_hub",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
