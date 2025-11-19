@@ -42,17 +42,6 @@ try:
     _kernels_available = True
     _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
 
-    def use_kernel_forward_from_hub(layer_name: str):
-        if _kernels_enabled:
-            from kernels import use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub
-
-            return _kernels_use_kernel_forward_from_hub(layer_name)
-        else:
-            logger.warning_once(
-                f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
-            )
-            return lambda cls: cls
-
     _KERNEL_MAPPING: dict[str, dict[Union[Device, str], LayerRepository]] = {
         "MultiScaleDeformableAttention": {
             "cuda": LayerRepository(

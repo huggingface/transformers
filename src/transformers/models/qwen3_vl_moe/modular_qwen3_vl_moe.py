@@ -41,6 +41,7 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLTextAttention,
     Qwen3VLTextModel,
     Qwen3VLVisionModel,
+    apply_rotary_pos_emb,
 )
 
 
