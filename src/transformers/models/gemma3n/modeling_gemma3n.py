@@ -28,6 +28,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -1605,11 +1606,11 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
-            module.weight.fill_(1.0)
+            init.ones_(module.weight)
         elif isinstance(module, Gemma3nAudioAttention):
-            module.per_dim_scale.zero_()
+            init.zeros_(module.per_dim_scale)
         elif isinstance(module, Gemma3nTextAltUp):
-            module.correct_output_scale.zero_()
+            init.zeros_(module.correct_output_scale)
 
 
 class Gemma3nRotaryEmbedding(nn.Module):
@@ -1938,7 +1939,6 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Gemma3nTextConfig
-    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {"model.language_model": "model"}
 
     def __init__(self, config: Gemma3nTextConfig):
@@ -2106,12 +2106,6 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
@@ -2348,7 +2342,6 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    base_model_prefix = "model"
 
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
@@ -2362,27 +2355,8 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_image_features(self, pixel_values):
         return self.model.get_image_features(pixel_values)
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        raise AttributeError("Use embed_vision instead of multi_modal_projector.")
 
     @can_return_tuple
     @auto_docstring
@@ -2557,10 +2531,6 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             model_inputs["input_features_mask"] = input_features_mask
 
         return model_inputs
-
-    @property
-    def audio_tower(self):
-        return self.model.audio_tower
 
 
 __all__ = [

@@ -27,6 +27,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -163,7 +164,7 @@ class LlavaNextVideoMultiModalProjector(nn.Module):
 @auto_docstring
 class LlavaNextVideoPreTrainedModel(PreTrainedModel):
     config: LlavaNextVideoConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     input_modalities = ["image", "video", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
@@ -181,12 +182,12 @@ class LlavaNextVideoPreTrainedModel(PreTrainedModel):
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, LlavaNextVideoModel):
             embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            module.image_newline.normal_(mean=0.0, std=embed_std)
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
 
 def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
@@ -329,12 +330,6 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         """
@@ -700,12 +695,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         return self.model.pack_image_features(
             image_features=image_features,
@@ -727,19 +716,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
         )
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
 
     @can_return_tuple
     @auto_docstring

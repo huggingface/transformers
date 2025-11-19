@@ -1067,18 +1067,6 @@ class LEDPreTrainedModel(PreTrainedModel):
     base_model_prefix = "led"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-
     @property
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id
@@ -1783,9 +1771,6 @@ class LEDModel(LEDPreTrainedModel):
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1918,12 +1903,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.led.get_encoder()
-
-    def get_decoder(self):
-        return self.led.get_decoder()
 
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True

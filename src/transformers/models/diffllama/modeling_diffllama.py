@@ -28,6 +28,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
@@ -352,6 +353,7 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
+                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
                 target_dtype = (
                     torch.get_autocast_dtype(device_type)
                     if hasattr(torch, "get_autocast_dtype")
@@ -600,10 +602,10 @@ class DiffLlamaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, DiffLlamaAttention):
-            module.lambda_q1.normal_(0, self.config.lambda_std_dev)
-            module.lambda_k1.normal_(0, self.config.lambda_std_dev)
-            module.lambda_q2.normal_(0, self.config.lambda_std_dev)
-            module.lambda_k2.normal_(0, self.config.lambda_std_dev)
+            init.normal_(module.lambda_q1, 0, self.config.lambda_std_dev)
+            init.normal_(module.lambda_k1, 0, self.config.lambda_std_dev)
+            init.normal_(module.lambda_q2, 0, self.config.lambda_std_dev)
+            init.normal_(module.lambda_k2, 0, self.config.lambda_std_dev)
 
 
 @auto_docstring

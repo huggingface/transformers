@@ -332,17 +332,6 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "prophetnet"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.init_std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.init_std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
@@ -1411,9 +1400,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         self.encoder.word_embeddings = self.word_embeddings
         self.decoder.word_embeddings = self.word_embeddings
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1682,11 +1668,11 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
-    def get_encoder(self):
-        return self.prophetnet.encoder
-
-    def get_decoder(self):
-        return self.prophetnet.decoder
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.prophetnet.encoder
+        else:
+            return super().get_encoder(modality=modality)
 
 
 @auto_docstring(
@@ -1721,12 +1707,6 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.prophetnet.decoder.word_embeddings = value
-
-    def set_decoder(self, decoder):
-        self.prophetnet.decoder = decoder
-
-    def get_decoder(self):
-        return self.prophetnet.decoder
 
     @auto_docstring
     def forward(

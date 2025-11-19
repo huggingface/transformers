@@ -34,6 +34,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -223,18 +224,17 @@ class PretrainedFSMTModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.init_std
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, SinusoidalPositionalEmbedding):
             weight = module.get_embedding(*module.weight.shape, module.padding_idx)
-            weight = nn.Parameter(weight, requires_grad=False)
-            weight.detach_()
-            module.weight = weight
+            init.copy_(module.weight, weight)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
     @property
     def dummy_inputs(self):
@@ -827,9 +827,6 @@ class FSMTModel(PretrainedFSMTModel):
         self.decoder = FSMTDecoder(config)
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1065,12 +1062,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id)
-
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_decoder(self):
-        return self.model.decoder
 
     def get_output_embeddings(self):
         return self.model.decoder.embed_tokens

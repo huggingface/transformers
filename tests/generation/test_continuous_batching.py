@@ -17,7 +17,7 @@ import unittest
 import torch
 from parameterized import parameterized
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, LogitsProcessorList
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, LogitsProcessorList
 from transformers.generation.continuous_batching.cache import group_layers_by_attn_type
 from transformers.generation.continuous_batching.continuous_api import build_attention_mask
 from transformers.testing_utils import (
@@ -455,6 +455,69 @@ class ContinuousBatchingTest(unittest.TestCase):
         self.assertEqual(len(chunk_3.generated_tokens), 3)
 
         manager.stop(block=True)
+
+    @require_torch_accelerator
+    def test_prefix_sharing(self) -> None:
+        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
+        max_new_tokens = 32
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+
+        generation_config = GenerationConfig(do_sample=False, block_size=32)
+        with model.continuous_batching_context_manager(generation_config=generation_config) as manager:
+            manager.logit_processor = LogitsProcessorList()
+
+            # Create a request with at least 32 tokens but less than 64 so prefill only generates one complete block
+            messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
+
+            inputs = tokenizer.apply_chat_template(
+                messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
+            )
+            inputs = inputs.to(model.device)[0].tolist()
+            self.assertGreaterEqual(len(inputs), 32, f"Input length is {len(inputs)} instead of at least 32")
+            self.assertLess(len(inputs), 64, f"Input length is {len(inputs)} instead of less than 64")
+
+            # First request, which populates the cache with a complete block
+            request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens)
+            chunk_no_reuse = next(manager.request_id_iter(request_id))
+
+            hash_table = manager.batch_processor.cache._block_manager._hash_to_id
+            self.assertEqual(
+                len(hash_table),
+                2,
+                f"There should be 2 blocks, one for the prefill and one for the decode, but {len(hash_table) = }",
+            )
+            total_prefix_length = manager.batch_processor.cache._total_prefix_length
+            self.assertEqual(
+                total_prefix_length, 0, f"Expected total prefix length to be 0, got {total_prefix_length}"
+            )
+
+            # Second request, which should reuse the same block
+            request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens)
+            chunk_with_reuse = next(manager.request_id_iter(request_id))
+
+            # There should only still be two blocks in the hash table because of block reuse
+            self.assertEqual(
+                len(hash_table),
+                2,
+                f"Because of block reuse, there should still be two blocks in the hash table, but {len(hash_table) = }",
+            )
+
+            # Check that the whole prefill was matched
+            total_prefix_length = manager.batch_processor.cache._total_prefix_length
+            self.assertEqual(
+                total_prefix_length, 32, f"Expected total prefix length to be 32, got {total_prefix_length}"
+            )
+
+        # Check the outputs were the same
+        self.assertEqual(chunk_no_reuse.generated_tokens, chunk_with_reuse.generated_tokens)
+
+        # As an additional sanity check, we also compare to the generated tokens when prefix sharing is disabled
+        expected_generated_tokens = Expectations({
+            ("rocm", (9, 4)): [785, 80532, 6733, 374, 3881, 369, 1181, 5726, 311, 1855, 323, 36635, 3460, 12934, 4128, 4119, 11, 2670, 1846, 429, 646, 6923, 1467, 11, 14683, 1467, 11, 323, 2736, 1008, 4128, 13904],
+        }).get_expectation()  # fmt: skip
+        self.assertEqual(chunk_no_reuse.generated_tokens, expected_generated_tokens)
 
 
 # FIXME: the gemma test seem broken, there is a message about cuda graphs and the sdpa and flash expecteations are

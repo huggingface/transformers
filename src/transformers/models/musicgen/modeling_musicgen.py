@@ -26,6 +26,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import (
@@ -420,16 +421,17 @@ class MusicgenPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_factor
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
 
 class MusicgenDecoder(MusicgenPreTrainedModel):
@@ -812,12 +814,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_heads = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
 
     @auto_docstring
     def forward(
@@ -1396,16 +1392,6 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         # tie text encoder, decoder weights if config set accordingly
         self.post_init()
 
-    def get_audio_encoder(self):
-        return self.audio_encoder
-
-    def get_text_encoder(self):
-        return self.text_encoder
-
-    def get_encoder(self):
-        # get the text encoder to compute the encoder hidden-states for generation
-        return self.get_text_encoder()
-
     def get_input_embeddings(self):
         return self.text_encoder.get_input_embeddings()
 
@@ -1896,7 +1882,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         generation_config: GenerationConfig,
     ) -> dict[str, Any]:
         # 1. get text encoder
-        encoder = self.get_text_encoder()
+        encoder = self.get_encoder()
         # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
         # as the inputs.
         if hasattr(encoder, "_hf_hook"):
@@ -1941,7 +1927,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         self, input_values, model_kwargs, model_input_name: Optional[str] = None
     ):
         # 1. get audio encoder
-        encoder = self.get_audio_encoder()
+        encoder = self.get_encoder(modality="audio")
         # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
         # as the inputs.
         if hasattr(encoder, "_hf_hook"):

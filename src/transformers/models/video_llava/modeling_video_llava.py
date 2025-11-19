@@ -20,6 +20,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -124,37 +125,26 @@ class VideoLlavaMultiModalProjector(nn.Module):
 @auto_docstring
 class VideoLlavaPreTrainedModel(PreTrainedModel):
     config: VideoLlavaConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     input_modalities = ["image", "video", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
-
     _supports_flash_attn = True
     _supports_sdpa = True
-
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )
-
         if hasattr(module, "class_embedding"):
-            module.class_embedding.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.class_embedding, mean=0.0, std=std)
 
 
 @auto_docstring(
@@ -181,12 +171,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_image_features(
         self,
@@ -442,12 +426,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_image_features(
         self,
         pixel_values_images: torch.FloatTensor,
@@ -459,23 +437,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
         )
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def video_tower(self):
-        return self.model.video_tower
-
-    @property
-    def image_tower(self):
-        return self.model.image_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
 
     @can_return_tuple
     @auto_docstring

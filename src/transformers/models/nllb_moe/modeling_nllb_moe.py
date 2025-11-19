@@ -665,22 +665,6 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
 
-    @torch.no_grad()
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights"""
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-
 
 class NllbMoeEncoder(NllbMoePreTrainedModel):
     _can_record_outputs = {
@@ -909,9 +893,6 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1081,12 +1062,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
         self.router_aux_loss_coef = config.router_aux_loss_coef
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @can_return_tuple
     @auto_docstring

@@ -26,7 +26,6 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
-from types import MethodType
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
@@ -46,22 +45,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
-
-str_to_torch_dtype = {
-    "BOOL": torch.bool,
-    "U8": torch.uint8,
-    "I8": torch.int8,
-    "I16": torch.int16,
-    "F16": torch.float16,
-    "BF16": torch.bfloat16,
-    "I32": torch.int32,
-    "F32": torch.float32,
-    "F64": torch.float64,
-    "I64": torch.int64,
-    "F8_E4M3": torch.float8_e4m3fn,
-    "F8_E5M2": torch.float8_e5m2,
-}
-
 
 logger = logging.get_logger(__name__)
 
@@ -313,130 +296,16 @@ class ConversionEntry:
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
 
-# Factory function to create LoadedParameter subclasses dynamically
-def get_loaded_parameter_class(base_cls):
-    """
-    base_cls: an nn.Parameter subclass (or nn.Parameter) or a Tensor
-    Returns a new class that combines the base_cls with LoadedParameterMixin
-
-    """
-
-    class LoadedParam(base_cls):
-        _inplace_methods = [
-            "add_",
-            "mul_",
-            "clamp_",
-            "zero_",
-            "fill_",
-            "normal_",
-            "uniform_",
-            "copy_",
-            "erfinv_",
-            "log_",
-            "__getitem__",
-            "neg_",
-            "exp_",
-            "sub_",
-        ]
-
-        def __new__(cls, from_existing, **kwargs):
-            if isinstance(from_existing, torch.nn.Parameter):
-                inst = super().__new__(cls, from_existing.data, from_existing.requires_grad, **from_existing.__dict__)
-            else:
-                inst = super().__new__(cls, from_existing)
-            # we store the original object to get it back later on
-            inst._original = from_existing
-            # Explicitly override all in-place methods per instance
-            for method_name in inst._inplace_methods:
-                setattr(inst, method_name, MethodType(inst._skip, inst))
-
-            return inst
-
-        def _skip(self, *args, **kwargs):
-            """Helper to skip in-place operations."""
-            return self
-
-        def __repr__(self):
-            return f"LoadedParameter(data={self.data})"
-
-        @property
-        def data(self):
-            return super().data
-
-        @data.setter
-        def data(self, new):
-            pass
-
-    def __lt__(self, other):
-        return torch.Tensor.__lt__(self, other)
-
-    def __le__(self, other):
-        return torch.Tensor.__le__(self, other)
-
-    def __gt__(self, other):
-        return torch.Tensor.__gt__(self, other)
-
-    def __ge__(self, other):
-        return torch.Tensor.__ge__(self, other)
-
-    def __eq__(self, other):
-        return torch.Tensor.__eq__(self, other)
-
-    def __ne__(self, other):
-        return torch.Tensor.__ne__(self, other)
-
-    def __iadd__(self, *args, **kwargs):
-        return self
-
-    def __isub__(self, *args, **kwargs):
-        return self
-
-    def __imul__(self, *args, **kwargs):
-        return self
-
-    def __imatmul__(self, *args, **kwargs):
-        return self
-
-    def __itruediv__(self, *args, **kwargs):
-        return self
-
-    def __ifloordiv__(self, *args, **kwargs):
-        return self
-
-    def __imod__(self, *args, **kwargs):
-        return self
-
-    def __ipow__(self, *args, **kwargs):
-        return self
-
-    def __iand__(self, *args, **kwargs):
-        return self
-
-    def __ior__(self, *args, **kwargs):
-        return self
-
-    def __ixor__(self, *args, **kwargs):
-        return self
-
-    def __ilshift__(self, *args, **kwargs):
-        return self
-
-    def __irshift__(self, *args, **kwargs):
-        return self
-
-    return LoadedParam
-
-
-def _materialize_copy(tensor, dtype=None):
+def _materialize_copy(tensor, device=None, dtype=None):
     tensor = tensor[...]
-    if dtype is not None:
-        tensor = tensor.to(dtype)
+    if dtype is not None or device is not None:
+        tensor = tensor.to(device=device, dtype=dtype)
     return tensor
 
 
-def spawn_materialize(thread_pool, tensor, dtype=None) -> Future:
+def spawn_materialize(thread_pool, tensor, device=None, dtype=None) -> Future:
     def _job():
-        return _materialize_copy(tensor, dtype)
+        return _materialize_copy(tensor, device, dtype)
 
     return thread_pool.submit(_job)
 
@@ -504,11 +373,15 @@ def set_param_for_module(
     missing_keys: MutableSet[str],
     misc: MutableMapping[str, Any],
     distributed_operation: Optional[TensorParallelLayer],
+    hf_quantizer: HfQuantizer,
 ):
     with log_to_misc(layer_name, misc, layer_name):
         module_path, _, param_name = layer_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
-        param_value = param_value[0] if isinstance(param_value, list) else param_value[...]
+        if isinstance(param_value, list):
+            param_value = param_value[0]
+        elif not isinstance(param_value, torch.nn.Parameter):
+            param_value = param_value[...]
         ref = getattr(module_obj, param_name)
 
         use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
@@ -527,11 +400,10 @@ def set_param_for_module(
                     param_value = param_value.to_local()
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
-        param_value = get_loaded_parameter_class(param_value.__class__)(from_existing=param_value)
 
         # Remove from missing keys (it's either mismatched, or all good)
         missing_keys.discard(layer_name)
-        if ref is not None and ref.shape != param_value.shape:
+        if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
             module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
         else:
@@ -550,7 +422,7 @@ def convert_and_load_state_dict_in_model(
     state_dict: dict[str, Any],
     weight_mapping: dict[str, WeightConverter] | None,
     tp_plan: dict[str, str] | None,
-    quantizer: HfQuantizer | None,
+    hf_quantizer: HfQuantizer | None,
     dtype: torch.dtype | None = None,
     device_map: dict | None = None,
     dtype_plan: dict | None = None,
@@ -563,7 +435,10 @@ def convert_and_load_state_dict_in_model(
 
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}  # {glob_pattern: plan_obj_or_key}
-    device_map = device_map or {}  # {exact_target_key: device}
+    device_map = device_map or {"": "cpu"}  # {exact_target_key: device}
+    device_map_regex = re.compile(
+        "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: x.count("."), reverse=True))
+    )
     dtype_plan = dtype_plan or {}  # {glob_pattern: dtype}
     weight_mapping = weight_mapping or {}  # {glob_pattern: WeightConverter}
     meta_model_state_dict = model.state_dict()
@@ -612,20 +487,14 @@ def convert_and_load_state_dict_in_model(
                 unexpected_keys.add(t)
                 continue
 
-            if quantizer is not None and quantizer.param_needs_quantization(model, t):
-                if quantizer.__class__.__name__ == "FineGrainedFP8HfQuantizer":
-                    from .integrations.finegrained_fp8 import Fp8Quantize
-
-                    converter.quantization_operation = Fp8Quantize()  # TODO support other methods
-                else:
-                    raise ValueError("This quantization method is gonna be supported SOOOON")
-            else:
-                _dtype = dtype
-                matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
-                if matched_dtype_pattern is not None:
-                    _dtype = dtype_plan[matched_dtype_pattern]
-                elif empty_param.dtype != _dtype:
-                    _dtype = empty_param.dtype
+            if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, t):
+                converter.quantization_operation = hf_quantizer.get_quantize_ops()
+            _dtype = dtype
+            matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
+            if matched_dtype_pattern is not None:
+                _dtype = dtype_plan[matched_dtype_pattern]
+            elif empty_param.dtype != _dtype:
+                _dtype = empty_param.dtype
 
         first_target_key = new_target_key[0]
         target_key = "|".join(new_target_key)
@@ -650,7 +519,9 @@ def convert_and_load_state_dict_in_model(
                 )
 
         if future is None:  # If not TP, async materialize the tensors. TODO handle disk offload?
-            future = spawn_materialize(thread_pool, tensor, _dtype)
+            device_match = device_map_regex.match(first_target_key)
+            param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
+            future = spawn_materialize(thread_pool, tensor, param_device, _dtype)
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(future)
 
     # 2. Actually convert the ckpt
@@ -686,9 +557,7 @@ def convert_and_load_state_dict_in_model(
                             if op := converter.quantization_operation:
                                 with log_to_misc(layer_name, misc, op=op):
                                     realized_value.update(
-                                        op.convert(
-                                            {k: realized_value.pop(k)}, quant_config=quantizer.quantization_config
-                                        )
+                                        op.convert({k: realized_value.pop(k)}, model=model, missing_keys=missing_keys)
                                     )
 
                         for k, output_value in realized_value.items():
@@ -702,6 +571,7 @@ def convert_and_load_state_dict_in_model(
                                 missing_keys,
                                 misc,
                                 converter.distributed_operation,
+                                hf_quantizer,
                             )
 
                 except SkipLayer:

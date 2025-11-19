@@ -44,18 +44,6 @@ class FuyuPreTrainedModel(PreTrainedModel):
     _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-
 
 @auto_docstring(
     custom_intro="""
@@ -83,12 +71,6 @@ class FuyuModel(FuyuPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def gather_continuous_embeddings(
         self,
@@ -271,12 +253,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @can_return_tuple
     @auto_docstring

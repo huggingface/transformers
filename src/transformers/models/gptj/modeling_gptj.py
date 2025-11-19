@@ -327,6 +327,7 @@ class GPTJFlashAttention2(GPTJAttention):
         device_type = query.device.type if query.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
+                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
                 target_dtype = (
                     torch.get_autocast_dtype(device_type)
                     if hasattr(torch, "get_autocast_dtype")
@@ -442,25 +443,6 @@ class GPTJPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _can_compile_fullgraph = True
-    _supports_param_buffer_assignment = False
-
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear,)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
 
 
 @auto_docstring

@@ -21,6 +21,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
@@ -1879,11 +1880,11 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
-            module.weight.fill_(1.0)
+            init.ones_(module.weight)
         elif isinstance(module, Gemma3nAudioAttention):
-            module.per_dim_scale.zero_()
+            init.zeros_(module.per_dim_scale)
         elif isinstance(module, Gemma3nTextAltUp):
-            module.correct_output_scale.zero_()
+            init.zeros_(module.correct_output_scale)
 
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")
@@ -2115,7 +2116,6 @@ class Gemma3nTextModel(Gemma3TextModel):
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3ForCausalLM):
     _checkpoint_conversion_mapping = {"model.language_model": "model"}
-    base_model_prefix = "model"
 
 
 class Gemma3nMultimodalEmbedder(nn.Module):
@@ -2420,15 +2420,6 @@ class Gemma3nModel(PaliGemmaModel):
 )
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
-    base_model_prefix = "model"
-
-    @property
-    def audio_tower(self):
-        return self.model.audio_tower
-
-    @property
-    def multi_modal_projector(self):
-        raise AttributeError("Use embed_vision instead of multi_modal_projector.")
 
     @can_return_tuple
     @auto_docstring

@@ -26,6 +26,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -445,7 +446,7 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Gemma3PreTrainedModel(PreTrainedModel):
     config: Gemma3Config
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Gemma3DecoderLayer",
@@ -470,10 +471,10 @@ class Gemma3PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Gemma3MultiModalProjector):
-            module.mm_input_projection_weight.zero_()
+            init.zeros_(module.mm_input_projection_weight)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.zero_()
+            init.zeros_(module.weight)
 
 
 def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
@@ -631,7 +632,6 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Gemma3TextConfig
-    base_model_prefix = "model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -872,12 +872,6 @@ class Gemma3Model(Gemma3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
-
     def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Projects the last hidden state from the vision model into language model space.
@@ -1062,27 +1056,8 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_image_features(self, pixel_values):
         return self.model.get_image_features(pixel_values)
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
 
     @auto_docstring
     def forward(
