@@ -185,9 +185,7 @@ class HiggsAudioV2Processor(ProcessorMixin):
                 audio_input_ids = torch.cat([bos_codes, audio_input_ids, eos_codes], dim=2)
 
                 audio_input_ids = self.build_delay_pattern(audio_input_ids)
-
-                # TODO: @eustlb, is the cpu call necessary ?
-                audio_input_ids_list.append(audio_input_ids[0].transpose(0, 1).cpu())
+                audio_input_ids_list.append(audio_input_ids[0].transpose(0, 1))
 
             # expand audio tokens in text
             num_audio_tokens_iter = iter(len(audio_input_ids) for audio_input_ids in audio_input_ids_list)

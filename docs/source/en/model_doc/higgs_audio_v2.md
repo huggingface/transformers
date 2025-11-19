@@ -443,6 +443,10 @@ processor.save_audio(decoded, ["output_batched_1.wav", "output_batched_2.wav"])
 
 ### Training
 
+> [!TIP]
+> By default, the model does not load the text language modeling head to save memory (~1.5GiB reduction), as it's not required for generation.
+> However, when training the model, you need the text head to compute loss on text tokens. To enable it, set `use_text_head=True` when instantiating the model (see example below).
+
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration, infer_device
 import torch
@@ -451,7 +455,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 model_id = "eustlb/higgs-v2"
 
 processor = AutoProcessor.from_pretrained(model_id, device_map=device)
-model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map=device)
+model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map=device, use_text_head=True)
 
 conversation1 = [
     {
@@ -544,7 +548,6 @@ inputs = processor.apply_chat_template(
 outputs = model(**inputs)
 outputs.loss.backward()
 ```
-
 
 This model was contributed by [Shuai Zheng](https://huggingface.co/szhengac) and [Eustache Le Bihan](https://huggingface.co/eustlb). The original code can be found [here](https://github.com/boson-ai/higgs-audio).
 
