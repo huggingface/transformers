@@ -44,8 +44,8 @@ This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan) an
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
->>> model = Sam3Model.from_pretrained("facebook/sam3-base").to(device)
->>> processor = Sam3Processor.from_pretrained("facebook/sam3-base")
+>>> model = Sam3Model.from_pretrained("facebook/sam3").to(device)
+>>> processor = Sam3Processor.from_pretrained("facebook/sam3")
 
 >>> # Load image
 >>> image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"

@@ -1373,25 +1373,6 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
             spatial_shapes,
         )
 
-    def _pool_text_features(self, text_features: torch.Tensor, text_mask: Optional[torch.Tensor]) -> torch.Tensor:
-        """
-        Pool text features along the sequence dimension.
-
-        Args:
-            text_features: Text features [batch_size, seq_len, hidden_size]
-            text_mask: Optional mask where True indicates padding [batch_size, seq_len]
-
-        Returns:
-            Pooled text features [batch_size, hidden_size]
-        """
-        if text_mask is None:
-            return text_features.mean(dim=1)
-
-        is_valid = (~text_mask).float().unsqueeze(-1)
-        num_valid = torch.clamp(is_valid.sum(dim=1), min=1.0)
-        pooled_features = (text_features * is_valid).sum(dim=1) / num_valid
-        return pooled_features
-
     @check_model_inputs()
     def forward(
         self,
