@@ -893,9 +893,6 @@ class MvpModel(MvpPreTrainedModel):
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-    def get_encoder(self):
-        return self.encoder
-
     def set_lightweight_tuning(self):
         assert self.use_prompt, "If you want to use lightweight tuning, make sure that `use_prompt=True`."
 
@@ -1030,12 +1027,6 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
@@ -1536,12 +1527,6 @@ class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
-
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
 
     def set_lightweight_tuning(self):
         self.model.set_lightweight_tuning()

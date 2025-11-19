@@ -1354,12 +1354,6 @@ class Emu3Model(Emu3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.text_model = decoder
-
-    def get_decoder(self):
-        return self.text_model
-
     def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
         """
         Tokenizes images into discrete tokens with VQGAN module. Converts
@@ -1513,25 +1507,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
-    # Make modules available through conditional class for BC
-    @property
-    def text_model(self):
-        return self.model.text_model
-
-    @property
-    def vqmodel(self):
-        return self.model.vqmodel
-
-    @property
-    def vocabulary_mapping(self):
-        return self.model.vocabulary_mapping
 
     def decode_image_tokens(self, **kwargs):
         return self.model.decode_image_tokens(**kwargs)

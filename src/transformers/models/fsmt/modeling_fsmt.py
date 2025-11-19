@@ -827,9 +827,6 @@ class FSMTModel(PretrainedFSMTModel):
         self.decoder = FSMTDecoder(config)
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1065,12 +1062,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id)
-
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_decoder(self):
-        return self.model.decoder
 
     def get_output_embeddings(self):
         return self.model.decoder.embed_tokens

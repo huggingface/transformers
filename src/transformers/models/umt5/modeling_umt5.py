@@ -950,10 +950,6 @@ class UMT5Model(UMT5PreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    # Copied from transformers.models.t5.modeling_t5.T5Model.get_encoder
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1133,10 +1129,6 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_encoder
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     def forward(
@@ -1329,10 +1321,6 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
-
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.get_encoder
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5->UMT5, google-t5/t5-small->google/umt5-small, t5#training->umt5#training
@@ -1644,10 +1632,6 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.get_encoder
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     def forward(

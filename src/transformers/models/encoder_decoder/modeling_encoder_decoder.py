@@ -173,9 +173,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         elif module in self.decoder.modules():
             self.decoder._init_weights(module)
 
-    def get_encoder(self):
-        return self.encoder
-
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
 

@@ -1513,11 +1513,11 @@ class Florence2Model(LlavaModel):
         super().__init__(config)
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
 
-    def get_encoder(self):
-        return self.language_model.get_encoder()
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.language_model.get_encoder()
+        else:
+            return super().get_encoder(modality=modality)
 
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         """
@@ -1623,9 +1623,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
     _tied_weights_keys = {
         "lm_head.weight": "model.language_model.shared.weight",
     }
-
-    def get_encoder(self):
-        return self.model.get_encoder()
 
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)

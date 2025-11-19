@@ -424,15 +424,6 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
     def get_image_features(self, **kwargs):
         raise AttributeError("Not needed for PerceptionLM")
 
-    def language_model(self):
-        raise AttributeError("Not needed for PerceptionLM")
-
-    def vision_tower(self):
-        raise AttributeError("Not needed for PerceptionLM")
-
-    def multi_modal_projector(self):
-        raise AttributeError("Not needed for PerceptionLM")
-
 
 __all__ = [
     "PerceptionLMForConditionalGeneration",

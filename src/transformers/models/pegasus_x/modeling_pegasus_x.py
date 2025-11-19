@@ -1202,9 +1202,6 @@ class PegasusXModel(PegasusXPreTrainedModel):
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-    def get_encoder(self):
-        return self.encoder
-
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
         Resizes position embeddings matrix of the model if `new_num_position_embeddings !=
@@ -1350,12 +1347,6 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """

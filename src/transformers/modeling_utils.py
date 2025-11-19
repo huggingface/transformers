@@ -2205,26 +2205,78 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         self._require_grads_hook.remove()
 
+    def get_encoder(self, modality: Optional[str] = None):
+        """
+        Best-effort lookup of the *encoder* module. If provided with `modality` argument,
+        it looks for a modality-specific encoder in multimodal models (e.g. "image_encoder")
+        By default the function returns model's text encoder if any, and otherwise returns `self`.
+
+        Possible `modality` values are "image", "video" and "audio".
+        """
+        # NOTE: new models need to use existing names for layers if possible, so this list doesn't grow infinitely
+        if modality in ["image", "video"]:
+            possible_module_names = ["vision_tower", "visual", "vision_model", "vision_encoder", "image_tower"]
+        elif modality == "audio":
+            possible_module_names = ["audio_tower", "audio_encoder", "speech_encoder"]
+        elif modality is None:
+            possible_module_names = ["text_encoder", "encoder"]
+        else:
+            raise ValueError(f'Unnrecognized modality, has to be "image", "video" or "audio" but found {modality}')
+
+        for name in possible_module_names:
+            if hasattr(self, name):
+                return getattr(self, name)
+
+        if self.base_model is not self and hasattr(self.base_model, "get_encoder"):
+            return self.base_model.get_encoder(modality=modality)
+
+        # If this is a base transformer model (no encoder/model attributes), return self
+        return self
+
+    def set_encoder(self, encoder, modality: Optional[str] = None):
+        """
+        Symmetric setter. Mirrors the lookup logic used in `get_encoder`.
+        """
+
+        # NOTE: new models need to use existing names for layers if possible, so this list doesn't grow infinitely
+        if modality in ["image", "video"]:
+            possible_module_names = ["vision_tower", "visual", "vision_model", "vision_encoder", "image_tower"]
+        if modality == "audio":
+            possible_module_names = ["audio_tower", "audio_encoder"]
+        elif modality is None:
+            possible_module_names = ["text_encoder", "encoder"]
+        else:
+            raise ValueError(f'Unnrecognized modality, has to be "image", "video" or "audio" but found {modality}')
+
+        for name in possible_module_names:
+            if hasattr(self, name):
+                setattr(self, name, encoder)
+                return
+
+        if self.base_model is not self:
+            if hasattr(self.base_model, "set_encoder"):
+                self.base_model.set_encoder(encoder, modality=modality)
+            else:
+                self.model = encoder
+
     def get_decoder(self):
         """
         Best-effort lookup of the *decoder* module.
 
         Order of attempts (covers ~85 % of current usages):
 
-        1. `self.decoder`
-        2. `self.model`                       (many wrappers store the decoder here)
-        3. `self.model.get_decoder()`         (nested wrappers)
+        1. `self.decoder/self.language_model/self.text_model`
+        2. `self.base_model`                  (many wrappers store the decoder here)
+        3. `self.base_model.get_decoder()`    (nested wrappers)
         4. fallback: raise for the few exotic models that need a bespoke rule
         """
-        if hasattr(self, "decoder"):
-            return self.decoder
+        possible_module_names = ["language_model", "text_model", "decoder", "text_decoder"]
+        for name in possible_module_names:
+            if hasattr(self, name):
+                return getattr(self, name)
 
-        if hasattr(self, "model"):
-            inner = self.model
-            # See: https://github.com/huggingface/transformers/issues/40815
-            if hasattr(inner, "get_decoder") and type(inner) is not type(self):
-                return inner.get_decoder()
-            return inner
+        if self.base_model is not self and hasattr(self.base_model, "get_decoder"):
+            return self.base_model.get_decoder()
 
         # If this is a base transformer model (no decoder/model attributes), return self
         # This handles cases like MistralModel which is itself the decoder
@@ -2235,19 +2287,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Symmetric setter. Mirrors the lookup logic used in `get_decoder`.
         """
 
-        if hasattr(self, "decoder"):
-            self.decoder = decoder
-            return
+        possible_module_names = ["language_model", "text_model", "decoder"]
+        for name in possible_module_names:
+            if hasattr(self, name):
+                print(name)
+                setattr(self, name, decoder)
+                return
 
-        if hasattr(self, "model"):
-            inner = self.model
-            if hasattr(inner, "set_decoder"):
-                inner.set_decoder(decoder)
+        if self.base_model is not self:
+            if hasattr(self.base_model, "set_decoder"):
+                self.base_model.set_decoder(decoder)
             else:
                 self.model = decoder
-            return
-
-        return
 
     @torch.no_grad()
     def _init_weights(self, module):

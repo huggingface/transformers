@@ -769,12 +769,6 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_heads = new_embeddings
 
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
     @auto_docstring
     # Ignore copy
     def forward(
@@ -1318,13 +1312,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             if module.bias is not None:
                 init.zeros_(module.bias)
 
-    def get_text_encoder(self):
-        return self.text_encoder
-
-    def get_encoder(self):
-        # get the text encoder to compute the conditioning hidden-states for generation
-        return self.get_text_encoder()
-
     def get_input_embeddings(self):
         return self.text_encoder.get_input_embeddings()
 
@@ -1824,7 +1811,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         # 1. condition on text
         if inputs_tensor is not None:
-            encoder = self.get_text_encoder()
+            encoder = self.get_encoder()
             # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
             # as the inputs.
             if hasattr(encoder, "_hf_hook"):
