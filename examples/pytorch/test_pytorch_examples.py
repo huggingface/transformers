@@ -374,6 +374,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_bleu"], 30)
 
+    @slow
     def test_run_image_classification(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -403,6 +404,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.8)
 
+    @slow
     def test_run_speech_recognition_ctc(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -573,6 +575,7 @@ class ExamplesTests(TestCasePlus):
             model = ViTMAEForPreTraining.from_pretrained(tmp_dir)
             self.assertIsNotNone(model)
 
+    @slow
     def test_run_semantic_segmentation(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -597,6 +600,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_overall_accuracy"], 0.1)
 
+    @slow
     @patch.dict(os.environ, {"WANDB_DISABLED": "true"})
     def test_run_object_detection(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -624,6 +628,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["test_map"], 0.1)
 
+    @slow
     @patch.dict(os.environ, {"WANDB_DISABLED": "true"})
     def test_run_instance_segmentation(self):
         tmp_dir = self.get_auto_remove_tmp_dir()

@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import re
 from collections.abc import Callable
 from functools import partial
@@ -18,7 +19,7 @@ from types import ModuleType
 from typing import Optional, Union
 
 from ..modeling_flash_attention_utils import lazy_import_flash_attention
-from ..utils import logging
+from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.import_utils import is_kernels_available
 from .flash_attention import flash_attention_forward
 
@@ -37,7 +38,20 @@ try:
         use_kernel_func_from_hub,
     )
 
+    _TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
     _kernels_available = True
+    _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
+
+    def use_kernel_forward_from_hub(layer_name: str):
+        if _kernels_enabled:
+            from kernels import use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub
+
+            return _kernels_use_kernel_forward_from_hub(layer_name)
+        else:
+            logger.warning_once(
+                f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
+            )
+            return lambda cls: cls
 
     _KERNEL_MAPPING: dict[str, dict[Union[Device, str], LayerRepository]] = {
         "MultiScaleDeformableAttention": {
@@ -70,6 +84,12 @@ try:
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/rmsnorm",
                     layer_name="RMSNorm",
+                )
+            },
+            "npu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/liger_kernels",
+                    layer_name="LigerRMSNorm",
                 )
             },
         },
@@ -173,6 +193,7 @@ try:
 
 except ImportError:
     _kernels_available = False
+    _kernels_enabled = False
 
     # Stub to make decorators int transformers work when `kernels`
     # is not installed.
