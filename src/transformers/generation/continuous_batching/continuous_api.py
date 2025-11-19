@@ -22,11 +22,11 @@ from functools import partial
 from itertools import count
 from math import ceil
 from time import perf_counter
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 import torch
 from torch import nn
 from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
@@ -810,6 +810,7 @@ class ContinuousBatchingManager:
         """Check if the background generation thread is running."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
 
+    # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
     def stop(self, block: bool = True, timeout: float | None = None) -> None:
         """Signal the background thread to stop.
 
@@ -1087,7 +1088,9 @@ class ContinuousMixin:
         try:
             yield manager
         finally:
-            logger.debug("Continuous batching loop finished") # a dummy log needed for the logs of stop to show. Won't show
+            logger.debug(
+                "Continuous batching loop finished"
+            )  # a dummy log needed for the logs of stop to show. Won't show
             manager.stop(block=block, timeout=timeout)
 
     # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
