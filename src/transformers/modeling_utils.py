@@ -2472,6 +2472,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if missing_keys is not None:
                 source_is_there = source_param_name not in missing_keys
                 target_is_there = target_param_name not in missing_keys
+                # If we tied correctly, remove the target from the missing keys
                 if source_is_there:
                     missing_keys.discard(target_param_name)
                 # If the source is not present, but the target is, the checkpoint is corrupted
