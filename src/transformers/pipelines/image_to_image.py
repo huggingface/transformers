@@ -85,8 +85,6 @@ class ImageToImagePipeline(Pipeline):
 
         if "timeout" in kwargs:
             preprocess_params["timeout"] = kwargs["timeout"]
-        if "head_mask" in kwargs:
-            forward_params["head_mask"] = kwargs["head_mask"]
 
         return preprocess_params, forward_params, postprocess_params
 
@@ -94,7 +92,7 @@ class ImageToImagePipeline(Pipeline):
     def __call__(self, images: Union[str, "Image.Image"], **kwargs: Any) -> "Image.Image": ...
 
     @overload
-    def __call__(self, images: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list["Image.Image"]: ...
+    def __call__(self, images: list[str] | list["Image.Image"], **kwargs: Any) -> list["Image.Image"]: ...
 
     def __call__(
         self, images: Union[str, list[str], "Image.Image", list["Image.Image"]], **kwargs: Any

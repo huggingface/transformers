@@ -45,8 +45,8 @@ gr.Interface.from_pipeline(pipeline).launch(share=True)
 The Space below is created with the code above and hosted on Spaces.
 
 <iframe
-	src="https://stevhliu-gradio-pipeline-demo.hf.space"
-	frameborder="0"
-	width="850"
-	height="850"
+ src="https://stevhliu-gradio-pipeline-demo.hf.space"
+ frameborder="0"
+ width="850"
+ height="850"
 ></iframe>

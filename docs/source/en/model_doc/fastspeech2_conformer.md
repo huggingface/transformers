@@ -28,15 +28,19 @@ The abstract from the original FastSpeech2 paper is the following:
 This model was contributed by [Connor Henderson](https://huggingface.co/connor-henderson). The original code can be found [here](https://github.com/espnet/espnet/blob/master/espnet2/tts/fastspeech2/fastspeech2.py).
 
 ## 🤗 Model Architecture
+
 FastSpeech2's general structure with a Mel-spectrogram decoder was implemented, and the traditional transformer blocks were replaced with conformer blocks as done in the ESPnet library.
 
-#### FastSpeech2 Model Architecture
+### FastSpeech2 Model Architecture
+
 ![FastSpeech2 Model Architecture](https://www.microsoft.com/en-us/research/uploads/prod/2021/04/fastspeech2-1.png)
 
 #### Conformer Blocks
+
 ![Conformer Blocks](https://www.researchgate.net/profile/Hirofumi-Inaguma-2/publication/344911155/figure/fig2/AS:951455406108673@1603856054097/An-overview-of-Conformer-block.png)
 
 #### Convolution Module
+
 ![Convolution Module](https://d3i71xaburhd42.cloudfront.net/8809d0732f6147d4ad9218c8f9b20227c837a746/2-Figure1-1.png)
 
 ## 🤗 Transformers Usage

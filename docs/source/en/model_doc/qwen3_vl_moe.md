@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on None and added to Hugging Face Transformers on 2025-09-15.*
+*This model was released on 2025-02-19 and added to Hugging Face Transformers on 2025-09-15.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">

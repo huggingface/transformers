@@ -35,12 +35,10 @@ if is_torch_available():
     from transformers.trainer_pt_utils import (
         DistributedLengthGroupedSampler,
         DistributedSamplerWithLoop,
-        DistributedTensorGatherer,
         EvalLoopContainer,
         IterableDatasetShard,
         LabelSmoother,
         LengthGroupedSampler,
-        SequentialDistributedSampler,
         ShardSampler,
         get_parameter_names,
         numpy_pad_and_concatenate,
@@ -80,79 +78,6 @@ if is_torch_available():
 
 @require_torch
 class TrainerUtilsTest(unittest.TestCase):
-    def test_distributed_tensor_gatherer(self):
-        # Simulate a result with a dataset of size 21, 4 processes and chunks of lengths 2, 3, 1
-        world_size = 4
-        num_samples = 21
-        input_indices = [
-            [0, 1, 6, 7, 12, 13, 18, 19],
-            [2, 3, 4, 8, 9, 10, 14, 15, 16, 20, 0, 1],
-            [5, 11, 17, 2],
-        ]
-
-        predictions = np.random.normal(size=(num_samples, 13))
-        gatherer = DistributedTensorGatherer(world_size=world_size, num_samples=num_samples)
-        for indices in input_indices:
-            gatherer.add_arrays(predictions[indices])
-        result = gatherer.finalize()
-        self.assertTrue(np.array_equal(result, predictions))
-
-        # With nested tensors
-        gatherer = DistributedTensorGatherer(world_size=world_size, num_samples=num_samples)
-        for indices in input_indices:
-            gatherer.add_arrays([predictions[indices], [predictions[indices], predictions[indices]]])
-        result = gatherer.finalize()
-        self.assertTrue(isinstance(result, list))
-        self.assertEqual(len(result), 2)
-        self.assertTrue(isinstance(result[1], list))
-        self.assertEqual(len(result[1]), 2)
-        self.assertTrue(np.array_equal(result[0], predictions))
-        self.assertTrue(np.array_equal(result[1][0], predictions))
-        self.assertTrue(np.array_equal(result[1][1], predictions))
-
-    def test_distributed_tensor_gatherer_different_shapes(self):
-        # Simulate a result with a dataset of size 21, 4 processes and chunks of lengths 2, 3, 1
-        world_size = 4
-        num_samples = 21
-        input_indices = [
-            [0, 1, 6, 7, 12, 13, 18, 19],
-            [2, 3, 4, 8, 9, 10, 14, 15, 16, 20, 0, 1],
-            [5, 11, 17, 2],
-        ]
-        sequence_lengths = [8, 10, 13]
-
-        predictions = np.random.normal(size=(num_samples, 13))
-        gatherer = DistributedTensorGatherer(world_size=world_size, num_samples=num_samples)
-        for indices, seq_length in zip(input_indices, sequence_lengths):
-            gatherer.add_arrays(predictions[indices, :seq_length])
-        result = gatherer.finalize()
-
-        # Remove the extra samples added at the end for a round multiple of num processes.
-        actual_indices = [input_indices[0], input_indices[1][:-2], input_indices[2][:-1]]
-        for indices, seq_length in zip(actual_indices, sequence_lengths):
-            self.assertTrue(np.array_equal(result[indices, :seq_length], predictions[indices, :seq_length]))
-
-        # With nested tensors
-        predictions = np.random.normal(size=(num_samples, 13))
-        gatherer = DistributedTensorGatherer(world_size=world_size, num_samples=num_samples)
-        for indices, seq_length in zip(input_indices, sequence_lengths):
-            gatherer.add_arrays([predictions[indices, :seq_length], predictions[indices]])
-        result = gatherer.finalize()
-
-        for indices, seq_length in zip(actual_indices, sequence_lengths):
-            self.assertTrue(np.array_equal(result[0][indices, :seq_length], predictions[indices, :seq_length]))
-        self.assertTrue(np.array_equal(result[1], predictions))
-
-        # Check if works if varying seq_length is second
-        gatherer = DistributedTensorGatherer(world_size=world_size, num_samples=num_samples)
-        for indices, seq_length in zip(input_indices, sequence_lengths):
-            gatherer.add_arrays([predictions[indices], predictions[indices, :seq_length]])
-        result = gatherer.finalize()
-
-        self.assertTrue(np.array_equal(result[0], predictions))
-        for indices, seq_length in zip(actual_indices, sequence_lengths):
-            self.assertTrue(np.array_equal(result[1][indices, :seq_length], predictions[indices, :seq_length]))
-
     def test_label_smoothing(self):
         epsilon = 0.1
         num_labels = 12
@@ -296,38 +221,6 @@ class TrainerUtilsTest(unittest.TestCase):
 
             self.assertEqual(set(total[:length]), set(dataset))
             self.assertEqual(set(total[length:]), set(total[: (len(total) - length)]))
-
-    def test_sequential_distributed_sampler(self):
-        batch_size = 16
-        for length in [23, 64, 123]:
-            dataset = list(range(length))
-            shard1 = SequentialDistributedSampler(dataset, num_replicas=2, rank=0)
-            shard2 = SequentialDistributedSampler(dataset, num_replicas=2, rank=1)
-
-            # Sample
-            samples1 = list(shard1)
-            samples2 = list(shard2)
-
-            total = samples1 + samples2
-
-            self.assertListEqual(total[:length], dataset)
-            self.assertListEqual(total[length:], dataset[: (len(total) - length)])
-
-            # With a batch_size passed
-            shard1 = SequentialDistributedSampler(dataset, num_replicas=2, rank=0, batch_size=batch_size)
-            shard2 = SequentialDistributedSampler(dataset, num_replicas=2, rank=1, batch_size=batch_size)
-
-            # Sample
-            samples1 = list(shard1)
-            samples2 = list(shard2)
-
-            self.assertTrue(len(samples1) % batch_size == 0)
-            self.assertTrue(len(samples2) % batch_size == 0)
-
-            total = samples1 + samples2
-
-            self.assertListEqual(total[:length], dataset)
-            self.assertListEqual(total[length:], dataset[: (len(total) - length)])
 
     def check_iterable_dataset_shard(self, dataset, batch_size, drop_last, num_processes=2, epoch=0):
         # Set the seed for the base dataset to get the proper reference.

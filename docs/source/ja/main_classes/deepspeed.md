@@ -188,7 +188,7 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --deepspeed ds_config.js
 deepspeed examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero3.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -211,7 +211,7 @@ DeepSpeed 関連の引数が 2 つありますが、簡単にするためであ�
 deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero2.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -1292,7 +1292,7 @@ DeepSpeed は、`LRRangeTest`、`OneCycle`、`WarmupLR`、および`WarmupDecayL
   したがって、スケジューラを設定しない場合、これがデフォルトで設定されるスケジューラになります。
 
 設定ファイルで `scheduler` エントリを設定しない場合、[`Trainer`] は
-`--lr_scheduler_type`、`--learning_rate`、および `--warmup_steps` または `--warmup_ratio` の値を設定します。
+`--lr_scheduler_type`、`--learning_rate`、および `--warmup_steps` の値を設定します。
 🤗 それのトランスフォーマーバージョン。
 
 以下は、`WarmupLR`の自動構成された`scheduler`エントリの例です。
@@ -1316,8 +1316,7 @@ DeepSpeed は、`LRRangeTest`、`OneCycle`、`WarmupLR`、および`WarmupDecayL
 
 - `warmup_min_lr` の値は `0` です。
 - `warmup_max_lr` と `--learning_rate` の値。
-- `warmup_num_steps` と `--warmup_steps` の値 (指定されている場合)。それ以外の場合は `--warmup_ratio` を使用します
-  トレーニング ステップの数を乗算し、切り上げます。
+- `warmup_num_steps` と `--warmup_steps` の値 (指定されている場合)
 - `total_num_steps` には `--max_steps` の値を指定するか、指定されていない場合は実行時に自動的に導出されます。
   環境、データセットのサイズ、およびその他のコマンド ライン引数 (
   `WarmupDecayLR`)。
@@ -1389,8 +1388,6 @@ Ampere アーキテクチャ ベースの GPU を使用している場合、pyto
 <a id='deepspeed-amp'></a>
 
 ### Automatic Mixed Precision
-
-pytorch のような AMP の方法または apex のような方法で自動混合精度を使用できます。
 
 ### fp16
 
@@ -1490,40 +1487,6 @@ bf16 が有効な状態で [勾配累積](#gradient-accumulation) を使用す�
 この記事の執筆時点での有効な値は、"fp16"、"bfp16"、"fp32"です。
 
 注: ステージ ゼロ 3 には、bf16 通信タイプに関するバグがあり、`deepspeed==0.8.1`で修正されました。
-
-### apex
-
-apex AMP のようなモード セットを設定するには:
-
-```json
-"amp": {
-    "enabled": "auto",
-    "opt_level": "auto"
-}
-```
-
-[`Trainer`] は `args.fp16_backend` の値に基づいて自動的に設定します。
-`args.fp16_opt_level`。
-
-このモードは、`--fp16 --fp16_backend apex --fp16_opt_level 01`コマンド ライン引数が渡されると有効になります。
-
-このモードを明示的に構成することもできます。
-
-```json
-{
-    "amp": {
-        "enabled": true,
-        "opt_level": "O1"
-    }
-}
-```
-
-ただし、[`Trainer`] コマンドライン引数と DeepSpeed を自分で同期することになります。
-構成。
-
-これは[ドキュメント](https://www.deepspeed.ai/docs/config-json/#automatic-mixed-precision-amp-training-options)です。
-
-<a id='deepspeed-bs'></a>
 
 ### Batch Size
 
@@ -1825,7 +1788,7 @@ deepspeed examples/pytorch/translation/run_translation.py \
 --model_name_or_path google-t5/t5-small --output_dir output_dir \
 --do_eval --max_eval_samples 50 --warmup_steps 50  \
 --max_source_length 128 --val_max_target_length 128 \
---overwrite_output_dir --per_device_eval_batch_size 4 \
+--per_device_eval_batch_size 4 \
 --predict_with_generate --dataset_config "ro-en" --fp16 \
 --source_lang en --target_lang ro --dataset_name wmt16 \
 --source_prefix "translate English to Romanian: "

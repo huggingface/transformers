@@ -470,12 +470,12 @@ class PythonBackend(PreTrainedTokenizerBase):
         return dict(sorted(self._added_tokens_decoder.items(), key=lambda item: item[0]))
 
     @added_tokens_decoder.setter
-    def added_tokens_decoder(self, value: dict[int, Union[AddedToken, str]]) -> dict[int, AddedToken]:
+    def added_tokens_decoder(self, value: dict[int, AddedToken | str]) -> dict[int, AddedToken]:
         # Always raise an error if string because users should define the behavior
         for index, token in value.items():
             if not isinstance(token, (str, AddedToken)) or not isinstance(index, int):
                 raise TypeError(
-                    f"The provided `added_tokens_decoder` has an element of type {index.__class__, token.__class__}, should be a dict of {int, Union[AddedToken, str]}"
+                    f"The provided `added_tokens_decoder` has an element of type {index.__class__, token.__class__}, should be a dict of {int, AddedToken | str}"
                 )
 
             self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
@@ -507,7 +507,7 @@ class PythonBackend(PreTrainedTokenizerBase):
         """
         self.total_vocab_size = len(self.get_vocab())
 
-    def _add_tokens(self, new_tokens: Union[list[str], list[AddedToken]], special_tokens: bool = False) -> int:
+    def _add_tokens(self, new_tokens: list[str] | list[AddedToken], special_tokens: bool = False) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
         it with indices starting from length of the current vocabulary. Special tokens are sometimes already in the

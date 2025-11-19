@@ -63,9 +63,6 @@ python src/transformers/models/musicgen/convert_musicgen_transformers.py \
     --checkpoint small --pytorch_dump_folder /output/path --safe_serialization 
 ```
 
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
-
 ## Generation
 
 MusicGen is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly
@@ -233,6 +230,7 @@ generation config.
 ## Model Structure
 
 The MusicGen model can be de-composed into three distinct stages:
+
 1. Text encoder: maps the text inputs to a sequence of hidden-state representations. The pre-trained MusicGen models use a frozen text encoder from either T5 or Flan-T5
 2. MusicGen decoder: a language model (LM) that auto-regressively generates audio tokens (or codes) conditional on the encoder hidden-state representations
 3. Audio encoder/decoder: used to encode an audio prompt to use as prompt tokens, and recover the audio waveform from the audio tokens predicted by the decoder
@@ -259,6 +257,7 @@ be combined with the frozen text encoder and audio encoder/decoders to recover t
 model.
 
 Tips:
+
 * MusicGen is trained on the 32kHz checkpoint of Encodec. You should ensure you use a compatible version of the Encodec model.
 * Sampling mode tends to deliver better results than greedy - you can toggle sampling with the variable `do_sample` in the call to [`MusicgenForConditionalGeneration.generate`]
 

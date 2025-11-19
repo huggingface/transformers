@@ -119,7 +119,7 @@ print(f"Prediction probabilities: {predictions}")
 
 <hfoption id="AutoModel (w/quantization)">
 
-```
+```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 

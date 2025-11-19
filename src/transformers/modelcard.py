@@ -649,7 +649,6 @@ def parse_log_history(log_history):
             _ = metrics.pop("eval_runtime", None)
             _ = metrics.pop("eval_samples_per_second", None)
             _ = metrics.pop("eval_steps_per_second", None)
-            _ = metrics.pop("eval_jit_compilation_time", None)
             values = {"Training Loss": training_loss, "Epoch": epoch, "Step": step}
             for k, v in metrics.items():
                 if k == "eval_loss":
@@ -667,8 +666,7 @@ def parse_log_history(log_history):
     if idx > 0:
         eval_results = {}
         for key, value in log_history[idx].items():
-            if key.startswith("eval_"):
-                key = key[5:]
+            key = key.removeprefix("eval_")
             if key not in ["runtime", "samples_per_second", "steps_per_second", "epoch", "step"]:
                 camel_cased_key = " ".join([part.capitalize() for part in key.split("_")])
                 eval_results[camel_cased_key] = value
@@ -754,8 +752,6 @@ def extract_hyperparameters_from_trainer(trainer):
             hyperparameters["optimizer"] = f"Use {optimizer_name} and the args are:\n{optimizer_args}"
 
     hyperparameters["lr_scheduler_type"] = trainer.args.lr_scheduler_type.value
-    if trainer.args.warmup_ratio != 0.0:
-        hyperparameters["lr_scheduler_warmup_ratio"] = trainer.args.warmup_ratio
     if trainer.args.warmup_steps != 0.0:
         hyperparameters["lr_scheduler_warmup_steps"] = trainer.args.warmup_steps
     if trainer.args.max_steps != -1:
@@ -764,10 +760,7 @@ def extract_hyperparameters_from_trainer(trainer):
         hyperparameters["num_epochs"] = trainer.args.num_train_epochs
 
     if trainer.args.fp16:
-        if trainer.use_apex:
-            hyperparameters["mixed_precision_training"] = f"Apex, opt level {trainer.args.fp16_opt_level}"
-        else:
-            hyperparameters["mixed_precision_training"] = "Native AMP"
+        hyperparameters["mixed_precision_training"] = "Native AMP"
 
     if trainer.args.label_smoothing_factor != 0.0:
         hyperparameters["label_smoothing_factor"] = trainer.args.label_smoothing_factor

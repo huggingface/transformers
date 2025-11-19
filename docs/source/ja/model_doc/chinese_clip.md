@@ -71,7 +71,6 @@ Chinese-CLIP モデルは、[OFA-Sys](https://huggingface.co/OFA-Sys) によっ�
 ## ChineseCLIPConfig
 
 [[autodoc]] ChineseCLIPConfig
-    - from_text_vision_configs
 
 ## ChineseCLIPTextConfig
 
@@ -90,10 +89,6 @@ Chinese-CLIP モデルは、[OFA-Sys](https://huggingface.co/OFA-Sys) によっ�
 
 [[autodoc]] ChineseCLIPImageProcessorFast
     - preprocess
-
-## ChineseCLIPFeatureExtractor
-
-[[autodoc]] ChineseCLIPFeatureExtractor
 
 ## ChineseCLIPProcessor
 

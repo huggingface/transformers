@@ -153,6 +153,9 @@ generation.
 [[autodoc]] TemperatureLogitsWarper
     - __call__
 
+[[autodoc]] TopHLogitsWarper
+    - __call__
+
 [[autodoc]] TopKLogitsWarper
     - __call__
 
@@ -192,28 +195,6 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 [[autodoc]] EosTokenCriteria
     - __call__
-
-## Constraints
-
-A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusively available to our PyTorch implementations.
-
-[[autodoc]] Constraint
-
-[[autodoc]] PhrasalConstraint
-
-[[autodoc]] DisjunctiveConstraint
-
-[[autodoc]] ConstraintListState
-
-## BeamSearch
-
-[[autodoc]] BeamScorer
-    - process
-    - finalize
-
-[[autodoc]] ConstrainedBeamSearchScorer
-    - process
-    - finalize
 
 ## Streamers
 
@@ -270,18 +251,18 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - batch_select_indices
 
 [[autodoc]] DynamicCache
-    - to_legacy_cache
-    - from_legacy_cache
+
+[[autodoc]] StaticCache
 
 [[autodoc]] QuantizedCache
+
+[[autodoc]] EncoderDecoderCache
 
 [[autodoc]] QuantoQuantizedCache
 
 [[autodoc]] HQQQuantizedCache
 
 [[autodoc]] OffloadedCache
-
-[[autodoc]] StaticCache
 
 [[autodoc]] OffloadedStaticCache
 
@@ -290,10 +271,6 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] HybridChunkedCache
 
 [[autodoc]] SlidingWindowCache
-
-[[autodoc]] EncoderDecoderCache
-    - to_legacy_cache
-    - from_legacy_cache
 
 ## Watermark Utils
 

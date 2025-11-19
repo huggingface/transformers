@@ -33,7 +33,7 @@ Export a Transformers model to ONNX with the Optimum CLI or the `optimum.onnxrun
 Run the command below to install Optimum and the [exporters](https://huggingface.co/docs/optimum/exporters/overview) module.
 
 ```bash
-pip install optimum[exporters]
+pip install optimum-onnx
 ```
 
 > [!TIP]
@@ -51,7 +51,7 @@ optimum-cli export onnx --model distilbert/distilbert-base-uncased-distilled-squ
 
 You should see logs indicating the progress and showing where the resulting `model.onnx` is saved.
 
-```bash
+```text
 Validating ONNX model distilbert_base_uncased_squad_onnx/model.onnx...
 	-[✓] ONNX model output names match reference model (start_logits, end_logits)
 	- Validating ONNX Model output "start_logits":

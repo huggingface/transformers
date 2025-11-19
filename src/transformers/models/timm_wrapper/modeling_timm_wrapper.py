@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_timm_available, requires_backends
@@ -79,7 +80,9 @@ def _create_timm_model_with_error_handling(config: "TimmWrapperConfig", **model_
 
 @auto_docstring
 class TimmWrapperPreTrainedModel(PreTrainedModel):
+    base_model_prefix = "timm_model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     config: TimmWrapperConfig
     _no_split_modules = []
     model_tags = ["timm"]
@@ -121,6 +124,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         state_dict = {self._fix_state_dict_key_on_load(k)[0]: v for k, v in state_dict.items()}
         return super().load_state_dict(state_dict, *args, **kwargs)
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize weights function to properly initialize Linear layer weights.
@@ -128,9 +132,9 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         initialization, while all other weights should be loaded from the checkpoint.
         """
         if isinstance(module, (nn.Linear)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """
@@ -160,6 +164,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         super().__init__(config)
         # using num_classes=0 to avoid creating classification head
         extra_init_kwargs = config.model_args or {}
+        self.features_only = extra_init_kwargs.get("features_only", False)
         self.timm_model = _create_timm_model_with_error_handling(config, num_classes=0, **extra_init_kwargs)
         self.post_init()
 
@@ -233,20 +238,25 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
 
         pixel_values = pixel_values.to(self.device, self.dtype)
 
-        if output_hidden_states:
-            # to enable hidden states selection
-            if isinstance(output_hidden_states, (list, tuple)):
-                kwargs["indices"] = output_hidden_states
-            last_hidden_state, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
-        else:
-            last_hidden_state = self.timm_model.forward_features(pixel_values, **kwargs)
-            hidden_states = None
-
-        if do_pooling:
-            # classification head is not created, applying pooling only
-            pooler_output = self.timm_model.forward_head(last_hidden_state)
-        else:
+        if self.features_only:
+            last_hidden_state = self.timm_model.forward(pixel_values, **kwargs)
+            hidden_states = last_hidden_state if output_hidden_states else None
             pooler_output = None
+        else:
+            if output_hidden_states:
+                # to enable hidden states selection
+                if isinstance(output_hidden_states, (list, tuple)):
+                    kwargs["indices"] = output_hidden_states
+                last_hidden_state, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
+            else:
+                last_hidden_state = self.timm_model.forward_features(pixel_values, **kwargs)
+                hidden_states = None
+
+            if do_pooling:
+                # classification head is not created, applying pooling only
+                pooler_output = self.timm_model.forward_head(last_hidden_state)
+            else:
+                pooler_output = None
 
         if not return_dict:
             outputs = (last_hidden_state, pooler_output, hidden_states)

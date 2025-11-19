@@ -30,10 +30,6 @@ logger = logging.get_logger(__name__)
 
 
 class GraniteSpeechProcessor(ProcessorMixin):
-    attributes = ["audio_processor", "tokenizer"]
-    audio_processor_class = "GraniteSpeechFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         audio_processor,
@@ -49,8 +45,6 @@ class GraniteSpeechProcessor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
         audio: Union["torch.Tensor", list["torch.Tensor"]] = None,
         device: str = "cpu",
-        images=None,
-        videos=None,
         **kwargs,
     ) -> BatchFeature:
         requires_backends(self, ["torch"])

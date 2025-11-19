@@ -22,7 +22,6 @@ import torch
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     SizeDict,
     group_images_by_shape,
     reorder_images,
@@ -36,6 +35,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+from .image_processing_idefics3 import Idefics3ImageProcessorKwargs
 
 
 if is_torchvision_available():
@@ -169,22 +169,6 @@ def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "tor
     return mask
 
 
-class Idefics3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_image_splitting (`bool`, *optional*, defaults to `True`):
-        Whether to split the image into sub-images concatenated with the original image. They are split into patches
-        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
-    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
-        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
-    return_row_col_info (`bool`, *optional*, defaults to `False`):
-        Whether to return the row and column information of the images.
-    """
-
-    do_image_splitting: Optional[bool]
-    max_image_size: Optional[dict[str, int]]
-    return_row_col_info: Optional[bool]
-
-
 @auto_docstring
 class Idefics3ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.LANCZOS
@@ -199,7 +183,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
     do_image_splitting = True
     do_pad = True
     return_row_col_info = False
-    valid_kwargs = Idefics3FastImageProcessorKwargs
+    valid_kwargs = Idefics3ImageProcessorKwargs
 
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         """
@@ -367,7 +351,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         return image, pixel_mask
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Idefics3FastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Idefics3ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(

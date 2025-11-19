@@ -56,7 +56,7 @@ out = pipe(text=messages, max_new_tokens=128)
 print(out[0]['generated_text'][-1]['content'])
 ```
 
-```
+```text
 Ahoy, me hearty! These be two feline friends, likely some tabby cats, taking a siesta on a cozy pink blanket. They're resting near remote controls, perhaps after watching some TV or just enjoying some quiet time together. Cats sure know how to find comfort and relaxation, don't they?
 ```
 
@@ -96,7 +96,7 @@ processed_chat = processor.apply_chat_template(messages, add_generation_prompt=T
 print(list(processed_chat.keys()))
 ```
 
-```
+```text
 ['input_ids', 'attention_mask', 'pixel_values', 'image_grid_thw']
 ```
 
@@ -115,7 +115,7 @@ Some vision models also support video inputs. The message format is very similar
 
 - The content `"type"` should be `"video"` to indicate the content is a video.
 - For videos, it can be a link to the video (`"url"`) or it could be a file path (`"path"`). Videos loaded from a URL can only be decoded with [PyAV](https://pyav.basswood-io.com/docs/stable/) or [Decord](https://github.com/dmlc/decord).
-- In addition to loading videos from a URL or file path, you can also pass decoded video data directly. This is useful if you’ve already preprocessed or decoded video frames elsewhere in memory (e.g., using OpenCV, decord, or torchvision). You don't need to save to files or store it in an URL.
+- In addition to loading videos from a URL or file path, you can also pass decoded video data directly. This is useful if you've already preprocessed or decoded video frames elsewhere in memory (e.g., using OpenCV, decord, or torchvision). You don't need to save to files or store it in an URL.
 
 > [!WARNING]
 > Loading a video from `"url"` is only supported by the PyAV or Decord backends.

@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, HeliumConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_read_token,
@@ -31,49 +31,23 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        HeliumForCausalLM,
-        HeliumForSequenceClassification,
-        HeliumForTokenClassification,
         HeliumModel,
     )
 
 
 class HeliumModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = HeliumConfig
         base_model_class = HeliumModel
-        causal_lm_class = HeliumForCausalLM
-        sequence_classification_class = HeliumForSequenceClassification
-        token_classification_class = HeliumForTokenClassification
 
 
 @require_torch
 class HeliumModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (HeliumModel, HeliumForCausalLM, HeliumForSequenceClassification, HeliumForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": HeliumModel,
-            "text-classification": HeliumForSequenceClassification,
-            "token-classification": HeliumForTokenClassification,
-            "text-generation": HeliumForCausalLM,
-            "zero-shot": HeliumForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-    model_tester_class = HeliumModelTester
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
+    model_tester_class = HeliumModelTester
 
 
 @slow
-# @require_torch_gpu
 class HeliumIntegrationTest(unittest.TestCase):
     input_text = ["Hello, today is a great day to"]
 

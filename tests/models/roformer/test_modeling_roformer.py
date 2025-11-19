@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch RoFormer model."""
 
+import copy
 import unittest
 
 from transformers import RoFormerConfig, is_torch_available
@@ -209,6 +210,8 @@ class RoFormerModelTester:
         token_labels,
         choice_labels,
     ):
+        config = copy.deepcopy(config)
+        config.is_decoder = True
         model = RoFormerForCausalLM(config=config).to(torch_device).eval()
         torch.manual_seed(0)
         output_without_past_cache = model.generate(
@@ -514,7 +517,7 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
     def test_basic(self):
         input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
         emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6)
-        emb1._init_weight()
+        emb1.weight.copy_(emb1.create_weight())
         emb1 = emb1.to(torch_device)
         emb = emb1(input_ids.shape)
         desired_weights = torch.tensor(
@@ -534,7 +537,7 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
             ]
         ).to(torch_device)
         emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512).to(torch_device)
-        emb1._init_weight()
+        emb1.weight.copy_(emb1.create_weight())
         weights = emb1.weight.data[:3, :5].to(torch_device)
 
         self.assertTrue(
@@ -556,7 +559,7 @@ class RoFormerSelfAttentionRotaryPositionEmbeddingTest(unittest.TestCase):
             -torch.arange(2 * 12 * 16 * 64, dtype=torch.float, device=torch_device).reshape(2, 12, 16, 64) / 100
         ).to(torch_device)
         embed_positions = RoFormerSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=64)
-        embed_positions._init_weight()
+        embed_positions.weight.copy_(embed_positions.create_weight())
         embed_positions = embed_positions.to(torch_device)
         sinusoidal_pos = embed_positions([2, 16, 768])[None, None, :, :]
 

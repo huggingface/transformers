@@ -140,8 +140,7 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     """
 
     all_model_classes = (Qwen2AudioForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
+
     _is_composite = True
 
     def setUp(self):
@@ -155,6 +154,10 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2Audio models")
     def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(reason="Qwen2Audio has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):

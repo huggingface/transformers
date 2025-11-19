@@ -56,14 +56,14 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] GLPNConfig
 
-## GLPNFeatureExtractor
-
-[[autodoc]] GLPNFeatureExtractor
-    - __call__
-
 ## GLPNImageProcessor
 
 [[autodoc]] GLPNImageProcessor
+    - preprocess
+
+## GLPNImageProcessorFast
+
+[[autodoc]] GLPNImageProcessorFast
     - preprocess
 
 ## GLPNModel

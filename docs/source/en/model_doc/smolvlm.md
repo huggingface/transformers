@@ -24,6 +24,7 @@ rendered properly in your Markdown viewer.
 </div>
 
 ## Overview
+
 [SmolVLM2](https://huggingface.co/papers/2504.05299) ([blog post](https://huggingface.co/blog/smolvlm2)) is an adaptation of the Idefics3 model with two main differences:
 
 - It uses SmolLM2 for the text model.
@@ -38,7 +39,7 @@ Videos should not be upsampled.
 If `do_resize` is set to `True`, the model resizes images so that the longest edge is 4*512 pixels by default.
 The default resizing behavior can be customized by passing a dictionary to the `size` parameter. For example, `{"longest_edge": 4 * 512}` is the default, but you can change it to a different value if needed.
 
-Here’s how to control resizing and set a custom size:
+Here's how to control resizing and set a custom size:
 
 ```python
 image_processor = SmolVLMImageProcessor(do_resize=True, size={"longest_edge": 2 * 512}, max_image_size=512)
@@ -158,7 +159,7 @@ conversation3 = [
 
 conversations = [conversation1, conversation2, conversation3]
 inputs = processor.apply_chat_template(
-    conversation,
+    conversations,
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
@@ -193,17 +194,21 @@ print(generated_texts[0])
     - forward
 
 ## SmolVLMImageProcessor
+
 [[autodoc]] SmolVLMImageProcessor
     - preprocess
 
 ## SmolVLMImageProcessorFast
+
 [[autodoc]] SmolVLMImageProcessorFast
     - preprocess
 
 ## SmolVLMVideoProcessor
+
 [[autodoc]] SmolVLMVideoProcessor
     - preprocess
 
 ## SmolVLMProcessor
+
 [[autodoc]] SmolVLMProcessor
     - __call__

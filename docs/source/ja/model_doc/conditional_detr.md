@@ -53,15 +53,6 @@ alt="描画" width="600"/>
     - post_process_semantic_segmentation
     - post_process_panoptic_segmentation
 
-## ConditionalDetrFeatureExtractor
-
-[[autodoc]] ConditionalDetrFeatureExtractor
-    - __call__
-    - post_process_object_detection
-    - post_process_instance_segmentation
-    - post_process_semantic_segmentation
-    - post_process_panoptic_segmentation
-
 ## ConditionalDetrModel
 
 [[autodoc]] ConditionalDetrModel
@@ -76,5 +67,3 @@ alt="描画" width="600"/>
 
 [[autodoc]] ConditionalDetrForSegmentation
     - forward
-
-    

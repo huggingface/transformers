@@ -64,11 +64,6 @@ class ColQwen2Processor(ProcessorMixin):
         query_prefix (`str`, *optional*): A prefix to be used for the query.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
-
     def __init__(
         self,
         image_processor=None,
@@ -94,8 +89,6 @@ class ColQwen2Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         """

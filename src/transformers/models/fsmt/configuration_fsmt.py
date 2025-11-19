@@ -14,14 +14,14 @@
 # limitations under the License.
 """FSMT configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DecoderConfig(PretrainedConfig):
+class DecoderConfig(PreTrainedConfig):
     r"""
     Configuration class for FSMT's decoder specific things. note: this is a private helper class
     """
@@ -35,15 +35,15 @@ class DecoderConfig(PretrainedConfig):
         self.is_encoder_decoder = is_encoder_decoder
 
 
-class FSMTConfig(PretrainedConfig):
+class FSMTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FSMTModel`]. It is used to instantiate a FSMT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the FSMT
     [facebook/wmt19-en-ru](https://huggingface.co/facebook/wmt19-en-ru) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         langs (`list[str]`):

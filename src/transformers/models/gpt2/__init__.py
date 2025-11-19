@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .configuration_gpt2 import *
     from .modeling_gpt2 import *
     from .tokenization_gpt2 import *
-    from .tokenization_gpt2_tf import *
 else:
     import sys
 

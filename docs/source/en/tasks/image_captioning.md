@@ -71,7 +71,7 @@ Many image captioning datasets contain multiple captions per image. In those cas
 
 </Tip>
 
-Split the dataset’s train split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
+Split the dataset's train split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
 
 ```python
 ds = ds["train"].train_test_split(test_size=0.1)
@@ -169,7 +169,7 @@ def compute_metrics(eval_pred):
     return {"wer_score": wer_score}
 ```
 
-## Train!
+## Train
 
 Now, you are ready to start fine-tuning the model. You will use the 🤗 [`Trainer`] for this.
 
@@ -247,9 +247,9 @@ image
 Prepare image for the model.
 
 ```python
-from transformers import infer_device
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 inputs = processor(images=image, return_tensors="pt").to(device)
 pixel_values = inputs.pixel_values
 ```

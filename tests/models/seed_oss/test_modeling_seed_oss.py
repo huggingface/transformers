@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, SeedOssConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
@@ -35,51 +35,18 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        SeedOssForCausalLM,
-        SeedOssForQuestionAnswering,
-        SeedOssForSequenceClassification,
-        SeedOssForTokenClassification,
         SeedOssModel,
     )
 
 
 class SeedOssModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = SeedOssConfig
         base_model_class = SeedOssModel
-        causal_lm_class = SeedOssForCausalLM
-        sequence_classification_class = SeedOssForSequenceClassification
-        token_classification_class = SeedOssForTokenClassification
-        question_answering_class = SeedOssForQuestionAnswering
 
 
 @require_torch
 class SeedOssModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = SeedOssModelTester
-    all_model_classes = (
-        (
-            SeedOssModel,
-            SeedOssForCausalLM,
-            SeedOssForSequenceClassification,
-            SeedOssForTokenClassification,
-            SeedOssForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": SeedOssModel,
-            "text-classification": SeedOssForSequenceClassification,
-            "token-classification": SeedOssForTokenClassification,
-            "text-generation": SeedOssForCausalLM,
-            "zero-shot": SeedOssForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
 

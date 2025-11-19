@@ -444,7 +444,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             return_tensors="np",
         )
         self.assertLessEqual(out_dict[self.images_input_name][0][0].mean(), 0)

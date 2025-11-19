@@ -223,8 +223,6 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
-    test_pruning = True
     test_resize_embeddings = True
     test_resize_position_embeddings = True
 

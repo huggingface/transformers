@@ -235,8 +235,7 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_head_masking = False
+
     test_attention_outputs = False
     _is_composite = True
 
