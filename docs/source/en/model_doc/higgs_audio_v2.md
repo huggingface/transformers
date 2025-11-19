@@ -32,7 +32,7 @@ Despite having no post-training or fine-tuning, Higgs Audio v2 excels in express
 
 **Model Architecture:**
 <div class="flex justify-center">
-    <img src="https://huggingface.co/bosonai/higgs-audio-v2-generation-3B-base/resolve/main/higgs_audio_v2_architecture_combined.png"/>
+    <img src="https://huggingface.co/datasets/eustlb/documentation-images/resolve/main/higgs_audio_v2_architecture_combined.png"/>
 </div>
 Higgs Audio v2 adopts the "generation variant" depicted in the architecture figure above. Its strong performance is driven by three key technical innovations:
 
