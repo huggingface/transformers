@@ -2394,7 +2394,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return expanded_tied_weights
 
-    def tie_weights(self, missing_keys: Optional[set[str]] = None):
+    def tie_weights(self, missing_keys: Optional[set[str]] = None, recheck_keys: bool = True):
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
         and the encoder and decoder. This relies on the `_tied_weights_keys` dict.
@@ -2443,44 +2443,30 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         If you call this function, it will always tie. There is only 1 tricky case, if all weights are missing, you still want to mention that
         the ones you tied were missing.
         """
-        # TODO Cyril: using this fixed set of keys (set in post_init()) does not allow to switch the config flag and re-tie
-        mapping = getattr(self, "all_tied_weights_keys", None)
-        if not isinstance(mapping, dict):
-            return
+        # In this case, the keys stored in `all_tied_weights_keys` are already correct
+        if missing_keys is not None or not recheck_keys:
+            tied_keys = self.all_tied_weights_keys
+        else:
+            tied_keys = self.get_expanded_tied_weights_keys(all_submodels=True)
 
-        # TODO let's pray this is not too slow :)
-        top_level_params = dict(self.named_parameters(remove_duplicate=False)) | dict(
-            self.named_buffers(remove_duplicate=False)
-        )
-        for target_name, source_name in mapping.items():
-            source_name = "^" + source_name
-            target_name = "^" + target_name
-
+        for target_param, source_param in tied_keys.items():
             source_is_there = bool(missing_keys) and not re.search(
-                source_name, "\n".join(missing_keys), flags=re.MULTILINE
+                target_param, "\n".join(missing_keys), flags=re.MULTILINE
             )
-            source_params = sorted(filter(lambda x: re.search(source_name, x), top_level_params.keys()))
-            target_params = sorted(filter(lambda x: re.search(target_name, x), top_level_params.keys()))
-            if not len(source_params) > 0 or len(target_params) % len(source_params) != 0:
-                raise ValueError(
-                    f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. We found {source_params} to tie into {target_params}"
-                )
-            if len(target_params) > 0:
-                # we cycle source as it should be dispatch in many target if regex
-                for target_n, source_n in zip(target_params, cycle(source_params)):
-                    if "." in target_n:
-                        parent_path, last = target_n.rsplit(".", 1)
-                        parent = self.get_submodule(parent_path)
-                    else:
-                        parent_path, last = "", target_n
-                        parent = self  # top-level
-                    setattr(parent, last, top_level_params[source_n])
-                    self._adjust_bias(parent, top_level_params[source_n])
-                    if missing_keys and source_is_there:  # test_model_weights_reload_no_missing_tied_weights
-                        missing_keys.discard(target_n)
+            source_param = self.get_parameter_or_buffer(source_param)
+            if "." in target_param:
+                parent_name, name = target_param.rsplit(".", 1)
+                parent = self.get_submodule(parent_name)
+            else:
+                name = target_param
+                parent = self
+            setattr(parent, name, source_param)
+            self._adjust_bias(parent, source_param)
+            if missing_keys and source_is_there:
+                missing_keys.discard(target_param)
             else:
                 target_is_not_there = missing_keys and re.search(
-                    target_name, "\n".join(missing_keys), flags=re.MULTILINE
+                    target_param, "\n".join(missing_keys), flags=re.MULTILINE
                 )
                 raise ValueError(
                     "There is a problem in the way you tie your keys or the way they were saved.\n"
