@@ -72,6 +72,7 @@ class HiggsAudioV2TokenizerConfig(XcodecConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     def __init__(
         self,
         target_bandwidths=None,

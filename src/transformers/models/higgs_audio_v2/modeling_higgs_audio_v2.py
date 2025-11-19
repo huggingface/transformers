@@ -589,7 +589,6 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
         use_text_head (`bool`, *optional*, defaults to False):
             Whether to use a text language model head. Such head is not required for generation,
             but can be used to compute the text loss when training.
-
         """
         super().__init__(config)
         self.model = HiggsAudioV2Model(config)
