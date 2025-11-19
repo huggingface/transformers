@@ -406,6 +406,8 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} is not available yet and will be supported soon."
         )
 
+    def get_weight_conversions(self):
+        return []
 
 class SequentialLlama4TextExperts(ModuleList):
     """

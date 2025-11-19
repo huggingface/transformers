@@ -648,7 +648,6 @@ def convert_and_load_state_dict_in_model(
     ```
 
     """
-
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
     device_map = device_map or {"": "cpu"}

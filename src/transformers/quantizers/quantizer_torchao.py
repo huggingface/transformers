@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 from safetensors import safe_open
 
 from ..utils import is_torch_available, is_torchao_available, logging
-
+from ..core_model_loading import WeightConverter
 
 if is_torch_available():
     import torch
@@ -534,3 +534,39 @@ class TorchAoHfQuantizer(HfQuantizer):
     def get_quantize_ops(self):
         from ..integrations.torchao import TorchAoQuantize
         return TorchAoQuantize(self)
+
+    def get_weight_conversions(self):
+        from ..integrations.torchao import TorchAoQuantize
+        return [
+            WeightConverter(
+                source_keys= ["self_attn.q_proj.weight:*"],
+                target_keys= "self_attn.q_proj.weight",
+                operations=[TorchAoQuantize(self)],
+            ),
+            WeightConverter(
+                source_keys= ["self_attn.k_proj.weight:*"],
+                target_keys= "self_attn.k_proj.weight",
+                operations=[TorchAoQuantize(self)],
+            ),
+            WeightConverter(
+                source_keys= ["self_attn.v_proj.weight:*"],
+                target_keys= "self_attn.v_proj.weight",
+                operations=[TorchAoQuantize(self)],
+            ),
+            WeightConverter(
+                source_keys= ["mlp.gate_proj.weight:*"],
+                target_keys= "mlp.gate_proj.weight",
+                operations=[TorchAoQuantize(self)],
+            ),
+            WeightConverter(
+                source_keys= ["mlp.up_proj.weight:*"],
+                target_keys= "mlp.up_proj.weight",
+                operations=[TorchAoQuantize(self)],
+            ),
+            WeightConverter(
+                source_keys= ["mlp.down_proj.weight:*"],
+                target_keys= "mlp.down_proj.weight",
+                operations=[TorchAoQuantize(self)],
+            ),
+
+        ]
