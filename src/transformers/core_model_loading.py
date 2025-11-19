@@ -614,12 +614,12 @@ def convert_and_load_state_dict_in_model(
     """
 
     prefix = model.base_model_prefix
-    tp_plan = tp_plan or {}  # {glob_pattern: plan_obj_or_key}
-    device_map = device_map or {"": "cpu"}  # {exact_target_key: device}
+    tp_plan = tp_plan or {}
+    device_map = device_map or {"": "cpu"}
     device_map_regex = re.compile(
         "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: x.count("."), reverse=True))
     )
-    dtype_plan = dtype_plan or {}  # {glob_pattern: dtype}
+    dtype_plan = dtype_plan or {}
     weight_mapping = weight_mapping or []
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
@@ -637,22 +637,25 @@ def convert_and_load_state_dict_in_model(
 
     all_mappings: dict[str, Union[WeightRenaming | WeightConverter]] = {}
 
-    rename_alt, _, rename_by_group = build_glob_alternation(
-        renamings
-    )  # '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and {'g0': '*.block_sparse_moe.'}
-    pattern_to_converter = {k: converter for converter in converters for k in converter.target_keys}
+    # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and {'g0': '*.block_sparse_moe.'} and {'g0': '*.mlp.'}
+    rename_alt, _, rename_by_group = build_glob_alternation(renamings)
     weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = build_glob_alternation(converters)
-    tp_plan = tp_plan or {}
-    dtype_plan = dtype_plan or {}
     tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
     dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
+    pattern_to_converter = {k: converter for converter in converters for k in converter.target_keys}
+
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
+        # 1. apply all renamings
         renamed_key = rename_alt.sub(lambda m: repl(m, rename_by_group), original_key).replace("\\", "")
+
+        # 2. apply 1 weight conversion on the key
         matched_pattern = weight_pattern_alt.search(renamed_key)
         if matched_pattern is not None:  # we have a converter to apply
             renamed_key = weight_pattern_alt.sub(lambda m: repl(m, tgt_group_to_glob), renamed_key).replace("\\", "")
+
+        # 3. check if we need to add or remove prefix
         if (
             renamed_key.startswith(prefix)
             and meta_model_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1)) is not None
@@ -661,18 +664,19 @@ def convert_and_load_state_dict_in_model(
         elif meta_model_state_dict.get(f"{prefix}.{renamed_key}") is not None:
             renamed_key = f"{prefix}.{renamed_key}"
 
+        # 4. finally, collect the tensor into the proper converter
         if renamed_key in missing_keys:
             empty_param = meta_model_state_dict.get(renamed_key)
             if matched_pattern:
                 new_converter = deepcopy(pattern_to_converter[tgt_group_to_glob[matched_pattern.lastgroup]])
-                mapping = all_mappings.setdefault(
-                    renamed_key, new_converter
-                )  # each target key gets its own converter instance
+                # each target key gets its own converter instance
+                mapping = all_mappings.setdefault(renamed_key, new_converter)
                 source_pattern = src_group_to_glob[matched_pattern.lastgroup]
             else:
                 mapping = all_mappings.setdefault(renamed_key, WeightRenaming(renamed_key, renamed_key))
                 source_pattern = renamed_key
 
+            # 5. Handle dtype casting
             _dtype = dtype
             pending_quantize_op = None
             if quantizer is not None and quantizer.param_needs_quantization(model, renamed_key):
@@ -688,6 +692,7 @@ def convert_and_load_state_dict_in_model(
             if pending_quantize_op is not None:
                 mapping.quantization_operation = pending_quantize_op
 
+            # 6. Handle TP sharding or device_map placement -> scheduled materialization
             future = None
             if device_mesh:
                 # TODO for now we can only match on of the target key' patterns from the source pattern
@@ -698,7 +703,7 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_map[""].index, empty_param=empty_param.clone()
                         )
-                    shard_index = len(mapping.collected_tensors[renamed_key][source_pattern])
+                    shard_index = len(mapping.collected_tensors[source_pattern])
                     future = spawn_tp_materialize(
                         thread_pool,
                         tensor,
@@ -707,21 +712,20 @@ def convert_and_load_state_dict_in_model(
                         shard_index,
                     )
 
-            if future is None:  # TODO handle disk offload?
+            if future is None:  # TODO handle disk offload
                 device_match = device_map_regex.match(renamed_key)
                 param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
                 future = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future)
-        elif matched_pattern:
+        elif matched_pattern:  # add all target keys as unexpected
             mapping = pattern_to_converter[tgt_group_to_glob[matched_pattern.lastgroup]]
             for k in mapping.target_keys:
                 unexpected_keys.add(renamed_key.replace(mapping.target_keys[0], k))
         else:
             unexpected_keys.add(renamed_key)
 
-    total_entries = sum(len(mapping.collected_tensors) for mapping in all_mappings.values())
-
+    total_entries = len(all_mappings)
     with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
         for layer_name, mapping in all_mappings.items():
             pbar.update(1)
@@ -729,7 +733,6 @@ def convert_and_load_state_dict_in_model(
             pbar.refresh()
             try:
                 realized_value, misc = mapping.convert(layer_name, config=model.config, quantizer=quantizer)
-
                 for k, output_value in realized_value.items():
                     set_param_for_module(
                         model,
