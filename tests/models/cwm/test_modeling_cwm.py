@@ -137,6 +137,7 @@ class CwmIntegrationTest(unittest.TestCase):
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("facebook/cwm")
+        # original `sliding_window` is `8192`, but it causes GPU OOM on A10
         model = CwmForCausalLM.from_pretrained(
             "facebook/cwm", device_map="auto", dtype=torch.bfloat16, sliding_window=4096
         )
@@ -164,10 +165,12 @@ class CwmIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(out.logits[0, -1, :32], expected_logits, atol=1e-2, rtol=1e-2)
 
-        self.assertEqual(out.logits.shape[1], seq_len)
-        self.assertEqual(out.logits.shape[2], model.config.vocab_size)
-        self.assertFalse(torch.isnan(out.logits).any())
-        self.assertFalse(torch.isinf(out.logits).any())
+        logits = out.logits.to("cpu")
+
+        self.assertEqual(logits.shape[1], seq_len)
+        self.assertEqual(logits.shape[2], model.config.vocab_size)
+        self.assertFalse(torch.isnan(logits).any())
+        self.assertFalse(torch.isinf(logits).any())
 
         for i, layer in enumerate(model.model.layers):
             if model.config.layer_types[i] == "sliding_attention":
