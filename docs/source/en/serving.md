@@ -452,6 +452,14 @@ transformers serve \
   --attn_implementation "sdpa"
 ```
 
+Monitor continuous batching performance with [OpenTelemetry](https://opentelemetry.io). It collects traces and metrics, but you'll need a backend to visualize them.
+
+Install the dependency.
+
+```py
+pip install transformers[open-telemetry]
+```
+
 ### Quantization
 
 [Quantization](./quantization/overview) reduces memory usage by mapping weights to a lower precision. `transformers serve` is compatible with all quantization methods in Transformers. It supports pre-quantized models and runtime quantization.
