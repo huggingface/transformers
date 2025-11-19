@@ -162,7 +162,7 @@ def squad_convert_example_to_features(
         else tokenizer.model_max_length - tokenizer.max_len_single_sentence
     )
     max_len_sentences_pair = tokenizer.model_max_length - tokenizer.num_special_tokens_to_add(pair=True)
-    sequence_pair_added_tokens = tokenizer.model_max_length
+    sequence_pair_added_tokens = tokenizer.model_max_length - max_len_sentences_pair
 
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
@@ -176,7 +176,7 @@ def squad_convert_example_to_features(
             pairs = truncated_query
             truncation = TruncationStrategy.ONLY_FIRST.value
 
-        encoded_dict = tokenizer.encode_plus(  # TODO(thom) update this logic
+        encoded_dict = tokenizer(  # TODO(thom) update this logic
             texts,
             pairs,
             truncation=truncation,

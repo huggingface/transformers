@@ -712,7 +712,7 @@ class PythonBackend(PreTrainedTokenizerBase):
         is_batched = isinstance(text, (list, tuple)) and (
             (not text and not is_split_into_words)
             or (text and is_split_into_words and isinstance(text[0], (list, tuple)))
-            or (text and not is_split_into_words and isinstance(text[0], (str, list, tuple, int)))
+            or (text and not is_split_into_words and isinstance(text[0], (str, list, tuple)))
         )
 
         if is_batched:
