@@ -94,7 +94,6 @@ class Sam2Processor(ProcessorMixin):
             A [`BatchEncoding`] with the following fields:
             - `pixel_values` (`torch.Tensor`): The processed image(s).
             - `original_sizes` (`list[list[float]]`): The original sizes of the images.
-            - `reshaped_input_sizes` (`torch.Tensor`): The reshaped input sizes of the images.
             - `labels` (`torch.Tensor`): The processed segmentation maps (if provided).
             - `input_points` (`torch.Tensor`): The processed points.
             - `input_labels` (`torch.Tensor`): The processed labels.

@@ -860,9 +860,6 @@ class MoonshineModel(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-    def get_encoder(self):
-        return self.encoder
-
     def freeze_encoder(self):
         """
         Calling this function will disable the gradient computation for the Moonshine encoder so that its parameters will
@@ -1009,7 +1006,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     """
 )
 class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["proj_out.weight"]
+    _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)
@@ -1018,12 +1015,6 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def get_output_embeddings(self):
         return self.proj_out
