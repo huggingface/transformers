@@ -178,10 +178,10 @@ def eager_attention_forward(
     **kwargs: Unpack[TransformersKwargs],
 ):
     if grouped_query_attention := module.num_key_value_groups > 1:
-        # In GQA, there are multiple query heads for each key head. To make GQA work, we reshape the input from
-        # (batch, num_query_heads, seq_len, dim) to (batch, num_key_heads, num_query_heads_per_key, seq_len, dim)
-        query_states = query.view(query.shape[0], key.shape[1], module.num_key_value_groups, *query.shape[2:])
-        # Next, we broadcast keys across the num_query_heads_per_key dim with an einsum. Equivalent to (but faster than)
+        # In GQA, there are multiple query heads for each key head. We reshape the attention heads dim in the query
+        # tensor to (num_kv_heads, num_key_value_groups) to align it with the key tensor
+        query_states = query.unflatten(1, (key.shape[1], module.num_key_value_groups))
+        # Next, we broadcast keys across the key_value_groups dim with an einsum. Equivalent to (but faster than)
         # attn_weights = query_states @ key.unsqueeze(2).transpose(-1, -2) * scaling
         attn_weights = torch.einsum("bkgjd, bksd -> bkgjs", query_states, key).flatten(1, 2) * scaling
     else:
@@ -194,9 +194,8 @@ def eager_attention_forward(
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     if grouped_query_attention:
-        # In GQA, the number of value heads is equal to the number of key heads and smaller than query heads.
-        # Therefore, we need to broadcast them across the num_query_heads_per_key dim like we did with keys.
-        # Equivalent to (but faster than)
+        # In GQA, attention weights are reshaped like the query tensor to align them with the value tensor.
+        # Then we broadcast them across the key_value_groups dim like we did with keys. Equivalent to (but faster than)
         # attn_output = (attn_weights @ value.unsqueeze(2)).flatten(1, 2)
         attn_output = torch.einsum(
             "bkgjs, bksd -> bkgjd", attn_weights.unflatten(1, (key.shape[1], module.num_key_value_groups)), value
