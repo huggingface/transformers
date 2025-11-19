@@ -639,9 +639,12 @@ def convert_and_load_state_dict_in_model(
 
     # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and {'g0': '*.block_sparse_moe.'} and {'g0': '*.mlp.'}
     rename_alt, _, rename_by_group = build_glob_alternation(renamings)
-    weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = build_glob_alternation(converters)
-    tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
-    dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
+    if converters != []:
+        weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = build_glob_alternation(converters)
+    if tp_plan != {}:
+        tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
+    if dtype_plan != {}:
+        dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
     pattern_to_converter = {k: converter for converter in converters for k in converter.target_keys}
 
@@ -651,7 +654,7 @@ def convert_and_load_state_dict_in_model(
         renamed_key = rename_alt.sub(lambda m: repl(m, rename_by_group), original_key).replace("\\", "")
 
         # 2. apply 1 weight conversion on the key
-        matched_pattern = weight_pattern_alt.search(renamed_key)
+        matched_pattern = weight_pattern_alt.search(renamed_key) if converters != [] else None
         if matched_pattern is not None:  # we have a converter to apply
             renamed_key = weight_pattern_alt.sub(lambda m: repl(m, tgt_group_to_glob), renamed_key).replace("\\", "")
 
@@ -683,9 +686,10 @@ def convert_and_load_state_dict_in_model(
                 pending_quantize_op = quantizer.get_quantization_operation(model, renamed_key)
             else:
                 _dtype = dtype
-                matched_dtype_pattern = match_glob(renamed_key, dtype_policy_alt, dtype_policy_by_group_name)
-                if matched_dtype_pattern is not None:
-                    _dtype = dtype_plan[matched_dtype_pattern]
+                if dtype_plan != {}:
+                    matched_dtype_pattern = match_glob(renamed_key, dtype_policy_alt, dtype_policy_by_group_name)
+                    if matched_dtype_pattern is not None:
+                        _dtype = dtype_plan[matched_dtype_pattern]
                 elif empty_param is not None and empty_param.dtype != _dtype:
                     _dtype = empty_param.dtype
 
