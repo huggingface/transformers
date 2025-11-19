@@ -27,7 +27,6 @@ def _build_checkpoint_conversion_mapping():
     mapping = {
         "mixtral": [
             WeightRenaming(r"\.block_sparse_moe\.", ".mlp."),
-            WeightRenaming(r"model\.layers\.", "layers."),
             WeightConverter(
                 source_keys=[
                     "experts.*.w1.weight",
@@ -43,25 +42,25 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightConverter(
                 source_keys=[
-                    "mlp.experts.*.w2.weight",
+                    "experts.*.w2.weight",
                 ],
-                target_keys="mlp.experts.down_proj",  # target key gets the list of two tensors
+                target_keys="experts.down_proj",  # target key gets the list of two tensors
                 operations=[
                     MergeModulelist(
                         dim=0
                     ),  # each process has two lists of tensors, we cat each list. -> we end up with 2 tensors
                 ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
             ),
-            WeightConverter(
-                ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
-                "self_attn.qkv_proj",
-                operations=[Concatenate(dim=0)],  # more like stack?
-            ),
-            WeightConverter(
-                "input_layernorm.weight",
-                ["input_layernorm1.weight", "input_layernorm2.weight"],
-                operations=[Chunk(dim=0)],  # more like stack?
-            ),
+            # WeightConverter(
+            #     ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
+            #     "self_attn.qkv_proj",
+            #     operations=[Concatenate(dim=0)],  # more like stack?
+            # ),
+            # WeightConverter(
+            #     r"layernorm.weight",
+            #     [r"layernorm.weight", r"layernorm.bias"],
+            #     operations=[Chunk(dim=0)],  # more like stack?
+            # ),
 
             # TODO @ArthurZucker support this kind of patterns
             # WeightConverter(

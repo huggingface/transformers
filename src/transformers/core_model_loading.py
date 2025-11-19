@@ -25,9 +25,8 @@ from collections.abc import MutableMapping, MutableSet, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from functools import partial
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
-
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
+from copy import deepcopy 
 import torch
 
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, DTensor, Replicate, TensorParallelLayer
@@ -102,7 +101,7 @@ def build_glob_alternation(globs: list[Union[WeightRenaming, WeightConverter, st
                 i += 1
                 body = src.replace("*", r".*")
                 branches.append(f"(?P<{group_name}>{body})")
-                tgt_group_to_glob[group_name] = "|".join(glob.target_keys) if isinstance(glob, (WeightRenaming, WeightConverter)) else glob
+                tgt_group_to_glob[group_name] = glob.target_keys[0] # we index witht the first target
         else:
             group_name = f"g{i}"
             src_group_to_glob[group_name] = glob
@@ -204,21 +203,11 @@ class Chunk(ConversionOps):
         target_key: str,
         config,
     ) -> dict[str, list[torch.Tensor]]:
-        if len(value) != 1:
-            raise ValueError("Chunk operation expects a single source tensor.")
         tensors = next(iter(value.values()))
-        if len(tensors) != 1:
-            raise ValueError("Chunk operation received unexpected multiple tensors for a single source.")
         tensor = tensors[0]
-        if not isinstance(tensor, torch.Tensor):
-            raise TypeError("Chunk operation requires torch.Tensor inputs.")
-        if self.sizes is not None:
-            chunks = torch.split(tensor, self.sizes, dim=self.dim)
-        else:
-            chunks = torch.chunk(tensor, self.chunks, dim=self.dim)
-        if len(chunks) != len(target_key):
-            raise ValueError("Number of produced chunks does not match the expected targets.")
-        return {target: [chunk] for target, chunk in zip(target_key, chunks)}
+        sizes = len(target_keys)
+        chunks = torch.split(tensor, sizes, dim=self.dim)
+        return {target_key.replace(target_keys[0], target): [chunk] for target, chunk in zip(target_keys, chunks)}
 
 
 class Concatenate(ConversionOps):
@@ -245,7 +234,7 @@ class Concatenate(ConversionOps):
         if len(value) != len(source_keys):
             raise ValueError("Concatenate received an unexpected number of tensors compared to source keys.")
 
-        return {target_key : [torch.cat(tuple(value.values()), dim=self.dim)]}
+        return {target_key : torch.cat(tuple(value.values()), dim=self.dim)}
 
 
 class MergeModulelist(Concatenate):
@@ -269,12 +258,13 @@ class MergeModulelist(Concatenate):
         target_key: str,
         config,
     ) -> dict[str, list[torch.Tensor]]:
-        merged: dict[str, list[torch.Tensor]] = {}
-        for idx, key in enumerate(source_keys):
+        merged: dict[str, torch.Tensor] = {}
+        for idx, key in enumerate(value.keys()):
             tensors = value.get(key, [])
+            if len(source_keys) == 1:
+                key = target_key
             stacked = torch.stack(tensors, dim=self.dim)
-
-            merged[key] = [stacked]
+            merged[key] = stacked
         return merged
 
 
@@ -371,7 +361,7 @@ class WeightConverter:
 
     distributed_operation: Optional[TensorParallelLayer] = None
     quantization_operation: Optional[ConversionOps] = None
-    collected_tensors: dict[str, defaultdict[str, list[Future]]] = field(default_factory=dict, init=False)
+    collected_tensors: dict[str, list[Future]] = field(default_factory=dict, init=False)
     layer_targets: dict[str, str] = field(default_factory=dict, init=False)
 
     def __post_init__(self):
@@ -394,8 +384,8 @@ class WeightConverter:
             raise ValueError("WeightConverter requires at least one operation.")
 
     def add_tensor(self, target_key: str, original_key:str, source_pattern: str, future: Future):
-        bucket = self.collected_tensors.setdefault(target_key, defaultdict(list))
-        bucket[source_pattern].append(future)
+        bucket = self.collected_tensors.setdefault(source_pattern, [])
+        bucket+= [future]
 
         # we also want a mapping from target to original
         bucket = self.layer_targets.setdefault(target_key, set())
@@ -410,7 +400,7 @@ class WeightRenaming:
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
     distributed_operation: Optional[TensorParallelLayer] = None
     quantization_operation: Optional[ConversionOps] = None
-    collected_tensors: dict[str, defaultdict[str, list[Future]]] = field(default_factory=dict, init=False)
+    collected_tensors: dict[str, list[Future]] = field(default_factory=dict, init=False)
     layer_targets: dict[str, str] = field(default_factory=dict, init=False)
     source_keys: list[str] = field(init=False)
     target_keys: list[str] = field(init=False)
@@ -420,8 +410,8 @@ class WeightRenaming:
         object.__setattr__(self, "target_keys", [self.target_key])
 
     def add_tensor(self, target_key: str, original_key:str, source_pattern: str, future: Future):
-        bucket = self.collected_tensors.setdefault(target_key, defaultdict(list))
-        bucket[source_pattern].append(future)
+        bucket = self.collected_tensors.setdefault(source_pattern, [])
+        bucket+= [future]
 
         # we also want a mapping from target to original
         bucket = self.layer_targets.setdefault(target_key, set())
@@ -607,10 +597,13 @@ def convert_and_load_state_dict_in_model(
 
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
+    if quantizer:
+        pass # TODO @ArthurZucker handle dequantization that needs to add a weight converter?
+
     all_mappings: dict[str, Union[WeightRenaming | WeightConverter]] = {}
 
     rename_alt, _, rename_by_group = build_glob_alternation(renamings) # '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and {'g0': '*.block_sparse_moe.'}
-    pattern_to_converter = {"|".join(converter.target_keys): converter for converter in converters}
+    pattern_to_converter = {k: converter for converter in converters for k in converter.target_keys}
     weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = build_glob_alternation(converters)
     tp_plan = tp_plan or {}
     dtype_plan = dtype_plan or {}
@@ -619,28 +612,25 @@ def convert_and_load_state_dict_in_model(
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        renamed_key = original_key
-
-        rename_match = match_glob(original_key, rename_alt, rename_by_group)
-        if rename_match is not None: # we rename first
-            renamed_key = rename_alt.sub(lambda m: repl(m, rename_by_group), original_key).replace("\\", "")
-
+        renamed_key = rename_alt.sub(lambda m: repl(m, rename_by_group), original_key).replace("\\", "")
         matched_pattern = weight_pattern_alt.search(renamed_key)
         if matched_pattern is not None: # we have a converter to apply
             renamed_key = weight_pattern_alt.sub(lambda m: repl(m, tgt_group_to_glob), renamed_key).replace("\\", "")
-            mapping = all_mappings.setdefault(renamed_key, pattern_to_converter[tgt_group_to_glob[matched_pattern.lastgroup]])
-            source_pattern = src_group_to_glob[matched_pattern.lastgroup]
-        else:
-            mapping = all_mappings.setdefault(renamed_key, WeightRenaming(renamed_key, renamed_key))
-            source_pattern = rename_match or renamed_key
-
         if renamed_key.startswith(prefix) and meta_model_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1)) is not None:
             renamed_key = re.sub(f"^{prefix}.", "", renamed_key, count=1)
         elif meta_model_state_dict.get(f"{prefix}.{renamed_key}") is not None:
             renamed_key = f"{prefix}.{renamed_key}"
-        empty_param = meta_model_state_dict.get(renamed_key)
 
         if renamed_key in missing_keys:
+            empty_param = meta_model_state_dict.get(renamed_key)
+            if matched_pattern:
+                new_converter = deepcopy(pattern_to_converter[tgt_group_to_glob[matched_pattern.lastgroup]])
+                mapping = all_mappings.setdefault(renamed_key, new_converter) # each target key gets its own converter instance
+                source_pattern = src_group_to_glob[matched_pattern.lastgroup]
+            else:
+                mapping = all_mappings.setdefault(renamed_key, WeightRenaming(renamed_key, renamed_key))
+                source_pattern = renamed_key
+
             _dtype = dtype
             pending_quantize_op = None
             if quantizer is not None and quantizer.param_needs_quantization(model, renamed_key):
@@ -658,18 +648,15 @@ def convert_and_load_state_dict_in_model(
 
             future = None
             if device_mesh:
-                if "|" in renamed_key:
-                    renamed_key_for_tp = renamed_key.split("|")[0]
-
                 # TODO for now we can only match on of the target key' patterns from the source pattern
-                if matched_tp_pattern := match_glob(renamed_key_for_tp, tp_plan_alt, tp_plan_by_group_name):
+                if matched_tp_pattern := match_glob(renamed_key, tp_plan_alt, tp_plan_by_group_name):
                     empty_param = meta_model_state_dict.get(renamed_key)
                     if getattr(mapping, "distributed_operation", None) is None:
                         tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_map[""].index, empty_param=empty_param.clone()
                         )
-                    shard_index = len(mapping.collected_tensors.get(renamed_key, {}).get(source_pattern, []))
+                    shard_index = len(mapping.collected_tensors[renamed_key][source_pattern])
                     future = spawn_tp_materialize(
                         thread_pool,
                         tensor,
@@ -684,58 +671,62 @@ def convert_and_load_state_dict_in_model(
                 future = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future)
-
+        elif matched_pattern:
+            mapping = pattern_to_converter[tgt_group_to_glob[matched_pattern.lastgroup]]
+            for k in mapping.target_keys:
+                unexpected_keys.add(renamed_key.replace(mapping.target_keys[0], k))
+        else:
+            unexpected_keys.add(renamed_key)
 
     total_entries = sum(len(mapping.collected_tensors) for mapping in all_mappings.values())
 
     with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
-        for mapping in all_mappings.values():
+        for layer_name, mapping in all_mappings.items():
             operations = mapping.operations if isinstance(mapping.operations, list) else [mapping.operations]
-            for layer_name, tensors_for_this_layer in mapping.collected_tensors.items():
-                pbar.update(1)
-                pbar.set_postfix({"Materializing param": layer_name})
-                pbar.refresh()
-                try:
-                    with log_to_misc(layer_name, misc):
-                        values = {
-                            pattern: [future.result() for future in futures]
-                            for pattern, futures in tensors_for_this_layer.items()
-                        }
+            pbar.update(1)
+            pbar.set_postfix({"Materializing param": layer_name})
+            pbar.refresh()
+            try:
+                with log_to_misc(layer_name, misc):
+                    values = {
+                        pattern: [future.result() for future in futures]
+                        for pattern, futures in mapping.collected_tensors.items()
+                    }
 
-                    if operations and layer_name in missing_keys:
-                        for op in operations:
-                            with log_to_misc(layer_name, misc, (values, layer_name), operations):
-                                values = op.convert(
-                                    values,
-                                    source_keys=mapping.source_keys,
-                                    target_keys=mapping.target_keys,
-                                    target_key=layer_name,
-                                    config=model.config,
-                                )
-
-                    realized_value = {}
-                    for key, tensors in values.items():
-                        realized_value[key] = tensors[0] if isinstance(tensors, list) else tensors
-
-                    if mapping.quantization_operation is not None and quantizer is not None:
-                        with log_to_misc(layer_name, misc, op=mapping.quantization_operation):
-                            realized_value = mapping.quantization_operation.convert(
-                                realized_value, quant_config=quantizer.quantization_config
+                if operations:
+                    for op in operations:
+                        with log_to_misc(layer_name, misc, (values, layer_name), operations):
+                            values = op.convert(
+                                values,
+                                source_keys=mapping.source_keys,
+                                target_keys=mapping.target_keys,
+                                target_key=layer_name,
+                                config=model.config,
                             )
 
-                    for k, output_value in realized_value.items():
-                        set_param_for_module(
-                            model,
-                            k,
-                            output_value,
-                            mismatch_keys,
-                            missing_keys,
-                            misc,
-                            unexpected_keys,
-                            mapping.distributed_operation,
+                realized_value = {}
+                for key, tensors in values.items():
+                    realized_value[key] = tensors[0] if isinstance(tensors, list) else tensors
+
+                if mapping.quantization_operation is not None and quantizer is not None:
+                    with log_to_misc(layer_name, misc, op=mapping.quantization_operation):
+                        realized_value = mapping.quantization_operation.convert(
+                            realized_value, quant_config=quantizer.quantization_config
                         )
-                except SkipLayer:
-                    continue
+
+                for k, output_value in realized_value.items():
+                    set_param_for_module(
+                        model,
+                        k,
+                        output_value,
+                        mismatch_keys,
+                        missing_keys,
+                        misc,
+                        unexpected_keys,
+                        mapping.distributed_operation,
+                    )
+            except SkipLayer:
+                continue
     thread_pool.shutdown(wait=False)
     return missing_keys, unexpected_keys, mismatch_keys, misc
 
