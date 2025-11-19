@@ -1026,7 +1026,7 @@ def infer_tests_to_run(
     if len(test_files_to_run) < 20:
         doctest_list = get_doctest_files()
     else:
-        doctest_file = []
+        doctest_list = []
 
     print(f"\n### DOCTEST TO RUN ###\n{_print_list(doctest_list)}")
     if len(doctest_list):
