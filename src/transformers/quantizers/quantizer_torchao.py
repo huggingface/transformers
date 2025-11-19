@@ -530,3 +530,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                     metadata.update(metadata_)
             # Save it
             self.metadata = metadata
+
+    def get_quantize_ops(self):
+        from ..integrations.torchao import TorchAoQuantize
+        return TorchAoQuantize(self)
