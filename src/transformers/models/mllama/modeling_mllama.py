@@ -793,6 +793,7 @@ class MllamaRotaryEmbedding(nn.Module):
 @auto_docstring
 class MllamaPreTrainedModel(PreTrainedModel):
     config: MllamaConfig
+    base_model_prefix = "model"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -1436,7 +1437,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     """
 )
 class MllamaModel(MllamaPreTrainedModel):
-    base_model_prefix = ""
     _checkpoint_conversion_mapping = {
         "language_model.model": "language_model",
         "model.vision_model": "vision_model",
@@ -1464,12 +1464,6 @@ class MllamaModel(MllamaPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     @check_model_inputs()
     @can_return_tuple
@@ -1599,21 +1593,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_model(self):
-        return self.model.vision_model
 
     @can_return_tuple
     @auto_docstring

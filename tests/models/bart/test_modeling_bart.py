@@ -975,9 +975,9 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):
-        config = BartConfig.from_pretrained("facebook/bart-large-xsum")
+        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-xsum")
         expected_params = {"num_beams": 6, "do_sample": False, "early_stopping": True, "length_penalty": 1.0}
-        config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
+        config_params = {k: getattr(model.generation_config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
 
     @slow

@@ -2116,7 +2116,6 @@ class Gemma3nTextModel(Gemma3TextModel):
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3ForCausalLM):
     _checkpoint_conversion_mapping = {"model.language_model": "model"}
-    base_model_prefix = "model"
 
 
 class Gemma3nMultimodalEmbedder(nn.Module):
@@ -2421,15 +2420,6 @@ class Gemma3nModel(PaliGemmaModel):
 )
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
-    base_model_prefix = "model"
-
-    @property
-    def audio_tower(self):
-        return self.model.audio_tower
-
-    @property
-    def multi_modal_projector(self):
-        raise AttributeError("Use embed_vision instead of multi_modal_projector.")
 
     @can_return_tuple
     @auto_docstring

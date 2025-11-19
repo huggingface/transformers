@@ -89,6 +89,7 @@ class PerceptionLMMultiModalProjector(nn.Module):
 @auto_docstring
 class PerceptionLMPreTrainedModel(PreTrainedModel):
     config: PerceptionLMConfig
+    base_model_prefix = "model"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -99,7 +100,6 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-    base_model_prefix = "model"
 
 
 @dataclass
@@ -179,12 +179,6 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_image_features(
         self,
@@ -339,12 +333,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @can_return_tuple
     @auto_docstring

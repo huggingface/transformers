@@ -561,7 +561,7 @@ GEMMA3_START_DOCSTRING = None
 
 
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     input_modalities = ["image", "text"]
     _no_split_modules = [
         "Gemma3DecoderLayer",
@@ -717,7 +717,6 @@ class Gemma3TextModel(Gemma2Model):
 
 class Gemma3ForCausalLM(Gemma2ForCausalLM):
     config: Gemma3TextConfig
-    base_model_prefix = "model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
