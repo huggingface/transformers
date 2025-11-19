@@ -40,12 +40,12 @@ class VibeVoiceGenerateOutput(GenerateDecoderOnlyOutput):
     Outputs of VibeVoiceForConditionalGeneration.generate.
 
     Args:
-        speech_outputs (`List[torch.FloatTensor]`, *optional*):
-            List of generated speech waveforms for each speech segment.
+        audio (`list(torch.FloatTensor)` of length `batch_size`):
+            The generated audio.
         reach_max_step_sample (`torch.BoolTensor`, *optional*):
             Boolean tensor indicating which samples reached maximum generation steps.
     """
-    speech_outputs: Optional[list[torch.FloatTensor]] = None
+    audio: Optional[list[torch.FloatTensor]] = None
     reach_max_step_sample: Optional[torch.BoolTensor] = None
 
 
@@ -703,7 +703,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 attentions=decoder_attentions,
                 hidden_states=decoder_hidden_states,
                 past_key_values=model_kwargs.get("past_key_values"),
-                speech_outputs=final_audio_outputs,
+                audio=final_audio_outputs,
                 reach_max_step_sample=completion_steps >= max_step_per_sample,
             )
         else:
