@@ -179,6 +179,7 @@ class ConversionOps:
         target_keys: list[str],
         target_key: str,
         config,
+        **kwargs
     ) -> dict[str, list[torch.Tensor]]:
         raise NotImplementedError
 
@@ -352,30 +353,25 @@ class WeightConverter:
     - target_keys: str | list[str] | None
     - distributed_operation / operations / quantization_operations are ALWAYS lists.
 
-    TODO: for BNB we need to collect model.weight.quant_state_keys
     """
 
-    source_keys: Union[str, list[str]]
-    target_keys: Optional[Union[str, list[str]]] = None
+    source_keys: Union[str, list[str]] = field(init=True)
+    target_keys: Union[str, list[str]] = field(init=True)
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
 
     distributed_operation: Optional[TensorParallelLayer] = None
     quantization_operation: Optional[ConversionOps] = None
+
     collected_tensors: dict[str, list[Future]] = field(default_factory=dict, init=False)
-    layer_targets: dict[str, str] = field(default_factory=dict, init=False)
+    layer_targets: dict[str, set[str]] = field(default_factory=dict, init=False)
 
     def __post_init__(self):
-        if not isinstance(self.source_keys, list):
-            object.__setattr__(self, "source_keys", [self.source_keys])
-        targets_were_none = False
-        if not isinstance(self.target_keys, list):
-            if self.target_keys is None:
-                object.__setattr__(self, "target_keys", list(self.source_keys))
-                targets_were_none = True
-            else:
-                object.__setattr__(self, "target_keys", [self.target_keys])
+        if isinstance(self.source_keys, str):
+            self.source_keys = [self.source_keys]
+        if isinstance(self.target_keys, str):
+            self.target_keys = [self.target_keys]
 
-        if not targets_were_none and bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
+        if  bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
             raise ValueError(
                 f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
             )
@@ -387,40 +383,77 @@ class WeightConverter:
         bucket = self.collected_tensors.setdefault(source_pattern, [])
         bucket+= [future]
 
-        # we also want a mapping from target to original
         bucket = self.layer_targets.setdefault(target_key, set())
         bucket.add(original_key)
 
+    def convert(self, layer_name: str, config=None, quantizer=None):
+        misc = {}
+        for pattern, futures in self.collected_tensors.items():
+            self.collected_tensors[pattern] = [future.result() for future in futures]
+        collected_tensors = self.collected_tensors
+        for op in self.operations:
+            with log_to_misc(layer_name, misc, (collected_tensors, layer_name), op):
+                collected_tensors = op.convert(
+                    collected_tensors,
+                    source_keys=self.source_keys,
+                    target_keys=self.target_keys,
+                    target_key=layer_name,
+                    config=config,
+                )
+        if quantizer is not None and self.quantization_operation is not None:
+            with log_to_misc(layer_name, misc, (collected_tensors, layer_name), self.quantization_operation):
+                collected_tensors = self.quantization_operation.convert(
+                    collected_tensors,
+                    source_keys=self.source_keys,
+                    target_keys=self.target_keys,
+                    target_key=layer_name,
+                    config=config,
+                    quant_config=quantizer.quantization_config
+                )
+        return collected_tensors, misc
 
 
 @dataclass(slots=True)
 class WeightRenaming:
-    source_key: str
-    target_key: str
-    operations: list[ConversionOps] = field(default_factory=list, repr=False)
+    source_keys: Union[str, list[str]] = field(init=True)
+    target_keys: Union[str, list[str]] = field(init=True)
+
     distributed_operation: Optional[TensorParallelLayer] = None
     quantization_operation: Optional[ConversionOps] = None
+
     collected_tensors: dict[str, list[Future]] = field(default_factory=dict, init=False)
-    layer_targets: dict[str, str] = field(default_factory=dict, init=False)
-    source_keys: list[str] = field(init=False)
-    target_keys: list[str] = field(init=False)
+    layer_targets: dict[str, set[str]] = field(default_factory=dict, init=False)
 
     def __post_init__(self):
-        object.__setattr__(self, "source_keys", [self.source_key])
-        object.__setattr__(self, "target_keys", [self.target_key])
+        if isinstance(self.source_keys, str):
+            self.source_keys = [self.source_keys]
+        if isinstance(self.target_keys, str):
+            self.target_keys = [self.target_keys]
 
     def add_tensor(self, target_key: str, original_key:str, source_pattern: str, future: Future):
         bucket = self.collected_tensors.setdefault(source_pattern, [])
         bucket+= [future]
 
-        # we also want a mapping from target to original
         bucket = self.layer_targets.setdefault(target_key, set())
         bucket.add(original_key)
 
-    def __post_init__(self):
-        self.source_keys = [self.source_key]
-        self.target_keys = [self.target_key]
+    def convert(self, layer_name: str, config=None, quantizer=None):
+        misc = {}
+        for pattern, futures in self.collected_tensors.items():
+            self.collected_tensors[pattern] = [future.result() for future in futures]
 
+        if quantizer is not None and self.quantization_operation is not None:
+            with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
+                collected_tensors = self.quantization_operation.convert(
+                    self.collected_tensors,
+                    source_keys=self.source_keys,
+                    target_keys=self.target_keys,
+                    target_key=layer_name,
+                    config=config,
+                    quant_config=quantizer.quantization_config
+                )
+
+        return collected_tensors, misc
 
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
@@ -682,37 +715,11 @@ def convert_and_load_state_dict_in_model(
 
     with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
         for layer_name, mapping in all_mappings.items():
-            operations = mapping.operations if isinstance(mapping.operations, list) else [mapping.operations]
             pbar.update(1)
             pbar.set_postfix({"Materializing param": layer_name})
             pbar.refresh()
             try:
-                with log_to_misc(layer_name, misc):
-                    values = {
-                        pattern: [future.result() for future in futures]
-                        for pattern, futures in mapping.collected_tensors.items()
-                    }
-
-                if operations:
-                    for op in operations:
-                        with log_to_misc(layer_name, misc, (values, layer_name), operations):
-                            values = op.convert(
-                                values,
-                                source_keys=mapping.source_keys,
-                                target_keys=mapping.target_keys,
-                                target_key=layer_name,
-                                config=model.config,
-                            )
-
-                realized_value = {}
-                for key, tensors in values.items():
-                    realized_value[key] = tensors[0] if isinstance(tensors, list) else tensors
-
-                if mapping.quantization_operation is not None and quantizer is not None:
-                    with log_to_misc(layer_name, misc, op=mapping.quantization_operation):
-                        realized_value = mapping.quantization_operation.convert(
-                            realized_value, quant_config=quantizer.quantization_config
-                        )
+                realized_value, misc = mapping.convert(layer_name, config=model.config, quantizer=quantizer)
 
                 for k, output_value in realized_value.items():
                     set_param_for_module(
