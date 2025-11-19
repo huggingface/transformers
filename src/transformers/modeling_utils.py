@@ -2449,27 +2449,28 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             tied_keys = self.get_expanded_tied_weights_keys(all_submodels=True)
 
-        for target_param, source_param in tied_keys.items():
-            source_param = self.get_parameter_or_buffer(source_param)
-            if "." in target_param:
-                parent_name, name = target_param.rsplit(".", 1)
+        for target_param_name, source_param_name in tied_keys.items():
+            source_param = self.get_parameter_or_buffer(source_param_name)
+            if "." in target_param_name:
+                parent_name, name = target_param_name.rsplit(".", 1)
                 parent = self.get_submodule(parent_name)
             else:
-                name = target_param
+                name = target_param_name
                 parent = self
             setattr(parent, name, source_param)
             self._adjust_bias(parent, source_param)
             if missing_keys is not None:
-                source_is_there = not re.search(source_param, "\n".join(missing_keys), flags=re.MULTILINE)
-                target_is_there = not re.search(target_param, "\n".join(missing_keys), flags=re.MULTILINE)
+                source_is_there = not re.search(source_param_name, "\n".join(missing_keys), flags=re.MULTILINE)
+                target_is_there = not re.search(target_param_name, "\n".join(missing_keys), flags=re.MULTILINE)
                 if source_is_there:
-                    missing_keys.discard(target_param)
+                    missing_keys.discard(target_param_name)
                 # If the source is not present, the checkpoint is corrupted
                 else:
                     target_present = "not present either" if not target_is_there else "present"
                     raise ValueError(
-                        f"This checkpoint seem corrupted. The tied weights mapping for this model specifies to tie {source_param} "
-                        f"(which should be present and is not), to {target_param} (which is {target_present})"
+                        f"This checkpoint seem corrupted. The tied weights mapping for this model specifies to tie "
+                        f"{source_param_name} (which should be present and is not), to {target_param_name} (which is "
+                        f"{target_present})"
                     )
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
@@ -4282,7 +4283,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model._initialize_missing_keys(is_quantized)
 
         # Tie the weights
-        model.tie_weights(missing_keys, recompute_mapping=False)
+        model.tie_weights(missing_keys=missing_keys, recompute_mapping=False)
 
         # Adjust missing and unexpected keys
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys)
