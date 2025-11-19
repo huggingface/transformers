@@ -153,10 +153,9 @@ class ConversionOps:
     def convert(
         self,
         value: dict[str, Any],
-        
         source_keys: list[str],
         target_keys: list[str],
-        target_key: str,
+        full_layer_name: str,
         config,
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
@@ -177,17 +176,16 @@ class Chunk(ConversionOps):
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
-        
         source_keys: list[str],
         target_keys: list[str],
-        target_key: str,
+        full_layer_name: str,
         config,
     ) -> dict[str, list[torch.Tensor]]:
         tensors = next(iter(value.values()))
         tensor = tensors[0]
         sizes = len(target_keys)
         chunks = torch.split(tensor, sizes, dim=self.dim)
-        return {target_key.replace(target_keys[0], target): [chunk] for target, chunk in zip(target_keys, chunks)}
+        return {full_layer_name.replace(target_keys[0], target): [chunk] for target, chunk in zip(target_keys, chunks)}
 
 
 class Concatenate(ConversionOps):
@@ -203,18 +201,17 @@ class Concatenate(ConversionOps):
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
-        
         source_keys: list[str],
         target_keys: list[str],
-        target_key: str,
+        full_layer_name: str,
         config,
-    ) -> dict[str, list[torch.Tensor]]:
+    ) -> dict[str, torch.Tensor]:
         if len(target_keys) != 1:
             raise ValueError("Concatenate expects a single target key.")
         if len(value) != len(source_keys):
             raise ValueError("Concatenate received an unexpected number of tensors compared to source keys.")
 
-        return {target_key: torch.cat(tuple(value.values()), dim=self.dim)}
+        return {full_layer_name: torch.cat(tuple(value.values()), dim=self.dim)}
 
 
 class MergeModulelist(Concatenate):
@@ -232,17 +229,16 @@ class MergeModulelist(Concatenate):
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
-        
         source_keys: list[str],
         target_keys: list[str],
-        target_key: str,
+        full_layer_name: str,
         config,
-    ) -> dict[str, list[torch.Tensor]]:
+    ) -> dict[str, torch.Tensor]:
         merged: dict[str, torch.Tensor] = {}
         for idx, key in enumerate(value.keys()):
             tensors = value.get(key, [])
             if len(source_keys) == 1:
-                key = target_key
+                key = full_layer_name
             stacked = torch.stack(tensors, dim=self.dim)
             merged[key] = stacked
         return merged
@@ -262,10 +258,9 @@ class SplitModulelist(ConversionOps):
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
-        
         source_keys: list[str],
         target_keys: list[str],
-        target_key: str,
+        full_layer_name: str,
         config,
     ) -> dict[str, list[torch.Tensor]]:
         if len(value) != len(self.sizes):
@@ -301,10 +296,9 @@ class PermuteForRope(ConversionOps):
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
-        
         source_keys: list[str],
         target_keys: list[str],
-        target_key: str,
+        full_layer_name: str,
         config,
     ) -> dict[str, list[torch.Tensor]]:
         self.config = config
@@ -333,12 +327,12 @@ class WeightTransform:
             self.target_keys = [self.target_keys]
 
 
-    def add_tensor(self, target_key: str, original_key: str, source_pattern: str, future: Future):
+    def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
         bucket = self.collected_tensors.setdefault(source_pattern, [])
         bucket += [future]
 
         bucket = self.layer_targets.setdefault(target_key, set())
-        bucket.add(original_key)
+        bucket.add(source_key)
 
 @dataclass(slots=True)
 class WeightRenaming(WeightTransform):
@@ -356,7 +350,7 @@ class WeightRenaming(WeightTransform):
                     self.collected_tensors,
                     source_keys=self.source_keys,
                     target_keys=self.target_keys,
-                    target_key=layer_name,
+                    full_layer_name=layer_name,
                     config=config,
                     quant_config=quantizer.quantization_config,
                     missing_keys=missing_keys,
@@ -390,7 +384,7 @@ class WeightConverter(WeightTransform):
                     collected_tensors,
                     source_keys=self.source_keys,
                     target_keys=self.target_keys,
-                    target_key=layer_name,
+                    full_layer_name=layer_name,
                     config=config,
                 )
         if quantizer is not None and self.quantization_operation is not None:
@@ -399,7 +393,7 @@ class WeightConverter(WeightTransform):
                     collected_tensors,
                     source_keys=self.source_keys,
                     target_keys=self.target_keys,
-                    target_key=layer_name,
+                    full_layer_name=layer_name,
                     config=config,
                     quant_config=quantizer.quantization_config,
                     missing_keys=missing_keys,
