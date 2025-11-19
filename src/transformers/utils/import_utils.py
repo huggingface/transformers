@@ -2266,7 +2266,7 @@ class _LazyModule(ModuleType):
             # V5: If a tokenizer class doesn't exist, check if it should alias to another tokenizer
             # via the converter mapping (e.g., FNetTokenizer -> AlbertTokenizer via AlbertConverter)
             value = None
-            if name.endswith("Tokenizer"):
+            if name.endswith("Tokenizer") or name.endswith("TokenizerFast"):
                 # Strip "Fast" suffix for converter lookup if present
                 lookup_name = name[:-4] if name.endswith("TokenizerFast") else name
                 
