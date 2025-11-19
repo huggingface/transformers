@@ -365,7 +365,7 @@ class WeightConverter(WeightTransform):
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
 
     def __post_init__(self):
-        super().__post_init__()
+        WeightTransform.__post_init__(self)
         if bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
             raise ValueError(
                 f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
