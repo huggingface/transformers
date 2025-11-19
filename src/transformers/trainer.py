@@ -2332,8 +2332,6 @@ class Trainer:
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
             train_dataloader = self.accelerator.deepspeed_ulysses_dl_adapter(train_dataloader, model)
-            # Update len_dataloader since UlyssesSPDataLoaderAdapter changes the dataloader length (multiplies by sp_world_size)
-            len_dataloader = len(train_dataloader) if has_length(train_dataloader) else None
 
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
@@ -5275,6 +5273,11 @@ class Trainer:
         # If max_steps is negative, we use the number of epochs to determine the number of total steps later
         epoch_based = max_steps < 0
         len_dataloader = len(dataloader) if has_length(dataloader) else None
+
+        # Account for Sequence Parallelism (SP) dataloader adapter's effect
+        sp_size = self.get_sp_size()
+        if sp_size > 1 and len_dataloader is not None:
+            len_dataloader = len_dataloader * sp_size
 
         # Case 2: We have a dataloader length and can extrapolate
         if len_dataloader is not None:
