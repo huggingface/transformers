@@ -6,7 +6,7 @@ The Transformers Kernels integration provides high-performance, optimized kernel
 
 - **Drop-in Performance Boost**: Enable optimized kernels with a single `use_kernels=True` flag
 - **Hub-Based Distribution**: Access community-maintained kernels directly from Hugging Face Hub
-- **Multi-Backend Support**: CUDA, ROCm, and XPU backends for different hardware platforms
+- **Multi-Backend Support**: CUDA, ROCm, Metal, and XPU backends for different hardware platforms
 - **Mode-Aware Optimization**: Automatically switches between training and inference optimizations
 - **Zero Code Changes**: Existing models automatically benefit from kernel acceleration
 - **Customizable**: Override default kernels with your own implementations via `KernelConfig`
