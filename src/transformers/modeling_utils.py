@@ -2474,13 +2474,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 target_is_there = target_param_name not in missing_keys
                 if source_is_there:
                     missing_keys.discard(target_param_name)
-                # If the source is not present, the checkpoint is corrupted
-                else:
-                    target_present = "not present either" if not target_is_there else "present"
+                # If the source is not present, but the target is, the checkpoint is corrupted
+                # TODO: maybe we could simply tie in the opposite direction here instead of error?
+                elif target_is_there:
                     raise ValueError(
                         f"This checkpoint seem corrupted. The tied weights mapping for this model specifies to tie "
                         f"{source_param_name} (which should be present and is not), to {target_param_name} (which is "
-                        f"{target_present})"
+                        f"present)."
                     )
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
