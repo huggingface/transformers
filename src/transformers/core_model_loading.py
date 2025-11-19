@@ -309,6 +309,7 @@ class PermuteForRope(ConversionOps):
             output[key] = [self._apply(tensors[0])]
         return output
 
+
 @dataclass(slots=True)
 class WeightTransform:
     source_keys: Union[str, list[str]] = field(init=True)
@@ -326,13 +327,13 @@ class WeightTransform:
         if isinstance(self.target_keys, str):
             self.target_keys = [self.target_keys]
 
-
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
         bucket = self.collected_tensors.setdefault(source_pattern, [])
         bucket += [future]
 
         bucket = self.layer_targets.setdefault(target_key, set())
         bucket.add(source_key)
+
 
 @dataclass(slots=True)
 class WeightRenaming(WeightTransform):
@@ -362,6 +363,7 @@ class WeightRenaming(WeightTransform):
 @dataclass(slots=True)
 class WeightConverter(WeightTransform):
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
+
     def __post_init__(self):
         super().__post_init__()
         if bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
@@ -370,7 +372,6 @@ class WeightConverter(WeightTransform):
             )
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
-
 
     def convert(self, layer_name: str, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
         misc = {}
@@ -399,6 +400,7 @@ class WeightConverter(WeightTransform):
                     missing_keys=missing_keys,
                 )
         return collected_tensors, misc
+
 
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
@@ -645,7 +647,8 @@ def convert_and_load_state_dict_in_model(
 
     all_mappings: dict[str, Union[WeightRenaming | WeightConverter]] = {}
 
-    # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and {'g0': '*.block_sparse_moe.'} and {'g0': '*.mlp.'}
+    # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
+    # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
     rename_alt, _, rename_by_group = build_glob_alternation(renamings)
     if converters != []:
         weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = build_glob_alternation(converters)
@@ -689,9 +692,8 @@ def convert_and_load_state_dict_in_model(
 
             # 5. Handle dtype casting
             _dtype = dtype
-            pending_quantize_op = None
             if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, renamed_key):
-                converter.quantization_operation = hf_quantizer.get_quantize_ops()
+                mapping.quantization_operation = hf_quantizer.get_quantize_ops()
             else:
                 _dtype = dtype
                 if dtype_plan != {}:
@@ -700,9 +702,6 @@ def convert_and_load_state_dict_in_model(
                         _dtype = dtype_plan[matched_dtype_pattern]
                 elif empty_param is not None and empty_param.dtype != _dtype:
                     _dtype = empty_param.dtype
-
-            if pending_quantize_op is not None:
-                mapping.quantization_operation = pending_quantize_op
 
             # 6. Handle TP sharding or device_map placement -> scheduled materialization
             future = None
