@@ -13,9 +13,10 @@
 # limitations under the License.
 
 import contextlib
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 from torch import nn

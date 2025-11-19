@@ -287,7 +287,7 @@ class AlignConfig(PreTrainedConfig):
     >>> config_text = AlignTextConfig()
     >>> config_vision = AlignVisionConfig()
 
-    >>> config = AlignConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = AlignConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "align"
@@ -302,22 +302,25 @@ class AlignConfig(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the AlignTextConfig with default values.")
+            text_config = AlignTextConfig()
+            logger.info("`text_config` is `None`. Initializing the `AlignTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = AlignTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. Initializing the AlignVisionConfig with default values.")
+            vision_config = AlignVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `AlignVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = AlignVisionConfig(**vision_config)
 
-        self.text_config = AlignTextConfig(**text_config)
-        self.vision_config = AlignVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.temperature_init_value = temperature_init_value
         self.initializer_range = initializer_range
+        super().__init__(**kwargs)
 
 
 __all__ = ["AlignTextConfig", "AlignVisionConfig", "AlignConfig"]

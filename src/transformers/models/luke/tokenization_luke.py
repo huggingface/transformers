@@ -1033,7 +1033,7 @@ class LukeTokenizer(PreTrainedTokenizer):
             if head_token_span[0] < tail_token_span[0]:
                 first_entity_token_spans[0] = (head_token_span[0], head_token_span[1] + 2)
                 first_entity_token_spans[1] = (tail_token_span[0] + 2, tail_token_span[1] + 4)
-                token_span_with_special_token_ids = reversed(token_span_with_special_token_ids)
+                token_span_with_special_token_ids.reverse()
             else:
                 first_entity_token_spans[0] = (head_token_span[0] + 2, head_token_span[1] + 4)
                 first_entity_token_spans[1] = (tail_token_span[0], tail_token_span[1] + 2)

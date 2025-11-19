@@ -243,14 +243,14 @@ def write_model(
     config_kwargs = {}
     if params["use_scaled_rope"]:
         # some constants from original code
-        rope_scaling = {
+        rope_parameters = {
             "rope_type": "llama3",
-            "factor": params.get("rope_scaling_factor", 8.0),
+            "factor": params.get("rope_parameters_factor", 8.0),
             "low_freq_factor": 1.0,
             "high_freq_factor": params.get("rope_high_freq_factor", 4.0),
             "original_max_position_embeddings": 8192,
         }
-        config_kwargs.update({"rope_scaling": rope_scaling})
+        config_kwargs.update({"rope_parameters": rope_parameters})
 
     if attention_chunk_size is None:
         config_kwargs.update({"cache_implementation": "static"})

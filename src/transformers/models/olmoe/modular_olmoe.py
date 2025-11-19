@@ -11,7 +11,8 @@
 # limitations under the License.
 """PyTorch OLMoE model."""
 
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 from torch import nn
@@ -23,7 +24,6 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
@@ -35,6 +35,7 @@ from ..llama.modeling_llama import (
     eager_attention_forward,
 )
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM, MixtralModel
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeTopKRouter
 from .configuration_olmoe import OlmoeConfig
 
 
@@ -62,7 +63,6 @@ class OlmoeAttention(LlamaAttention):
             (config.hidden_size // config.num_attention_heads) * config.num_key_value_heads, eps=config.rms_norm_eps
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -116,38 +116,24 @@ class OlmoeAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class OlmoeExperts(MixtralExperts, nn.ModuleList):
-    def __init__(self, config):
-        nn.ModuleList.__init__(self)
-        for _ in range(config.num_experts):
-            self.append(OlmoeMLP(config))
-        self.num_experts = config.num_experts
-        self.top_k = config.num_experts_per_tok
-        self.norm_topk_prob = config.norm_topk_prob
+class OlmoeExperts(MixtralExperts):
+    pass
+
+
+class OlmoeTopKRouter(Qwen2MoeTopKRouter):
+    pass
 
 
 class OlmoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
-        self.top_k = config.num_experts_per_tok
-        self.norm_topk_prob = config.norm_topk_prob
-        self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
+        self.gate = OlmoeTopKRouter(config)
         self.experts = OlmoeExperts(config)
-
-    def route_tokens_to_experts(self, hidden_states, router_logits):
-        routing_weights = torch.nn.functional.softmax(router_logits.float(), dim=-1)
-        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        if self.norm_topk_prob:
-            top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        top_k_weights = top_k_weights.to(hidden_states.dtype)
-        return top_k_index, top_k_weights
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
-        router_logits = self.gate(hidden_states)
-        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
+        top_k_weights, top_k_index = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).reshape(
             batch_size, sequence_length, hidden_dim
         )
@@ -174,7 +160,7 @@ class OlmoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="gate", index=1),
+        "router_logits": OutputRecorder(OlmoeTopKRouter, index=0),
         "hidden_states": OlmoeDecoderLayer,
         "attentions": OlmoeAttention,
     }
@@ -256,7 +242,7 @@ class OlmoeModel(MixtralModel):
 
 
 class OlmoeForCausalLM(MixtralForCausalLM, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)

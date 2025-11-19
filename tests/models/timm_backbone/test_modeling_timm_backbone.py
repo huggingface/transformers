@@ -86,7 +86,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     all_model_classes = (TimmBackbone,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": TimmBackbone} if is_torch_available() else {}
     test_resize_embeddings = False
-    test_pruning = False
+
     has_attentions = False
 
     def setUp(self):
@@ -167,10 +167,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_cannot_load_with_meta_device_context_manager(self):
         pass
 
-    @unittest.skip(reason="model weights aren't tied in TimmBackbone.")
-    def test_tie_model_weights(self):
-        pass
-
     @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmBackbone")
     def test_load_save_without_tied_weights(self):
         pass
@@ -181,10 +177,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
     @unittest.skip(reason="TimmBackbone doesn't have hidden size info in its configuration.")
     def test_channels(self):
-        pass
-
-    @unittest.skip(reason="TimmBackbone doesn't support output_attentions.")
-    def test_torchscript_output_attentions(self):
         pass
 
     @unittest.skip(reason="Safetensors is not supported by timm.")

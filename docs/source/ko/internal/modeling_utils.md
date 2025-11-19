@@ -29,10 +29,4 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] pytorch_utils.apply_chunking_to_forward
 
-[[autodoc]] pytorch_utils.find_pruneable_heads_and_indices
-
-[[autodoc]] pytorch_utils.prune_layer
-
-[[autodoc]] pytorch_utils.prune_conv1d_layer
-
 [[autodoc]] pytorch_utils.prune_linear_layer

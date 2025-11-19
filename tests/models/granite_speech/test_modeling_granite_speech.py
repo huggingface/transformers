@@ -217,7 +217,7 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
     """
 
     all_model_classes = (GraniteSpeechForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False
+
     _is_composite = True
 
     def setUp(self):
@@ -290,6 +290,10 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
     @slow
     @unittest.skip(reason="Granite Speech doesn't support SDPA for all backbones")
     def test_eager_matches_sdpa_generate(self):
+        pass
+
+    @unittest.skip(reason="GraniteSpeech has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
 

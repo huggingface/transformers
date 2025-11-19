@@ -129,7 +129,7 @@ def lazy_import_flash_attention(implementation: Optional[str], force_import: Opt
     Lazily import flash attention and return the respective functions + flags.
 
     NOTE: For fullgraph, this needs to be called before compile, while no fullgraph can
-    work without preloading. See `load_and_register_kernel` in `integrations.hub_kernels`.
+    work without preloading. See `load_and_register_attn_kernel` in `integrations.hub_kernels`.
     """
     global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn
     if force_import or any(k is None for k in [_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn]):

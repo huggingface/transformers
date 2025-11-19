@@ -31,7 +31,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_led import LEDConfig
 
 
@@ -767,7 +766,6 @@ class LEDDecoderAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -793,17 +791,17 @@ class LEDDecoderAttention(nn.Module):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_values.cross_attention_cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_values.self_attention_cache
+                    curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_values
+                curr_past_key_values = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -813,7 +811,7 @@ class LEDDecoderAttention(nn.Module):
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
+                key_states, value_states = curr_past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -963,7 +961,6 @@ class LEDDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1069,17 +1066,6 @@ class LEDPreTrainedModel(PreTrainedModel):
     config: LEDConfig
     base_model_prefix = "led"
     supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
     @property
     def dummy_inputs(self):
@@ -1293,7 +1279,7 @@ class LEDEncoder(LEDPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: LEDConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: LEDConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -1316,10 +1302,7 @@ class LEDEncoder(LEDPreTrainedModel):
                     f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
                 )
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         self.embed_positions = LEDLearnedPositionalEmbedding(
             self.max_source_positions,
@@ -1556,17 +1539,14 @@ class LEDDecoder(LEDPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: LEDConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: LEDConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_decoder_position_embeddings
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = LEDLearnedPositionalEmbedding(
             self.max_target_positions,
@@ -1684,13 +1664,6 @@ class LEDDecoder(LEDPreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         # create causal mask
@@ -1773,7 +1746,10 @@ class LEDDecoder(LEDPreTrainedModel):
 
 @auto_docstring
 class LEDModel(LEDPreTrainedModel):
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: LEDConfig):
         super().__init__(config)
@@ -1781,8 +1757,8 @@ class LEDModel(LEDPreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = LEDEncoder(config, self.shared)
-        self.decoder = LEDDecoder(config, self.shared)
+        self.encoder = LEDEncoder(config)
+        self.decoder = LEDDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1794,9 +1770,6 @@ class LEDModel(LEDPreTrainedModel):
         self.shared = value
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     def forward(
@@ -1918,7 +1891,9 @@ class LEDModel(LEDPreTrainedModel):
 class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
     base_model_prefix = "led"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "led.shared.weight",
+    }
 
     def __init__(self, config: LEDConfig):
         super().__init__(config)
@@ -1928,12 +1903,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.led.get_encoder()
-
-    def get_decoder(self):
-        return self.led.get_decoder()
 
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
@@ -2116,8 +2085,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
     """
 )
 class LEDForSequenceClassification(LEDPreTrainedModel):
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
-
     def __init__(self, config: LEDConfig, **kwargs):
         warnings.warn(
             "The `transformers.LEDForSequenceClassification` class is deprecated and will be removed in version 5 of"
@@ -2262,8 +2229,6 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
 
 @auto_docstring
 class LEDForQuestionAnswering(LEDPreTrainedModel):
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
-
     def __init__(self, config):
         super().__init__(config)
 

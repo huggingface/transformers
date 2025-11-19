@@ -46,7 +46,6 @@ AltCLIP은 멀티모달 비전 및 언어 모델입니다. 이미지와 텍스�
 ## AltCLIPConfig
 
 [[autodoc]] AltCLIPConfig
-    - from_text_vision_configs
 
 ## AltCLIPTextConfig
 

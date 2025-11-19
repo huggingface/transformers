@@ -231,7 +231,7 @@ flush()
 دعنا نرى ما هو استهلاك ذاكرة GPU الذروة الذي يوفره تكميم 4 بت. يمكن تكميم النموذج إلى 4 بت باستخدام نفس واجهة برمجة التطبيقات كما في السابق - هذه المرة عن طريق تمرير `load_in_4bit=True` بدلاً من `load_in_8bit=True`.
 
 ```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", load_in_4bit=True, pad_token_id=0)
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", quantization_config=BitsAndBytesConfig(load_in_4bit=True), pad_token_id=0)
 
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
@@ -472,7 +472,7 @@ for _ in range(5):
   next_token_id = torch.argmax(next_logits, dim=-1)
 
   print("shape of input_ids", next_token_id.shape)
-  print("length of key-value cache", len(past_key_values[0][0]))  # past_key_values are of shape [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
+  print("length of key-value cache", past_key_values.get_seq_length())  # past_key_values are of shape [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
   generated_tokens.append(next_token_id.item())
 
 generated_text = tokenizer.batch_decode(generated_tokens)

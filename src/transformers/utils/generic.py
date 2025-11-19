@@ -21,12 +21,12 @@ import os
 import tempfile
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
-from collections.abc import Iterable, MutableMapping
+from collections.abc import Callable, Iterable, MutableMapping
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Callable, Optional, TypedDict
+from typing import Any, Optional, TypedDict
 
 import numpy as np
 
@@ -219,6 +219,17 @@ def to_numpy(obj):
             return framework_to_numpy[framework](obj)
 
     return obj
+
+
+def safe_load_json_file(json_file: str):
+    "A helper to load safe config files and raise a proper error message if it wasn't serialized correctly"
+    try:
+        with open(json_file, encoding="utf-8") as reader:
+            text = reader.read()
+        config_dict = json.loads(text)
+    except json.JSONDecodeError:
+        raise OSError(f"It looks like the config file at '{json_file}' is not a valid JSON file.")
+    return config_dict
 
 
 class ModelOutput(OrderedDict):
@@ -573,7 +584,7 @@ def torch_float(x):
     return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
 
-def filter_out_non_signature_kwargs(extra: Optional[list] = None):
+def filter_out_non_signature_kwargs(extra: list | None = None):
     """
     Decorator to filter out named arguments that are not in the function signature.
 
@@ -676,13 +687,13 @@ class TransformersKwargs(TypedDict, total=False):
     """
 
     num_items_in_batch: Optional["torch.Tensor"]
-    output_hidden_states: Optional[bool]
-    output_attentions: Optional[bool]
-    output_router_logits: Optional[bool]
+    output_hidden_states: bool | None
+    output_attentions: bool | None
+    output_router_logits: bool | None
     cu_seq_lens_q: Optional["torch.LongTensor"]
     cu_seq_lens_k: Optional["torch.LongTensor"]
-    max_length_q: Optional[int]
-    max_length_k: Optional[int]
+    max_length_q: int | None
+    max_length_k: int | None
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
@@ -777,8 +788,8 @@ class OutputRecorder:
 
     target_class: "type[torch.nn.Module]"
     index: int = 0
-    layer_name: Optional[str] = None
-    class_name: Optional[str] = None
+    layer_name: str | None = None
+    class_name: str | None = None
 
 
 def check_model_inputs(tie_last_hidden_states=True):
@@ -859,7 +870,7 @@ def check_model_inputs(tie_last_hidden_states=True):
 
             # Check attention implementation is properly set for capturing attention outputs
             if recordable_keys.get("output_attentions", False):
-                supported_attn = ["eager", "eager_paged", "flex_attention"]
+                supported_attn = ["eager", "eager_paged", "flex_attention", "sdpa"]
                 config_attn = getattr(self.config, "_attn_implementation", None)
                 sub_configs = [getattr(self.config, key, None) for key in self.config.sub_configs]
                 sub_configs_attn = [
@@ -877,13 +888,7 @@ def check_model_inputs(tie_last_hidden_states=True):
                 def wrapped_forward(*args, **kwargs):
                     if key == "hidden_states" and len(collected_outputs[key]) == 0:
                         collected_outputs[key] += (args[0],)
-                    if kwargs.get("debug_io", False):
-                        with model_addition_debugger_context(
-                            module, kwargs.get("debug_io_dir", "~/model_debug"), kwargs.get("prune_layers")
-                        ):
-                            output = orig_forward(*args, **kwargs)
-                    else:
-                        output = orig_forward(*args, **kwargs)
+                    output = orig_forward(*args, **kwargs)
                     if not isinstance(output, tuple):
                         collected_outputs[key] += (output,)
                     elif output[index] is not None:
@@ -924,7 +929,13 @@ def check_model_inputs(tie_last_hidden_states=True):
                             monkey_patched_layers.append((module, original_forward))
 
             try:
-                outputs = func(self, *args, **kwargs)
+                if kwargs.get("debug_io", False):
+                    with model_addition_debugger_context(
+                        self, kwargs.get("debug_io_dir", "model_debug"), kwargs.get("prune_layers")
+                    ):
+                        outputs = func(self, *args, **kwargs)
+                else:
+                    outputs = func(self, *args, **kwargs)
             except TypeError as original_exception:
                 # If we get a TypeError, it's possible that the model is not receiving the recordable kwargs correctly.
                 # Get a TypeError even after removing the recordable kwargs -> re-raise the original exception

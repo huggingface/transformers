@@ -62,7 +62,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class ZoeDepthImageProcessorKwargs(ImagesKwargs):
+class ZoeDepthImageProcessorKwargs(ImagesKwargs, total=False):
     """
     keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
         If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it
@@ -77,8 +77,8 @@ class ZoeDepthImageProcessorKwargs(ImagesKwargs):
         Can be overridden by `ensure_multiple_of` in `preprocess`.
     """
 
-    keep_aspect_ratio: Optional[bool]
-    ensure_multiple_of: Optional[int]
+    keep_aspect_ratio: bool
+    ensure_multiple_of: int
 
 
 def get_resize_output_image_size(

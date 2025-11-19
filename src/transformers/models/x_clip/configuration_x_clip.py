@@ -280,8 +280,6 @@ class XCLIPConfig(PreTrainedConfig):
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
 
-        super().__init__(**kwargs)
-
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
@@ -345,15 +343,19 @@ class XCLIPConfig(PreTrainedConfig):
             vision_config.update(_vision_config_dict)
 
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `XCLIPTextConfig` with default values.")
+            text_config = XCLIPTextConfig()
+            logger.info("`text_config` is `None`. initializing the `XCLIPTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = XCLIPTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = XCLIPVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `XCLIPVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = XCLIPVisionConfig(**vision_config)
 
-        self.text_config = XCLIPTextConfig(**text_config)
-        self.vision_config = XCLIPVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.prompt_layers = prompt_layers
@@ -364,6 +366,8 @@ class XCLIPConfig(PreTrainedConfig):
         self.prompt_projection_dropout = prompt_projection_dropout
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["XCLIPConfig", "XCLIPTextConfig", "XCLIPVisionConfig"]

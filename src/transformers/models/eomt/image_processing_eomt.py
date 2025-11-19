@@ -55,7 +55,7 @@ if is_torch_available():
     import torch.nn.functional as F
 
 
-class EomtImageProcessorKwargs(ImagesKwargs):
+class EomtImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_split_image (`bool`, *optional*, defaults to `False`):
         Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
@@ -67,7 +67,7 @@ class EomtImageProcessorKwargs(ImagesKwargs):
     """
 
     do_split_image: bool
-    ignore_index: Optional[int] = None
+    ignore_index: Optional[int]
 
 
 # Adapted from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks

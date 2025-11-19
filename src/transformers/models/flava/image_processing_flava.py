@@ -57,7 +57,7 @@ FLAVA_CODEBOOK_STD = [1.0, 1.0, 1.0]
 LOGIT_LAPLACE_EPS: float = 0.1
 
 
-class FlavaImageProcessorKwargs(ImagesKwargs):
+class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     """
     return_image_mask (`bool`, *optional*, defaults to `False`):
         Whether to return the image mask. Can be overridden by the `return_image_mask` parameter in `preprocess`.
@@ -118,26 +118,26 @@ class FlavaImageProcessorKwargs(ImagesKwargs):
     """
 
     # Mask related params
-    return_image_mask: Optional[bool]
-    input_size_patches: Optional[int]
-    total_mask_patches: Optional[int]
-    mask_group_min_patches: Optional[int]
-    mask_group_max_patches: Optional[int]
-    mask_group_min_aspect_ratio: Optional[float]
-    mask_group_max_aspect_ratio: Optional[float]
+    return_image_mask: bool
+    input_size_patches: int
+    total_mask_patches: int
+    mask_group_min_patches: int
+    mask_group_max_patches: int
+    mask_group_min_aspect_ratio: float
+    mask_group_max_aspect_ratio: float
     # Codebook related params
-    return_codebook_pixels: Optional[bool]
-    codebook_do_resize: Optional[bool]
-    codebook_size: Optional[bool]
-    codebook_resample: Optional[int]
-    codebook_do_center_crop: Optional[bool]
-    codebook_crop_size: Optional[int]
-    codebook_do_rescale: Optional[bool]
-    codebook_rescale_factor: Optional[Union[int, float]]
-    codebook_do_map_pixels: Optional[bool]
-    codebook_do_normalize: Optional[bool]
-    codebook_image_mean: Optional[Union[float, Iterable[float]]]
-    codebook_image_std: Optional[Union[float, Iterable[float]]]
+    return_codebook_pixels: bool
+    codebook_do_resize: bool
+    codebook_size: bool
+    codebook_resample: int
+    codebook_do_center_crop: bool
+    codebook_crop_size: int
+    codebook_do_rescale: bool
+    codebook_rescale_factor: Union[int, float]
+    codebook_do_map_pixels: bool
+    codebook_do_normalize: bool
+    codebook_image_mean: Union[float, Iterable[float]]
+    codebook_image_std: Union[float, Iterable[float]]
 
 
 # Inspired from https://github.com/microsoft/unilm/blob/master/beit/masking_generator.py

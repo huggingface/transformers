@@ -32,9 +32,10 @@ Greedy search works well for tasks with relatively short outputs where creativit
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
@@ -54,9 +55,10 @@ Enable multinomial sampling with `do_sample=True` and `num_beams=1`.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
@@ -79,9 +81,10 @@ Enable beam search with the `num_beams` parameter (should be greater than 1 othe
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
@@ -166,9 +169,10 @@ Enable prompt lookup decoding with the `prompt_lookup_num_tokens` parameter.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
 model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype=torch.float16).to(device)

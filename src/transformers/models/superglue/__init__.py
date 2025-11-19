@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_superglue import *
     from .image_processing_superglue import *
+    from .image_processing_superglue_fast import *
     from .modeling_superglue import *
 else:
     import sys

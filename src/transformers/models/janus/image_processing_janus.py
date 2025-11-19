@@ -51,7 +51,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class JanusImageProcessorKwargs(ImagesKwargs):
+class JanusImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_size (`int`, *optional*, defaults to 14):
         The minimum allowed size for the resized image. Ensures that neither the height nor width
