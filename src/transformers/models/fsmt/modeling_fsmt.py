@@ -34,10 +34,10 @@ import torch
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -220,21 +220,21 @@ class PretrainedFSMTModel(PreTrainedModel):
     config: FSMTConfig
     base_model_prefix = "model"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, SinusoidalPositionalEmbedding):
             weight = module.get_embedding(*module.weight.shape, module.padding_idx)
-            weight = nn.Parameter(weight, requires_grad=False)
-            weight.detach_()
-            module.weight = weight
+            init.copy_(module.weight, weight)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
     @property
     def dummy_inputs(self):
@@ -338,13 +338,13 @@ class FSMTEncoder(nn.Module):
         config: FSMTConfig
     """
 
-    def __init__(self, config: FSMTConfig, embed_tokens):
+    def __init__(self, config: FSMTConfig):
         super().__init__()
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-        self.padding_idx = embed_tokens.padding_idx
-        self.embed_tokens = embed_tokens
-        embed_dim = embed_tokens.embedding_dim
+        self.padding_idx = config.pad_token_id
+        self.embed_tokens = nn.Embedding(config.src_vocab_size, config.d_model, config.pad_token_id)
+        embed_dim = self.embed_tokens.embedding_dim
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
@@ -531,31 +531,19 @@ class FSMTDecoder(nn.Module):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: FSMTConfig, embed_tokens: nn.Embedding):
+    def __init__(self, config: FSMTConfig):
         super().__init__()
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = embed_tokens.padding_idx
+        self.padding_idx = config.pad_token_id
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
-        self.embed_tokens = embed_tokens
-        embed_dim = embed_tokens.embedding_dim
+        self.embed_tokens = nn.Embedding(config.tgt_vocab_size, config.d_model, self.padding_idx)
+        embed_dim = self.embed_tokens.embedding_dim
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList([DecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])  # type: list[DecoderLayer]
-
-        if is_deepspeed_zero3_enabled():
-            import deepspeed
-
-            with deepspeed.zero.GatheredParameters(self.embed_tokens.weight, modifier_rank=None):
-                embed_tokens_weight_shape = self.embed_tokens.weight.shape
-        else:
-            embed_tokens_weight_shape = self.embed_tokens.weight.shape
-        self.output_projection = nn.Linear(embed_tokens_weight_shape[1], embed_tokens_weight_shape[0], bias=False)
-        self.output_projection.weight = self.embed_tokens.weight
-
-    def _tie_weights(self):
-        self.embed_tokens.weight = self.output_projection.weight
+        self.output_projection = nn.Linear(config.d_model, config.tgt_vocab_size, bias=False)
 
     def forward(
         self,
@@ -828,28 +816,16 @@ def _get_shape(t):
 
 @auto_docstring
 class FSMTModel(PretrainedFSMTModel):
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "decoder.embed_tokens.weight",
+        "decoder.output_projection.weight": "decoder.embed_tokens.weight",
+    }
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
-
-        padding_idx = config.pad_token_id
-        encoder_embed_tokens = nn.Embedding(config.src_vocab_size, config.d_model, padding_idx)
-        decoder_embed_tokens = nn.Embedding(config.tgt_vocab_size, config.d_model, padding_idx)
-
-        self.encoder = FSMTEncoder(config, encoder_embed_tokens)
-        self.decoder = FSMTDecoder(config, decoder_embed_tokens)
-
-        # Initialize weights and apply final processing
+        self.encoder = FSMTEncoder(config)
+        self.decoder = FSMTDecoder(config)
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.get_input_embeddings())
-            self._tie_embedding_weights(self.decoder.output_projection, self.get_input_embeddings())
 
     @auto_docstring
     def forward(
@@ -978,7 +954,6 @@ class FSMTModel(PretrainedFSMTModel):
 )
 class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
     base_model_prefix = "model"
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
@@ -1087,12 +1062,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id)
-
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_decoder(self):
-        return self.model.decoder
 
     def get_output_embeddings(self):
         return self.model.decoder.embed_tokens

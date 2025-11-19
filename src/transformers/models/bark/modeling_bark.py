@@ -329,23 +329,6 @@ class BarkPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _supports_flash_attn = True
 
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear,)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
     @property
     def device(self) -> torch.device:
         """
@@ -910,6 +893,9 @@ class BarkFineModel(BarkPreTrainedModel):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
         super().__init__(config)
         self.config = config
+        self._tied_weights_keys = {}
+        for i in range(self.config.n_codes_total - self.config.n_codes_given):
+            self._tied_weights_keys[f"lm_heads.{i}.weight"] = f"input_embeds_layers.{i + 1}.weight"
 
         # initialize a modified non causal GPT-like model
         # note that for there is one embedding layer and one lm_head for each codebook of Encodec
@@ -1024,25 +1010,6 @@ class BarkFineModel(BarkPreTrainedModel):
         self.tie_weights()
 
         return model_embeds
-
-    def _tie_weights(self):
-        if getattr(self.config, "tie_word_embeddings", True):
-            self._tied_weights_keys = []
-            output_embeddings = self.get_output_embeddings()
-            input_embeddings = self.get_input_embeddings()
-
-            for i in range(self.config.n_codes_total - self.config.n_codes_given):
-                # self.input_embeds_layers[i + 1].weight = self.lm_heads[i].weight
-                self._tie_embedding_weights(output_embeddings[i], input_embeddings[i + 1])
-                self._tied_weights_keys.append(f"lm_heads.{i}.weight")
-
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings list and the output embeddings list.
-        """
-        for module in self.modules():
-            if hasattr(module, "_tie_weights"):
-                module._tie_weights()
 
     @auto_docstring
     def forward(
@@ -1332,6 +1299,8 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
 
         self.config = config
 
+        self.post_init()
+
     @classmethod
     def can_generate(cls) -> bool:
         # Bark has a unique model structure, where the external class (`BarkModel`) doesn't need to inherit from
@@ -1579,14 +1548,6 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
             return audio, output_lengths
 
         return audio
-
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings list and the output embeddings list.
-        """
-        for module in self.modules():
-            if hasattr(module, "_tie_weights"):
-                module._tie_weights()
 
 
 __all__ = [

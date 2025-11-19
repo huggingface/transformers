@@ -733,9 +733,19 @@ def _preprocess_mask_arguments(
     # If using a cache, it can give all information about mask sizes based on seen tokens
     if past_key_values is not None:
         kv_length, kv_offset = past_key_values.get_mask_sizes(cache_position, layer_idx)
-    # Otherwise, the sizes are simply the input sizes
+    # Otherwise, we infer based on our input
     else:
-        kv_length, kv_offset = input_embeds.shape[1], 0
+        # 1. Rely on input directly
+        if attention_mask is None:
+            kv_length, kv_offset = input_embeds.shape[1], 0
+        # 2. Rely on the mask instead - needed for special cases like prefix tuning in PEFT
+        #
+        # This is a very unique and special case where an encoder utilizes a cache and expects its length
+        # to be accounted for (usually, they should never use a cache). In general, the mask should always
+        # match with the input sizes nonetheless (i.e. it does not affect others).
+        # Conclusion: "prefix tuning is evil"
+        else:
+            kv_length, kv_offset = attention_mask.shape[-1], 0
 
     # We check the position_ids for potential packed sequence format (only if the 2D attention mask is explicitly None,
     # and we don't have past_key_values, i.e. generally a training setup)

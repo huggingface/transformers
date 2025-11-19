@@ -22,6 +22,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
@@ -802,13 +803,14 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = False
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
             cutoff_factor = 3
 
         def init_weight(module: nn.Module, std: float):
-            nn.init.trunc_normal_(
+            init.trunc_normal_(
                 module.weight,
                 mean=0.0,
                 std=std,
@@ -818,7 +820,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
 
             if isinstance(module, nn.Linear):
                 if module.bias is not None:
-                    nn.init.zeros_(module.bias)
+                    init.zeros_(module.bias)
 
         stds = {
             "in": self.config.initializer_range,
@@ -850,9 +852,9 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         ):
             init_weight(module.classifier, stds["final_out"])
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
+            init.ones_(module.weight)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
 
     def _check_and_adjust_attn_implementation(
         self, attn_implementation: Optional[str], is_init_check: bool = False
@@ -1129,7 +1131,7 @@ class ModernBertPredictionHead(nn.Module):
     """
 )
 class ModernBertForMaskedLM(ModernBertPreTrainedModel):
-    _tied_weights_keys = ["decoder.weight"]
+    _tied_weights_keys = {"decoder.weight": "model.embeddings.tok_embeddings.weight"}
 
     def __init__(self, config: ModernBertConfig):
         super().__init__(config)
