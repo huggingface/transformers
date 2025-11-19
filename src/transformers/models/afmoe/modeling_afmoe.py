@@ -176,13 +176,16 @@ class AfmoeTokenChoiceRouter(nn.Module):
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
 
     def forward(self, hidden_states: torch.Tensor, expert_bias: torch.Tensor | None = None):
-        # Keep expert_bias argument for checkpoint/backwards compatibility (it is always zero in released models).
-        del expert_bias
         _, _, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
         scores = torch.sigmoid(self.gate(hidden_states).to(torch.float32))
-        top_scores, selected_experts = torch.topk(scores, k=self.top_k, dim=1)
+
+        if expert_bias is not None:
+            _, selected_experts = torch.topk(scores + expert_bias, k=self.top_k, dim=1)
+            top_scores = scores.gather(dim=1, index=selected_experts)
+        else:
+            top_scores, selected_experts = torch.topk(scores, k=self.top_k, dim=1)
 
         if self.route_norm:
             denominator = top_scores.sum(dim=-1, keepdim=True) + 1e-20
