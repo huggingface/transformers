@@ -137,6 +137,7 @@ class EsmForProteinFoldingOutput(ModelOutput):
 
 def is_fp16_enabled(device_type):
     # Autocast world
+    # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
     autocast_dtype = (
         torch.get_autocast_dtype(device_type)
         if hasattr(torch, "get_autocast_dtype")
