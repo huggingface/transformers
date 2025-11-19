@@ -1,6 +1,6 @@
 # Hugging Face Transformers Kernels
 
-The Transformers Kernels integration provides high-performance, optimized kernel implementations for common transformer operations. By leveraging specialized CUDA, Triton, ROCm, and XPU kernels from the Hugging Face Hub, you can significantly accelerate model inference and training with minimal code changes.
+The Transformers Kernels integration provides high-performance, optimized kernel implementations for common transformer operations. By leveraging specialized CUDA, Triton, ROCm, Metal and XPU kernels from the Hugging Face Hub, you can significantly accelerate model inference and training with minimal code changes.
 
 ## Key Benefits
 
