@@ -3955,7 +3955,12 @@ class Trainer:
         # special dealing with SFT that has prompt tokens that aren't used in loss computation
         good_tokens = (shift_labels != -100).view(-1).sum()
         good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
-        total_loss = sum(losses_per_rank[rank] * good_tokens_per_rank[rank] for rank in range(sp_world_size))
+        # Skip ranks with zero valid tokens
+        total_loss = sum(
+            losses_per_rank[rank] * good_tokens_per_rank[rank]
+            for rank in range(sp_world_size)
+            if good_tokens_per_rank[rank] > 0
+        )
         total_good_tokens = sum(good_tokens_per_rank)
         loss = total_loss / max(total_good_tokens, 1)
 
