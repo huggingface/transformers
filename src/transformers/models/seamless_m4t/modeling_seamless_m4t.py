@@ -2006,6 +2006,12 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, 
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_encoder(self):
+        return self.model.encoder
+
+    def get_decoder(self):
+        return self.model.decoder
+
     def get_input_embeddings(self):
         return self.model.decoder.embed_tokens
 
@@ -2447,6 +2453,12 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_encoder(self):
+        return self.text_encoder
+
+    def get_decoder(self):
+        return self.text_decoder
+
     def get_input_embeddings(self):
         return self.text_decoder.embed_tokens
 
@@ -2690,6 +2702,12 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_encoder(self):
+        return self.speech_encoder
+
+    def get_decoder(self):
+        return self.text_decoder
 
     def get_input_embeddings(self):
         return self.text_decoder.embed_tokens
@@ -2946,6 +2964,12 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_encoder(self):
+        return self.text_encoder
+
+    def get_decoder(self):
+        return self.text_decoder
 
     def get_input_embeddings(self):
         return self.text_decoder.embed_tokens
@@ -3252,6 +3276,12 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4TCodeHifiGan(config)
         self.post_init()
+
+    def get_encoder(self):
+        return self.speech_encoder
+
+    def get_decoder(self):
+        return self.text_decoder
 
     def get_input_embeddings(self):
         return self.text_decoder.embed_tokens
@@ -3593,6 +3623,12 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
             self.current_modality = "speech"
         else:
             raise ValueError(f"`modality={modality}` is not a valid modality. It must be `text` or `speech`.")
+
+    def get_encoder(self):
+        if self.current_modality == "text":
+            return self.text_encoder
+        else:
+            return self.speech_encoder
 
     def get_input_embeddings(self):
         return self.text_decoder.embed_tokens
