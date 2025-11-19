@@ -1081,7 +1081,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
     def add_special_tokens(
         self,
         special_tokens_dict: dict[str, Union[str, AddedToken, Sequence[Union[str, AddedToken]]]],
-        replace_extra_special_tokens=True,
+        replace_extra_special_tokens: Optional[bool] = None,
     ) -> int:
         """
         Add a dictionary of special tokens (eos, pad, cls, etc.) to the encoder and link them to class attributes. If
@@ -1141,6 +1141,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if not special_tokens_dict:
             return 0
 
+        if replace_extra_special_tokens is None:
+            # Preserve legacy behavior: additional/extra special tokens are extended unless explicitly replaced.
+            replace_extra_special_tokens = False
+
         # V5: Allowed keys are SPECIAL_TOKENS_ATTRIBUTES + "extra_special_tokens"
         # Backward compatibility: convert "additional_special_tokens" to "extra_special_tokens"
         special_tokens_dict = dict(special_tokens_dict)
@@ -1168,7 +1172,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     for t in value
                     if replace_extra_special_tokens or str(t) not in self.extra_special_tokens
                 ]
-                if replace_extra_special_tokens and new_tokens:
+                if replace_extra_special_tokens:
                     self._extra_special_tokens = list(new_tokens)
                 else:
                     self._extra_special_tokens.extend(new_tokens)
@@ -2093,8 +2097,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # Re-run post-initialization if the tokenizer has it
             if hasattr(tokenizer, "_post_init"):
                 tokenizer._post_init()
-            # If only SPM exists, try to get vocab and merges and init to load a tokenizers-backend
-        else:
+        # If only vocab/merges files exist (no tokenizer.json) and we haven't already provided explicit vocab to
+        # the tokenizer constructor, try to reconstruct a tokenizers-backend from those files.
+        elif "vocab" not in init_kwargs and "merges" not in init_kwargs:
             from .utils import has_file
 
             spm_filename = find_sentencepiece_model_file(
@@ -2131,22 +2136,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         files_loaded = [spm_filename]
                         init_kwargs["backend"] = "tokenizers"
                         init_kwargs["files_loaded"] = files_loaded
-                        # If tokenizer needs merges too (BPE), pass both; unigram models only need vocab
+                        new_kwargs = dict(init_kwargs)
                         if "merges" in class_sig.parameters:
-                            return cls.from_pretrained(
-                                pretrained_model_name_or_path,
-                                *init_inputs,
-                                vocab=vocab_scores,
-                                merges=merges,
-                                **init_kwargs,
-                            )
-                        elif "vocab" in class_sig.parameters:
-                            return cls.from_pretrained(
-                                pretrained_model_name_or_path,
-                                *init_inputs,
-                                vocab=vocab_scores,
-                                **init_kwargs,
-                            )
+                            new_kwargs["merges"] = merges
+                        if "vocab" in class_sig.parameters:
+                            new_kwargs["vocab"] = vocab_scores
+                        return cls(*init_inputs, **new_kwargs)
                     except Exception:
                         pass
             # Fallback to vocab.json + merges.txt (BPE) or just vocab.json (WordLevel/WordPiece)
@@ -2168,22 +2163,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     class_sig = _inspect.signature(getattr(cls, "__init__", cls))
                     init_kwargs["backend"] = "tokenizers"
                     init_kwargs["files_loaded"] = files_loaded
-
+                    new_kwargs = dict(init_kwargs)
                     if merges is not None and "merges" in class_sig.parameters:
-                        return cls.from_pretrained(
-                            pretrained_model_name_or_path,
-                            *init_inputs,
-                            vocab=vocab,
-                            merges=merges,
-                            **init_kwargs,
-                        )
-                    elif "vocab" in class_sig.parameters:
-                        return cls.from_pretrained(
-                            pretrained_model_name_or_path,
-                            *init_inputs,
-                            vocab=vocab,
-                            **init_kwargs,
-                        )
+                        new_kwargs["merges"] = merges
+                    if "vocab" in class_sig.parameters:
+                        new_kwargs["vocab"] = vocab
+                    return cls(*init_inputs, **new_kwargs)
                 except Exception:
                     pass
         if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
