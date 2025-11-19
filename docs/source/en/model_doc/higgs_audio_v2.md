@@ -209,7 +209,7 @@ conversation = [
         "content": [
             {
                 "type": "text",
-                "text": "Twas the night before my birthday. Hooray! It's almost here! It may not be a holiday, but it's the best day of the year."
+                "text": "It was the night before my birthday. Hooray! It's almost here! It may not be a holiday, but it's the best day of the year."
             }
         ]
     },
@@ -355,7 +355,7 @@ conversation1 = [
         "content": [
             {
                 "type": "text",
-                "text": "Twas the night before my birthday. Hooray! It's almost here! It may not be a holiday, but it's the best day of the year."
+                "text": "It was the night before my birthday. Hooray! It's almost here! It may not be a holiday, but it's the best day of the year."
             }
         ]
     },
@@ -477,7 +477,7 @@ conversation1 = [
         "content": [
             {
                 "type": "text",
-                "text": "Twas the night before my birthday. Hooray! It's almost here! It may not be a holiday, but it's the best day of the year."
+                "text": "It was the night before my birthday. Hooray! It's almost here! It may not be a holiday, but it's the best day of the year."
             }
         ]
     },
