@@ -62,7 +62,7 @@ class T5GemmaModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         is_training=True,
         use_attention_mask=True,
         use_labels=True,
@@ -1296,7 +1296,7 @@ class T5GemmaEncoderOnlyModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         is_training=True,
         use_attention_mask=True,
         use_labels=True,

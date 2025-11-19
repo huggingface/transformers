@@ -47,7 +47,7 @@ class UdopModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=2,
+        batch_size=13,
         encoder_seq_length=7,
         decoder_seq_length=9,
         # For common tests
@@ -414,7 +414,7 @@ class UdopEncoderOnlyModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         # For common tests
         is_training=False,

@@ -147,9 +147,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     def get_input_embeddings(self):
         return self.decoder.get_input_embeddings()
 

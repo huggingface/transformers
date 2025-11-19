@@ -44,22 +44,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-str_to_torch_dtype = {
-    "BOOL": torch.bool,
-    "U8": torch.uint8,
-    "I8": torch.int8,
-    "I16": torch.int16,
-    "F16": torch.float16,
-    "BF16": torch.bfloat16,
-    "I32": torch.int32,
-    "F32": torch.float32,
-    "F64": torch.float64,
-    "I64": torch.int64,
-    "F8_E4M3": torch.float8_e4m3fn,
-    "F8_E5M2": torch.float8_e5m2,
-}
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -534,11 +518,16 @@ def set_param_for_module(
     misc: MutableMapping[str, Any],
     unexpected_keys: MutableSet[str],
     distributed_operation: Optional[TensorParallelLayer],
+    hf_quantizer: HfQuantizer,
 ):
     with log_to_misc(layer_name, misc, layer_name):
         module_path, _, param_name = layer_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
-        param_value = param_value[0] if isinstance(param_value, list) else param_value[...]
+        if isinstance(param_value, list):
+            param_value = param_value[0]
+        elif not isinstance(param_value, torch.nn.Parameter):
+            param_value = param_value[...]
+
         ref = getattr(module_obj, param_name)
         if ref is None:
             unexpected_keys.add(layer_name)
@@ -562,13 +551,11 @@ def set_param_for_module(
 
             # Remove from missing keys (it's either mismatched, or all good)
             missing_keys.discard(layer_name)
-            if ref is not None and ref.shape != param_value.shape:
+            if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
                 mismatch_keys.add((layer_name, param_value.shape, ref.shape))
                 module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
             else:
-                param_value._is_hf_initialized = (
-                    True  # super important otherwise _init_weight re-initi if bias is missing
-                )
+                param_value._is_hf_initialized = True  # super important otherwise _init_weight re-initi if bias is missing
                 setattr(module_obj, param_name, param_value)
 
 
@@ -602,7 +589,7 @@ def convert_and_load_state_dict_in_model(
     state_dict: dict[str, Any],
     weight_mapping: list[WeightConverter | WeightRenaming] | None,
     tp_plan: dict[str, str] | None,
-    quantizer: HfQuantizer | None,
+    hf_quantizer: HfQuantizer | None,
     dtype: torch.dtype | None = None,
     device_map: dict | None = None,
     dtype_plan: dict | None = None,
@@ -682,8 +669,8 @@ def convert_and_load_state_dict_in_model(
             # 5. Handle dtype casting
             _dtype = dtype
             pending_quantize_op = None
-            if quantizer is not None and quantizer.param_needs_quantization(model, renamed_key):
-                pending_quantize_op = quantizer.get_quantization_operation(model, renamed_key)
+            if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, renamed_key):
+                converter.quantization_operation = hf_quantizer.get_quantize_ops()
             else:
                 _dtype = dtype
                 if dtype_plan != {}:
@@ -734,7 +721,7 @@ def convert_and_load_state_dict_in_model(
             pbar.set_postfix({"Materializing param": layer_name})
             pbar.refresh()
             try:
-                realized_value, misc = mapping.convert(layer_name, config=model.config, quantizer=quantizer)
+                realized_value, misc = mapping.convert(layer_name, config=model.config, quantizer=hf_quantizer)
                 for k, output_value in realized_value.items():
                     set_param_for_module(
                         model,
@@ -745,6 +732,7 @@ def convert_and_load_state_dict_in_model(
                         misc,
                         unexpected_keys,
                         mapping.distributed_operation,
+                        hf_quantizer
                     )
             except SkipLayer:
                 continue
