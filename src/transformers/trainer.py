@@ -3931,7 +3931,7 @@ class Trainer:
             model (`nn.Module`):
                 The model to compute the loss for.
             inputs (`dict[str, Union[torch.Tensor, Any]]`):
-                The input data for the model.
+                The input data for the model. Must include "shift_labels" key.
             return_outputs (`bool`, *optional*, defaults to `False`):
                 Whether to return the model outputs along with the loss.
             pc (`accelerate.parallelism_config.ParallelismConfig`):
