@@ -4040,7 +4040,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if weight_conversions is None:
                 weight_conversions = get_checkpoint_conversion_mapping("legacy")
             if key_mapping is not None:
-                weight_conversions.extend([WeightRenaming(source_key=k, target_key=v) for k, v in key_mapping.items()])
+                weight_conversions.extend([WeightRenaming(source_keys=k, target_keys=v) for k, v in key_mapping.items()])
 
         if gguf_file:
             if hf_quantizer is not None:
