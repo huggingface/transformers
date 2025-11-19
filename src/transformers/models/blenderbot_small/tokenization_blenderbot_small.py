@@ -46,10 +46,12 @@ class BlenderbotSmallTokenizer(TokenizersBackend):
         trim_offsets=True,
         **kwargs,
     ):
+        vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+        merges = generate_merges(merges) if isinstance(merges, list) else merges
         self._tokenizer = Tokenizer(
             BPE(
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab,
-                merges if merges is not None else generate_merges(filtered_vocab),
+                vocab,
+                merges,
                 continuing_subword_prefix="",
                 end_of_word_suffix="",
             )
