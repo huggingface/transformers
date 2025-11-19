@@ -138,7 +138,7 @@ class Sam3VideoModelIntegrationTest(unittest.TestCase):
                 )
                 torch.testing.assert_close(
                     scores,
-                    torch.tensor([0.9738274216651917, 0.9788170456886292], dtype=torch.float32),
+                    torch.tensor([0.968647837638855, 0.9736108779907227], dtype=torch.float32),
                     atol=1e-4,
                     rtol=1e-4,
                 )
@@ -214,7 +214,7 @@ class Sam3VideoModelIntegrationTest(unittest.TestCase):
                 )
                 torch.testing.assert_close(
                     scores,
-                    torch.tensor([0.9738274216651917, 0.9788170456886292], dtype=torch.float32),
+                    torch.tensor([0.968647837638855, 0.9736108779907227], dtype=torch.float32),
                     atol=1e-4,
                     rtol=1e-4,
                 )
@@ -356,7 +356,7 @@ class Sam3VideoModelIntegrationTest(unittest.TestCase):
                 )
                 torch.testing.assert_close(
                     scores,
-                    torch.tensor([0.9734834432601929, 0.9791367053985596], dtype=torch.float32),
+                    torch.tensor([0.9683944582939148, 0.9740181565284729], dtype=torch.float32),
                     atol=1e-4,
                     rtol=1e-4,
                 )
@@ -432,7 +432,7 @@ class Sam3VideoModelIntegrationTest(unittest.TestCase):
                 )
                 torch.testing.assert_close(
                     scores,
-                    torch.tensor([0.9734834432601929, 0.9791367053985596], dtype=torch.float32),
+                    torch.tensor([0.9683944582939148, 0.9740181565284729], dtype=torch.float32),
                     atol=1e-4,
                     rtol=1e-4,
                 )

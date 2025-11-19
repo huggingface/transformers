@@ -555,21 +555,30 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             text_embeds=text_embeds,
             attention_mask=inference_session.text_attention_mask,
         )
+
+        pred_logits = detector_outputs.pred_logits
+        presence_logits = detector_outputs.presence_logits
+
+        pred_probs = pred_logits.sigmoid()
+        presence_scores = presence_logits.sigmoid()
+        pred_probs = pred_probs * presence_scores
+
         run_nms = self.det_nms_thresh > 0.0
         if run_nms:
             keep = nms_masks(
-                pred_probs=detector_outputs["pred_logits"][0].sigmoid(),
-                pred_masks=detector_outputs["pred_masks"][0],
+                pred_probs=pred_probs[0],
+                pred_masks=detector_outputs.pred_masks[0],
                 prob_threshold=self.score_threshold_detection,
                 iou_threshold=self.det_nms_thresh,
             )
             # set suppressed detections' logits to a very low value
-            detector_outputs["pred_logits"][0] -= 1e4 * (~keep).float()
+            detector_outputs.pred_logits[0] -= 1e4 * (~keep).float()
+            # Recompute pred_probs after NMS suppression
+            pred_probs = pred_logits.sigmoid()
+            pred_probs = pred_probs * presence_scores
 
-        # note: detections in `sam3_image_out` has already gone through NMS
-        pred_probs = detector_outputs["pred_logits"].sigmoid()
-        pred_boxes_xyxy = detector_outputs["pred_boxes"]
-        pred_masks = detector_outputs["pred_masks"]
+        pred_boxes_xyxy = detector_outputs.pred_boxes
+        pred_masks = detector_outputs.pred_masks
         # get the positive detection outputs above threshold
         pos_pred_idx = torch.where(pred_probs > self.score_threshold_detection)
         det_out = {
