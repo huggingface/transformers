@@ -4008,11 +4008,9 @@ class Trainer:
             Path(os.path.join(output_dir, "user_content.pt")).touch()
         # We are in N-D parallelism if we have parallelism_config set, so we check accelerate if we're on a to_save rank
         elif getattr(self.accelerator, "parallelism_config", None) is not None:
-            # deepspeed already takes care of saving the checkpoint below, so we need this only for the torch cp backend
-            if (
-                self.accelerator.should_save_model
-                and getattr(self.accelerator, "parallelism_config").cp_backend == "torch"
-            ):
+            # DeepSpeed SP already handles checkpoint saving below, so skip manual save in that case
+            pc = getattr(self.accelerator, "parallelism_config")
+            if self.accelerator.should_save_model and not (pc.sp_enabled and pc.sp_backend == "deepspeed"):
                 self._save(output_dir)
         # If we drop to here, we're in 1D parallelism, so all ranks need to go to `save_pretrained`
         elif (tp_size := getattr(self.model, "_tp_size", 0)) is not None and tp_size > 1:
