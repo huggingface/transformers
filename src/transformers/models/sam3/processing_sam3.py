@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Processor class for SAM2.
+Processor class for SAM3.
 """
 
 from copy import deepcopy
@@ -23,7 +23,7 @@ import numpy as np
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import TensorType, is_torch_available, logging
 from ...utils.import_utils import requires
 
@@ -34,10 +34,60 @@ if is_torch_available():
     import torch
 
 
+def box_cxcywh_to_xyxy(x):
+    x_c, y_c, w, h = x.unbind(-1)
+    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    return torch.stack(b, dim=-1)
+
+
+def box_cxcywh_to_xywh(x):
+    x_c, y_c, w, h = x.unbind(-1)
+    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (w), (h)]
+    return torch.stack(b, dim=-1)
+
+
+def box_xywh_to_xyxy(x):
+    x, y, w, h = x.unbind(-1)
+    b = [(x), (y), (x + w), (y + h)]
+    return torch.stack(b, dim=-1)
+
+
+def box_xywh_to_cxcywh(x):
+    x, y, w, h = x.unbind(-1)
+    b = [(x + 0.5 * w), (y + 0.5 * h), (w), (h)]
+    return torch.stack(b, dim=-1)
+
+
+def box_xyxy_to_xywh(x):
+    x, y, X, Y = x.unbind(-1)
+    b = [(x), (y), (X - x), (Y - y)]
+    return torch.stack(b, dim=-1)
+
+
+def box_xyxy_to_cxcywh(x):
+    x0, y0, x1, y1 = x.unbind(-1)
+    b = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0), (y1 - y0)]
+    return torch.stack(b, dim=-1)
+
+
+def box_area(boxes):
+    """
+    Batched version of box area. Boxes should be in [x0, y0, x1, y1] format.
+
+    Inputs:
+    - boxes: Tensor of shape (..., 4)
+
+    Returns:
+    - areas: Tensor of shape (...,)
+    """
+    x0, y0, x1, y1 = boxes.unbind(-1)
+    return (x1 - x0) * (y1 - y0)
+
+
 @requires(backends=("torch",))
-class Sam2Processor(ProcessorMixin):
+class Sam3Processor(ProcessorMixin):
     r"""
-    Constructs a SAM2 processor which wraps a SAM2 image processor and an 2D points & Bounding boxes processor into a
+    Constructs a SAM3 processor which wraps a SAM3 image processor and bounding boxes processing into a
     single processor.
 
     [`Sam2Processor`] offers all the functionalities of [`Sam2ImageProcessorFast`] and [`Sam2VideoProcessor`]. See the docstring of
@@ -46,43 +96,46 @@ class Sam2Processor(ProcessorMixin):
     Args:
         image_processor (`Sam2ImageProcessorFast`):
             An instance of [`Sam2ImageProcessorFast`].
+        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
+            An instance of [`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]. The tokenizer is a required input.
         target_size (`int`, *optional*):
             The target size (target_size, target_size) to which the image will be resized.
         point_pad_value (`int`, *optional*, defaults to -10):
-            The value used for padding input points.
+            The value used for padding input boxes.
     """
 
-    def __init__(self, image_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs):
-        super().__init__(image_processor, **kwargs)
+    def __init__(
+        self, image_processor, tokenizer, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
+    ):
+        super().__init__(image_processor, tokenizer, **kwargs)
         self.point_pad_value = point_pad_value
         self.target_size = target_size if target_size is not None else self.image_processor.size["height"]
 
     def __call__(
         self,
         images: Optional[ImageInput] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         segmentation_maps: Optional[ImageInput] = None,
-        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
-        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
         input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
+        input_boxes_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
         original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchEncoding:
         r"""
-        This method uses [`Sam2ImageProcessorFast.__call__`] method to prepare image(s) for the model. It also prepares 2D
-        points and bounding boxes for the model if they are provided.
+        This method uses [`Sam3ImageProcessorFast.__call__`] method to prepare image(s) for the model. It also prepares bounding boxes for the model if they are provided.
 
         Args:
             images (`ImageInput`, *optional*):
                 The image(s) to process.
+            text (`str`, `list[str]`, `list[list[str]]`, *optional*):
+                The text to process.
             segmentation_maps (`ImageInput`, *optional*):
                 The segmentation maps to process.
-            input_points (`list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
-                The points to add to the frame.
-            input_labels (`list[list[list[int]]]`, `torch.Tensor`, *optional*):
-                The labels for the points.
             input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
-                The bounding boxes to add to the frame.
+                The bounding boxes to process.
+            input_boxes_labels (`list[list[int]]`, `torch.Tensor`, *optional*):
+                The labels for the bounding boxes.
             original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
                 The original sizes of the images.
             return_tensors (`str` or `TensorType`, *optional*):
@@ -95,8 +148,7 @@ class Sam2Processor(ProcessorMixin):
             - `pixel_values` (`torch.Tensor`): The processed image(s).
             - `original_sizes` (`list[list[float]]`): The original sizes of the images.
             - `labels` (`torch.Tensor`): The processed segmentation maps (if provided).
-            - `input_points` (`torch.Tensor`): The processed points.
-            - `input_labels` (`torch.Tensor`): The processed labels.
+            - `input_boxes_labels` (`torch.Tensor`): The processed labels for the bounding boxes.
             - `input_boxes` (`torch.Tensor`): The processed bounding boxes.
         """
         if images is not None:
@@ -113,30 +165,21 @@ class Sam2Processor(ProcessorMixin):
         else:
             raise ValueError("Either images or original_sizes must be provided")
 
-        # pop arguments that are not used in the forward but used nevertheless
         original_sizes = encoding_image_processor["original_sizes"]
         # Check original_sizes is of length 1 or len(images)
         if images is not None and len(original_sizes) != 1 and len(original_sizes) != len(images):
             raise ValueError(
                 "original_sizes must be of length 1 or len(images). If you are passing a single image, you must pass a single original_size."
             )
+        text = self._resolve_text_prompts(text, input_boxes)
 
-        # Process input points, labels, and boxes if provided
-        if input_points is not None or input_labels is not None or input_boxes is not None:
+        encoding_image_processor.update(
+            self.tokenizer(text, return_tensors=return_tensors, padding="max_length", max_length=32)
+        )
+
+        # Process input boxes if provided
+        if input_boxes is not None:
             # Validate and convert inputs to standardized format
-            processed_points = self._validate_single_input(
-                input_points,
-                expected_depth=4,
-                input_name="points",
-                expected_format="[image level, object level, point level, point coordinates]",
-                expected_coord_size=2,
-            )
-            processed_labels = self._validate_single_input(
-                input_labels,
-                expected_depth=3,
-                input_name="labels",
-                expected_format="[image level, object level, point level]",
-            )
             processed_boxes = self._validate_single_input(
                 input_boxes,
                 expected_depth=3,
@@ -144,53 +187,44 @@ class Sam2Processor(ProcessorMixin):
                 expected_format="[image level, box level, box coordinates]",
                 expected_coord_size=4,
             )
+            processed_boxes_labels = self._validate_single_input(
+                input_boxes_labels,
+                expected_depth=2,
+                input_name="labels",
+                expected_format="[image level, box level]",
+            )
 
             # Get padding requirements for all inputs
-            if processed_points is not None:
-                points_max_dims = self._get_nested_dimensions(processed_points)[:3]
-            if processed_labels is not None:
-                labels_max_dims = self._get_nested_dimensions(processed_labels)[:3]
             if processed_boxes is not None:
                 boxes_max_dims = self._get_nested_dimensions(processed_boxes)[:2]
+            if processed_boxes_labels is not None:
+                boxes_labels_max_dims = self._get_nested_dimensions(processed_boxes_labels)[:2]
 
-            # Ensure points and labels have consistent dimensions
-            if processed_points is not None and processed_labels is not None:
-                if points_max_dims != labels_max_dims:
+            # Ensure boxes and labels have consistent dimensions
+            if processed_boxes is not None and processed_boxes_labels is not None:
+                if boxes_max_dims != boxes_labels_max_dims:
                     raise ValueError(
-                        "Input points and labels have inconsistent dimensions. Please ensure they have the same dimensions."
-                    )
-
-            # Check that boxes don't need padding (model limitation)
-            if processed_boxes is not None and len(processed_boxes) >= 2:
-                if any(len(img_boxes) < boxes_max_dims[1] for img_boxes in processed_boxes):
-                    raise ValueError(
-                        "Input boxes have inconsistent dimensions that would require padding, "
-                        "but boxes cannot be padded due to model limitations. "
-                        "Please ensure all images have the same number of boxes."
+                        "Input boxes and labels have inconsistent dimensions. Please ensure they have the same dimensions."
                     )
 
             # Pad and normalize all inputs to final tensor format
-            if processed_points is not None:
-                padded_points = self._pad_nested_list(processed_points, points_max_dims + [2])
-                final_points = torch.tensor(padded_points, dtype=torch.float32)
-                self._normalize_tensor_coordinates(final_points, original_sizes, preserve_padding=True)
-                encoding_image_processor.update({"input_points": final_points})
-
-            if processed_labels is not None:
-                padded_labels = self._pad_nested_list(processed_labels, labels_max_dims)
-                final_labels = torch.tensor(padded_labels, dtype=torch.int64)
-                encoding_image_processor.update({"input_labels": final_labels})
-
             if processed_boxes is not None:
-                final_boxes = torch.tensor(processed_boxes, dtype=torch.float32)
-                self._normalize_tensor_coordinates(final_boxes, original_sizes, is_bounding_box=True)
+                padded_boxes = self._pad_nested_list(processed_boxes, boxes_max_dims + [4])
+                final_boxes = torch.tensor(padded_boxes, dtype=torch.float32)
+                self._normalize_tensor_coordinates(
+                    final_boxes, original_sizes, is_bounding_box=True, preserve_padding=True
+                )
+                final_boxes = box_xyxy_to_cxcywh(final_boxes)
                 encoding_image_processor.update({"input_boxes": final_boxes})
+
+            if processed_boxes_labels is not None:
+                padded_boxes_labels = self._pad_nested_list(processed_boxes_labels, boxes_labels_max_dims)
+                final_boxes_labels = torch.tensor(padded_boxes_labels, dtype=torch.int64)
+                encoding_image_processor.update({"input_boxes_labels": final_boxes_labels})
 
         return encoding_image_processor
 
-    def _normalize_coordinates(
-        self, target_size: int, coords: "torch.Tensor", original_size, is_bounding_box=False
-    ) -> "torch.Tensor":
+    def _normalize_coordinates(self, coords: "torch.Tensor", original_size, is_bounding_box=False) -> "torch.Tensor":
         """
         Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
 
@@ -205,13 +239,12 @@ class Sam2Processor(ProcessorMixin):
                 Whether the coordinates are bounding boxes.
         """
         old_h, old_w = original_size
-        new_h, new_w = target_size, target_size
         coords = deepcopy(coords).float()
 
         if is_bounding_box:
             coords = coords.reshape(-1, 2, 2)
-        coords[..., 0] = coords[..., 0] * (new_w / old_w)
-        coords[..., 1] = coords[..., 1] * (new_h / old_h)
+        coords[..., 0] = coords[..., 0] / old_w
+        coords[..., 1] = coords[..., 1] / old_h
 
         if is_bounding_box:
             coords = coords.reshape(-1, 4)
@@ -221,14 +254,15 @@ class Sam2Processor(ProcessorMixin):
     def _convert_to_nested_list(self, data, expected_depth, current_depth=0):
         """
         Recursively convert various input formats (tensors, numpy arrays, lists) to nested lists.
+        Preserves None values within lists.
 
         Args:
-            data: Input data in any format
+            data: Input data in any format (may be None or contain None values)
             expected_depth: Expected nesting depth
             current_depth: Current depth in recursion
 
         Returns:
-            Nested list representation of the data
+            Nested list representation of the data (or None)
         """
         if data is None:
             return None
@@ -249,20 +283,50 @@ class Sam2Processor(ProcessorMixin):
                 # We've reached the expected depth, return as is
                 return data
             else:
-                # Continue recursion
-                return [self._convert_to_nested_list(item, expected_depth, current_depth + 1) for item in data]
+                # Continue recursion, preserving None values
+                return [
+                    self._convert_to_nested_list(item, expected_depth, current_depth + 1) if item is not None else None
+                    for item in data
+                ]
         elif isinstance(data, (int, float)):
             return data
         else:
-            raise TypeError(f"Unsupported data type: {type(data)}")
+            raise ValueError(f"Unsupported data type: {type(data)}")
+
+    def _resolve_text_prompts(self, text, input_boxes):
+        """
+        Resolve text prompts by setting defaults based on prompt types.
+        """
+        # If no text provided, infer default based on prompt type
+        if text is None:
+            return "visual" if input_boxes else None
+
+        if not isinstance(text, (list, tuple)):
+            return text
+
+        # Validate list/tuple length matches both prompt types if provided
+        text = list(text)  # Convert to list to allow modification
+
+        if input_boxes and len(text) != len(input_boxes):
+            raise ValueError(
+                f"The number of text prompts must match the number of input boxes. "
+                f"Got {len(text)} text prompts and {len(input_boxes)} input boxes."
+            )
+
+        # Fill in None values with defaults based on corresponding prompt
+        for i, text_value in enumerate(text):
+            if text_value is None and input_boxes and input_boxes[i] is not None:
+                text[i] = "visual"
+
+        return text
 
     def _get_nested_dimensions(self, nested_list, max_dims=None):
         """
-        Get the maximum dimensions at each level of nesting.
+        Get the maximum dimensions at each level of nesting, skipping None values.
 
         Args:
             nested_list (`list`):
-                Nested list structure.
+                Nested list structure (may contain None values).
             max_dims (`list`, *optional*):
                 Current maximum dimensions (for recursion).
 
@@ -282,6 +346,9 @@ class Sam2Processor(ProcessorMixin):
 
         if len(nested_list) > 0:
             for item in nested_list:
+                # Skip None values
+                if item is None:
+                    continue
                 if isinstance(item, list):
                     sub_dims = self._get_nested_dimensions(item)
                     # Merge sub_dims into max_dims
@@ -295,11 +362,11 @@ class Sam2Processor(ProcessorMixin):
 
     def _pad_nested_list(self, nested_list, target_dims, current_level=0, pad_value=None):
         """
-        Recursively pad a nested list to match target dimensions.
+        Recursively pad a nested list to match target dimensions. Replaces None values with padded structures.
 
         Args:
             nested_list (`list`):
-                Nested list to pad.
+                Nested list to pad (may contain None values).
             target_dims (`list`):
                 Target dimensions for each level.
             current_level (`int`, *optional*, defaults to 0):
@@ -347,10 +414,14 @@ class Sam2Processor(ProcessorMixin):
                 template = self._create_empty_nested_structure(template_dims, pad_value)
                 nested_list.extend([deepcopy(template) for _ in range(target_size)])
 
-        # Recursively pad sublists
+        # Recursively pad sublists, replacing None with padded structures
         if current_level < len(target_dims) - 1:
             for i in range(len(nested_list)):
-                if isinstance(nested_list[i], list):
+                if nested_list[i] is None:
+                    # Replace None with fully padded structure
+                    template_dims = target_dims[current_level + 1 :]
+                    nested_list[i] = self._create_empty_nested_structure(template_dims, pad_value)
+                elif isinstance(nested_list[i], list):
                     nested_list[i] = self._pad_nested_list(nested_list[i], target_dims, current_level + 1, pad_value)
 
         return nested_list
@@ -372,7 +443,7 @@ class Sam2Processor(ProcessorMixin):
 
     def _get_nesting_level(self, input_list):
         """
-        Get the nesting level of a list structure.
+        Get the nesting level of a list structure, skipping None values.
 
         Args:
             input_list (`list`):
@@ -381,7 +452,12 @@ class Sam2Processor(ProcessorMixin):
         if isinstance(input_list, list):
             if len(input_list) == 0:
                 return 1
-            return 1 + self._get_nesting_level(input_list[0])
+            # Find first non-None element to determine nesting level
+            for item in input_list:
+                if item is not None:
+                    return 1 + self._get_nesting_level(item)
+            # All elements are None, treat as single level
+            return 1
         elif isinstance(input_list, (np.ndarray, torch.Tensor)):
             # For arrays/tensors, the nesting level is the number of dimensions
             return len(input_list.shape)
@@ -408,7 +484,7 @@ class Sam2Processor(ProcessorMixin):
                     expected_format (`str`):
                         The expected format of the input.
                     expected_coord_size (`int`, *optional*):
-                        Expected coordinate size (2 for points, 4 for boxes, None for labels).
+                        Expected coordinate size (4 for boxes, None for labels).
         .
         """
         if data is None:
@@ -449,10 +525,10 @@ class Sam2Processor(ProcessorMixin):
             is_bounding_box (`bool`, *optional*, defaults to `False`):
                 Whether coordinates are bounding boxes.
             preserve_padding (`bool`, *optional*, defaults to `False`):
-                Whether to preserve padding values (for points).
+                Whether to preserve padding values (for boxes).
         """
         if preserve_padding:
-            # For points: avoid normalizing pad values
+            # For boxes: avoid normalizing pad values
             mask = tensor != self.point_pad_value
             coord_mask = mask.all(dim=-1, keepdim=True)
 
@@ -460,7 +536,7 @@ class Sam2Processor(ProcessorMixin):
             if img_idx < tensor.shape[0]:
                 original_size = original_sizes[img_idx] if img_idx < len(original_sizes) else original_sizes[0]
                 normalized_coords = self._normalize_coordinates(
-                    self.target_size, tensor[img_idx], original_size, is_bounding_box=is_bounding_box
+                    tensor[img_idx], original_size, is_bounding_box=is_bounding_box
                 )
 
                 if preserve_padding:
@@ -472,51 +548,127 @@ class Sam2Processor(ProcessorMixin):
                 else:
                     tensor[img_idx] = normalized_coords
 
-    def post_process_masks(
-        self,
-        masks,
-        original_sizes,
-        mask_threshold=0.0,
-        binarize=True,
-        max_hole_area=0.0,
-        max_sprinkle_area=0.0,
-        apply_non_overlapping_constraints=False,
-        **kwargs,
-    ):
+    def post_process_semantic_segmentation(self, outputs, target_sizes=None, threshold=0.5):
         """
-        Remove padding and upscale masks to the original image size.
+        Converts the output of [`Sam3Model`] into semantic segmentation maps.
 
         Args:
-            masks (`Union[List[torch.Tensor], List[np.ndarray]]`):
-                Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
-            original_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
-                The original sizes of each image before it was resized to the model's expected input shape, in (height,
-                width) format.
-            mask_threshold (`float`, *optional*, defaults to 0.0):
-                Threshold for binarization and post-processing operations.
-            binarize (`bool`, *optional*, defaults to `True`):
-                Whether to binarize the masks.
-            max_hole_area (`float`, *optional*, defaults to 0.0):
-                The maximum area of a hole to fill.
-            max_sprinkle_area (`float`, *optional*, defaults to 0.0):
-                The maximum area of a sprinkle to fill.
-            apply_non_overlapping_constraints (`bool`, *optional*, defaults to `False`):
-                Whether to apply non-overlapping constraints to the masks.
+            outputs ([`Sam3ImageSegmentationOutput`]):
+                Raw outputs of the model containing semantic_seg.
+            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+            threshold (`float`, *optional*, defaults to 0.5):
+                Threshold for binarizing the semantic segmentation masks.
 
         Returns:
-            (`torch.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
-            is given by original_size.
+            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry is a binary mask (0 or 1).
         """
-        return self.image_processor.post_process_masks(
-            masks,
-            original_sizes,
-            mask_threshold,
-            binarize,
-            max_hole_area,
-            max_sprinkle_area,
-            apply_non_overlapping_constraints,
-            **kwargs,
+        return self.image_processor.post_process_semantic_segmentation(outputs, target_sizes, threshold)
+
+    def post_process_object_detection(self, outputs, threshold=0.3, target_sizes=None):
+        """
+        Converts the raw output of [`Sam3Model`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format. This is a convenience wrapper around the image processor method.
+
+        Args:
+            outputs ([`Sam3ImageSegmentationOutput`]):
+                Raw outputs of the model containing pred_boxes, pred_logits, and optionally presence_logits.
+            threshold (`float`, *optional*, defaults to 0.3):
+                Score threshold to keep object detection predictions.
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                List of tuples (`tuple[int, int]`) containing the target size `(height, width)` of each image in the
+                batch. If unset, predictions will not be resized.
+
+        Returns:
+            `list[dict]`: A list of dictionaries, each dictionary containing the following keys:
+                - **scores** (`torch.Tensor`): The confidence scores for each predicted box on the image.
+                - **boxes** (`torch.Tensor`): Image bounding boxes in (top_left_x, top_left_y, bottom_right_x,
+                  bottom_right_y) format.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoModel, AutoProcessor
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> model = AutoModel.from_pretrained("facebook/sam3-base")
+        >>> processor = AutoProcessor.from_pretrained("facebook/sam3-base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = processor(images=image, text="cat", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> # Post-process to get bounding boxes
+        >>> results = processor.post_process_object_detection(outputs, threshold=0.3, target_sizes=[image.size[::-1]])
+        >>> boxes = results[0]["boxes"]
+        >>> scores = results[0]["scores"]
+        ```
+        """
+        return self.image_processor.post_process_object_detection(outputs, threshold, target_sizes)
+
+    def post_process_instance_segmentation(
+        self,
+        outputs,
+        threshold=0.3,
+        mask_threshold=0.5,
+        target_sizes=None,
+    ):
+        """
+        Converts the raw output of [`Sam3Model`] into instance segmentation predictions with bounding boxes and masks.
+        This is a convenience wrapper around the image processor method.
+
+        Args:
+            outputs ([`Sam3ImageSegmentationOutput`]):
+                Raw outputs of the model containing pred_boxes, pred_logits, pred_masks, and optionally
+                presence_logits.
+            threshold (`float`, *optional*, defaults to 0.3):
+                Score threshold to keep instance predictions.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold for binarizing the predicted masks.
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                List of tuples (`tuple[int, int]`) containing the target size `(height, width)` of each image in the
+                batch. If unset, predictions will not be resized.
+
+        Returns:
+            `list[dict]`: A list of dictionaries, each dictionary containing the following keys:
+                - **scores** (`torch.Tensor`): The confidence scores for each predicted instance on the image.
+                - **boxes** (`torch.Tensor`): Image bounding boxes in (top_left_x, top_left_y, bottom_right_x,
+                  bottom_right_y) format.
+                - **masks** (`torch.Tensor`): Binary segmentation masks for each instance, shape (num_instances,
+                  height, width).
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoModel, AutoProcessor
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> model = AutoModel.from_pretrained("facebook/sam3-base")
+        >>> processor = AutoProcessor.from_pretrained("facebook/sam3-base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = processor(images=image, text="cat", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> # Post-process to get instance segmentation
+        >>> results = processor.post_process_instance_segmentation(
+        ...     outputs, threshold=0.3, target_sizes=[image.size[::-1]]
+        ... )
+        >>> masks = results[0]["masks"]
+        >>> boxes = results[0]["boxes"]
+        >>> scores = results[0]["scores"]
+        ```
+        """
+        return self.image_processor.post_process_instance_segmentation(
+            outputs, threshold, mask_threshold, target_sizes
         )
 
 
-__all__ = ["Sam2Processor"]
+__all__ = ["Sam3Processor"]
