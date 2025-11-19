@@ -27,15 +27,14 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-<!-- TODO: This section needs to be filled in with the SAM3 overview. -->
+SAM3 performs **Promptable Concept Segmentation (PCS)** on images. PCS takes text and/or image exemplars as input (e.g., "yellow school bus"), and predicts instance and semantic masks for **every single object** matching the concept.
 
-This model was contributed by [username](https://github.com/username).
+
+This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan) and [ronghanghu](https://huggingface.co/ronghanghu).
 
 ## Usage examples with 🤗 Transformers
 
 ### Text-Only Prompts
-
-SAM3 can segment objects using natural language descriptions:
 
 ```python
 >>> from transformers import Sam3Processor, Sam3Model
@@ -75,7 +74,7 @@ SAM3 can segment objects using natural language descriptions:
 
 ### Single Bounding Box Prompt
 
-Segment objects using a bounding box:
+Segment objects using a bounding box on the visual concept:
 
 ```python
 >>> # Box in xyxy format: [x1, y1, x2, y2] in pixel coordinates
@@ -105,7 +104,7 @@ Segment objects using a bounding box:
 
 ### Multiple Box Prompts (Positive and Negative)
 
-Use multiple boxes with positive and negative labels to refine segmentation:
+Use multiple boxes with positive and negative labels to refine the concept:
 
 ```python
 >>> # Load kitchen image
@@ -140,7 +139,7 @@ Use multiple boxes with positive and negative labels to refine segmentation:
 
 ### Combined Prompts (Text + Negative Box)
 
-Use text prompts with negative visual prompts to exclude specific regions:
+Use text prompts with negative visual prompts to refine the concept:
 
 ```python
 >>> # Segment "handle" but exclude the oven handle using a negative box
@@ -175,7 +174,6 @@ Use text prompts with negative visual prompts to exclude specific regions:
 Process multiple images with different text prompts efficiently:
 
 ```python
->>> # Load two images
 >>> cat_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
 >>> kitchen_url = "http://images.cocodataset.org/val2017/000000136466.jpg"
 >>> images = [
@@ -210,7 +208,6 @@ Use different prompt types for different images in the same batch:
 ```python
 >>> # Image 1: text prompt "laptop"
 >>> # Image 2: visual prompt (dial box)
->>> # Box for dial in image 2 (xyxy): [59, 144, 76, 163]
 >>> box2_xyxy = [59, 144, 76, 163]
 
 >>> inputs = processor(

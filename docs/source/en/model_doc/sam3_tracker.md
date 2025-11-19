@@ -30,15 +30,12 @@ limitations under the License.
 
 ## Overview
 
-Sam3Tracker is an updated version of SAM2 (Segment Anything Model 2) that maintains the same API while providing improved performance and capabilities. SAM2 was proposed in [Segment Anything in Images and Videos](https://ai.meta.com/research/publications/sam-2-segment-anything-in-images-and-videos/) by Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollár, Christoph Feichtenhofer.
+Sam3Tracker performs **Promptable Visual Segmentation (PVS)** on images. PVS takes interactive visual prompts (points, boxes, masks) or text inputs to segment a **specific object instance** per prompt. This is the task that SAM 1 and SAM 2 focused on, and SAM 3 improves upon it.
 
-The model can be used to predict segmentation masks of any object of interest given an input image or video, and input points or bounding boxes. Sam3Tracker maintains full API compatibility with SAM2, making it a drop-in replacement for existing SAM2 workflows.
+Sam3Tracker is an updated version of SAM2 (Segment Anything Model 2) that maintains the same API while providing improved performance and capabilities.
 
-![example image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam2_header.gif)
 
-The abstract from the original SAM2 paper is the following:
-
-*We present Segment Anything Model 2 (SAM 2), a foundation model towards solving promptable visual segmentation in images and videos. We build a data engine, which improves model and data via user interaction, to collect the largest video segmentation dataset to date. Our model is a simple transformer architecture with streaming memory for real-time video processing. SAM 2 trained on our data provides strong performance across a wide range of tasks. In video segmentation, we observe better accuracy, using 3x fewer interactions than prior approaches. In image segmentation, our model is more accurate and 6x faster than the Segment Anything Model (SAM). We believe that our data, model, and insights will serve as a significant milestone for video segmentation and related perception tasks. We are releasing a version of our model, the dataset and an interactive demo.*
+This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan) and [ronghanghu](https://huggingface.co/ronghanghu).
 
 ## Usage example
 

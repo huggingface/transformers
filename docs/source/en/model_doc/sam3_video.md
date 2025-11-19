@@ -27,25 +27,15 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-SAM3 Video extends SAM3 (Segment Anything Model 3) to support video segmentation and tracking. The model combines a detection module (SAM3) with a tracking module (SAM2-style tracker) to enable robust object tracking across video frames using text prompts.
+SAM3 Video performs **Promptable Concept Segmentation (PCS)** on videos. PCS takes text as input (e.g., "yellow school bus"), and predicts instance and semantic masks for **every single object** matching the concept, while preserving object identities across video frames.
 
-The model can be used to track and segment objects of interest across video frames given text descriptions, automatically detecting and tracking objects that match the text prompt throughout the video sequence.
+The model combines a detection module (SAM3) with a tracking module (SAM2-style tracker) to enable robust object tracking across video frames using text prompts.
 
-The abstract from the paper is the following:
-
-*We present Segment Anything Model 2 (SAM 2), a foundation model towards solving promptable visual segmentation in images and videos. We build a data engine, which improves model and data via user interaction, to collect the largest video segmentation dataset to date. Our model is a simple transformer architecture with streaming memory for real-time video processing. SAM 2 trained on our data provides strong performance across a wide range of tasks. In video segmentation, we observe better accuracy, using 3x fewer interactions than prior approaches. In image segmentation, our model is more accurate and 6x faster than the Segment Anything Model (SAM). We believe that our data, model, and insights will serve as a significant milestone for video segmentation and related perception tasks. We are releasing a version of our model, the dataset and an interactive demo.*
-
-Tips:
-
-- Text-Based Detection: SAM3 Video uses text prompts to automatically detect and track objects, eliminating the need for manual point or box annotations on the first frame.
-- Detection-Tracking Fusion: The model combines detection outputs with tracking predictions for robust object tracking across frames.
-- Streaming Support: SAM3 Video supports both batch processing of entire videos and streaming inference for real-time applications.
+This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan) and [ronghanghu](https://huggingface.co/ronghanghu).
 
 ## Usage example
 
 ### Video Segmentation and Tracking
-
-SAM3 Video's key strength is its ability to automatically detect and track objects across video frames using text prompts. Here's how to use it for video segmentation:
 
 #### Pre-loaded Video Inference
 
