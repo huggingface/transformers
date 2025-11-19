@@ -1882,9 +1882,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         if isinstance(self.decoder, SpeechT5DecoderWithTextPrenet):
             self.decoder.set_input_embeddings(value)
 
-    def get_encoder(self):
-        return self.encoder
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -2020,12 +2017,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.speecht5.get_encoder()
-
-    def get_decoder(self):
-        return self.speecht5.get_decoder()
 
     def freeze_feature_encoder(self):
         """
@@ -2347,12 +2338,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         # `GenerationMixin` (it has a non-standard generation method). This means that the base `can_generate()` will return `False`,
         # but we need to override it so as to do `GenerationConfig` handling in multiple parts of the codebase.
         return True
-
-    def get_encoder(self):
-        return self.speecht5.get_encoder()
-
-    def get_decoder(self):
-        return self.speecht5.get_decoder()
 
     @auto_docstring
     def forward(
@@ -2684,12 +2669,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.speecht5.get_encoder()
-
-    def get_decoder(self):
-        return self.speecht5.get_decoder()
 
     def freeze_feature_encoder(self):
         """
