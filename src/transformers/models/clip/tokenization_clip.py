@@ -85,7 +85,9 @@ class CLIPTokenizer(TokenizersBackend):
             }
 
         if merges is not None:
-            _merges = merges
+            # Convert merges to tuples if they are lists (e.g., from JSON loading)
+            # BPE expects merges as list of tuples, not list of lists
+            _merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
         else:
             _merges = []
 
@@ -108,9 +110,7 @@ class CLIPTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
                 pre_tokenizers.Split(
-                    Regex(
-                        r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+"""
-                    ),
+                    Regex(r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+"""),
                     behavior="removed",
                     invert=True,
                 ),
@@ -122,7 +122,7 @@ class CLIPTokenizer(TokenizersBackend):
 
         bos_token_id = _vocab.get(str(bos_token), 0)
         eos_token_id = _vocab.get(str(eos_token), 1)
-
+        
         self._tokenizer.post_processor = processors.RobertaProcessing(
             sep=(str(eos_token), eos_token_id),
             cls=(str(bos_token), bos_token_id),
@@ -140,6 +140,7 @@ class CLIPTokenizer(TokenizersBackend):
             pad_token=pad_token,
             **kwargs,
         )
+
 
         if hasattr(self, "_post_init"):
             self._post_init()
@@ -162,6 +163,7 @@ class CLIPTokenizer(TokenizersBackend):
             return text
 
         self.backend_tokenizer.decode = new_decode_method
+
 
 
 __all__ = ["CLIPTokenizer"]
