@@ -585,6 +585,12 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
     _keys_to_ignore_on_load_unexpected = ["text_lm_head.weight"]
 
     def __init__(self, config: HiggsAudioV2Config, use_text_head: bool = False):
+        r"""
+        use_text_head (`bool`, *optional*, defaults to False):
+            Whether to use a text language model head. Such head is not required for generation,
+            but can be used to compute the text loss when training.
+
+        """
         super().__init__(config)
         self.model = HiggsAudioV2Model(config)
         self.audio_lm_head = nn.Linear(config.hidden_size, config.num_codebooks * config.codebook_size, bias=False)
@@ -649,6 +655,10 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
             Indices can be obtained using [`HiggsAudioV2TokenizerModel.encode`].
         audio_input_ids_mask (`torch.BoolTensor` of shape `(batch_size, num_audio_frames)`, *optional*):
             Indicates which audio frames in `audio_input_ids` are valid.
+        audio_labels (`torch.LongTensor` of shape `(batch_size, num_audio_frames, num_codebooks)`, *optional*):
+            Labels for the audio codebook tokens for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.codebook_size]. Token with indices set to `-100` are ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.codebook_size]`.
+            Can be obtained using `output_labels=True` when calling [`HiggsAudioV2Processor`].
 
         Returns:
             [`~models.modeling_outputs.BaseModelOutputWithPast`]:
