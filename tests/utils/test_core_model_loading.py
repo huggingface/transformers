@@ -440,14 +440,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
 
-    def test_post_pre(self):
-        rules = {
-            "*.block_sparse_moe.experts.*.w1.weight": "*.mlp.experts.gate_up_proj",
-            "*.block_sparse_moe.experts.*.w2.weight": "*.mlp.experts.down_proj",
-            "model.language_model.*": "language_model.*",
-            "post_layer_norm.*": "pre_layer_norm.*",
-            "pre_layer_norm.*": "post_layer_norm.*",
-        }
-        
+
 if __name__ == "__main__":
     unittest.main()

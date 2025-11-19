@@ -15,7 +15,7 @@
 
 from copy import deepcopy
 
-from .core_model_loading import Concatenate, MergeModulelist, WeightConverter, WeightRenaming, Chunk
+from .core_model_loading import Concatenate, MergeModulelist, WeightConverter, WeightRenaming
 from .utils import is_torch_available
 
 
@@ -61,14 +61,12 @@ def _build_checkpoint_conversion_mapping():
             #     [r"layernorm.weight", r"layernorm.bias"],
             #     operations=[Chunk(dim=0)],  # more like stack?
             # ),
-
             # TODO @ArthurZucker support this kind of patterns
             # WeightConverter(
             #     "embed_tokens.weight",
             #     ["embed_tokens.weight", "lm_head.weight"],
             #     operations=[Copy()],  # more like stack?
             # ),
-
         ],
         "qwen2_moe": [
             WeightConverter(

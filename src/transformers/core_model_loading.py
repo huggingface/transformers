@@ -16,17 +16,16 @@
 
 from __future__ import annotations
 
-import itertools
 import os
 import re
 from abc import abstractmethod
-from collections import defaultdict
 from collections.abc import MutableMapping, MutableSet, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
-from copy import deepcopy 
+from typing import TYPE_CHECKING, Any, Optional, Union
+
 import torch
 
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, DTensor, Replicate, TensorParallelLayer
@@ -64,7 +63,7 @@ str_to_torch_dtype = {
 logger = logging.get_logger(__name__)
 
 
-def compile_glob_rule(source_glob: str, target_glob: str) -> Tuple[re.Pattern, str]:
+def compile_glob_rule(source_glob: str, target_glob: str) -> tuple[re.Pattern, str]:
     """
     Convert a glob-style source + target into a full regex + replacement.
 
@@ -85,7 +84,9 @@ def compile_glob_rule(source_glob: str, target_glob: str) -> Tuple[re.Pattern, s
     return regex, replacement
 
 
-def build_glob_alternation(globs: list[Union[WeightRenaming, WeightConverter, str]]) -> tuple[re.Pattern, dict[str, str], dict[str, str]]:
+def build_glob_alternation(
+    globs: list[Union[WeightRenaming, WeightConverter, str]],
+) -> tuple[re.Pattern, dict[str, str], dict[str, str]]:
     """
     Build a single alternation regex with one named group per glob.
     """
@@ -101,7 +102,7 @@ def build_glob_alternation(globs: list[Union[WeightRenaming, WeightConverter, st
                 i += 1
                 body = src.replace("*", r".*")
                 branches.append(f"(?P<{group_name}>{body})")
-                tgt_group_to_glob[group_name] = glob.target_keys[0] # we index witht the first target
+                tgt_group_to_glob[group_name] = glob.target_keys[0]  # we index witht the first target
         else:
             group_name = f"g{i}"
             src_group_to_glob[group_name] = glob
@@ -118,8 +119,8 @@ def build_glob_alternation(globs: list[Union[WeightRenaming, WeightConverter, st
 def sub_key(
     key: str,
     alternation: re.Pattern,
-    group_to_glob: Dict[str, str],
-    compiled_rules: Dict[str, Tuple[re.Pattern, str]],
+    group_to_glob: dict[str, str],
+    compiled_rules: dict[str, tuple[re.Pattern, str]],
 ) -> str:
     """
     Apply glob-based rewrite rules to a single key.
@@ -128,11 +129,7 @@ def sub_key(
     if not match:
         return key
 
-    matched_globs = [
-        group_to_glob[group_name]
-        for group_name, value in match.groupdict().items()
-        if value is not None
-    ]
+    matched_globs = [group_to_glob[group_name] for group_name, value in match.groupdict().items() if value is not None]
 
     result: str | None = None
 
@@ -147,9 +144,7 @@ def sub_key(
         if result is None:
             result = candidate
         elif candidate != result:
-            raise ValueError(
-                f"Contradictory rules for key {key!r}: {result!r} vs {candidate!r}"
-            )
+            raise ValueError(f"Contradictory rules for key {key!r}: {result!r} vs {candidate!r}")
 
     return result if result is not None else key
 
@@ -179,7 +174,7 @@ class ConversionOps:
         target_keys: list[str],
         target_key: str,
         config,
-        **kwargs
+        **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
         raise NotImplementedError
 
@@ -235,7 +230,7 @@ class Concatenate(ConversionOps):
         if len(value) != len(source_keys):
             raise ValueError("Concatenate received an unexpected number of tensors compared to source keys.")
 
-        return {target_key : torch.cat(tuple(value.values()), dim=self.dim)}
+        return {target_key: torch.cat(tuple(value.values()), dim=self.dim)}
 
 
 class MergeModulelist(Concatenate):
@@ -371,7 +366,7 @@ class WeightConverter:
         if isinstance(self.target_keys, str):
             self.target_keys = [self.target_keys]
 
-        if  bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
+        if bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
             raise ValueError(
                 f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
             )
@@ -379,9 +374,9 @@ class WeightConverter:
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
 
-    def add_tensor(self, target_key: str, original_key:str, source_pattern: str, future: Future):
+    def add_tensor(self, target_key: str, original_key: str, source_pattern: str, future: Future):
         bucket = self.collected_tensors.setdefault(source_pattern, [])
-        bucket+= [future]
+        bucket += [future]
 
         bucket = self.layer_targets.setdefault(target_key, set())
         bucket.add(original_key)
@@ -390,6 +385,7 @@ class WeightConverter:
         misc = {}
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]
+
         collected_tensors = self.collected_tensors
         for op in self.operations:
             with log_to_misc(layer_name, misc, (collected_tensors, layer_name), op):
@@ -408,7 +404,7 @@ class WeightConverter:
                     target_keys=self.target_keys,
                     target_key=layer_name,
                     config=config,
-                    quant_config=quantizer.quantization_config
+                    quant_config=quantizer.quantization_config,
                 )
         return collected_tensors, misc
 
@@ -430,9 +426,9 @@ class WeightRenaming:
         if isinstance(self.target_keys, str):
             self.target_keys = [self.target_keys]
 
-    def add_tensor(self, target_key: str, original_key:str, source_pattern: str, future: Future):
+    def add_tensor(self, target_key: str, original_key: str, source_pattern: str, future: Future):
         bucket = self.collected_tensors.setdefault(source_pattern, [])
-        bucket+= [future]
+        bucket += [future]
 
         bucket = self.layer_targets.setdefault(target_key, set())
         bucket.add(original_key)
@@ -450,10 +446,11 @@ class WeightRenaming:
                     target_keys=self.target_keys,
                     target_key=layer_name,
                     config=config,
-                    quant_config=quantizer.quantization_config
+                    quant_config=quantizer.quantization_config,
                 )
 
         return collected_tensors, misc
+
 
 GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 
@@ -568,7 +565,9 @@ def set_param_for_module(
                 mismatch_keys.add((layer_name, param_value.shape, ref.shape))
                 module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
             else:
-                param_value._is_hf_initialized = True  # super important otherwise _init_weight re-initi if bias is missing
+                param_value._is_hf_initialized = (
+                    True  # super important otherwise _init_weight re-initi if bias is missing
+                )
                 setattr(module_obj, param_name, param_value)
 
 
@@ -576,6 +575,7 @@ class SkipLayer(Exception):
     """Control-flow sentinel: abort processing of the current layer only."""
 
     pass
+
 
 def repl(m, repl_map: dict[str, str]) -> str:
     # Collect all groups that matched
@@ -594,6 +594,7 @@ def repl(m, repl_map: dict[str, str]) -> str:
     # Exactly one match => return replacement
     name = matched_groups[0]
     return repl_map[name]
+
 
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
@@ -631,11 +632,13 @@ def convert_and_load_state_dict_in_model(
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
     if quantizer:
-        pass # TODO @ArthurZucker handle dequantization that needs to add a weight converter?
+        pass  # TODO @ArthurZucker handle dequantization that needs to add a weight converter?
 
     all_mappings: dict[str, Union[WeightRenaming | WeightConverter]] = {}
 
-    rename_alt, _, rename_by_group = build_glob_alternation(renamings) # '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and {'g0': '*.block_sparse_moe.'}
+    rename_alt, _, rename_by_group = build_glob_alternation(
+        renamings
+    )  # '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and {'g0': '*.block_sparse_moe.'}
     pattern_to_converter = {k: converter for converter in converters for k in converter.target_keys}
     weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = build_glob_alternation(converters)
     tp_plan = tp_plan or {}
@@ -647,9 +650,12 @@ def convert_and_load_state_dict_in_model(
     for original_key, tensor in state_dict:
         renamed_key = rename_alt.sub(lambda m: repl(m, rename_by_group), original_key).replace("\\", "")
         matched_pattern = weight_pattern_alt.search(renamed_key)
-        if matched_pattern is not None: # we have a converter to apply
+        if matched_pattern is not None:  # we have a converter to apply
             renamed_key = weight_pattern_alt.sub(lambda m: repl(m, tgt_group_to_glob), renamed_key).replace("\\", "")
-        if renamed_key.startswith(prefix) and meta_model_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1)) is not None:
+        if (
+            renamed_key.startswith(prefix)
+            and meta_model_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1)) is not None
+        ):
             renamed_key = re.sub(f"^{prefix}.", "", renamed_key, count=1)
         elif meta_model_state_dict.get(f"{prefix}.{renamed_key}") is not None:
             renamed_key = f"{prefix}.{renamed_key}"
@@ -658,7 +664,9 @@ def convert_and_load_state_dict_in_model(
             empty_param = meta_model_state_dict.get(renamed_key)
             if matched_pattern:
                 new_converter = deepcopy(pattern_to_converter[tgt_group_to_glob[matched_pattern.lastgroup]])
-                mapping = all_mappings.setdefault(renamed_key, new_converter) # each target key gets its own converter instance
+                mapping = all_mappings.setdefault(
+                    renamed_key, new_converter
+                )  # each target key gets its own converter instance
                 source_pattern = src_group_to_glob[matched_pattern.lastgroup]
             else:
                 mapping = all_mappings.setdefault(renamed_key, WeightRenaming(renamed_key, renamed_key))
