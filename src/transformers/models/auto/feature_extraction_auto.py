@@ -50,7 +50,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("hubert", "Wav2Vec2FeatureExtractor"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
         ("markuplm", "MarkupLMFeatureExtractor"),
-        ("mctct", "MCTCTFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),
         ("moonshine", "Wav2Vec2FeatureExtractor"),
         ("moshi", "EncodecFeatureExtractor"),
