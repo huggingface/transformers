@@ -5,7 +5,7 @@
 #                          modular_higgs_audio_v2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 Boson AI and The HuggingFace Team. All rights reserved.
+# Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -399,6 +399,79 @@ class HiggsAudioV2Model(HiggsAudioV2PreTrainedModel):
         use_cache: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
+        r"""
+        audio_input_ids (`torch.LongTensor` of shape `(batch_size, num_audio_frames, num_codebooks)`, *optional*):
+            Indices of audio codebook tokens.
+
+            Indices can be obtained using [`HiggsAudioV2TokenizerModel.encode`].
+        audio_input_ids_mask (`torch.BoolTensor` of shape `(batch_size, num_audio_frames)`, *optional*):
+            Indicates which audio frames in `audio_input_ids` are valid.
+
+        Returns:
+            [`~models.modeling_outputs.BaseModelOutputWithPast`]:
+                Usual decoder outputs with the placeholder positions already substituted by their corresponding
+                audio embeddings.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, HiggsAudioV2Model
+        >>> import torch
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+        >>> processor = AutoProcessor.from_pretrained("eustlb/higgs-v2", device_map=device)
+        >>> model = HiggsAudioV2Model.from_pretrained("eustlb/higgs-v2", device_map=device)
+        >>> conversation = [
+        ...     {
+        ...         "role": "system",
+        ...         "content": [
+        ...             {
+        ...                 "type": "text",
+        ...                 "text": "Generate audio following instruction."
+        ...             }
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "scene",
+        ...         "content": [
+        ...             {
+        ...                 "type": "text",
+        ...                 "text": "Audio is recorded from a quiet room."
+        ...             }
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {
+        ...                 "type": "text",
+        ...                 "text": "It was the night before my birthday. Hooray! It's almost here! It may not be a holiday, but it's the best day of the year."
+        ...             }
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "assistant",
+        ...         "content": [
+        ...             {
+        ...                 "type": "audio",
+        ...                 "url": "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/belinda.wav"
+        ...             }
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {
+        ...                 "type": "text",
+        ...                 "text": "The sun rises in the east and sets in the west. This simple fact has been observed by humans for thousands of years."
+        ...             }
+        ...         ]
+        ...     }
+        ... ]
+        >>> inputs = processor.apply_chat_template(conversation, return_dict=True, tokenize=True, sampling_rate=24000, return_tensors="pt")
+        >>> inputs = inputs.to(model.device)
+        >>> outputs = model(**inputs)
+        ```
+        """
         if (input_ids is None) and (inputs_embeds is None) and (audio_input_ids is None):
             raise ValueError("You must specify at least one of input_ids, inputs_embeds, or audio_input_ids")
 
@@ -569,6 +642,79 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        audio_input_ids (`torch.LongTensor` of shape `(batch_size, num_audio_frames, num_codebooks)`, *optional*):
+            Indices of audio codebook tokens.
+
+            Indices can be obtained using [`HiggsAudioV2TokenizerModel.encode`].
+        audio_input_ids_mask (`torch.BoolTensor` of shape `(batch_size, num_audio_frames)`, *optional*):
+            Indicates which audio frames in `audio_input_ids` are valid.
+
+        Returns:
+            [`~models.modeling_outputs.BaseModelOutputWithPast`]:
+                Usual decoder outputs with the placeholder positions already substituted by their corresponding
+                audio embeddings.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, HiggsAudioV2Model
+        >>> import torch
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+        >>> processor = AutoProcessor.from_pretrained("eustlb/higgs-v2", device_map=device)
+        >>> model = HiggsAudioV2Model.from_pretrained("eustlb/higgs-v2", device_map=device)
+        >>> conversation = [
+        ...     {
+        ...         "role": "system",
+        ...         "content": [
+        ...             {
+        ...                 "type": "text",
+        ...                 "text": "Generate audio following instruction."
+        ...             }
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "scene",
+        ...         "content": [
+        ...             {
+        ...                 "type": "text",
+        ...                 "text": "Audio is recorded from a quiet room."
+        ...             }
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {
+        ...                 "type": "text",
+        ...                 "text": "It was the night before my birthday. Hooray! It's almost here! It may not be a holiday, but it's the best day of the year."
+        ...             }
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "assistant",
+        ...         "content": [
+        ...             {
+        ...                 "type": "audio",
+        ...                 "url": "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/belinda.wav"
+        ...             }
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {
+        ...                 "type": "text",
+        ...                 "text": "The sun rises in the east and sets in the west. This simple fact has been observed by humans for thousands of years."
+        ...             }
+        ...         ]
+        ...     }
+        ... ]
+        >>> inputs = processor.apply_chat_template(conversation, return_dict=True, tokenize=True, sampling_rate=24000, return_tensors="pt")
+        >>> inputs = inputs.to(model.device)
+        >>> outputs = model(**inputs)
+        ```
+        """
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -591,7 +737,8 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
         if audio_labels is not None:
             audio_logits = logits.reshape(*logits.shape[:2], self.config.num_codebooks, self.config.codebook_size)
             audio_labels_expanded = input_ids.new_ones((*input_ids.shape[:2], 8)) * -100
-            audio_labels_expanded[input_ids == self.config.audio_token_id] = audio_labels[audio_input_ids_mask]
+            audio_token_mask = self.model.get_placeholder_mask(input_ids, inputs_embeds, audio_input_ids_mask)
+            audio_labels_expanded[audio_token_mask] = audio_labels[audio_input_ids_mask]
 
             codebook_losses = []
             for codebook_idx in range(self.config.num_codebooks):

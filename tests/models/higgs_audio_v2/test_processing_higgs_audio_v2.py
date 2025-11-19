@@ -12,21 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
 import tempfile
 import unittest
 
+import numpy as np
 import pytest
 
-import numpy as np
-from parameterized import parameterized
-
+from transformers import HiggsAudioV2Processor, HiggsAudioV2TokenizerModel
 from transformers.models.auto.processing_auto import processor_class_from_name
-from transformers import HiggsAudioV2Processor, PreTrainedTokenizerFast, DacFeatureExtractor, HiggsAudioV2TokenizerModel
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_torch_available():
     import torch
@@ -60,7 +58,7 @@ DEFAULT_CHAT_TEMPLATE = """{{- bos_token }}
                 {%- set text_content = content_item['text'] | trim %}
                 {{- text_content }}
                 {%- if loop.first and not loop.last %}
-                    {{- "\n\n" }}            
+                    {{- "\n\n" }}
                 {%- endif %}
                 {%- if not loop.first and not loop.last and messages[0]['content'][loop.index]['type'] != 'audio' %}
                     {{- "\n" }}
@@ -126,10 +124,10 @@ class HiggsAudioV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor.save_pretrained(cls.tmpdirname)
         audio_tokenizer.save_pretrained(cls.audio_tokenizer_tmpdirname)
-    
+
     def prepare_processor_dict(self):
         audio_tokenizer_class = processor_class_from_name("HiggsAudioV2TokenizerModel")
-        audio_tokenizer = audio_tokenizer_class.from_pretrained(self.audio_tokenizer_tmpdirname) 
+        audio_tokenizer = audio_tokenizer_class.from_pretrained(self.audio_tokenizer_tmpdirname)
         return {
             "audio_tokenizer": audio_tokenizer,
             "chat_template": DEFAULT_CHAT_TEMPLATE,
@@ -143,7 +141,9 @@ class HiggsAudioV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_chat_template_audio_2(self):
         pass
 
-    @pytest.mark.skip(reason="This test does not apply to HiggsAudioV2Processor because `decode` method calls the audio_tokenizer.decode")
+    @pytest.mark.skip(
+        reason="This test does not apply to HiggsAudioV2Processor because `decode` method calls the audio_tokenizer.decode"
+    )
     def test_apply_chat_template_assistant_mask(self):
         pass
 
@@ -229,24 +229,8 @@ class HiggsAudioV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Test that with modality URLs and `return_dict=True`, we get modality inputs in the dict
         for idx, url in enumerate(input_data[:batch_size]):
             batch_messages[idx] = batch_messages[idx] + [
-                {
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": modality,
-                            "url": url
-                        }
-                    ]
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Hey, how you doing?"
-                        }
-                    ]
-                }
+                {"role": "assistant", "content": [{"type": modality, "url": url}]},
+                {"role": "user", "content": [{"type": "text", "text": "Hey, how you doing?"}]},
             ]
 
         out_dict = processor.apply_chat_template(
@@ -266,4 +250,3 @@ class HiggsAudioV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
         for k in out_dict:
             self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
-

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 Boson AI and The HuggingFace Team. All rights reserved.
+# Copyright 2025, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""HiggsAudioV2GenerationMixin."""
 
 import os
 from dataclasses import dataclass
@@ -44,9 +43,8 @@ class HiggsAudioV2GenerationOutput(GenerateDecoderOnlyOutput):
     Outputs of HiggsAudioV2 generation models, when using non-beam methods.
 
     Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, audio_sequence_lenght, num_codebooks)`):
-            # TODO: check
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+        sequences (`torch.LongTensor` of shape `(batch_size, audio_sequence_length, num_codebooks)`):
+            The generated text sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
@@ -70,7 +68,7 @@ class HiggsAudioV2GenerationOutput(GenerateDecoderOnlyOutput):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
         audio_sequences (`tuple(torch.LongTensor)` *optional*):
-            The generated discrete audio codes. These codes can be used to fill-in related locations of <|AUDIO_OUT|> at input sequences.
+            The generated discrete audio codes.
     """
 
     audio_sequences: Optional[list[torch.LongTensor]] = None

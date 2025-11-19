@@ -459,7 +459,9 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
-        inputs = self.processor.apply_chat_template(conversation, tokenize=True, return_dict=True, sampling_rate=24000)
+        inputs = self.processor.apply_chat_template(
+            conversation, tokenize=True, return_dict=True, sampling_rate=24000, return_tensors="pt"
+        )
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
@@ -497,7 +499,12 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         inputs = self.processor.apply_chat_template(
-            conversation, add_generation_prompt=True, tokenize=True, return_dict=True, sampling_rate=24000
+            conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            sampling_rate=24000,
+            return_tensors="pt",
         )
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
@@ -546,7 +553,12 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         inputs = self.processor.apply_chat_template(
-            conversation, add_generation_prompt=True, tokenize=True, return_dict=True, sampling_rate=24000
+            conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            sampling_rate=24000,
+            return_tensors="pt",
         )
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
@@ -589,7 +601,12 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         inputs = self.processor.apply_chat_template(
-            conversation, add_generation_prompt=True, tokenize=True, return_dict=True, sampling_rate=24000
+            conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            sampling_rate=24000,
+            return_tensors="pt",
         )
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
@@ -670,6 +687,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             tokenize=True,
             return_dict=True,
             sampling_rate=24000,
+            return_tensors="pt",
         )
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
