@@ -85,35 +85,35 @@ def _build_checkpoint_conversion_mapping():
         ],
         "legacy": [
             WeightRenaming(
-                source_key="LayerNorm.gamma",
-                target_key="LayerNorm.weight",
+                source_keys="LayerNorm.gamma",
+                target_keys="LayerNorm.weight",
             ),
             WeightRenaming(
-                source_key="LayerNorm.beta",
-                target_key="LayerNorm.bias",
+                source_keys="LayerNorm.beta",
+                target_keys="LayerNorm.bias",
             ),
         ],
     }
     if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
         mapping["legacy"] += [
             WeightRenaming(
-                source_key="weight_g",
-                target_key="parametrizations.weight.original0",
+                source_keys="weight_g",
+                target_keys="parametrizations.weight.original0",
             ),
             WeightRenaming(
-                source_key="weight_v",
-                target_key="parametrizations.weight.original1",
+                source_keys="weight_v",
+                target_keys="parametrizations.weight.original1",
             ),
         ]
     else:
         mapping["legacy"] += [
             WeightRenaming(
-                source_key="parametrizations.weight.original0",
-                target_key="weight_g",
+                source_keys="parametrizations.weight.original0",
+                target_keys="weight_g",
             ),
             WeightRenaming(
-                source_key="parametrizations.weight.original1",
-                target_key="weight_v",
+                source_keys="parametrizations.weight.original1",
+                target_keys="weight_v",
             ),
         ]
 
