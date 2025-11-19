@@ -42,7 +42,7 @@ def prepare_video():
 class Sam3VideoModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        checkpoint_path = "/home/ubuntu/sam3/sam3-hf-v4-video-full"
+        checkpoint_path = "../sam3-hf-v4-video-full"
         self.video_model = Sam3VideoModel.from_pretrained(checkpoint_path).to(torch.float32)
         self.processor = Sam3VideoProcessor.from_pretrained(checkpoint_path)
         self.video_model.to(torch_device)

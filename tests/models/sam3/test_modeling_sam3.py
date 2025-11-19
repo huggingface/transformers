@@ -987,8 +987,7 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        # Note: Update this path when a real checkpoint is available
-        model_name = "../sam3-hf-v4"  # Placeholder
+        model_name = "../sam3-hf-v4-video-full"
         self.model = Sam3Model.from_pretrained(model_name).to(torch.float32)
         self.processor = Sam3Processor.from_pretrained(model_name)
         self.model.to(torch_device)
@@ -996,7 +995,6 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         super().tearDown()
-        # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         backend_empty_cache(torch_device)
 

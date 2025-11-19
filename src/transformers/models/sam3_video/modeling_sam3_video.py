@@ -27,7 +27,7 @@ from tqdm.auto import tqdm
 from transformers.models.sam3.modeling_sam3 import Sam3VisionNeck
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, is_kernels_available, logging
 from ..auto import AutoModel
 from .configuration_sam3_video import Sam3VideoConfig
 
@@ -36,12 +36,21 @@ logger = logging.get_logger(__name__)
 
 cv_utils_kernel = None
 
+if is_kernels_available():
+    try:
+        from kernels import get_kernel
 
-def load_cv_utils_kernel():
-    global cv_utils_kernel
-    from kernels import get_kernel
-
-    cv_utils_kernel = get_kernel("kernels-community/cv_utils")
+        cv_utils_kernel = get_kernel("kernels-community/cv_utils")
+    except Exception as e:
+        logger.warning_once(
+            f"Failed to load cv_utils kernel (your torch/cuda setup may not be supported): {e}. "
+            "NMS post-processing, hole filling, and sprinkle removal will be skipped."
+        )
+else:
+    logger.warning_once(
+        "kernels library is not installed. NMS post-processing, hole filling, and sprinkle removal will be skipped. "
+        "Install it with `pip install kernels` for better mask quality."
+    )
 
 
 class Sam3VideoInferenceCache:
@@ -1684,20 +1693,7 @@ def nms_masks(
 
     # Try to use kernels for NMS, fallback to keeping all valid detections if unavailable
     if cv_utils_kernel is None:
-        try:
-            load_cv_utils_kernel()
-        except ImportError:
-            logger.warning_once(
-                "kernels library is not installed. NMS post-processing will be skipped. "
-                "Install it with `pip install kernels` for better mask quality."
-            )
-            return is_valid  # Fallback: keep all valid detections without NMS
-        except Exception as e:
-            logger.warning_once(
-                f"Failed to load cv_utils kernel (your torch/cuda setup may not be supported): {e}. "
-                "NMS post-processing will be skipped."
-            )
-            return is_valid  # Fallback: keep all valid detections without NMS
+        return is_valid  # Fallback: keep all valid detections without NMS
 
     try:
         kept_inds = cv_utils_kernel.generic_nms(ious, probs, iou_threshold, use_iou_matrix=True)
@@ -1757,26 +1753,10 @@ def _get_connected_components_with_padding(mask):
 
     # Try to use kernels for connected components, fallback if unavailable
     if cv_utils_kernel is None:
-        try:
-            load_cv_utils_kernel()
-        except ImportError:
-            logger.warning_once(
-                "kernels library is not installed. Hole filling and sprinkle removal will be skipped. "
-                "Install it with `pip install kernels` for better mask quality."
-            )
-            # Fallback: return dummy labels and counts that won't trigger filtering
-            labels = torch.zeros_like(mask, dtype=torch.int32)
-            counts = torch.full_like(mask, fill_value=mask.shape[2] * mask.shape[3] + 1, dtype=torch.int32)
-            return labels, counts
-        except Exception as e:
-            logger.warning_once(
-                f"Failed to load cv_utils kernel (your torch/cuda setup may not be supported): {e}. "
-                "Hole filling and sprinkle removal will be skipped."
-            )
-            # Fallback: return dummy labels and counts that won't trigger filtering
-            labels = torch.zeros_like(mask, dtype=torch.int32)
-            counts = torch.full_like(mask, fill_value=mask.shape[2] * mask.shape[3] + 1, dtype=torch.int32)
-            return labels, counts
+        # Fallback: return dummy labels and counts that won't trigger filtering
+        labels = torch.zeros_like(mask, dtype=torch.int32)
+        counts = torch.full_like(mask, fill_value=mask.shape[2] * mask.shape[3] + 1, dtype=torch.int32)
+        return labels, counts
 
     # make sure both height and width are even (to be compatible with cc_torch)
     pad_h = H % 2

@@ -510,14 +510,14 @@ def prepare_video():
 class Sam3TrackerModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.model = Sam3TrackerModel.from_pretrained("../sam3-hf-v4-video-full").to(torch.float32)
-        self.processor = Sam3TrackerProcessor.from_pretrained("../sam3-hf-v4-video-full")
+        checkpoint_path = "../sam3-hf-v4-video-full"
+        self.model = Sam3TrackerModel.from_pretrained(checkpoint_path).to(torch.float32)
+        self.processor = Sam3TrackerProcessor.from_pretrained(checkpoint_path)
         self.model.to(torch_device)
         self.model.eval()
 
     def tearDown(self):
         super().tearDown()
-        # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         backend_empty_cache(torch_device)
 
