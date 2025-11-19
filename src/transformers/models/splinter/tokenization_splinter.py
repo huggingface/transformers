@@ -16,7 +16,6 @@
 """Tokenization classes for Splinter."""
 
 import collections
-import os
 from typing import Optional
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -96,7 +95,9 @@ class SplinterTokenizer(TokenizersBackend):
         **kwargs,
     ):
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {
                 str(pad_token): 0,
@@ -135,8 +136,9 @@ class SplinterTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        if hasattr(self, '_tokenizer') and self._tokenizer.normalizer is not None:
+        if hasattr(self, "_tokenizer") and self._tokenizer.normalizer is not None:
             import json
+
             pre_tok_state = json.loads(self._tokenizer.normalizer.__getstate__())
             if (
                 pre_tok_state.get("lowercase", do_lower_case) != do_lower_case

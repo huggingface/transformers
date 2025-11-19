@@ -15,7 +15,7 @@
 
 from typing import Optional
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, normalizers, Regex
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_python import AddedToken, BatchEncoding
@@ -113,11 +113,11 @@ class MBart50Tokenizer(TokenizersBackend):
             # <s>=0, <pad>=1, </s>=2, <unk>=3, then tokens, lang codes, <mask>
 
             vocab = [(str(item[0]), float(item[1])) for item in vocab]
-            
+
             # Check if vocab already includes language codes (from TokenizersExtractor/tokenizer.json)
             vocab_tokens = [item[0] for item in vocab]
             has_language_codes = any(lang_code in vocab_tokens for lang_code in FAIRSEQ_LANGUAGE_CODES)
-            
+
             if has_language_codes:
                 # Vocab from TokenizersExtractor is already in fairseq format with language codes
                 # Just use it as-is
@@ -126,13 +126,13 @@ class MBart50Tokenizer(TokenizersBackend):
                 # Vocab from SentencePieceExtractor is in sentencepiece format:
                 # <unk>=0, <s>=1, </s>=2, then tokens
                 # We need to reorder to fairseq format: <s>=0, <pad>=1, </s>=2, <unk>=3, then tokens
-                
+
                 # Reorder: fairseq expects <s>, <pad>, </s>, <unk>, then rest of vocab starting from index 3
                 vocab_list = [
-                    (str(cls_token), 0.0),   # 0: <s>
-                    (str(pad_token), 0.0),   # 1: <pad>
-                    (str(eos_token), 0.0),   # 2: </s>
-                    (str(unk_token), 0.0),   # 3: <unk>
+                    (str(cls_token), 0.0),  # 0: <s>
+                    (str(pad_token), 0.0),  # 1: <pad>
+                    (str(eos_token), 0.0),  # 2: </s>
+                    (str(unk_token), 0.0),  # 3: <unk>
                 ]
                 # Add remaining tokens from position 3 onwards (skip <unk>, <s>, </s> from sentencepiece)
                 vocab_list.extend(vocab[3:])
@@ -175,7 +175,9 @@ class MBart50Tokenizer(TokenizersBackend):
                 normalizers.Replace(Regex(r"[\n\r\t]"), " "),  # Precompiled converts newlines/tabs to spaces
                 normalizers.NFKC(),  # Precompiled does NFKC normalization
                 normalizers.Strip(left=False, right=True),  # Strip trailing whitespace (matches tokenizer.json)
-                normalizers.Replace(Regex(r" {2,}"), "▁"),  # Replace multiple spaces with underscore (matches tokenizer.json)
+                normalizers.Replace(
+                    Regex(r" {2,}"), "▁"
+                ),  # Replace multiple spaces with underscore (matches tokenizer.json)
             ]
         )
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
@@ -211,11 +213,11 @@ class MBart50Tokenizer(TokenizersBackend):
 
         self._src_lang = src_lang if src_lang is not None else "en_XX"
         self.tgt_lang = tgt_lang
-        
+
         # Build language code mappings and fairseq mappings
         # This will be called again in _post_init after tokenizer.json is loaded
         self._build_language_code_mappings()
-        
+
         self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
         self.set_src_lang_special_tokens(self._src_lang)
 

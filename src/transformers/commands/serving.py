@@ -54,8 +54,8 @@ from transformers.utils.import_utils import (
 from .. import (
     AutoConfig,
     LogitsProcessorList,
-    ProcessorMixin,
     PreTrainedTokenizerFast,
+    ProcessorMixin,
     TextIteratorStreamer,
 )
 from ..utils import is_torch_available, logging
@@ -1642,7 +1642,9 @@ class ServeCommand(BaseTransformersCLICommand):
         logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
-    def load_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", PreTrainedTokenizerFast]:
+    def load_model_and_processor(
+        self, model_id_and_revision: str
+    ) -> tuple["PreTrainedModel", PreTrainedTokenizerFast]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
 

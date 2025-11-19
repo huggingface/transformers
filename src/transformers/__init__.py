@@ -712,6 +712,13 @@ if TYPE_CHECKING:
     from .pytorch_utils import Conv1D as Conv1D
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
     from .pytorch_utils import prune_layer as prune_layer
+    from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
+    from .tokenization_utils import PythonBackend as PythonBackend
+    from .tokenization_utils_base import AddedToken as AddedToken
+    from .tokenization_utils_base import BatchEncoding as BatchEncoding
+    from .tokenization_utils_base import CharSpan as CharSpan
+    from .tokenization_utils_base import PreTrainedTokenizerBase as PreTrainedTokenizerBase
+    from .tokenization_utils_base import TokenSpan as TokenSpan
 
     # Tokenization
     from .tokenization_utils_sentencepiece import SentencePieceBackend as SentencePieceBackend
@@ -722,13 +729,6 @@ if TYPE_CHECKING:
     from .tokenization_utils_tokenizers import (
         TokenizersExtractor as TokenizersExtractor,
     )
-    from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
-    from .tokenization_utils import PythonBackend as PythonBackend
-    from .tokenization_utils_base import AddedToken as AddedToken
-    from .tokenization_utils_base import BatchEncoding as BatchEncoding
-    from .tokenization_utils_base import CharSpan as CharSpan
-    from .tokenization_utils_base import PreTrainedTokenizerBase as PreTrainedTokenizerBase
-    from .tokenization_utils_base import TokenSpan as TokenSpan
 
     # Trainer
     from .trainer import Trainer as Trainer

@@ -14,8 +14,6 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-from typing import Optional
-
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
@@ -69,7 +67,9 @@ class OpenAIGPTTokenizer(TokenizersBackend):
     ):
         # Initialize vocabulary
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             # Initialize minimal vocabulary with unk token
             self._vocab = {str(unk_token): 0}
@@ -95,12 +95,14 @@ class OpenAIGPTTokenizer(TokenizersBackend):
 
         # Set normalizer and pre-tokenizer to mimic OpenAI GPT behavior
         # OpenAI GPT uses BERT BasicTokenizer with lower_case=True
-        self._tokenizer.normalizer = normalizers.Sequence([
-            normalizers.NFD(),
-            normalizers.Lowercase(),
-            normalizers.StripAccents(),
-        ])
-        
+        self._tokenizer.normalizer = normalizers.Sequence(
+            [
+                normalizers.NFD(),
+                normalizers.Lowercase(),
+                normalizers.StripAccents(),
+            ]
+        )
+
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.BPEDecoder(suffix="</w>")
 
@@ -118,12 +120,14 @@ class OpenAIGPTTokenizer(TokenizersBackend):
     def _post_init(self):
         """Post-initialization to ensure tokenizer settings are applied correctly."""
         # Re-apply settings to ensure they're correct after loading from pretrained
-        self._tokenizer.normalizer = normalizers.Sequence([
-            normalizers.NFD(),
-            normalizers.Lowercase(),
-            normalizers.StripAccents(),
-        ])
-        
+        self._tokenizer.normalizer = normalizers.Sequence(
+            [
+                normalizers.NFD(),
+                normalizers.Lowercase(),
+                normalizers.StripAccents(),
+            ]
+        )
+
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.BPEDecoder(suffix="</w>")
 
@@ -136,4 +140,3 @@ class OpenAIGPTTokenizer(TokenizersBackend):
 
 
 __all__ = ["OpenAIGPTTokenizer"]
-

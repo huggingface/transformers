@@ -15,10 +15,10 @@
 
 from typing import Optional
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
-from ...tokenization_python import AddedToken, BatchEncoding
+from ...tokenization_python import AddedToken
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -100,32 +100,32 @@ class MBartTokenizer(TokenizersBackend):
                 else:
                     # Ensure tuples are (str, float) format
                     vocab = [(str(item[0]), float(item[1])) for item in vocab]
-            
+
             # Reorder to fairseq: <s>, <pad>, </s>, <unk>, ... (rest of vocab from SPM[3:])
             vocab_list = []
             vocab_list.append((str(bos_token), 0.0))
             vocab_list.append((str(pad_token), 0.0))
             vocab_list.append((str(eos_token), 0.0))
             vocab_list.append((str(unk_token), 0.0))
-            
+
             # Add the rest of the SentencePiece vocab (skipping first 3: <unk>, <s>, </s>)
             vocab_list.extend(vocab[4:])
-            
+
             # Add language codes
             for lang_code in FAIRSEQ_LANGUAGE_CODES:
                 vocab_list.append((str(lang_code), 0.0))
-            
+
             # Add mask token
             vocab_list.append((str(mask_token), 0.0))
-            
+
             self._vocab_scores = vocab_list
         else:
             self._vocab_scores = [
-                (str(bos_token), 0.0),   
-                (str(pad_token), 0.0),   
-                (str(eos_token), 0.0),   
-                (str(unk_token), 0.0),   
-                ("▁", -2.0),            
+                (str(bos_token), 0.0),
+                (str(pad_token), 0.0),
+                (str(eos_token), 0.0),
+                (str(unk_token), 0.0),
+                ("▁", -2.0),
             ]
             for lang_code in FAIRSEQ_LANGUAGE_CODES:
                 self._vocab_scores.append((lang_code, 0.0))
@@ -139,12 +139,14 @@ class MBartTokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = None  
+        self._tokenizer.normalizer = None
 
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence([
-            pre_tokenizers.WhitespaceSplit(),
-            pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
-        ])
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
+            ]
+        )
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
@@ -247,4 +249,3 @@ class MBartTokenizer(TokenizersBackend):
 
 
 __all__ = ["MBartTokenizer"]
-

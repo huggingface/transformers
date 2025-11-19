@@ -14,12 +14,6 @@
 # limitations under the License.
 """Tokenization classes for DistilBERT."""
 
-import json
-from typing import Optional
-
-from tokenizers import normalizers
-
-from ...utils import logging
 from ...models.bert.tokenization_bert import BertTokenizer
 
 

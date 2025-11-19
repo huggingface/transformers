@@ -33,6 +33,7 @@ from ...tokenization_utils_base import (
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import add_end_docstrings, logging
 
+
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
@@ -148,6 +149,7 @@ class MarkupLMTokenizer(TokenizersBackend):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+
     def __init__(
         self,
         tags_dict,
@@ -229,7 +231,7 @@ class MarkupLMTokenizer(TokenizersBackend):
         )
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
-        
+
         sep_token_str = str(sep_token)
         cls_token_str = str(cls_token)
         tokenizer.post_processor = processors.RobertaProcessing(
@@ -383,9 +385,7 @@ class MarkupLMTokenizer(TokenizersBackend):
             else:
                 text_pair = processed_nodes
 
-            if isinstance(processed_nodes, list) and processed_nodes and isinstance(
-                processed_nodes[0], (list, tuple)
-            ):
+            if isinstance(processed_nodes, list) and processed_nodes and isinstance(processed_nodes[0], (list, tuple)):
                 xpaths = [[placeholder_xpath] * len(sample) for sample in processed_nodes]
             else:
                 length = len(processed_nodes) if hasattr(processed_nodes, "__len__") else 0

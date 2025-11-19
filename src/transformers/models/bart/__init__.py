@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from ..roberta.tokenization_roberta import RobertaTokenizer as BartTokenizer
     from .configuration_bart import *
     from .modeling_bart import *
-    from ..roberta.tokenization_roberta import RobertaTokenizer as BartTokenizer
 else:
     import sys
 

@@ -14,9 +14,7 @@
 # limitations under the License.
 """Tokenization class for model PEGASUS."""
 
-from typing import Optional
-
-from tokenizers import Tokenizer, Regex, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -103,7 +101,7 @@ class PegasusTokenizer(TokenizersBackend):
             # For Pegasus, insert special tokens at the beginning
             special_tokens_set = {pad_token, eos_token, mask_token_sent, mask_token, unk_token}
             special_tokens_set.update(additional_special_tokens)
-            
+
             # Build special tokens in correct order
             _vocab_list = [
                 (str(pad_token), 0.0),
@@ -117,7 +115,7 @@ class PegasusTokenizer(TokenizersBackend):
             if mask_token not in [t for t, _ in _vocab_list]:
                 _vocab_list.append((str(mask_token), 0.0))
             _vocab_list.append((str(unk_token), 0.0))
-            
+
             # Filter out special tokens from main vocab and combine
             filtered_vocab = [(t, s) for t, s in vocab if t not in special_tokens_set]
             _vocab_list = _vocab_list + filtered_vocab
@@ -125,14 +123,13 @@ class PegasusTokenizer(TokenizersBackend):
             _vocab_list = [(str(unk_token), 0.0)]
 
         self._vocab = {token: idx for idx, (token, _) in enumerate(_vocab_list)}
-    
+
         self._tokenizer = Tokenizer(Unigram(vocab=_vocab_list, unk_id=self._vocab.get(str(unk_token), 0)))
-        
-        self._tokenizer.normalizer = normalizers.Sequence([
-            normalizers.Replace(Regex(r"\n"), " "), 
-            normalizers.Replace(Regex(r" {2,}"), " ") 
-        ])
-        
+
+        self._tokenizer.normalizer = normalizers.Sequence(
+            [normalizers.Replace(Regex(r"\n"), " "), normalizers.Replace(Regex(r" {2,}"), " ")]
+        )
+
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=f"$A {eos_token}",
             pair=f"$A $B {eos_token}",
@@ -158,4 +155,3 @@ class PegasusTokenizer(TokenizersBackend):
 
 
 __all__ = ["PegasusTokenizer"]
-

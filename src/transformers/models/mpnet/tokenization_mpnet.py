@@ -17,11 +17,11 @@
 
 from typing import Optional
 
-from tokenizers import Tokenizer, normalizers, pre_tokenizers, processors, decoders
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
 
-from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...tokenization_python import AddedToken
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
 
@@ -105,7 +105,9 @@ class MPNetTokenizer(TokenizersBackend):
     ):
         # Initialize vocab
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {}
 

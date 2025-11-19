@@ -36,7 +36,7 @@ for name in SLOW_TO_FAST_CONVERTERS:
         tokenizer_class_name = "BertTokenizerFast"
     else:
         tokenizer_class_name = name + "Fast"
-    
+
     try:
         TOKENIZER_CLASSES[name] = getattr(transformers, tokenizer_class_name)
     except AttributeError:

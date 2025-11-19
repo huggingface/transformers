@@ -16,17 +16,14 @@
 
 import itertools
 import json
-import os
 from collections.abc import Mapping
 from typing import Optional, Union
 
 import numpy as np
-
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_python import PreTrainedTokenizer
-from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     AddedToken,
@@ -39,6 +36,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
     to_py_obj,
 )
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import add_end_docstrings, is_torch_tensor, logging
 
 
@@ -261,7 +259,7 @@ class LukeTokenizer(TokenizersBackend):
 
         # Handle entity vocab file for backward compatibility
         entity_vocab_file = kwargs.pop("entity_vocab_file", None)
-        
+
         # Check if vocab/merges/entity_vocab are in kwargs
         if vocab is None and "vocab" in kwargs:
             vocab = kwargs.pop("vocab")
@@ -272,7 +270,9 @@ class LukeTokenizer(TokenizersBackend):
 
         # Build vocab and merges (either from data or empty, like GPT2Tokenizer)
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {}
 
@@ -316,7 +316,7 @@ class LukeTokenizer(TokenizersBackend):
                 raise ValueError(
                     f"Specified entity special token `{entity_special_token}` is not found in entity_vocab."
                 )
-        
+
         self.entity_unk_token_id = self.entity_vocab[entity_unk_token]
         self.entity_pad_token_id = self.entity_vocab[entity_pad_token]
         self.entity_mask_token_id = self.entity_vocab[entity_mask_token]
@@ -412,7 +412,6 @@ class LukeTokenizer(TokenizersBackend):
                 (self.sep_token, self.sep_token_id),
             ],
         )
-
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
@@ -565,7 +564,9 @@ class LukeTokenizer(TokenizersBackend):
             len(text) == 0 or isinstance(text[0], (str, list, tuple))
         )
         if not (is_valid_single_text or is_valid_batch_text):
-            raise ValueError("text input must be of type `str` (single example), `list[str]` (batch), or `list[tuple]` (batch pairs).")
+            raise ValueError(
+                "text input must be of type `str` (single example), `list[str]` (batch), or `list[tuple]` (batch pairs)."
+            )
 
         is_valid_single_text_pair = isinstance(text_pair, str)
         is_valid_batch_text_pair = isinstance(text_pair, (list, tuple)) and (
@@ -712,9 +713,7 @@ class LukeTokenizer(TokenizersBackend):
             )
 
         if return_offsets_mapping:
-            raise NotImplementedError(
-                "return_offset_mapping is not available when using entity-aware encoding."
-            )
+            raise NotImplementedError("return_offset_mapping is not available when using entity-aware encoding.")
 
         if is_split_into_words:
             raise NotImplementedError("is_split_into_words is not supported in this tokenizer.")
@@ -808,7 +807,7 @@ class LukeTokenizer(TokenizersBackend):
                 # Just texts
                 texts = batch_text_or_text_pairs
                 text_pairs = None
-            
+
             # Delegate to parent TokenizersBackend which properly handles Encoding objects for batches
             return super()._encode_plus(
                 text=texts,
@@ -834,9 +833,7 @@ class LukeTokenizer(TokenizersBackend):
             )
 
         if return_offsets_mapping:
-            raise NotImplementedError(
-                "return_offset_mapping is not available when using entity-aware encoding."
-            )
+            raise NotImplementedError("return_offset_mapping is not available when using entity-aware encoding.")
 
         if is_split_into_words:
             raise NotImplementedError("is_split_into_words is not supported in this tokenizer.")
@@ -1023,9 +1020,7 @@ class LukeTokenizer(TokenizersBackend):
                 first_ids[:entity_token_end] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_end:]
             )
             first_ids = (
-                first_ids[:entity_token_start]
-                + [self.extra_special_tokens_ids[0]]
-                + first_ids[entity_token_start:]
+                first_ids[:entity_token_start] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_start:]
             )
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
@@ -1707,5 +1702,6 @@ class LukeTokenizer(TokenizersBackend):
                 raise ValueError("Invalid padding strategy:" + str(padding_side))
 
         return encoded_inputs
+
 
 __all__ = ["LukeTokenizer"]

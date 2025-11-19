@@ -20,7 +20,6 @@ from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, models, normalizers, pre_tokenizers, processors
 
-from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...tokenization_utils_base import (
     BatchEncoding,
     EncodedInput,
@@ -31,6 +30,7 @@ from ...tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import add_end_docstrings, logging
 
 

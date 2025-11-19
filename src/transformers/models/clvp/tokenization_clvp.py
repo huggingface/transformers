@@ -159,7 +159,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
         self._normalizer = None
-        
+
         # Set special_tokens_pattern based on add_bos_token and add_eos_token flags
         if add_bos_token and add_eos_token:
             kwargs["special_tokens_pattern"] = "bos_eos"

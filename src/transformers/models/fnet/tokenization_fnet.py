@@ -14,8 +14,6 @@
 # limitations under the License.
 """Tokenization classes for FNet model."""
 
-from typing import Optional
-
 from ...utils import logging
 from ..albert.tokenization_albert import AlbertTokenizer
 
@@ -63,4 +61,3 @@ class FNetTokenizer(AlbertTokenizer):
 FNetTokenizerFast = FNetTokenizer
 
 __all__ = ["FNetTokenizer", "FNetTokenizerFast"]
-

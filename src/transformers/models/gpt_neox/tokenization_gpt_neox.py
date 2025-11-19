@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -118,7 +118,9 @@ class GPTNeoXTokenizer(TokenizersBackend):
         self.trim_offsets = trim_offsets
 
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {
                 str(unk_token): 0,
@@ -182,4 +184,3 @@ class GPTNeoXTokenizer(TokenizersBackend):
 
 
 __all__ = ["GPTNeoXTokenizer"]
-

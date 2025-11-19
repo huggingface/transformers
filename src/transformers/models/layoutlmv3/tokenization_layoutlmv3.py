@@ -19,7 +19,6 @@ from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers, processors
 
-from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...tokenization_utils_base import (
     BatchEncoding,
     EncodedInput,
@@ -30,6 +29,7 @@ from ...tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import add_end_docstrings, logging
 
 
@@ -619,7 +619,10 @@ class LayoutLMv3Tokenizer(TokenizersBackend):
         )
 
         if is_pair:
-            batch_text_or_text_pairs = [(text.split() if isinstance(text, str) else text, text_pair) for text, text_pair in batch_text_or_text_pairs]
+            batch_text_or_text_pairs = [
+                (text.split() if isinstance(text, str) else text, text_pair)
+                for text, text_pair in batch_text_or_text_pairs
+            ]
 
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,

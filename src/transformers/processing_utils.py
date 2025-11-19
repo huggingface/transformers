@@ -1479,7 +1479,7 @@ class ProcessorMixin(PushToHubMixin):
         """
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please
         refer to the docstring of this method for more information.
-        
+
         Note: `decode` now handles batch decoding natively, so this method simply calls `decode`.
         """
         if not hasattr(self, "tokenizer"):
@@ -1682,8 +1682,7 @@ class ProcessorMixin(PushToHubMixin):
             special_tokens = self.tokenizer.special_tokens_map
             # Filter out tokens that conflict with template kwargs
             special_tokens_map = {
-                k: v for k, v in special_tokens.items()
-                if k not in processed_kwargs["template_kwargs"]
+                k: v for k, v in special_tokens.items() if k not in processed_kwargs["template_kwargs"]
             }
 
         prompt, generation_indices = render_jinja_template(

@@ -1,4 +1,4 @@
-#tok utils
+# tok utils
 
 # Copyright 2020 The HuggingFace Inc. team.
 #
@@ -1135,4 +1135,3 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return clean_text
         else:
             return text
-

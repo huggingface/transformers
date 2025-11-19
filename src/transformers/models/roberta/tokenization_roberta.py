@@ -14,10 +14,9 @@
 # limitations under the License.
 """Tokenization classes for RoBERTa."""
 
-import json
 from typing import Optional
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -27,6 +26,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+
 
 class RobertaTokenizer(TokenizersBackend):
     r"""
@@ -138,7 +138,9 @@ class RobertaTokenizer(TokenizersBackend):
         self.trim_offsets = trim_offsets
 
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {
                 str(pad_token): 0,
@@ -189,5 +191,6 @@ class RobertaTokenizer(TokenizersBackend):
             trim_offsets=trim_offsets,
             **kwargs,
         )
+
 
 __all__ = ["RobertaTokenizer"]

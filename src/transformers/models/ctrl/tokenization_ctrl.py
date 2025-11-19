@@ -15,8 +15,6 @@
 """Tokenization classes for Salesforce CTRL."""
 
 import json
-import os
-from typing import Optional
 
 import regex as re
 
@@ -218,7 +216,6 @@ class CTRLTokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (string) in a single string."""
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
-
 
     # def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
     #     filtered_tokens = ' '.join(self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens))

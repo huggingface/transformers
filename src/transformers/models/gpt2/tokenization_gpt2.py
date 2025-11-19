@@ -23,7 +23,6 @@ from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
 
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
@@ -108,12 +107,14 @@ class GPT2Tokenizer(TokenizersBackend):
         merges: Optional[list] = None,
         **kwargs,
     ):
-      #  self.add_bos_token = add_bos_token
-      
+        #  self.add_bos_token = add_bos_token
+
         self.add_prefix_space = add_prefix_space
 
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {}
 
@@ -137,7 +138,7 @@ class GPT2Tokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.ByteLevel()
 
         tokenizer_object = self._tokenizer
-        
+
         # Set these before calling super().__init__() so the base class _post_init() can use them
         self._add_bos_token = add_bos_token
         self._add_eos_token = False
@@ -153,7 +154,7 @@ class GPT2Tokenizer(TokenizersBackend):
             add_bos_token=add_bos_token,
             **kwargs,
         )
-        
+
         # Call _post_init for tokenizers created directly (not from_pretrained)
         # For from_pretrained, this will be called again after loading the tokenizer from file
         self._post_init()

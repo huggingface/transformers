@@ -14,13 +14,10 @@
 # limitations under the License.
 """Tokenization class for Blenderbot."""
 
-import json
-from typing import Optional
-
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import AddedToken, BatchEncoding
+from ...tokenization_utils_base import AddedToken
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -118,7 +115,6 @@ class BlenderbotTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
 
     def __init__(
         self,
@@ -132,14 +128,9 @@ class BlenderbotTokenizer(TokenizersBackend):
         add_prefix_space=True,
         vocab=None,
         merges=None,
-        vocab_file=None,
-        merges_file=None,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
-        self.merges_file = merges_file
         self.add_prefix_space = add_prefix_space
-
         mask_token = (
             AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
             if isinstance(mask_token, str)
@@ -147,7 +138,9 @@ class BlenderbotTokenizer(TokenizersBackend):
         )
 
         if vocab is not None and merges is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
             self._merges = merges
         else:
             # Initialize with minimal vocab
@@ -192,7 +185,6 @@ class BlenderbotTokenizer(TokenizersBackend):
             pad_token=pad_token,
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
-          #  special_tokens_pattern="none",
             **kwargs,
         )
 

@@ -16,8 +16,8 @@
 from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...tokenization_utils_base import _get_prepend_scheme, generate_merges
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
 
@@ -112,7 +112,9 @@ class LlamaTokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
 
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {
                 str(unk_token): 0,

@@ -17,7 +17,6 @@ see tokenization_utils.py
 """
 
 import copy
-import inspect
 import json
 import os
 from collections import defaultdict
@@ -378,13 +377,25 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 desired_handle_chinese = getattr(self, "tokenize_chinese_chars", None)
 
                 updated = False
-                if desired_lowercase is not None and "lowercase" in norm_state and norm_state["lowercase"] != desired_lowercase:
+                if (
+                    desired_lowercase is not None
+                    and "lowercase" in norm_state
+                    and norm_state["lowercase"] != desired_lowercase
+                ):
                     norm_state["lowercase"] = desired_lowercase
                     updated = True
-                if desired_strip_accents is not None and "strip_accents" in norm_state and norm_state["strip_accents"] != desired_strip_accents:
+                if (
+                    desired_strip_accents is not None
+                    and "strip_accents" in norm_state
+                    and norm_state["strip_accents"] != desired_strip_accents
+                ):
                     norm_state["strip_accents"] = desired_strip_accents
                     updated = True
-                if desired_handle_chinese is not None and "handle_chinese_chars" in norm_state and norm_state["handle_chinese_chars"] != desired_handle_chinese:
+                if (
+                    desired_handle_chinese is not None
+                    and "handle_chinese_chars" in norm_state
+                    and norm_state["handle_chinese_chars"] != desired_handle_chinese
+                ):
                     norm_state["handle_chinese_chars"] = desired_handle_chinese
                     updated = True
 
@@ -1101,9 +1112,7 @@ class TokenizersExtractor:
             # {token: id}
             vocab_ids = dict(vocab_field)
             # tokenizer.json doesn't store scores for these types; default to 0.0 and sort by id
-            vocab_scores = sorted(
-                [(token, 0.0) for token in vocab_field.keys()], key=lambda x: vocab_field[x[0]]
-            )
+            vocab_scores = sorted([(token, 0.0) for token in vocab_field.keys()], key=lambda x: vocab_field[x[0]])
         elif isinstance(vocab_field, list):
             # [[token, score], ...] — ids are the list indices
             vocab_ids = {token: idx for idx, (token, _score) in enumerate(vocab_field)}
@@ -1155,6 +1164,7 @@ class TokenizersExtractor:
             added_tokens_decoder[token_id] = added_token_obj
 
         return vocab_ids, vocab_scores, merges, added_tokens_decoder
+
 
 # Backward-compatible alias: allow referring to TokenizersBackend as PreTrainedTokenizerFast
 PreTrainedTokenizerFast = TokenizersBackend

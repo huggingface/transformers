@@ -14,16 +14,13 @@
 # limitations under the License
 """Tokenization classes for the BARThez model."""
 
-import os
-from shutil import copyfile
-from typing import Optional
-
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 
 from ...tokenization_python import AddedToken
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -147,8 +144,6 @@ class BarthezTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
-
-        
 
 
 __all__ = ["BarthezTokenizer"]

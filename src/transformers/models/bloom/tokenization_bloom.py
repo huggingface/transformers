@@ -150,4 +150,3 @@ class BloomTokenizer(PreTrainedTokenizerFast):
 
 
 __all__ = ["BloomTokenizer"]
-

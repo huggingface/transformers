@@ -14,8 +14,6 @@
 # limitations under the License.
 """Tokenization classes for CANINE."""
 
-from typing import Optional
-
 from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 

@@ -403,7 +403,9 @@ class NougatTokenizer(TokenizersBackend):
         **kwargs,
     ):
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {
                 str(bos_token): 0,
@@ -434,20 +436,24 @@ class NougatTokenizer(TokenizersBackend):
             [
                 pre_tokenizers.Split(pattern="SPL1T-TH1S-Pl3A5E", behavior="removed", invert=False),
                 pre_tokenizers.Digits(individual_digits=True),
-                pre_tokenizers.Split(pattern=r"[\(\)\[\]\{\}]|([!\"#\$%\&'\*\+,\-\./:;<=>\?\\\^_`\|\~])\1*", behavior="isolated", invert=False),
+                pre_tokenizers.Split(
+                    pattern=r"[\(\)\[\]\{\}]|([!\"#\$%\&'\*\+,\-\./:;<=>\?\\\^_`\|\~])\1*",
+                    behavior="isolated",
+                    invert=False,
+                ),
                 pre_tokenizers.Split(pattern="\n", behavior="isolated", invert=False),
                 pre_tokenizers.ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=True),
             ]
         )
         self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=True, trim_offsets=True, use_regex=True)
-        
+
         # Set up post processor with bos and eos tokens
         bos_token_id = self._vocab.get(str(bos_token), 0)
         eos_token_id = self._vocab.get(str(eos_token), 2)
         pad_token_id = self._vocab.get(str(pad_token), 1)
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{bos_token}:0 $A:0 {eos_token}:0",
-            pair=f"$A:0 $B:1",
+            pair="$A:0 $B:1",
             special_tokens=[
                 (str(eos_token), eos_token_id),
                 (str(bos_token), bos_token_id),
@@ -478,20 +484,24 @@ class NougatTokenizer(TokenizersBackend):
             [
                 pre_tokenizers.Split(pattern="SPL1T-TH1S-Pl3A5E", behavior="removed", invert=False),
                 pre_tokenizers.Digits(individual_digits=True),
-                pre_tokenizers.Split(pattern=r"[\(\)\[\]\{\}]|([!\"#\$%\&'\*\+,\-\./:;<=>\?\\\^_`\|\~])\1*", behavior="isolated", invert=False),
+                pre_tokenizers.Split(
+                    pattern=r"[\(\)\[\]\{\}]|([!\"#\$%\&'\*\+,\-\./:;<=>\?\\\^_`\|\~])\1*",
+                    behavior="isolated",
+                    invert=False,
+                ),
                 pre_tokenizers.Split(pattern="\n", behavior="isolated", invert=False),
                 pre_tokenizers.ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=True),
             ]
         )
         self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=True, trim_offsets=True, use_regex=True)
-        
+
         # Set up post processor with bos and eos tokens
         bos_token_id = self.bos_token_id if self.bos_token_id is not None else 0
         eos_token_id = self.eos_token_id if self.eos_token_id is not None else 2
         pad_token_id = self.pad_token_id if self.pad_token_id is not None else 1
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{self.bos_token}:0 $A:0 {self.eos_token}:0",
-            pair=f"$A:0 $B:1",
+            pair="$A:0 $B:1",
             special_tokens=[
                 (str(self.eos_token), eos_token_id),
                 (str(self.bos_token), bos_token_id),
@@ -703,4 +713,3 @@ class NougatTokenizer(TokenizersBackend):
 
 
 __all__ = ["NougatTokenizer"]
-

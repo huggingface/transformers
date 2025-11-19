@@ -14,8 +14,6 @@
 # limitations under the License.
 """Tokenization class for Funnel Transformer."""
 
-import collections
-import os
 from typing import Optional
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -119,7 +117,9 @@ class FunnelTokenizer(TokenizersBackend):
         self.wordpieces_prefix = wordpieces_prefix
 
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {
                 str(pad_token): 0,
@@ -141,7 +141,7 @@ class FunnelTokenizer(TokenizersBackend):
         )
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.WordPiece(prefix=wordpieces_prefix)
-        
+
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls_token}:2 $A:0 {sep_token}:0",  # token_type_id is 2 for Funnel transformer
             pair=f"{cls_token}:2 $A:0 {sep_token}:0 $B:1 {sep_token}:1",
@@ -172,4 +172,3 @@ class FunnelTokenizer(TokenizersBackend):
 
 
 __all__ = ["FunnelTokenizer"]
-

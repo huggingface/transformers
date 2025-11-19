@@ -16,11 +16,10 @@
 
 from typing import Optional, Union
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, normalizers, Regex
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_python import (
-    AddedToken,
     BatchEncoding,
     PreTokenizedInput,
     TextInput,
@@ -127,7 +126,6 @@ class SeamlessM4TTokenizer(TokenizersBackend):
         vocab_file=None,
         **kwargs,
     ):
-    
         if vocab is None:
             vocab = {
                 str(pad_token): 0,
@@ -135,20 +133,20 @@ class SeamlessM4TTokenizer(TokenizersBackend):
                 str(bos_token): 2,
                 str(eos_token): 3,
             }
-        
+
         # Process vocab - SeamlessM4T uses fairseq vocab alignment: <pad>=0, <unk>=1, <s>=2, </s>=3, then SPM pieces[3:]
         if isinstance(vocab, list):
             # Convert list of (token, score) tuples to dict {token: idx}
             # Check if vocab is already in SeamlessM4T order (pad, unk, s, /s) or tokenizer.json order (unk, s, /s, ...)
             first_tokens = [str(item[0]) if isinstance(item, (list, tuple)) else str(item) for item in vocab[:4]]
             is_seamless_order = (
-                len(first_tokens) >= 4 and
-                first_tokens[0] == str(pad_token) and
-                first_tokens[1] == str(unk_token) and
-                first_tokens[2] == str(bos_token) and
-                first_tokens[3] == str(eos_token)
+                len(first_tokens) >= 4
+                and first_tokens[0] == str(pad_token)
+                and first_tokens[1] == str(unk_token)
+                and first_tokens[2] == str(bos_token)
+                and first_tokens[3] == str(eos_token)
             )
-            
+
             if is_seamless_order:
                 # Already in correct order, use list index directly as token ID
                 vocab_dict = {}
@@ -164,7 +162,7 @@ class SeamlessM4TTokenizer(TokenizersBackend):
                 vocab_dict[str(unk_token)] = 1
                 vocab_dict[str(bos_token)] = 2
                 vocab_dict[str(eos_token)] = 3
-                
+
                 # Add rest of vocab starting from index 4, skipping tokens we already added
                 idx = 4
                 for item in vocab:
@@ -172,7 +170,7 @@ class SeamlessM4TTokenizer(TokenizersBackend):
                     if token not in vocab_dict:
                         vocab_dict[token] = idx
                         idx += 1
-                
+
                 self._vocab = vocab_dict
         else:
             self._vocab = vocab
@@ -193,15 +191,14 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             )
         )
 
-
         self._tokenizer.normalizer = normalizers.Sequence(
             [
-                normalizers.Replace(Regex(r"[\n\r\t]"), " "),  
-                normalizers.NFKC(), 
-                normalizers.Strip(left=False, right=True), 
-                normalizers.Replace(Regex(r" +▁"), "▁"), 
-                normalizers.Replace(Regex(r"^▁+$"), ""),  
-                normalizers.Replace(Regex(r" {2,}"), "▁"), 
+                normalizers.Replace(Regex(r"[\n\r\t]"), " "),
+                normalizers.NFKC(),
+                normalizers.Strip(left=False, right=True),
+                normalizers.Replace(Regex(r" +▁"), "▁"),
+                normalizers.Replace(Regex(r"^▁+$"), ""),
+                normalizers.Replace(Regex(r" {2,}"), "▁"),
             ]
         )
 
@@ -302,10 +299,10 @@ class SeamlessM4TTokenizer(TokenizersBackend):
     ) -> BatchEncoding:
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
-        
+
         if max_length is None:
             max_length = self.model_max_length
-        
+
         model_inputs = self(
             src_texts,
             add_special_tokens=True,
@@ -315,14 +312,14 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             truncation=truncation,
             **kwargs,
         )
-        
+
         if tgt_texts is None:
             return model_inputs
-            
+
         # Process tgt_texts
         if max_target_length is None:
             max_target_length = max_length
-            
+
         self._switch_to_target_mode()
         labels = self(
             tgt_texts,
@@ -334,9 +331,9 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             **kwargs,
         )
         model_inputs["labels"] = labels["input_ids"]
-        
+
         self._switch_to_input_mode()
-        
+
         return model_inputs
 
     def _switch_to_input_mode(self):

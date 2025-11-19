@@ -120,7 +120,9 @@ class CodeGenTokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space
 
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {}
 
@@ -142,7 +144,9 @@ class CodeGenTokenizer(TokenizersBackend):
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
-        self._tokenizer.post_processor = processors.ByteLevel(add_prefix_space=True, use_regex=True, trim_offsets=False)
+        self._tokenizer.post_processor = processors.ByteLevel(
+            add_prefix_space=True, use_regex=True, trim_offsets=False
+        )
 
         tokenizer_object = self._tokenizer
 
@@ -165,7 +169,9 @@ class CodeGenTokenizer(TokenizersBackend):
         self._post_init()
 
     def _post_init(self):
-        self._tokenizer.post_processor = processors.ByteLevel(add_prefix_space=True, use_regex=True, trim_offsets=False)
+        self._tokenizer.post_processor = processors.ByteLevel(
+            add_prefix_space=True, use_regex=True, trim_offsets=False
+        )
         # Ensure base class post-init runs to register special/extra tokens, etc.
         super()._post_init()
 

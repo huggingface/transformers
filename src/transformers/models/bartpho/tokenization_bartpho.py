@@ -18,8 +18,8 @@ import os
 from shutil import copyfile
 from typing import Any, Optional
 
-from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...tokenization_python import AddedToken
+from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...utils import logging
 from ...utils.import_utils import requires
 

@@ -14,11 +14,9 @@
 # limitations under the License.
 """Tokenization classes for ALBERT model."""
 
-import os
-from shutil import copyfile
 from typing import Optional
 
-from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -104,9 +102,7 @@ class AlbertTokenizer(TokenizersBackend):
         self.keep_accents = keep_accents
 
         if vocab is not None:
-             self._vocab_scores = (
-                 [(token, 0.0) for token in vocab.keys()] if isinstance(vocab, dict) else list(vocab)
-             )
+            self._vocab_scores = [(token, 0.0) for token in vocab.keys()] if isinstance(vocab, dict) else list(vocab)
         else:
             self._vocab_scores = [
                 (str(pad_token), 0.0),
@@ -119,7 +115,7 @@ class AlbertTokenizer(TokenizersBackend):
         self._tokenizer = Tokenizer(
             Unigram(
                 self._vocab_scores,
-                unk_id=1, 
+                unk_id=1,
                 byte_fallback=False,
             )
         )
@@ -140,7 +136,7 @@ class AlbertTokenizer(TokenizersBackend):
 
         list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
-        
+
         prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [

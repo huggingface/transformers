@@ -18,14 +18,12 @@ import itertools
 import json
 import os
 from collections.abc import Mapping
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
-
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 
-from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     AddedToken,
@@ -38,6 +36,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
     to_py_obj,
 )
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import add_end_docstrings, is_torch_tensor, logging
 
 
@@ -253,10 +252,10 @@ class MLukeTokenizer(TokenizersBackend):
             if isinstance(entity_token_2, str)
             else entity_token_2
         )
-        
+
         # Handle entity vocab file for backward compatibility
         entity_vocab_file = kwargs.pop("entity_vocab_file", None)
-        
+
         # Check if vocab/entity_vocab are in kwargs
         if vocab is None and "vocab" in kwargs:
             vocab = kwargs.pop("vocab")
@@ -275,12 +274,14 @@ class MLukeTokenizer(TokenizersBackend):
 
         # Build Unigram tokenizer
         self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=0))
-        
+
         # Add SentencePiece-style normalization and pre-tokenization
-        self._tokenizer.normalizer = normalizers.Sequence([
-            normalizers.Replace("``", '"'),
-            normalizers.Replace("''", '"'),
-        ])
+        self._tokenizer.normalizer = normalizers.Sequence(
+            [
+                normalizers.Replace("``", '"'),
+                normalizers.Replace("''", '"'),
+            ]
+        )
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always")
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always")
 
@@ -387,7 +388,7 @@ class MLukeTokenizer(TokenizersBackend):
             entity_vocab=entity_vocab if entity_vocab_file is None else None,  # Only store if passed as data
             **kwargs,
         )
-        
+
         # Call _post_init for tokenizers created directly (not from_pretrained)
         self._post_init()
 
@@ -405,7 +406,7 @@ class MLukeTokenizer(TokenizersBackend):
         # single: <s> X </s>
         # pair: <s> A </s></s> B </s>
         from tokenizers import processors
-        
+
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{self.cls_token}:0 $A:0 {self.sep_token}:0",
             pair=f"{self.cls_token}:0 $A:0 {self.sep_token}:0 {self.sep_token}:0 $B:1 {self.sep_token}:1",
@@ -429,10 +430,10 @@ class MLukeTokenizer(TokenizersBackend):
         """Converts a token (str) in an id using the vocab."""
         if token in self.fairseq_tokens_to_ids:
             return self.fairseq_tokens_to_ids[token]
-        
+
         # Look up token in vocab
         token_id = self._tokenizer.token_to_id(token)
-        
+
         # Need to return unknown token if not found (token_to_id returns None)
         return token_id + self.fairseq_offset if token_id is not None else self.unk_token_id
 
@@ -447,7 +448,7 @@ class MLukeTokenizer(TokenizersBackend):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
-    
+
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """
         Returns the number of added tokens when encoding a sequence with special tokens.
@@ -576,7 +577,7 @@ class MLukeTokenizer(TokenizersBackend):
             raise ValueError("text_pair input must be of type `str` (single example) or `list[str]` (batch).")
 
         is_batched = bool(isinstance(text, (list, tuple)))
-        
+
         # Get proper padding and truncation strategies
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,

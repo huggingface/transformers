@@ -19,8 +19,8 @@ from typing import Optional
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
-from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...tokenization_utils_base import _get_prepend_scheme
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
 
@@ -136,7 +136,7 @@ class XLNetTokenizer(TokenizersBackend):
             normalizers.Replace("``", '"'),
             normalizers.Replace("''", '"'),
         ]
-      #  if not keep_accents:
+        #  if not keep_accents:
         list_normalizers.append(normalizers.NFKD())
         list_normalizers.append(normalizers.StripAccents())
         if do_lower_case:
@@ -147,7 +147,12 @@ class XLNetTokenizer(TokenizersBackend):
 
         add_prefix_space = True
         prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence([pre_tokenizers.WhitespaceSplit(), pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)])
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme),
+            ]
+        )
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
         self._pad_token_type_id = 3
@@ -176,16 +181,14 @@ class XLNetTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=f"$A:0 {str(self.sep_token)}:0 {str(self.cls_token)}:2",
             pair=f"$A:0 {str(self.sep_token)}:0 $B:1 {str(self.sep_token)}:1 {str(self.cls_token)}:2",
             special_tokens=[
-                (str(self.sep_token), self.sep_token_id ),
+                (str(self.sep_token), self.sep_token_id),
                 (str(self.cls_token), self.cls_token_id),
             ],
         )
 
 
 __all__ = ["XLNetTokenizer"]
-

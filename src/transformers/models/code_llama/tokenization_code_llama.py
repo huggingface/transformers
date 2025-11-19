@@ -13,17 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tokenizers import AddedToken, Tokenizer, decoders, models, normalizers, pre_tokenizers, processors
+
+from tokenizers import AddedToken, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
+from ...tokenization_utils_base import _get_prepend_scheme, generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from ...tokenization_utils_base import generate_merges, _get_prepend_scheme
 from ...utils import logging
 
-
-import os
-from shutil import copyfile
-from typing import Optional
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
@@ -140,7 +137,9 @@ class CodeLlamaTokenizer(TokenizersBackend):
             additional_special_tokens += [token] if token is not None else []
 
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {
                 str(unk_token): 0,
@@ -148,7 +147,9 @@ class CodeLlamaTokenizer(TokenizersBackend):
                 str(eos_token): 2,
             }
 
-        filtered_vocab = {t: i for t, i in self._vocab.items() if t not in  {str(eos_token), str(bos_token), str(unk_token)}}
+        filtered_vocab = {
+            t: i for t, i in self._vocab.items() if t not in {str(eos_token), str(bos_token), str(unk_token)}
+        }
         self._merges = merges if merges is not None else generate_merges(filtered_vocab)
         self._tokenizer = Tokenizer(
             BPE(
@@ -164,12 +165,9 @@ class CodeLlamaTokenizer(TokenizersBackend):
             replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
         )
 
-        self._tokenizer.decoder = decoders.Sequence([
-            decoders.Replace("▁", " "),
-            decoders.ByteFallback(), 
-            decoders.Fuse(),    
-            decoders.Strip(content=" ", left=1)
-        ])
+        self._tokenizer.decoder = decoders.Sequence(
+            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse(), decoders.Strip(content=" ", left=1)]
+        )
 
         super().__init__(
             tokenizer_object=self._tokenizer,
@@ -205,13 +203,12 @@ class CodeLlamaTokenizer(TokenizersBackend):
     def _post_init(self):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=False)
         self._tokenizer.normalizer = None
-        
+
         # This matches LlamaTokenizer's behavior and is needed when loading from vocab/merges
         self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
-        
+
         self.update_post_processor()
         super()._post_init()
-
 
     @property
     def prefix_token(self):
@@ -252,7 +249,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
     @property
     def eot_token(self):
         return self._eot_token
-
 
     def set_infilling_processor(self, reset, suffix_first=False, add_special_tokens=True):
         """
@@ -338,14 +334,14 @@ class CodeLlamaTokenizer(TokenizersBackend):
 
     def _encode_plus(self, text, text_pair=None, suffix=None, suffix_first=False, add_special_tokens=True, **kwargs):
         is_infilling = False
-        
+
         if suffix is not None:
             text_pair = suffix
             is_infilling = True
         elif "suffix" in kwargs:
             text_pair = kwargs.pop("suffix")
             is_infilling = True
-        
+
         if isinstance(text, str) and self.fill_token is not None and self.fill_token in text and text_pair is None:
             text, text_pair = text.split(self.fill_token)
             is_infilling = True
@@ -353,7 +349,11 @@ class CodeLlamaTokenizer(TokenizersBackend):
         if not is_infilling:
             return super()._encode_plus(text, text_pair=text_pair, add_special_tokens=add_special_tokens, **kwargs)
 
-        if text_pair is None or (isinstance(text_pair, str) and len(text_pair) < 1) or (isinstance(text_pair, list) and len(text_pair) == 0):
+        if (
+            text_pair is None
+            or (isinstance(text_pair, str) and len(text_pair) < 1)
+            or (isinstance(text_pair, list) and len(text_pair) == 0)
+        ):
             return super()._encode_plus(text, text_pair=text_pair, add_special_tokens=add_special_tokens, **kwargs)
 
         if None in (self.prefix_id, self.middle_id, self.suffix_id):
@@ -365,12 +365,12 @@ class CodeLlamaTokenizer(TokenizersBackend):
 
         self.set_infilling_processor(False, suffix_first=suffix_first, add_special_tokens=add_special_tokens)
         kwargs.pop("text_pair", None)
-        
+
         if isinstance(text, str):
             text = " " + text
         elif isinstance(text, list):
             text = [" " + t if isinstance(t, str) else t for t in text]
-        
+
         result = super()._encode_plus(text, text_pair=text_pair, add_special_tokens=True, **kwargs)
         self.set_infilling_processor(True)
         return result

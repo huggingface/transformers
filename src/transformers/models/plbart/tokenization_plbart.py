@@ -15,8 +15,6 @@
 
 from typing import Any, Optional
 
-import sentencepiece as spm
-
 from ...tokenization_python import BatchEncoding
 from ...tokenization_utils_base import AddedToken
 from ...tokenization_utils_sentencepiece import SentencePieceBackend
@@ -234,7 +232,6 @@ class PLBartTokenizer(SentencePieceBackend):
 
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
-
 
     @property
     def vocab_size(self):

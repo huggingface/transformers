@@ -112,7 +112,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
                 (str(cls_token), 0.0),
                 (str(mask_token), 0.0),
             ]
-        
+
         else:
             self._vocab = [tuple(item) if not isinstance(item, tuple) else item for item in vocab]
             computed_unk_id = {piece: i for i, (piece, _score) in enumerate(self._vocab)}

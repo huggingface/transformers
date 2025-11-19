@@ -131,12 +131,14 @@ class RemBertTokenizer(TokenizersBackend):
             list_normalizers.append(normalizers.StripAccents())
         if self.do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
-        
+
         # Add Precompiled equivalent (newline conversion + NFKC normalization)
-        list_normalizers.extend([
-            normalizers.Replace(Regex(r"[\n\r\t]"), " "),  # Precompiled converts newlines/tabs to spaces
-            normalizers.NFKC(),  # Precompiled does NFKC normalization
-        ])
+        list_normalizers.extend(
+            [
+                normalizers.Replace(Regex(r"[\n\r\t]"), " "),  # Precompiled converts newlines/tabs to spaces
+                normalizers.NFKC(),  # Precompiled does NFKC normalization
+            ]
+        )
 
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 
@@ -170,7 +172,7 @@ class RemBertTokenizer(TokenizersBackend):
         sep_token_str = str(sep_token)
         cls_token_id = self.convert_tokens_to_ids(cls_token_str)
         sep_token_id = self.convert_tokens_to_ids(sep_token_str)
-        
+
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls_token_str}:0 $A:0 {sep_token_str}:0",
             pair=f"{cls_token_str}:0 $A:0 {sep_token_str}:0 $B:1 {sep_token_str}:1",

@@ -1582,9 +1582,7 @@ class TikTokenConverter:
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
         self.extra_special_tokens = (
-            extra_special_tokens.keys()
-            if isinstance(extra_special_tokens, dict)
-            else extra_special_tokens
+            extra_special_tokens.keys() if isinstance(extra_special_tokens, dict) else extra_special_tokens
         )
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):

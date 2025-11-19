@@ -15,12 +15,9 @@
 SentencePiece-based tokenization class for loading from sentencepiece.model files.
 """
 
-import itertools
 import os
-import re
-from collections import OrderedDict
 from shutil import copyfile
-from typing import Any, Optional, Union, overload
+from typing import Optional, Union
 
 import sentencepiece as spm
 
@@ -270,7 +267,7 @@ class SentencePieceBackend(PreTrainedTokenizer):
     ) -> str:
         """
         Decode token ids to string.
-        
+
         Uses the generic decode path from PreTrainedTokenizer which works for all vocabularies,
         including custom vocabularies that override _convert_id_to_token.
         """

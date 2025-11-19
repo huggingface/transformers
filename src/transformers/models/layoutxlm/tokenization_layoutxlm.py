@@ -229,7 +229,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-        
+
         self.add_prefix_space = add_prefix_space
 
         # Build vocab from list of tuples if provided, else use default
@@ -254,10 +254,12 @@ class LayoutXLMTokenizer(TokenizersBackend):
         self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
 
         # Set up normalizer (strip right, replace multiple spaces)
-        self._tokenizer.normalizer = normalizers.Sequence([
-            normalizers.Strip(left=False, right=True),
-            normalizers.Replace(Regex(" {2,}"), "▁"),
-        ])
+        self._tokenizer.normalizer = normalizers.Sequence(
+            [
+                normalizers.Strip(left=False, right=True),
+                normalizers.Replace(Regex(" {2,}"), "▁"),
+            ]
+        )
 
         # Set up pre_tokenizer (Metaspace)
         prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
@@ -973,7 +975,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-
 
 
 __all__ = ["LayoutXLMTokenizer"]

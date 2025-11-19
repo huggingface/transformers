@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Tokenization class for model DeBERTa."""
 
-from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -114,7 +114,9 @@ class DebertaTokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space
 
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {
                 str(unk_token): 0,

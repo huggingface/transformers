@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -129,5 +129,6 @@ class ReformerTokenizer(TokenizersBackend):
         )
 
         super()._post_init()
+
 
 __all__ = ["ReformerTokenizer"]

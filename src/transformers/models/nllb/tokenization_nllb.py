@@ -15,7 +15,7 @@
 
 from typing import Optional
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, normalizers, Regex
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_python import AddedToken, BatchEncoding
@@ -110,7 +110,7 @@ class NllbTokenizer(TokenizersBackend):
             additional_special_tokens = kwargs.get("extra_special_tokens", FAIRSEQ_LANGUAGE_CODES)
 
         self.vocab_file = vocab_file
-        
+
         mask_token = (
             AddedToken(mask_token, normalized=True, lstrip=True, special=True)
             if isinstance(mask_token, str)
@@ -150,8 +150,8 @@ class NllbTokenizer(TokenizersBackend):
         self._tokenizer.normalizer = normalizers.Sequence(
             [
                 normalizers.Replace(Regex(r"[\n\r\t]"), " "),
-                normalizers.NFKC(), 
-                normalizers.Replace(Regex(r" {2,}"), " "), 
+                normalizers.NFKC(),
+                normalizers.Replace(Regex(r" {2,}"), " "),
             ]
         )
 
@@ -203,7 +203,6 @@ class NllbTokenizer(TokenizersBackend):
         self._src_lang = new_src_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
-
     def _build_translation_inputs(
         self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
     ):
@@ -231,10 +230,10 @@ class NllbTokenizer(TokenizersBackend):
     ) -> BatchEncoding:
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
-        
+
         if max_length is None:
             max_length = self.model_max_length
-        
+
         model_inputs = self(
             src_texts,
             add_special_tokens=True,
@@ -244,14 +243,14 @@ class NllbTokenizer(TokenizersBackend):
             truncation=truncation,
             **kwargs,
         )
-        
+
         if tgt_texts is None:
             return model_inputs
-            
+
         # Process tgt_texts
         if max_target_length is None:
             max_target_length = max_length
-            
+
         # Switch to target mode to set the right special tokens
         self._switch_to_target_mode()
         labels = self(
@@ -264,10 +263,10 @@ class NllbTokenizer(TokenizersBackend):
             **kwargs,
         )
         model_inputs["labels"] = labels["input_ids"]
-        
+
         # Switch back to input mode
         self._switch_to_input_mode()
-        
+
         return model_inputs
 
     def _switch_to_input_mode(self):

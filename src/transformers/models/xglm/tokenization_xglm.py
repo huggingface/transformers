@@ -19,7 +19,6 @@ from typing import Optional
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
-from ...tokenization_utils_sentencepiece import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -79,7 +78,9 @@ class XGLMTokenizer(TokenizersBackend):
         self.num_madeup_words = 7
         madeup_words = [f"<madeupword{i}>" for i in range(self.num_madeup_words)]
         kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", []) or []
-        kwargs["additional_special_tokens"] += [word for word in madeup_words if word not in kwargs["additional_special_tokens"]]
+        kwargs["additional_special_tokens"] += [
+            word for word in madeup_words if word not in kwargs["additional_special_tokens"]
+        ]
 
         self.add_prefix_space = add_prefix_space
 
@@ -92,14 +93,14 @@ class XGLMTokenizer(TokenizersBackend):
                 (str(eos_token), 0.0),
                 (str(unk_token), 0.0),
             ]
-            
+
         self._tokenizer = Tokenizer(Unigram(vocab=self._vocab, unk_id=3, byte_fallback=False))
 
         self._tokenizer.normalizer = normalizers.Sequence(
             [
                 normalizers.Replace(Regex(r"[\n\r\t]"), " "),
-                normalizers.NFKC(), 
-                normalizers.Replace(Regex(r" {2,}"), " "), 
+                normalizers.NFKC(),
+                normalizers.Replace(Regex(r" {2,}"), " "),
             ]
         )
         prepend_scheme = "always" if add_prefix_space else "never"
@@ -128,5 +129,6 @@ class XGLMTokenizer(TokenizersBackend):
                 (self.eos_token, self.eos_token_id),
             ],
         )
+
 
 __all__ = ["XGLMTokenizer"]

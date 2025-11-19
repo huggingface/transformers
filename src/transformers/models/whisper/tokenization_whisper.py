@@ -25,7 +25,6 @@ import numpy as np
 from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 from .english_normalizer import BasicTextNormalizer, EnglishTextNormalizer
@@ -39,7 +38,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
     "normalizer_file": "normalizer.json",
 }
-
 
 
 LANGUAGES = {
@@ -239,7 +237,7 @@ class WhisperTokenizer(TokenizersBackend):
 
         self._vocab = vocab if vocab is not None else {}
         self._merges = merges if merges is not None else []
-        
+
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -250,10 +248,9 @@ class WhisperTokenizer(TokenizersBackend):
                 fuse_unk=False,
             )
         )
-        
+
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
-        
 
         super().__init__(
             tokenizer_object=self._tokenizer,
@@ -279,16 +276,18 @@ class WhisperTokenizer(TokenizersBackend):
         self.language = language
         self.task = task
         self.predict_timestamps = predict_timestamps
-        
+
         self._post_init()
 
     def _post_init(self):
         """Post-initialization hook to set up prefix tokens after the tokenizer is fully loaded."""
         super()._post_init()
         # Set up prefix tokens if language or task is specified (may be set from config in from_pretrained)
-        if hasattr(self, 'language') and hasattr(self, 'task') and hasattr(self, 'predict_timestamps'):
+        if hasattr(self, "language") and hasattr(self, "task") and hasattr(self, "predict_timestamps"):
             if self.language is not None or self.task is not None:
-                self.set_prefix_tokens(language=self.language, task=self.task, predict_timestamps=self.predict_timestamps)
+                self.set_prefix_tokens(
+                    language=self.language, task=self.task, predict_timestamps=self.predict_timestamps
+                )
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._decode_with_timestamps
     def _decode_with_timestamps(
@@ -579,7 +578,7 @@ class WhisperTokenizer(TokenizersBackend):
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
-        
+
         vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
@@ -785,6 +784,7 @@ class WhisperTokenizer(TokenizersBackend):
             token_ids = token_ids.tolist()
         return token_ids
 
+
 def _combine_tokens_into_words(
     tokenizer,
     tokens: list[int],
@@ -809,8 +809,6 @@ def _combine_tokens_into_words(
 
     _merge_punctuations(words, word_tokens, token_indices, prepend_punctuations, append_punctuations)
     return words, word_tokens, token_indices
-
-
 
 
 def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
@@ -931,7 +929,6 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
         return total_sequence, total_token_timestamp_sequence
     else:
         return total_sequence, []
-
 
 
 def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision, segment_size=1500):
@@ -1439,7 +1436,6 @@ def _merge_punctuations(words, tokens, indices, prepended, appended):
     words[:] = [word for word in words if word]
     tokens[:] = [token for token in tokens if token]
     indices[:] = [idx for idx in indices if idx]
-
 
 
 __all__ = ["WhisperTokenizer"]

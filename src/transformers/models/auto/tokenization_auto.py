@@ -22,19 +22,9 @@ import warnings
 from collections import OrderedDict
 from typing import Any, Optional, Union
 
-import httpx
-from huggingface_hub import list_repo_tree
-from huggingface_hub.utils import (
-    GatedRepoError,
-    HfHubHTTPError,
-    OfflineModeIsEnabled,
-    RepositoryNotFoundError,
-    RevisionNotFoundError,
-)
-
 from transformers.utils.import_utils import is_mistral_common_available
-from ... import PythonBackend
 
+from ... import PythonBackend
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -523,9 +513,7 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                 pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
             )
         else:
-            return tokenizer_class.from_pretrained(
-                pretrained_model_name_or_path, *inputs, vocab=vocab, **kwargs
-            )
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, vocab=vocab, **kwargs)
 
     # Try vocab.txt (WordPiece models like SplinterTokenizer)
     try:
@@ -557,9 +545,7 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                 files_loaded.append("vocab.txt")
                 kwargs["backend"] = "tokenizers"
                 kwargs["files_loaded"] = files_loaded
-                return tokenizer_class.from_pretrained(
-                    pretrained_model_name_or_path, *inputs, vocab=vocab, **kwargs
-                )
+                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, vocab=vocab, **kwargs)
         except Exception:
             pass
 
@@ -694,8 +680,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 # If no fallback available, try calling tokenizer class directly as last resort
                 if hasattr(tokenizer_class, "from_pretrained"):
                     logger.info(
-                        f"Tokenizers backend failed: {e}. "
-                        "Trying to load tokenizer directly from tokenizer class."
+                        f"Tokenizers backend failed: {e}. Trying to load tokenizer directly from tokenizer class."
                     )
                     # Filter out AutoTokenizer-specific kwargs that custom tokenizers don't accept
                     custom_kwargs = {k: v for k, v in kwargs.items() if k not in ["backend", "files_loaded"]}
@@ -714,8 +699,10 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
             files_loaded = [spm_file]
             kwargs["backend"] = "sentencepiece"
             kwargs["files_loaded"] = files_loaded
-            if tokenizer_class is not None and SentencePieceBackend is not None and issubclass(
-                tokenizer_class, SentencePieceBackend
+            if (
+                tokenizer_class is not None
+                and SentencePieceBackend is not None
+                and issubclass(tokenizer_class, SentencePieceBackend)
             ):
                 logger.info(
                     "Falling back to SentencePiece backend using tokenizer class that inherits from SentencePieceBackend."

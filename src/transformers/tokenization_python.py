@@ -1393,7 +1393,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         return (vocab_file, merge_file)
 
-
     # def pad(
     #     self,
     #     encoded_inputs: Union[

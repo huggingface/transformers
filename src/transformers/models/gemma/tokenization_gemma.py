@@ -17,8 +17,8 @@ from typing import Optional
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...tokenization_utils_base import generate_merges
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
 
@@ -78,7 +78,9 @@ class GemmaTokenizer(TokenizersBackend):
         special_tokens = {str(pad_token), str(eos_token), str(bos_token), str(unk_token)}
 
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab            
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {
                 str(pad_token): 0,
@@ -91,7 +93,14 @@ class GemmaTokenizer(TokenizersBackend):
         filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
         self._merges = merges if merges is not None else generate_merges(filtered_vocab)
         self._tokenizer = Tokenizer(
-            BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, unk_token=str(unk_token), dropout=None, byte_fallback=True)
+            BPE(
+                vocab=self._vocab,
+                merges=self._merges,
+                fuse_unk=True,
+                unk_token=str(unk_token),
+                dropout=None,
+                byte_fallback=True,
+            )
         )
 
         self._tokenizer.decoder = decoders.Sequence(

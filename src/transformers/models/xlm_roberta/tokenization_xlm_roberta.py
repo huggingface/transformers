@@ -71,7 +71,6 @@ class XLMRobertaTokenizer(TokenizersBackend):
     ):
         self.add_prefix_space = add_prefix_space
 
-
         if vocab is not None:
             self._vocab = vocab
         else:
@@ -85,15 +84,21 @@ class XLMRobertaTokenizer(TokenizersBackend):
 
         self._tokenizer = Tokenizer(Unigram(vocab=self._vocab, unk_id=3, byte_fallback=False))
 
-        self._tokenizer.normalizer = normalizers.Sequence([
-            normalizers.Strip(left=False, right=True),
-            normalizers.Replace(" {2,}", "▁"),
-        ])
+        self._tokenizer.normalizer = normalizers.Sequence(
+            [
+                normalizers.Strip(left=False, right=True),
+                normalizers.Replace(" {2,}", "▁"),
+            ]
+        )
 
         prepend_scheme = "always" if add_prefix_space else "never"
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence([pre_tokenizers.WhitespaceSplit(), pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)])
-        self._tokenizer.decoder = decoders.Metaspace( replacement="▁", prepend_scheme=prepend_scheme)
-
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme),
+            ]
+        )
+        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
         tokenizer_object = self._tokenizer
 
@@ -109,7 +114,6 @@ class XLMRobertaTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
-        
 
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=["$A", "</s>"],
@@ -119,10 +123,7 @@ class XLMRobertaTokenizer(TokenizersBackend):
             ],
         )
 
-
         self.vocab_file = vocab_file
 
 
 __all__ = ["XLMRobertaTokenizer"]
-
-

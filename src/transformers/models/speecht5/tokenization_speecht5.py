@@ -122,7 +122,6 @@ class SpeechT5Tokenizer(SentencePieceBackend):
     def normalizer(self, value):
         self._normalizer = value
 
-
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:

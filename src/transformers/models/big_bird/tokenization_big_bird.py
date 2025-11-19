@@ -14,15 +14,13 @@
 # limitations under the License.
 """Tokenization classes for Big Bird model."""
 
-import os
-from shutil import copyfile
-from typing import Optional
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers.models import Unigram
 
 from ...tokenization_python import AddedToken
-from ...utils import is_sentencepiece_available, logging
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from tokenizers import Tokenizer, Regex, normalizers, pre_tokenizers, processors, decoders
-from tokenizers.models import Unigram
+from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
@@ -100,7 +98,7 @@ class BigBirdTokenizer(TokenizersBackend):
 
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-    
+
         self.add_prefix_space = add_prefix_space
         self.vocab_file = vocab_file
 

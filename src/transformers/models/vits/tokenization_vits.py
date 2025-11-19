@@ -100,7 +100,7 @@ class VitsTokenizer(PreTrainedTokenizer):
             normalize=normalize,
             phonemize=phonemize,
             is_uroman=is_uroman,
-            special_tokens_pattern="none",  
+            special_tokens_pattern="none",
             **kwargs,
         )
 

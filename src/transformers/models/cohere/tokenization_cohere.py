@@ -139,7 +139,9 @@ class CohereTokenizer(TokenizersBackend):
         self.tool_use_template = kwargs.pop("tool_use_template", None)
 
         if vocab is not None:
-            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
         else:
             self._vocab = {
                 str(pad_token): 0,
@@ -208,10 +210,9 @@ class CohereTokenizer(TokenizersBackend):
             ]
         )
         self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=self.add_prefix_space, trim_offsets=True)
-        
+
         # Call parent to handle AddedToken properties
         super()._post_init()
-
 
     def apply_tool_use_template(
         self,
@@ -482,4 +483,3 @@ class CohereTokenizer(TokenizersBackend):
 
 
 __all__ = ["CohereTokenizer"]
-
