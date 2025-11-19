@@ -227,7 +227,7 @@ def compute_module_sizes(
 
     tied_keys = getattr(model, "all_tied_weights_keys", {}).keys()
     for name, param in iterator:
-        # Do not count tied keys
+        # Do not count tied keys (the model is usually not tied yet here, so they will appear in the iterator)
         if name in tied_keys:
             continue
         if hf_quantizer is not None:
