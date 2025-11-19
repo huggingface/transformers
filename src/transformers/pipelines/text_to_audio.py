@@ -81,7 +81,7 @@ class TextToAudioPipeline(Pipeline):
     """
 
     _pipeline_calls_generate = True
-    _load_processor = False
+    _load_processor = True
     _load_image_processor = False
     _load_feature_extractor = False
     _load_tokenizer = True
@@ -150,7 +150,7 @@ class TextToAudioPipeline(Pipeline):
             kwargs = new_kwargs
 
         preprocessor = self.tokenizer if self.no_processor else self.processor
-        output = preprocessor(text, **kwargs, return_tensors="pt")
+        output = preprocessor(text, **kwargs, return_tensors="pt").to(self.model.dtype)
 
         return output
 
@@ -245,13 +245,13 @@ class TextToAudioPipeline(Pipeline):
     def postprocess(self, audio):
         output_dict = {}
 
-        if self.model.config.model_type == "csm":
+        if self.model.config.model_type in ["csm", "vibevoice"]:
             waveform_key = "audio"
         else:
             waveform_key = "waveform"
 
         # We directly get the waveform
-        if self.no_processor:
+        if self.no_processor or self.model.config.model_type == "vibevoice":
             if isinstance(audio, dict):
                 waveform = audio[waveform_key]
             elif isinstance(audio, tuple):
