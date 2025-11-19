@@ -190,6 +190,10 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
+    @unittest.skip(reason="AudioFlamingo3 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         # AF3 is audio+text composite; verify SDPA toggles propagate to submodules.
         if not self.has_attentions:
