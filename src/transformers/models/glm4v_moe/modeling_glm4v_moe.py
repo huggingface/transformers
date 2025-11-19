@@ -169,10 +169,10 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
-    if grouped_query_attention := key.shape[1] != query.shape[1]:
+    if grouped_query_attention := module.num_key_value_groups > 1:
         # In GQA, there are multiple query heads for each key head. To make GQA work, we reshape the input from
         # (batch, num_query_heads, seq_len, dim) to (batch, num_key_heads, num_query_heads_per_key, seq_len, dim)
-        query_states = query.view(query.shape[0], key.shape[1], -1, *query.shape[2:])
+        query_states = query.view(query.shape[0], key.shape[1], module.num_key_value_groups, *query.shape[2:])
         # Next, we broadcast keys across the num_query_heads_per_key dim with an einsum. Equivalent to (but faster than)
         # attn_weights = query_states @ key.unsqueeze(2).transpose(-1, -2) * scaling
         attn_weights = torch.einsum("bkgjd, bksd -> bkgjs", query_states, key).flatten(1, 2) * scaling
@@ -191,7 +191,7 @@ def eager_attention_forward(
         # Equivalent to (but faster than)
         # attn_output = (attn_weights @ value.unsqueeze(2)).flatten(1, 2)
         attn_output = torch.einsum(
-            "bkgjs, bksd -> bkgjd", attn_weights.unflatten(1, (key.shape[1], -1)), value
+            "bkgjs, bksd -> bkgjd", attn_weights.unflatten(1, (key.shape[1], module.num_key_value_groups)), value
         ).flatten(1, 2)
     else:
         attn_output = attn_weights @ value
@@ -1642,6 +1642,8 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vMoeCausalLMOutputWithPast]:
         r"""
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1650,8 +1652,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
 
         Example:
 
