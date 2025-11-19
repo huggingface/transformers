@@ -210,6 +210,7 @@ except ImportError:
     def register_kernel_mapping(*args, **kwargs):
         raise RuntimeError("register_kernel_mapping requires `kernels` to be installed. Run `pip install kernels`.")
 
+
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
 }
