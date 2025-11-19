@@ -14,8 +14,6 @@
 # limitations under the License.
 """MVP model configuration"""
 
-import warnings
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
@@ -171,13 +169,6 @@ class MvpConfig(PreTrainedConfig):
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
-
-        if kwargs.get("force_bos_token_to_be_generated", False):
-            self.forced_bos_token_id = self.bos_token_id
-            warnings.warn(
-                f"Please make sure the generated config includes `forced_bos_token_id={self.bos_token_id}` . "
-                "The config can simply be saved and uploaded again to be fixed."
-            )
 
 
 __all__ = ["MvpConfig"]

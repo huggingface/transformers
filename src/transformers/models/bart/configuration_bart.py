@@ -14,8 +14,6 @@
 # limitations under the License.
 """BART model configuration"""
 
-import warnings
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
@@ -165,12 +163,6 @@ class BartConfig(PreTrainedConfig):
             **kwargs,
         )
         self.tie_encoder_decoder = True
-        # ensure backward compatibility for BART CNN models
-        if kwargs.get("force_bos_token_to_be_generated", False):
-            self.forced_bos_token_id = self.bos_token_id
-            warnings.warn(
-                f"Please make sure the generation config includes `forced_bos_token_id={self.bos_token_id}`. "
-            )
 
 
 __all__ = ["BartConfig"]

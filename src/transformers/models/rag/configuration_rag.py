@@ -70,9 +70,6 @@ RAG_CONFIG_DOC = r"""
             `context_attention_mask` are returned. See returned tensors for more detail.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        forced_eos_token_id (`int`, *optional*):
-            The id of the token to force as the last generated token when `max_length` is reached. Usually set to
-            `eos_token_id`.
 """
 
 
@@ -109,7 +106,6 @@ class RagConfig(PreTrainedConfig):
         do_marginalize=False,
         output_retrieved=False,
         use_cache=True,
-        forced_eos_token_id=None,
         dataset_revision=None,
         **kwargs,
     ):
@@ -118,7 +114,6 @@ class RagConfig(PreTrainedConfig):
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             decoder_start_token_id=decoder_start_token_id,
-            forced_eos_token_id=forced_eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             prefix=prefix,
             vocab_size=vocab_size,
@@ -165,9 +160,6 @@ class RagConfig(PreTrainedConfig):
         self.do_deduplication = do_deduplication
 
         self.use_cache = use_cache
-
-        if forced_eos_token_id is None:
-            self.forced_eos_token_id = getattr(self.generator, "forced_eos_token_id", None)
 
     @classmethod
     def from_question_encoder_generator_configs(

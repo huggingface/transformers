@@ -33,6 +33,7 @@ from ..cache_utils import (
     QuantizedCache,
     StaticCache,
 )
+from ..configuration_utils import PreTrainedConfig
 from ..dynamic_module_utils import (
     check_python_requirements,
     get_cached_module_file,
@@ -1770,14 +1771,13 @@ class GenerationMixin(ContinuousMixin):
         # TODO (joao): per-model generation config classes.
 
         if generation_config is None:
-            # Users may modify `model.config` to control generation
-            # This is a legacy behavior and is not supported anymore
+            # Users may modify `model.config` to control generation. This is a legacy behavior and is not supported anymore
             if len(self.config._get_generation_parameters()) > 0:
                 raise ValueError(
-                    "You have modified the pretrained model configuration to control generation."
-                    " This strategy to control generation is not supported anymore. "
-                    " Please use and modify the model generation configuration (see"
-                    " https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )",
+                    "You have modified the pretrained model configuration to control generation "
+                    f" We detected the following values set - {self.config._get_generation_parameters()}. "
+                    " This strategy to control generation is not supported anymore. Please use and modify `model.generation_config` "
+                    " (see https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )",
                 )
 
             generation_config = self.generation_config
@@ -1788,8 +1788,8 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs = generation_config.update(**kwargs)
         generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
 
-        # Set default generation values if not already set by the users
-        global_defaults = GenerationConfig._get_global_generation_defaults()
+        # Set default generation values (BC) if not already re-set by users
+        global_defaults = PreTrainedConfig._get_global_generation_defaults()
         generation_config.update(**global_defaults, defaults_only=True)
 
         # Related to #40039: prior to this PR, models with sliding window attention were forced to have

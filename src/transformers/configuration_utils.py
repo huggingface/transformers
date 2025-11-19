@@ -303,8 +303,7 @@ class PreTrainedConfig(PushToHubMixin):
         self.decoder_start_token_id = decoder_start_token_id
 
         # Parameters for sequence generation saved in the config are popped instead of loading them.
-        generation_params = []
-        for parameter_name in generation_params:
+        for parameter_name in self._get_global_generation_defaults().keys():
             kwargs.pop(parameter_name, None)
 
         # Name or path to the pretrained checkpoint
@@ -424,6 +423,37 @@ class PreTrainedConfig(PushToHubMixin):
     @rope_scaling.setter
     def rope_scaling(self, value):
         self.rope_parameters = value
+
+    @staticmethod
+    def _get_global_generation_defaults() -> dict[str, Any]:
+        return {
+            "max_length": 20,
+            "min_length": 0,
+            "do_sample": False,
+            "early_stopping": False,
+            "num_beams": 1,
+            "temperature": 1.0,
+            "top_k": 50,
+            "top_p": 1.0,
+            "typical_p": 1.0,
+            "repetition_penalty": 1.0,
+            "length_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "encoder_no_repeat_ngram_size": 0,
+            "bad_words_ids": None,
+            "num_return_sequences": 1,
+            "output_scores": False,
+            "return_dict_in_generate": False,
+            "forced_bos_token_id": None,
+            "forced_eos_token_id": None,
+            "remove_invalid_values": False,
+            "exponential_decay_length_penalty": None,
+            "suppress_tokens": None,
+            "begin_suppress_tokens": None,
+            # Deprecated arguments (moved to the Hub). TODO joao, manuel: remove in v4.62.0
+            "num_beam_groups": 1,
+            "diversity_penalty": 0.0,
+        }
 
     def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
@@ -1063,9 +1093,9 @@ class PreTrainedConfig(PushToHubMixin):
         Gets the non-default generation parameters on the PreTrainedConfig instance
         """
         generation_params = {}
-        # for f in ["generate_params"]:
-        #     if hasattr(self, f.name):
-        #         generation_params[f.name] = getattr(self, f.name)
+        for key in self._get_global_generation_defaults().keys():
+            if hasattr(self, key) and getattr(self, key) is not None:
+                generation_params[key] = getattr(self, key)
 
         return generation_params
 
