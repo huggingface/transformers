@@ -33,6 +33,7 @@ from huggingface_hub.utils import (
 )
 
 from transformers.utils.import_utils import is_mistral_common_available
+from ... import PythonBackend
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
@@ -463,6 +464,8 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
         files_loaded.append("tokenizer.json")
         kwargs["backend"] = "tokenizers"
         kwargs["files_loaded"] = files_loaded
+        # Some old models have uploaded a tokenizer.json but haven't updated tokenizer_config.json to point to the correct tokenizer class
+        tokenizer_class = TokenizersBackend if tokenizer_class.__name__ == "PythonBackend" else tokenizer_class
         return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
     # Try extracting from SentencePiece model
@@ -646,7 +649,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 if bc and issubclass(tokenizer_class, bc):
                     inherits_from_backend = True
                     break
-            is_completely_custom = not issubclass(tokenizer_class, PreTrainedTokenizer) and not inherits_from_backend
+            is_completely_custom = not issubclass(tokenizer_class, PythonBackend) and not inherits_from_backend
 
             if is_custom_pre_trained:
                 logger.info("Loading tokenizer with custom PreTrainedTokenizer backend (edge case)")
