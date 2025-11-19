@@ -15,10 +15,9 @@
 
 
 import torch
+import torch.nn as nn
 
-from ... import initialization as init
-from ...configuration_utils import PreTrainedConfig
-from ...modeling_utils import PreTrainedModel
+from ...configuration_utils import PretrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoModel
 from ..sam2.configuration_sam2 import (
@@ -88,7 +87,7 @@ class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
 
 
 class Sam3TrackerProcessor(Sam2Processor):
-    pass
+    image_processor_class = "Sam3ImageProcessorFast"
 
 
 class Sam3TrackerMaskDecoderConfig(Sam2MaskDecoderConfig):
@@ -125,7 +124,7 @@ class Sam3TrackerConfig(Sam2Config):
         self.mask_decoder_config = Sam3TrackerMaskDecoderConfig(**mask_decoder_config)
 
         self.initializer_range = initializer_range
-        PreTrainedConfig.__init__(**kwargs)
+        PretrainedConfig.__init__(**kwargs)
 
 
 class Sam3TrackerImageSegmentationOutput(Sam2ImageSegmentationOutput):
@@ -138,12 +137,22 @@ class Sam3TrackerFeedForward(Sam2FeedForward):
 
 @auto_docstring
 class Sam3TrackerPreTrainedModel(Sam2PreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, Sam3TrackerLayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         if isinstance(module, Sam3TrackerModel):
             if module.no_memory_embedding is not None:
-                init.zeros_(module.no_memory_embedding)
+                module.no_memory_embedding.data.zero_()
 
 
 class Sam3TrackerPositionalEmbedding(Sam2PositionalEmbedding):
@@ -179,6 +188,8 @@ class Sam3TrackerMaskDecoder(Sam2MaskDecoder):
 
 
 class Sam3TrackerModel(Sam2Model):
+    _tied_weights_keys = []
+    _keys_to_ignore_on_load_missing = []
     _checkpoint_conversion_mapping = {
         "tracker_model.": "",
         "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
@@ -215,6 +226,9 @@ class Sam3TrackerModel(Sam2Model):
         self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
 
         self.post_init()
+
+    def _tie_weights(self):
+        raise NotImplementedError("Tying weights is not supported for Sam3TrackerModel.")
 
 
 __all__ = [

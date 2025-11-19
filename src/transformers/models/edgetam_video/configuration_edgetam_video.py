@@ -19,17 +19,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
+class EdgeTamVideoPromptEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EdgeTamVideoPromptEncoder`]. The [`EdgeTamVideoPromptEncoder`]
     module is used to encode the input 2D points and bounding boxes.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -75,13 +75,13 @@ class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
         self.scale = scale
 
 
-class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
+class EdgeTamVideoMaskDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EdgeTamVideoMaskDecoder`]. It is used to instantiate a EDGETAM_VIDEO
     memory encoder according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -148,15 +148,15 @@ class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
-class EdgeTamVideoConfig(PreTrainedConfig):
+class EdgeTamVideoConfig(PretrainedConfig):
     r"""
     [`EdgeTamVideoConfig`] is the configuration class to store the configuration of a [`EdgeTamVideoModel`]. It is used to instantiate a
     EDGETAM model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
     configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
     [facebook/EdgeTAM](https://huggingface.co/facebook/EdgeTAM) architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vision_config (Union[`dict`, `EdgeTamVideoVisionConfig`], *optional*):

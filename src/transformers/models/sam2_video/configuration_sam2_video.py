@@ -18,17 +18,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class Sam2VideoPromptEncoderConfig(PreTrainedConfig):
+class Sam2VideoPromptEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam2VideoPromptEncoder`]. The [`Sam2VideoPromptEncoder`]
     module is used to encode the input 2D points and bounding boxes.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -74,13 +74,13 @@ class Sam2VideoPromptEncoderConfig(PreTrainedConfig):
         self.scale = scale
 
 
-class Sam2VideoMaskDecoderConfig(PreTrainedConfig):
+class Sam2VideoMaskDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam2VideoMaskDecoder`]. It is used to instantiate a SAM2_VIDEO
     memory encoder according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -147,15 +147,15 @@ class Sam2VideoMaskDecoderConfig(PreTrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
-class Sam2VideoConfig(PreTrainedConfig):
+class Sam2VideoConfig(PretrainedConfig):
     r"""
     [`Sam2Config`] is the configuration class to store the configuration of a [`Sam2Model`]. It is used to instantiate a
     SAM2 model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
     configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
     [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vision_config (Union[`dict`, `Sam2VisionConfig`], *optional*):
@@ -186,8 +186,6 @@ class Sam2VideoConfig(PreTrainedConfig):
             Whether to use multimask output for tracking.
         max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
             The maximum number of object pointers in the encoder.
-        max_cond_frame_num (`int`, *optional*, defaults to -1):
-            Maximum number of conditioning frames to use in memory attention. Set to -1 to use all conditioning frames.
         enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
             Whether to enable temporal positional encoding for object pointers.
         memory_attention_hidden_size (`int`, *optional*, defaults to 256):

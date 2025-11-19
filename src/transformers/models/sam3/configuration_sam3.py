@@ -16,11 +16,11 @@
 
 from transformers import CLIPTextConfig
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class Sam3ViTConfig(PreTrainedConfig):
+class Sam3ViTConfig(PretrainedConfig):
     r"""
     Configuration class for SAM3 Vision Encoder (ViT backbone).
 
@@ -111,7 +111,7 @@ class Sam3ViTConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Sam3VisionConfig(PreTrainedConfig):
+class Sam3VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam3VisionModel`]. It is used to instantiate a SAM
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -180,7 +180,7 @@ class Sam3VisionConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class Sam3GeometryEncoderConfig(PreTrainedConfig):
+class Sam3GeometryEncoderConfig(PretrainedConfig):
     r"""
     Configuration class for SAM3 Geometry Encoder.
 
@@ -236,7 +236,7 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Sam3DETREncoderConfig(PreTrainedConfig):
+class Sam3DETREncoderConfig(PretrainedConfig):
     r"""
     Configuration class for SAM3 DETR Encoder (vision-text fusion encoder).
 
@@ -288,7 +288,7 @@ class Sam3DETREncoderConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Sam3DETRDecoderConfig(PreTrainedConfig):
+class Sam3DETRDecoderConfig(PretrainedConfig):
     r"""
     Configuration class for SAM3 DETR Decoder (object query decoder).
 
@@ -344,7 +344,7 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Sam3MaskDecoderConfig(PreTrainedConfig):
+class Sam3MaskDecoderConfig(PretrainedConfig):
     r"""
     Configuration class for SAM3 Mask Decoder (pixel-level mask prediction).
 
@@ -384,7 +384,7 @@ class Sam3MaskDecoderConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Sam3Config(PreTrainedConfig):
+class Sam3Config(PretrainedConfig):
     r"""
     Configuration class to store the configuration of a [`Sam3Model`].
 

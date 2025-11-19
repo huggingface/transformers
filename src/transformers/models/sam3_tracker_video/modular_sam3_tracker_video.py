@@ -17,7 +17,7 @@ from typing import Optional
 
 import torch
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ...processing_utils import Unpack
 from ...utils.generic import TransformersKwargs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -98,14 +98,15 @@ class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
 
 
 class Sam3TrackerVideoProcessor(Sam2VideoProcessor):
-    pass
+    image_processor_class = "Sam3ImageProcessorFast"
+    video_processor_class = "Sam2VideoVideoProcessor"
 
 
 class Sam3TrackerVideoMaskDecoderConfig(Sam2VideoMaskDecoderConfig):
     pass
 
 
-class Sam3TrackerVideoConfig(PreTrainedConfig):
+class Sam3TrackerVideoConfig(PretrainedConfig):
     r"""
     [`Sam3TrackerVideoConfig`] is the configuration class to store the configuration of a [`Sam3TrackerVideoModel`]. It is used to instantiate a
     SAM3 tracker video model according to the specified arguments, defining the memory attention, memory encoder, and image encoder

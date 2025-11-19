@@ -36,15 +36,20 @@ class Sam3VideoProcessor(ProcessorMixin):
     [`~Sam3ImageProcessor.__call__`] and [`~Sam3VideoProcessor.__call__`] for more information.
 
     Args:
-        image_processor (`Sam2ImageProcessorFast`):
-            An instance of [`Sam2ImageProcessorFast`].
+        image_processor (`Sam3ImageProcessorFast`):
+            An instance of [`Sam3ImageProcessorFast`].
         video_processor (`Sam2VideoVideoProcessor`):
             An instance of [`Sam2VideoVideoProcessor`].
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
+        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             An instance of [`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]. The tokenizer is a required input.
         target_size (`int`, *optional*):
             The target size (target_size, target_size) to which the image will be resized.
     """
+
+    attributes = ["image_processor", "video_processor", "tokenizer"]
+    image_processor_class = "Sam3ImageProcessorFast"
+    video_processor_class = "Sam2VideoVideoProcessor"
+    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(
         self,

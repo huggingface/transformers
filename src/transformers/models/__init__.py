@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from .arcee import *
     from .aria import *
     from .audio_spectrogram_transformer import *
-    from .audioflamingo3 import *
     from .auto import *
     from .autoformer import *
     from .aya_vision import *
@@ -77,7 +76,6 @@ if TYPE_CHECKING:
     from .csm import *
     from .ctrl import *
     from .cvt import *
-    from .cwm import *
     from .d_fine import *
     from .dab_detr import *
     from .dac import *
@@ -142,9 +140,6 @@ if TYPE_CHECKING:
     from .git import *
     from .glm import *
     from .glm4 import *
-    from .glm4v import *
-    from .glm4v_moe import *
-    from .glm46v import *
     from .glpn import *
     from .got_ocr2 import *
     from .gpt2 import *
@@ -191,7 +186,6 @@ if TYPE_CHECKING:
     from .led import *
     from .levit import *
     from .lfm2 import *
-    from .lfm2_moe import *
     from .lfm2_vl import *
     from .lightglue import *
     from .lilt import *
@@ -311,8 +305,10 @@ if TYPE_CHECKING:
     from .sam import *
     from .sam2 import *
     from .sam2_video import *
+    from .sam3 import *
     from .sam3_tracker import *
     from .sam3_tracker_video import *
+    from .sam3_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
@@ -358,7 +354,6 @@ if TYPE_CHECKING:
     from .univnet import *
     from .upernet import *
     from .vaultgemma import *
-    from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
     from .vilt import *

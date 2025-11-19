@@ -14,7 +14,7 @@
 # limitations under the License.
 """SAM3 Video model configuration"""
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class Sam3VideoConfig(PreTrainedConfig):
+class Sam3VideoConfig(PretrainedConfig):
     r"""
     Configuration class for [`Sam3VideoModel`]. This combines configurations for the detector (Sam3) and tracker
     (Sam2Video) components, along with detection-tracking fusion hyperparameters.
@@ -157,7 +157,7 @@ class Sam3VideoConfig(PreTrainedConfig):
         if isinstance(detector_config, dict):
             detector_config["model_type"] = detector_config.get("model_type", "sam3")
             self.detector_config = CONFIG_MAPPING[detector_config["model_type"]](**detector_config)
-        elif isinstance(detector_config, PreTrainedConfig):
+        elif isinstance(detector_config, PretrainedConfig):
             self.detector_config = detector_config
         else:
             raise ValueError(f"detector_config must be a dict or Sam3Config, got {type(detector_config)}")
@@ -169,7 +169,7 @@ class Sam3VideoConfig(PreTrainedConfig):
         if isinstance(tracker_config, dict):
             tracker_config["model_type"] = tracker_config.get("model_type", "sam3_tracker_video")
             self.tracker_config = CONFIG_MAPPING[tracker_config["model_type"]](**tracker_config)
-        elif isinstance(tracker_config, PreTrainedConfig):
+        elif isinstance(tracker_config, PretrainedConfig):
             self.tracker_config = tracker_config
         else:
             raise ValueError(f"tracker_config must be a dict or Sam3TrackerVideoConfig, got {type(tracker_config)}")

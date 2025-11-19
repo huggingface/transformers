@@ -53,6 +53,10 @@ class Sam2VideoProcessor(ProcessorMixin):
             The value used for padding input points.
     """
 
+    attributes = ["image_processor", "video_processor"]
+    image_processor_class = "Sam2ImageProcessorFast"
+    video_processor_class = "Sam2VideoVideoProcessor"
+
     def __init__(
         self, image_processor, video_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
     ):
@@ -525,9 +529,9 @@ class Sam2VideoProcessor(ProcessorMixin):
         self,
         video: Optional[VideoInput] = None,
         inference_device: Union[str, "torch.device"] = "cpu",
-        inference_state_device: Optional[Union[str, "torch.device"]] = None,
-        processing_device: Optional[Union[str, "torch.device"]] = None,
-        video_storage_device: Optional[Union[str, "torch.device"]] = None,
+        inference_state_device: Union[str, "torch.device"] = None,
+        processing_device: Union[str, "torch.device"] = None,
+        video_storage_device: Union[str, "torch.device"] = None,
         max_vision_features_cache_size: int = 1,
         dtype: torch.dtype = torch.float32,
     ):

@@ -104,6 +104,10 @@ class Sam3Processor(ProcessorMixin):
             The value used for padding input boxes.
     """
 
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "Sam3ImageProcessorFast"
+    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
+
     def __init__(
         self, image_processor, tokenizer, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
     ):

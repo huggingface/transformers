@@ -21,9 +21,9 @@
 
 import math
 from collections import OrderedDict
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -32,7 +32,6 @@ import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -672,26 +671,35 @@ class Sam3TrackerVideoPreTrainedModel(PreTrainedModel):
     config_class = Sam3TrackerVideoConfig
     base_model_prefix = "sam3_tracker_video"
     main_input_name = "pixel_values"
-    input_modalities = "video"
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, Sam3TrackerVideoModel):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, Sam3TrackerVideoLayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, Sam3TrackerVideoModel):
             if module.no_memory_positional_encoding is not None:
-                init.zeros_(module.no_memory_positional_encoding)
+                module.no_memory_positional_encoding.data.zero_()
             if module.memory_temporal_positional_encoding is not None:
-                init.zeros_(module.memory_temporal_positional_encoding)
+                module.memory_temporal_positional_encoding.data.zero_()
             if module.no_object_pointer is not None:
-                init.zeros_(module.no_object_pointer)
+                module.no_object_pointer.data.zero_()
             if module.occlusion_spatial_embedding_parameter is not None:
-                init.zeros_(module.occlusion_spatial_embedding_parameter)
+                module.occlusion_spatial_embedding_parameter.data.zero_()
         if isinstance(module, Sam3TrackerVideoMemoryFuserCXBlock):
             if module.scale is not None:
-                init.zeros_(module.scale)
+                module.scale.data.zero_()
 
 
 class Sam3TrackerVideoVisionRotaryEmbedding(nn.Module):
@@ -1564,11 +1572,10 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 
 @auto_docstring
 class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
-    input_modalities = ["video", "text"]
-    _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerVideoTwoWayAttentionBlock, index=2)}
-    _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
     _tied_weights_keys = {}
     _keys_to_ignore_on_load_missing = []
+    _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerVideoTwoWayAttentionBlock, index=2)}
+    _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
     _checkpoint_conversion_mapping = {
         "tracker_model.": "",
         "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
@@ -1633,6 +1640,11 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             self.occlusion_spatial_embedding_parameter = torch.nn.Parameter(torch.zeros(1, self.mem_dim))
 
         self.post_init()
+
+    def _tie_weights(self):
+        self.prompt_encoder.shared_embedding.positional_embedding.data = (
+            self.shared_image_embedding.positional_embedding.data
+        )
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()

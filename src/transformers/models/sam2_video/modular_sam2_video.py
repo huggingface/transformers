@@ -16,9 +16,9 @@
 
 import math
 from collections import OrderedDict
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -27,9 +27,8 @@ import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
 
-from ... import initialization as init
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -69,15 +68,15 @@ class Sam2VideoMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
-class Sam2VideoConfig(PreTrainedConfig):
+class Sam2VideoConfig(PretrainedConfig):
     r"""
     [`Sam2Config`] is the configuration class to store the configuration of a [`Sam2Model`]. It is used to instantiate a
     SAM2 model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
     configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
     [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vision_config (Union[`dict`, `Sam2VisionConfig`], *optional*):
@@ -108,8 +107,6 @@ class Sam2VideoConfig(PreTrainedConfig):
             Whether to use multimask output for tracking.
         max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
             The maximum number of object pointers in the encoder.
-        max_cond_frame_num (`int`, *optional*, defaults to -1):
-            Maximum number of conditioning frames to use in memory attention. Set to -1 to use all conditioning frames.
         enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
             Whether to enable temporal positional encoding for object pointers.
         memory_attention_hidden_size (`int`, *optional*, defaults to 256):
@@ -625,6 +622,10 @@ class Sam2VideoProcessor(Sam2Processor):
             The value used for padding input points.
     """
 
+    attributes = ["image_processor", "video_processor"]
+    image_processor_class = "Sam2ImageProcessorFast"
+    video_processor_class = "Sam2VideoVideoProcessor"
+
     def __init__(
         self, image_processor, video_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
     ):
@@ -636,9 +637,9 @@ class Sam2VideoProcessor(Sam2Processor):
         self,
         video: Optional[VideoInput] = None,
         inference_device: Union[str, "torch.device"] = "cpu",
-        inference_state_device: Optional[Union[str, "torch.device"]] = None,
-        processing_device: Optional[Union[str, "torch.device"]] = None,
-        video_storage_device: Optional[Union[str, "torch.device"]] = None,
+        inference_state_device: Union[str, "torch.device"] = None,
+        processing_device: Union[str, "torch.device"] = None,
+        video_storage_device: Union[str, "torch.device"] = None,
         max_vision_features_cache_size: int = 1,
         dtype: torch.dtype = torch.float32,
     ):
@@ -993,26 +994,35 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
     config_class = Sam2VideoConfig
     base_model_prefix = "sam2_video"
     main_input_name = "pixel_values"
-    input_modalities = "video"
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, Sam2VideoModel):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, Sam2VideoLayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, Sam2VideoModel):
             if module.no_memory_positional_encoding is not None:
-                init.zeros_(module.no_memory_positional_encoding)
+                module.no_memory_positional_encoding.data.zero_()
             if module.memory_temporal_positional_encoding is not None:
-                init.zeros_(module.memory_temporal_positional_encoding)
+                module.memory_temporal_positional_encoding.data.zero_()
             if module.no_object_pointer is not None:
-                init.zeros_(module.no_object_pointer)
+                module.no_object_pointer.data.zero_()
             if module.occlusion_spatial_embedding_parameter is not None:
-                init.zeros_(module.occlusion_spatial_embedding_parameter)
+                module.occlusion_spatial_embedding_parameter.data.zero_()
         if isinstance(module, Sam2VideoMemoryFuserCXBlock):
             if module.scale is not None:
-                init.zeros_(module.scale)
+                module.scale.data.zero_()
 
 
 class Sam2VideoVisionRotaryEmbedding(nn.Module):
@@ -1445,10 +1455,7 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 
 @auto_docstring
 class Sam2VideoModel(Sam2Model):
-    input_modalities = ["video", "text"]
-    _tied_weights_keys = {
-        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
-    }
+    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _keys_to_ignore_on_load_unexpected = []

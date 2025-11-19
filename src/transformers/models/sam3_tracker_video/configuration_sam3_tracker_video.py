@@ -20,11 +20,11 @@
 # limitations under the License.
 
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class Sam3TrackerVideoPromptEncoderConfig(PreTrainedConfig):
+class Sam3TrackerVideoPromptEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam3TrackerVideoPromptEncoder`]. The [`Sam3TrackerVideoPromptEncoder`]
     module is used to encode the input 2D points and bounding boxes.
@@ -76,13 +76,13 @@ class Sam3TrackerVideoPromptEncoderConfig(PreTrainedConfig):
         self.scale = scale
 
 
-class Sam3TrackerVideoMaskDecoderConfig(PreTrainedConfig):
+class Sam3TrackerVideoMaskDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam3TrackerVideoMaskDecoder`]. It is used to instantiate a SAM3_TRACKER_VIDEO
     memory encoder according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -149,7 +149,7 @@ class Sam3TrackerVideoMaskDecoderConfig(PreTrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
-class Sam3TrackerVideoConfig(PreTrainedConfig):
+class Sam3TrackerVideoConfig(PretrainedConfig):
     r"""
     [`Sam3TrackerVideoConfig`] is the configuration class to store the configuration of a [`Sam3TrackerVideoModel`]. It is used to instantiate a
     SAM3 tracker video model according to the specified arguments, defining the memory attention, memory encoder, and image encoder

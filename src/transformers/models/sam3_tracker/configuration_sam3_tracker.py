@@ -20,11 +20,11 @@
 # limitations under the License.
 
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class Sam3TrackerPromptEncoderConfig(PreTrainedConfig):
+class Sam3TrackerPromptEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam3TrackerPromptEncoder`]. The [`Sam3TrackerPromptEncoder`]
     module is used to encode the input 2D points and bounding boxes.
@@ -76,13 +76,13 @@ class Sam3TrackerPromptEncoderConfig(PreTrainedConfig):
         self.scale = scale
 
 
-class Sam3TrackerMaskDecoderConfig(PreTrainedConfig):
+class Sam3TrackerMaskDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam3TrackerMaskDecoder`]. It is used to instantiate a SAM3_TRACKER
     memory encoder according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -149,15 +149,15 @@ class Sam3TrackerMaskDecoderConfig(PreTrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
-class Sam3TrackerConfig(PreTrainedConfig):
+class Sam3TrackerConfig(PretrainedConfig):
     r"""
     [`Sam3TrackerConfig`] is the configuration class to store the configuration of a [`Sam3TrackerModel`]. It is used to instantiate a
     SAM3_TRACKER model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
     configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
     [facebook/sam3_tracker.1-hiera-tiny](https://huggingface.co/facebook/sam3_tracker.1-hiera-tiny) architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vision_config (Union[`dict`, `Sam3TrackerVisionConfig`], *optional*):

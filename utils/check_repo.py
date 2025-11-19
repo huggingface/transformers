@@ -33,13 +33,15 @@ It has no auto-fix mode.
 
 import os
 import re
+import sys
 import types
 import warnings
 from collections import OrderedDict
 from difflib import get_close_matches
+from importlib.machinery import ModuleSpec
 from pathlib import Path
 
-from transformers import is_torch_available
+from transformers import is_flax_available, is_tf_available, is_torch_available
 from transformers.models.auto.auto_factory import get_values
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
 from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
@@ -73,6 +75,7 @@ PRIVATE_MODELS = [
     "Qwen3VLVisionModel",
     "Qwen3VLMoeVisionModel",
     "SwitchTransformersStack",
+    "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
     "MaskFormerSwinPreTrainedModel",
     "BridgeTowerTextModel",
@@ -90,8 +93,6 @@ PRIVATE_MODELS = [
     "Kosmos2_5TextForCausalLM",
     "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
-    "SiglipVisionTransformer",
-    "Siglip2VisionTransformer",
     "AriaTextForCausalLM",
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
@@ -133,10 +134,17 @@ IGNORE_NON_TESTED = (
         "RealmScorer",  # Not regular model.
         "RealmForOpenQA",  # Not regular model.
         "ReformerForMaskedLM",  # Needs to be setup as decoder.
+        "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
+        "TFRobertaForMultipleChoice",  # TODO: fix
+        "TFRobertaPreLayerNormForMultipleChoice",  # TODO: fix
         "SeparableConv1D",  # Building part of bigger (tested) model.
+        "FlaxBartForCausalLM",  # Building part of bigger (tested) model.
+        "FlaxBertForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through FlaxRobertaForCausalLM.
         "OPTDecoderWrapper",
+        "TFSegformerDecodeHead",  # Not a regular model.
         "AltRobertaModel",  # Building part of bigger (tested) model.
         "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
+        "TFBlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
         "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
         "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
         "BarkCausalModel",  # Building part of bigger (tested) model.
@@ -204,12 +212,19 @@ IGNORE_NON_TESTED = (
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/decision_transformer/test_modeling_decision_transformer.py",
     "models/camembert/test_modeling_camembert.py",
+    "models/mt5/test_modeling_flax_mt5.py",
     "models/mbart/test_modeling_mbart.py",
     "models/mt5/test_modeling_mt5.py",
     "models/pegasus/test_modeling_pegasus.py",
+    "models/camembert/test_modeling_tf_camembert.py",
+    "models/mt5/test_modeling_tf_mt5.py",
+    "models/xlm_roberta/test_modeling_tf_xlm_roberta.py",
+    "models/xlm_roberta/test_modeling_flax_xlm_roberta.py",
     "models/xlm_prophetnet/test_modeling_xlm_prophetnet.py",
     "models/xlm_roberta/test_modeling_xlm_roberta.py",
     "models/vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
+    "models/vision_text_dual_encoder/test_modeling_tf_vision_text_dual_encoder.py",
+    "models/vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
     "models/decision_transformer/test_modeling_decision_transformer.py",
     "models/bark/test_modeling_bark.py",
     "models/shieldgemma2/test_modeling_shieldgemma2.py",
@@ -247,6 +262,12 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BlipTextModel",
     "BrosSpadeEEForTokenClassification",
     "BrosSpadeELForTokenClassification",
+    "TFBlipForConditionalGeneration",
+    "TFBlipForImageTextRetrieval",
+    "TFBlipForQuestionAnswering",
+    "TFBlipVisionModel",
+    "TFBlipTextLMHeadModel",
+    "TFBlipTextModel",
     "Swin2SRForImageSuperResolution",
     "BridgeTowerForImageAndTextRetrieval",
     "BridgeTowerForMaskedLM",
@@ -279,6 +300,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PerceiverForMultimodalAutoencoding",
     "PerceiverForOpticalFlow",
     "SegformerDecodeHead",
+    "TFSegformerDecodeHead",
+    "FlaxBeitForMaskedImageModeling",
     "BeitForMaskedImageModeling",
     "ChineseCLIPTextModel",
     "ChineseCLIPVisionModel",
@@ -288,6 +311,14 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ClvpModel",
     "GroupViTTextModel",
     "GroupViTVisionModel",
+    "TFCLIPTextModel",
+    "TFCLIPVisionModel",
+    "TFGroupViTTextModel",
+    "TFGroupViTVisionModel",
+    "FlaxCLIPTextModel",
+    "FlaxCLIPTextModelWithProjection",
+    "FlaxCLIPVisionModel",
+    "FlaxWav2Vec2ForCTC",
     "DetrForSegmentation",
     "Pix2StructVisionModel",
     "Pix2StructTextModel",
@@ -325,6 +356,13 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "RealmForOpenQA",
     "RealmScorer",
     "RealmReader",
+    "TFDPRReader",
+    "TFGPT2DoubleHeadsModel",
+    "TFLayoutLMForQuestionAnswering",
+    "TFOpenAIGPTDoubleHeadsModel",
+    "TFRagModel",
+    "TFRagSequenceForGeneration",
+    "TFRagTokenForGeneration",
     "Wav2Vec2ForCTC",
     "HubertForCTC",
     "SEWForCTC",
@@ -336,6 +374,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "VisualBertForVisualReasoning",
     "VisualBertForQuestionAnswering",
     "VisualBertForMultipleChoice",
+    "TFWav2Vec2ForCTC",
+    "TFHubertForCTC",
     "XCLIPVisionModel",
     "XCLIPTextModel",
     "AltCLIPTextModel",
@@ -365,9 +405,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
-    "SiglipVisionTransformer",
     "Siglip2VisionModel",
-    "Siglip2VisionTransformer",
     "Siglip2TextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
     "VitPoseForPoseEstimation",
@@ -404,6 +442,20 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
 ]
 
+# DO NOT edit this list!
+# (The corresponding pytorch objects should never have been in the main `__init__`, but it's too late to remove)
+OBJECT_TO_SKIP_IN_MAIN_INIT_CHECK = [
+    "FlaxBertLayer",
+    "FlaxBigBirdLayer",
+    "FlaxRoFormerLayer",
+    "TFBertLayer",
+    "TFLxmertEncoder",
+    "TFLxmertXLayer",
+    "TFMPNetLayer",
+    "TFMobileBertLayer",
+    "TFSegformerLayer",
+    "TFViTMAELayer",
+]
 
 # Update this list for models that have multiple model types for the same model doc.
 MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
@@ -431,7 +483,10 @@ def check_missing_backends():
     missing_backends = []
     if not is_torch_available():
         missing_backends.append("PyTorch")
-
+    if not is_tf_available():
+        missing_backends.append("TensorFlow")
+    if not is_flax_available():
+        missing_backends.append("Flax")
     if len(missing_backends) > 0:
         missing = ", ".join(missing_backends)
         if os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
@@ -488,8 +543,15 @@ def get_model_modules() -> list[str]:
         "modeling_encoder_decoder",
         "modeling_marian",
         "modeling_retribert",
+        "modeling_flax_auto",
+        "modeling_flax_encoder_decoder",
         "modeling_speech_encoder_decoder",
+        "modeling_flax_speech_encoder_decoder",
+        "modeling_flax_vision_encoder_decoder",
         "modeling_timm_backbone",
+        "modeling_tf_auto",
+        "modeling_tf_encoder_decoder",
+        "modeling_tf_vision_encoder_decoder",
         "modeling_vision_encoder_decoder",
     ]
     modules = []
@@ -520,15 +582,12 @@ def get_models(module: types.ModuleType, include_pretrained: bool = False) -> li
         List[Tuple[str, type]]: List of models as tuples (class name, actual class).
     """
     models = []
+    model_classes = (transformers.PreTrainedModel, transformers.TFPreTrainedModel, transformers.FlaxPreTrainedModel)
     for attr_name in dir(module):
         if not include_pretrained and ("Pretrained" in attr_name or "PreTrained" in attr_name):
             continue
         attr = getattr(module, attr_name)
-        if (
-            isinstance(attr, type)
-            and issubclass(attr, transformers.PreTrainedModel)
-            and attr.__module__ == module.__name__
-        ):
+        if isinstance(attr, type) and issubclass(attr, model_classes) and attr.__module__ == module.__name__:
             models.append((attr_name, attr))
     return models
 
@@ -584,7 +643,11 @@ def get_model_test_files() -> list[str]:
     _ignore_files = [
         "test_modeling_common",
         "test_modeling_encoder_decoder",
+        "test_modeling_flax_encoder_decoder",
+        "test_modeling_flax_speech_encoder_decoder",
         "test_modeling_marian",
+        "test_modeling_tf_common",
+        "test_modeling_tf_encoder_decoder",
     ]
     test_files = []
     model_test_root = os.path.join(PATH_TO_TESTS, "models")
@@ -712,7 +775,9 @@ def check_all_models_are_tested():
         # Matches a module to its test file.
         test_file = [file for file in test_files if f"test_{module.__name__.split('.')[-1]}.py" in file]
         if len(test_file) == 0:
-            failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
+            # We do not test TF or Flax models anymore because they're deprecated.
+            if not ("modeling_tf" in module.__name__ or "modeling_flax" in module.__name__):
+                failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
         elif len(test_file) > 1:
             failures.append(f"{module.__name__} has several test files: {test_file}.")
         else:
@@ -731,6 +796,14 @@ def get_all_auto_configured_models() -> list[str]:
         for attr_name in dir(transformers.models.auto.modeling_auto):
             if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_auto, attr_name)))
+    if is_tf_available():
+        for attr_name in dir(transformers.models.auto.modeling_tf_auto):
+            if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
+                result = result | set(get_values(getattr(transformers.models.auto.modeling_tf_auto, attr_name)))
+    if is_flax_available():
+        for attr_name in dir(transformers.models.auto.modeling_flax_auto):
+            if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
+                result = result | set(get_values(getattr(transformers.models.auto.modeling_flax_auto, attr_name)))
     return list(result)
 
 
@@ -798,10 +871,14 @@ def check_all_auto_object_names_being_defined():
         "PROCESSOR_MAPPING_NAMES": PROCESSOR_MAPPING_NAMES,
     }
 
-    module = getattr(transformers.models.auto, "modeling_auto")
-    # all mappings in a single auto modeling file
-    mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
-    mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
+    # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
+    for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
+        module = getattr(transformers.models.auto, module_name, None)
+        if module is None:
+            continue
+        # all mappings in a single auto modeling file
+        mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
+        mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
 
     for name, mapping in mappings_to_check.items():
         for class_names in mapping.values():
@@ -838,10 +915,14 @@ def check_all_auto_mapping_names_in_config_mapping_names():
         "PROCESSOR_MAPPING_NAMES": PROCESSOR_MAPPING_NAMES,
     }
 
-    module = getattr(transformers.models.auto, "modeling_auto")
-    # all mappings in a single auto modeling file
-    mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
-    mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
+    # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
+    for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
+        module = getattr(transformers.models.auto, module_name, None)
+        if module is None:
+            continue
+        # all mappings in a single auto modeling file
+        mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
+        mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
 
     for name, mapping in mappings_to_check.items():
         for model_type in mapping:
@@ -861,16 +942,66 @@ def check_all_auto_mappings_importable():
 
     failures = []
     mappings_to_check = {}
-
-    module = getattr(transformers.models.auto, "modeling_auto")
-    # all mappings in a single auto modeling file
-    mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
-    mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
+    # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
+    for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
+        module = getattr(transformers.models.auto, module_name, None)
+        if module is None:
+            continue
+        # all mappings in a single auto modeling file
+        mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
+        mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
 
     for name in mappings_to_check:
         name = name.replace("_MAPPING_NAMES", "_MAPPING")
         if not hasattr(transformers, name):
             failures.append(f"`{name}`")
+    if len(failures) > 0:
+        raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
+
+
+def check_objects_being_equally_in_main_init():
+    """
+    Check if a (TensorFlow or Flax) object is in the main __init__ if its counterpart in PyTorch is.
+    """
+    attrs = dir(transformers)
+
+    failures = []
+    for attr in attrs:
+        obj = getattr(transformers, attr)
+        if hasattr(obj, "__module__") and isinstance(obj.__module__, ModuleSpec):
+            continue
+        if not hasattr(obj, "__module__") or "models.deprecated" in obj.__module__:
+            continue
+
+        module_path = obj.__module__
+        module_name = module_path.split(".")[-1]
+        module_dir = ".".join(module_path.split(".")[:-1])
+        if (
+            module_name.startswith("modeling_")
+            and not module_name.startswith("modeling_tf_")
+            and not module_name.startswith("modeling_flax_")
+        ):
+            parent_module = sys.modules[module_dir]
+
+            frameworks = []
+            if is_tf_available():
+                frameworks.append("TF")
+            if is_flax_available():
+                frameworks.append("Flax")
+
+            for framework in frameworks:
+                other_module_path = module_path.replace("modeling_", f"modeling_{framework.lower()}_")
+                if os.path.isfile("src/" + other_module_path.replace(".", "/") + ".py"):
+                    other_module_name = module_name.replace("modeling_", f"modeling_{framework.lower()}_")
+                    other_module = getattr(parent_module, other_module_name)
+                    if hasattr(other_module, f"{framework}{attr}"):
+                        if not hasattr(transformers, f"{framework}{attr}"):
+                            if f"{framework}{attr}" not in OBJECT_TO_SKIP_IN_MAIN_INIT_CHECK:
+                                failures.append(f"{framework}{attr}")
+                    if hasattr(other_module, f"{framework}_{attr}"):
+                        if not hasattr(transformers, f"{framework}_{attr}"):
+                            if f"{framework}_{attr}" not in OBJECT_TO_SKIP_IN_MAIN_INIT_CHECK:
+                                failures.append(f"{framework}_{attr}")
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
@@ -950,13 +1081,17 @@ def find_all_documented_objects() -> list[str]:
 
 # One good reason for not being documented is to be deprecated. Put in this list deprecated objects.
 DEPRECATED_OBJECTS = [
-    "PretrainedConfig",  # deprecated in favor of PreTrainedConfig
+    "AdamWeightDecay",  # TensorFlow object, support is deprecated
     "AutoModelWithLMHead",
     "BartPretrainedModel",
     "DataCollator",
     "DataCollatorForSOP",
     "GlueDataset",
     "GlueDataTrainingArguments",
+    "GradientAccumulator",  # TensorFlow object, support is deprecated
+    "LineByLineTextDataset",
+    "LineByLineWithRefDataset",
+    "LineByLineWithSOPTextDataset",
     "NerPipeline",
     "OwlViTFeatureExtractor",
     "PretrainedBartModel",
@@ -968,8 +1103,13 @@ DEPRECATED_OBJECTS = [
     "SquadFeatures",
     "SquadV1Processor",
     "SquadV2Processor",
+    "TextDataset",
+    "TextDatasetForNextSentencePrediction",
+    "TFTrainingArguments",
+    "WarmUp",  # TensorFlow object, support is deprecated
     "Wav2Vec2ForMaskedLM",
     "Wav2Vec2Tokenizer",
+    "create_optimizer",  # TensorFlow object, support is deprecated
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",
@@ -994,11 +1134,13 @@ UNDOCUMENTED_OBJECTS = [
     "MecabTokenizer",  # Internal, should never have been in the main init.
     "ModelCard",  # Internal type.
     "SqueezeBertModule",  # Internal building block (should have been called SqueezeBertLayer)
+    "TFDPRPretrainedReader",  # Like an Encoder.
     "TransfoXLCorpus",  # Internal type.
     "WordpieceTokenizer",  # Internal, should never have been in the main init.
     "absl",  # External module
     "add_end_docstrings",  # Internal, should never have been in the main init.
     "add_start_docstrings",  # Internal, should never have been in the main init.
+    "convert_tf_weight_name_to_pt_weight_name",  # Internal used to convert model weights
     "logger",  # Internal logger
     "logging",  # External module
     "requires_backends",  # Internal function
@@ -1006,6 +1148,7 @@ UNDOCUMENTED_OBJECTS = [
     "VitPoseBackbone",  # Internal module
     "VitPoseBackboneConfig",  # Internal module
     "get_values",  # Internal object
+    "SinkCache",  # Moved to a custom_generate repository, to be deleted from transformers in v4.59.0
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
@@ -1049,6 +1192,7 @@ def ignore_undocumented(name: str) -> bool:
         or name.endswith("Layer")
         or name.endswith("Embeddings")
         or name.endswith("Attention")
+        or name.endswith("OnnxConfig")
     ):
         return True
     # Submodules are not documented.
@@ -1057,7 +1201,7 @@ def ignore_undocumented(name: str) -> bool:
     ):
         return True
     # All load functions are not documented.
-    if name.startswith("load_pytorch"):
+    if name.startswith("load_tf") or name.startswith("load_pytorch"):
         return True
     # is_xxx_available functions are not documented.
     if name.startswith("is_") and name.endswith("_available"):
@@ -1083,6 +1227,8 @@ def check_all_objects_are_documented():
     # the objects with the following prefixes are not required to be in the docs
     ignore_prefixes = [
         "_",  # internal objects
+        "TF",  # TF objects, support is deprecated
+        "Flax",  # Flax objects, support is deprecated
     ]
     objects = [c for c in dir(transformers) if c not in modules and not any(c.startswith(p) for p in ignore_prefixes)]
     undocumented_objs = [c for c in objects if c not in documented_objs and not ignore_undocumented(c)]
@@ -1219,6 +1365,8 @@ def check_repo_quality():
     check_all_auto_mapping_names_in_config_mapping_names()
     print("    - checking all auto mappings could be imported.")
     check_all_auto_mappings_importable()
+    print("    - checking all objects are equally (across frameworks) in the main __init__.")
+    check_objects_being_equally_in_main_init()
     print("    - checking the DEPRECATED_MODELS constant is up to date.")
     check_deprecated_constant_is_up_to_date()
 

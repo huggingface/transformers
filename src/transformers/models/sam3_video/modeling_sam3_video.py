@@ -21,7 +21,7 @@ from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
-from torch import Tensor
+from torch import Tensor, nn
 from tqdm.auto import tqdm
 
 from transformers.models.sam3.modeling_sam3 import Sam3VisionNeck
@@ -473,6 +473,21 @@ class Sam3VideoPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 @auto_docstring

@@ -20,9 +20,8 @@
 # limitations under the License.
 
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -32,7 +31,6 @@ from torch import Tensor
 
 from transformers.utils.generic import OutputRecorder
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -112,17 +110,26 @@ class Sam3TrackerPreTrainedModel(PreTrainedModel):
     config_class = Sam3TrackerConfig
     base_model_prefix = "sam3_tracker"
     main_input_name = "pixel_values"
-    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, Sam3TrackerLayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         if isinstance(module, Sam3TrackerModel):
             if module.no_memory_embedding is not None:
-                init.zeros_(module.no_memory_embedding)
+                module.no_memory_embedding.data.zero_()
 
 
 class Sam3TrackerPositionalEmbedding(nn.Module):
@@ -755,7 +762,8 @@ class Sam3TrackerVisionEncoderOutput(ModelOutput):
     """
 )
 class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
-    input_modalities = ["image", "text"]
+    _tied_weights_keys = []
+    _keys_to_ignore_on_load_missing = []
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = [
         r"^detector_model.",
@@ -870,7 +878,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
