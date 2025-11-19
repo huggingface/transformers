@@ -1535,8 +1535,6 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["BigBirdPegasusEncoderLayer", "BigBirdPegasusDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_param_buffer_assignment = False
-
     _can_compile_fullgraph = True
 
     @property

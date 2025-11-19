@@ -544,8 +544,6 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
 
 @auto_docstring
 class GPT2Model(GPT2PreTrainedModel):
-    _supports_param_buffer_assignment = False
-
     def __init__(self, config):
         super().__init__(config)
 
