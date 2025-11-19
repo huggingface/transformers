@@ -85,7 +85,7 @@ try:
                 )
             },
             "npu": {
-                Mode.INFERENCE: LayerRepository(
+                Mode.TRAINING: LayerRepository(
                     repo_id="kernels-ext-npu/rmsnorm",
                     layer_name="rmsnorm",
                 )
