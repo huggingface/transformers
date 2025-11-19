@@ -32,25 +32,36 @@ from ..auto import AutoModel
 from .configuration_sam3_video import Sam3VideoConfig
 
 
+if is_kernels_available():
+    from kernels import get_kernel
+
 logger = logging.get_logger(__name__)
 
-cv_utils_kernel = None
+cv_utils_kernel = None  # None = not attempted, False = failed, kernel object = success
 
-if is_kernels_available():
+
+def _load_cv_utils_kernel_once():
+    """Load cv_utils_kernel once on first use."""
+    global cv_utils_kernel
+    if cv_utils_kernel is not None:
+        return  # Already attempted loading (successfully or not)
+
+    if not is_kernels_available():
+        logger.warning_once(
+            "kernels library is not installed. NMS post-processing, hole filling, and sprinkle removal will be skipped. "
+            "Install it with `pip install kernels` for better mask quality."
+        )
+        cv_utils_kernel = False
+        return
+
     try:
-        from kernels import get_kernel
-
         cv_utils_kernel = get_kernel("kernels-community/cv_utils")
     except Exception as e:
         logger.warning_once(
             f"Failed to load cv_utils kernel (your torch/cuda setup may not be supported): {e}. "
             "NMS post-processing, hole filling, and sprinkle removal will be skipped."
         )
-else:
-    logger.warning_once(
-        "kernels library is not installed. NMS post-processing, hole filling, and sprinkle removal will be skipped. "
-        "Install it with `pip install kernels` for better mask quality."
-    )
+        cv_utils_kernel = False
 
 
 class Sam3VideoInferenceCache:
@@ -1692,7 +1703,8 @@ def nms_masks(
     ious = mask_iou(masks_binary, masks_binary)  # (num_valid, num_valid)
 
     # Try to use kernels for NMS, fallback to keeping all valid detections if unavailable
-    if cv_utils_kernel is None:
+    _load_cv_utils_kernel_once()
+    if not cv_utils_kernel:
         return is_valid  # Fallback: keep all valid detections without NMS
 
     try:
@@ -1752,7 +1764,8 @@ def _get_connected_components_with_padding(mask):
     _, _, H, W = mask.shape
 
     # Try to use kernels for connected components, fallback if unavailable
-    if cv_utils_kernel is None:
+    _load_cv_utils_kernel_once()
+    if not cv_utils_kernel:
         # Fallback: return dummy labels and counts that won't trigger filtering
         labels = torch.zeros_like(mask, dtype=torch.int32)
         counts = torch.full_like(mask, fill_value=mask.shape[2] * mask.shape[3] + 1, dtype=torch.int32)
