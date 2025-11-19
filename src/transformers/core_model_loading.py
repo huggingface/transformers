@@ -557,7 +557,9 @@ def set_param_for_module(
                 mismatch_keys.add((layer_name, param_value.shape, ref.shape))
                 module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
             else:
-                param_value._is_hf_initialized = True  # super important otherwise _init_weight re-initi if bias is missing
+                param_value._is_hf_initialized = (
+                    True  # super important otherwise _init_weight re-initi if bias is missing
+                )
                 setattr(module_obj, param_name, param_value)
 
 
@@ -597,9 +599,64 @@ def convert_and_load_state_dict_in_model(
     dtype_plan: dict | None = None,
     device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
 ):
-    """
-    Convert a state dict according to a weight mapping (one WeightConverter per glob pattern),
-    collecting tensors per *layer instance* (the concrete indices captured from '*').
+    r"""
+    We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
+    Then we load the tensors into the model, applying any conversion operations as needed.
+
+    The `all_weight_mappings` will look like this:
+    {
+        "model.layers.0.attention.qkv.weight": WeightConverter(
+                                                source_keys=["qkv"],
+                                                target_keys=["q", "k","v"],
+                                                operations=[Chunk(dim=0, chunks=3)]),
+                                                collected_tensors={
+                                                    "qkv": [Future, Future, Future]},
+                                                layer_targets={
+                                                    "model.layers.0.attention.q.weight": {"model.layers.0.attention.qkv.weight"},
+                                                    "model.layers.0.attention.k.weight": {"model.layers.0.attention.qkv.weight"},
+                                                    "model.layers.0.attention.v.weight": {"model.layers.0.attention.qkv.weight"},
+                                                }
+                                            ),
+        ...
+    }
+
+    We make sure that the keys are the full keys. The only "nit" here is that 1 key can map to multiple target keys (e.g. qkv -> q, k, v).
+    In that case the weight converter will take care of doing the appropriate renaming.
+
+    For example for:
+    ```python
+    WeightConverter(
+        source_keys=["mlp.experts.*.gate_proj.weight","mlp.experts.*.up_proj.weight"],
+        target_keys="mlp.experts.gate_up_proj",
+        operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+    )
+    ```
+    we would have the following collected tensors:
+    ```python
+    collected_tensors = {
+        "mlp.experts.*.gate_proj.weight": [Future, Future, Future, Future, Future, Future, Future, Future],
+        "mlp.experts.*.up_proj.weight": [Future, Future, Future, Future, Future, Future, Future, Future],
+    }
+    ```
+    The first op, `MergeModulelist`, would stack the 8 tensors of each source but will not "rename" them into the fused target name.
+    The second op, `Concatenate`, would then rename the fused tensor into the final target name.
+
+    If we want to split `qkv` we would have:
+    ```python
+    collected_tensors = {
+        "attention.qkv.weight": [Future],
+    }
+    ```
+    The `Chunk` operation would then split the single tensor into 3 and rename them accordingly and update the collected tensors to:
+    ```python
+    collected_tensors = {
+        "attention.q.weight": [Tensor],
+        "attention.k.weight": [Tensor],
+        "attention.v.weight": [Tensor],
+    }
+    ```
+
+    Now that this is done, we can quantize / dequantize accordingly the collected_tensors.
     """
 
     prefix = model.base_model_prefix
@@ -723,7 +780,9 @@ def convert_and_load_state_dict_in_model(
             pbar.set_postfix({"Materializing param": layer_name})
             pbar.refresh()
             try:
-                realized_value, misc = mapping.convert(layer_name, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys)
+                realized_value, misc = mapping.convert(
+                    layer_name, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys
+                )
                 for k, output_value in realized_value.items():
                     set_param_for_module(
                         model,
@@ -734,7 +793,7 @@ def convert_and_load_state_dict_in_model(
                         misc,
                         unexpected_keys,
                         mapping.distributed_operation,
-                        hf_quantizer
+                        hf_quantizer,
                     )
             except SkipLayer:
                 continue
