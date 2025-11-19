@@ -2394,7 +2394,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return expanded_tied_weights
 
-    def tie_weights(self, missing_keys: Optional[set[str]] = None, recheck_keys: bool = True):
+    def tie_weights(self, missing_keys: Optional[set[str]] = None, recompute_mapping: bool = True):
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
         and the encoder and decoder. This relies on the `_tied_weights_keys` dict.
@@ -2444,7 +2444,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         the ones you tied were missing.
         """
         # In this case, the keys stored in `all_tied_weights_keys` are already correct
-        if missing_keys is not None or not recheck_keys:
+        if not recompute_mapping:
             tied_keys = self.all_tied_weights_keys
         else:
             tied_keys = self.get_expanded_tied_weights_keys(all_submodels=True)
@@ -2988,9 +2988,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if _init_weights:
             # Initialize weights
             self.initialize_weights()
-            # Tie weights needs to be called as it figures out recursively if sub modules
-            # need to tie
-            self.tie_weights()
+            # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
+            self.tie_weights(recompute_mapping=False)
 
     def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
         """
@@ -4285,7 +4284,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model._initialize_missing_keys(is_quantized)
 
         # Tie the weights
-        model.tie_weights(missing_keys)
+        model.tie_weights(missing_keys, recompute_mapping=False)
 
         # Adjust missing and unexpected keys
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys)
