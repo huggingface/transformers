@@ -2350,9 +2350,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if isinstance(submodule, PreTrainedModel):
                     # Will dynamically check the config if it has changed
                     submodel_tied_weights = submodule.get_expanded_tied_weights_keys(all_submodels=False)
-                    expanded_tied_weights.update(
-                        {f"{prefix}.{k}": f"{prefix}.{v}" for k, v in submodel_tied_weights.items()}
-                    )
+                    if prefix != "":
+                        submodel_tied_weights = {f"{prefix}.{k}": f"{prefix}.{v}" for k, v in submodel_tied_weights.items()}
+                    expanded_tied_weights.update(submodel_tied_weights)
             return expanded_tied_weights
 
         tied_mapping = self._tied_weights_keys
