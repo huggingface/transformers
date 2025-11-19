@@ -213,6 +213,7 @@ class DeepseekVLHybridPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
+
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""

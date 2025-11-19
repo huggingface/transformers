@@ -391,6 +391,7 @@ class JanusPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
 
+
 @dataclass
 @auto_docstring(
     custom_intro="""

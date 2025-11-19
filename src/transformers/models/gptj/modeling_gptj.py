@@ -443,6 +443,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _can_compile_fullgraph = True
 
+
 @auto_docstring
 class GPTJModel(GPTJPreTrainedModel):
     def __init__(self, config):

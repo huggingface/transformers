@@ -131,6 +131,7 @@ class DeepseekVLPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
 
+
 @auto_docstring
 class DeepseekVLModel(DeepseekVLPreTrainedModel):
     def __init__(self, config):
