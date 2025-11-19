@@ -695,9 +695,7 @@ def convert_and_load_state_dict_in_model(
             # 6. Handle TP sharding or device_map placement -> scheduled materialization
             future = None
             if device_mesh:
-                # TODO for now we can only match on of the target key' patterns from the source pattern
                 if matched_tp_pattern := match_glob(renamed_key, tp_plan_alt, tp_plan_by_group_name):
-                    empty_param = meta_model_state_dict.get(renamed_key)
                     if getattr(mapping, "distributed_operation", None) is None:
                         tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
                         mapping.distributed_operation = tp_layer(
