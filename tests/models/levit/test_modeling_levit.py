@@ -58,7 +58,7 @@ class LevitModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         image_size=64,
         num_channels=3,
         kernel_size=3,

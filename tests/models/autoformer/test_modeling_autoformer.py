@@ -43,7 +43,7 @@ class AutoformerModelTester:
         self,
         parent,
         d_model=16,
-        batch_size=13,
+        batch_size=2,
         prediction_length=7,
         context_length=14,
         label_length=10,
