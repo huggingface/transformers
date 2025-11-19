@@ -204,13 +204,18 @@ def check_and_set_device_map(device_map: "torch.device | int | str | dict | None
 
 
 def compute_module_sizes(
-    model: "PreTrainedModel", hf_quantizer: "HfQuantizer | None" = None, buffers_only: bool = False
+    model: "PreTrainedModel",
+    hf_quantizer: "HfQuantizer | None" = None,
+    buffers_only: bool = False,
+    only_modules: bool = True,
 ) -> tuple[dict[str, int], dict[str, int]]:
     """
     Compute the size of each submodule of a given model (in bytes).
     Returns a tuple of 2 dicts, the fist one containing a mapping of all the modules and the corresponding size
     in bytes, and the 2nd one containing a mapping from all leaf modules (modules containing parameters, the end of
     the model graph) and the corresponding sizes.
+    If `only_modules` is set to False, the first mapping will not only contain the size of all modules, but also
+    the size of all parameters and buffers.
     """
     all_module_sizes = defaultdict(int)
     leaves_module_sizes = defaultdict(int)
@@ -241,6 +246,9 @@ def compute_module_sizes(
             all_module_sizes[".".join(name_parts[:idx])] += size
         if "." in name:
             leaves_module_sizes[name.rsplit(".", 1)[0]] += size
+        # If we want to also have the full leaves in `all_module_sizes`
+        if not only_modules:
+            all_module_sizes[name] += size
 
     return all_module_sizes, leaves_module_sizes
 
@@ -542,7 +550,7 @@ def _init_infer_auto_device_map(
     else:
         main_devices = ["cpu"]
 
-    module_sizes, _ = compute_module_sizes(model, hf_quantizer)
+    module_sizes, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
 
     if tied_parameters is None:
         if len(model.all_tied_weights_keys) > 0:
