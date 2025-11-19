@@ -208,6 +208,10 @@ VLMS = [
     "qwen2_5_vl",
     "videollava",
     "vipllava",
+    "sam3_video",
+    "sam3",
+    "sam3_tracker",
+    "sam3_tracker_video",
 ]
 
 

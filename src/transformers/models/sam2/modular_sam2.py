@@ -103,15 +103,6 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
         BaseImageProcessorFast.__init__(self, **kwargs)
 
-    def pad_image(self):
-        raise NotImplementedError("No pad_image for SAM 2.")
-
-    def _get_preprocess_shape(self):
-        raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
-
-    def resize(self):
-        raise NotImplementedError("No need to override resize for SAM 2.")
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -151,11 +142,9 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
         pixel_values = self._preprocess(images, **images_kwargs)
-        reshaped_input_sizes = [image.shape[-2:] for image in images]
         data = {
             "pixel_values": pixel_values,
             "original_sizes": original_sizes,
-            "reshaped_input_sizes": reshaped_input_sizes,
         }
 
         if segmentation_maps is not None:
@@ -298,6 +287,12 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
             output_masks.append(interpolated_mask)
 
         return output_masks
+
+    def _get_preprocess_shape(self):
+        raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
+
+    def resize(self):
+        raise NotImplementedError("No need to override resize for SAM 2.")
 
 
 @dataclass

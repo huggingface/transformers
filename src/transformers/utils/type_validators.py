@@ -57,6 +57,7 @@ def device_validator(value: str | int | None = None):
     if value is None:
         pass
     elif is_torch_available() and isinstance(value, torch.device):
+        # Convert torch.device to string for validation
         device_str = str(value)
         if device_str.split(":")[0] not in possible_names:
             raise ValueError(
