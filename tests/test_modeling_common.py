@@ -3030,7 +3030,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_sdpa = model_sdpa.eval().to(torch_device)
+                model_sdpa = model_sdpa.base_model
 
                 vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
                 language_model_names = {"language_model", "model", "text_model"}
@@ -3048,7 +3048,7 @@ class ModelTesterMixin:
                 self.assertTrue(vision_model_sdpa.config._attn_implementation == vision_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device)
+                model_eager = model_eager.base_model
                 self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
                 self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
 

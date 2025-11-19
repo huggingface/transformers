@@ -652,12 +652,6 @@ class Florence2Model(Florence2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
-
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -775,8 +769,11 @@ class Florence2Model(Florence2PreTrainedModel):
             image_hidden_states=image_features if pixel_values is not None else None,
         )
 
-    def get_encoder(self):
-        return self.language_model.get_encoder()
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.language_model.get_encoder()
+        else:
+            return super().get_encoder(modality=modality)
 
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
@@ -821,27 +818,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
 
     @can_return_tuple
     @auto_docstring
@@ -978,9 +956,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs
-
-    def get_encoder(self):
-        return self.model.get_encoder()
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
