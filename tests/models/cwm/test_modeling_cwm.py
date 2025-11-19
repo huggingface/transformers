@@ -137,10 +137,11 @@ class CwmIntegrationTest(unittest.TestCase):
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("facebook/cwm")
-        model = CwmForCausalLM.from_pretrained("facebook/cwm", device_map="auto", dtype=torch.bfloat16)
+        model = CwmForCausalLM.from_pretrained(
+            "facebook/cwm", device_map="auto", dtype=torch.bfloat16, sliding_window=4096
+        )
 
-        sliding_window = 4096
-        model.config.sliding_window = sliding_window
+        sliding_window = model.config.sliding_window
         long_text = "for i in range(1000):\n    print(f'iteration {i}')\n" * 270
 
         inputs = tokenizer(long_text, return_tensors="pt").to(model.device)
