@@ -2067,18 +2067,18 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
         except import_protobuf_decode_error():
-            logger.warning(
+            raise RuntimeError(
                 "Unable to load tokenizer model from SPM, loading from TikToken will be attempted instead."
                 "(Google protobuf error: Tried to load SPM model with non-SPM vocab file).",
             )
-            return False
         except RuntimeError as e:
             if "sentencepiece_processor.cc" in str(e):
-                logger.warning(
+                raise RuntimeError(
                     "Unable to load tokenizer model from SPM, loading from TikToken will be attempted instead."
                     "(SentencePiece RuntimeError: Tried to load SPM model with non-SPM vocab file).",
-                )
-            return False
+                ) from e
+            else:
+                raise e
         except OSError:
             raise OSError(
                 "Unable to load vocabulary from file. "
