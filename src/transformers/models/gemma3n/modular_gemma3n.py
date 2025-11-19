@@ -2421,14 +2421,6 @@ class Gemma3nModel(PaliGemmaModel):
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
 
-    @property
-    def audio_tower(self):
-        return self.model.audio_tower
-
-    @property
-    def multi_modal_projector(self):
-        raise AttributeError("Use embed_vision instead of multi_modal_projector.")
-
     @can_return_tuple
     @auto_docstring
     def forward(
