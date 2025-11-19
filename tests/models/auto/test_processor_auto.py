@@ -218,18 +218,14 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
         tokenizer = processor.tokenizer
         self.assertTrue(tokenizer.special_attribute_present)
-        if is_tokenizers_available():
-            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
+        self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
 
-            # Test we can also load the slow version
-            new_processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor", trust_remote_code=True, use_fast=False
-            )
-            new_tokenizer = new_processor.tokenizer
-            self.assertTrue(new_tokenizer.special_attribute_present)
-            self.assertEqual(new_tokenizer.__class__.__name__, "NewTokenizer")
-        else:
-            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+        new_processor = AutoProcessor.from_pretrained(
+            "hf-internal-testing/test_dynamic_processor", trust_remote_code=True, use_fast=False
+        )
+        new_tokenizer = new_processor.tokenizer
+        self.assertTrue(new_tokenizer.special_attribute_present)
+        self.assertEqual(new_tokenizer.__class__.__name__, "NewTokenizerFast")
 
     def test_new_processor_registration(self):
         try:
@@ -402,7 +398,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
     def test_auto_processor_creates_tokenizer(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")
-        self.assertEqual(processor.__class__.__name__, "BertTokenizerFast")
+        self.assertEqual(processor.__class__.__name__, "BertTokenizer")
 
     def test_auto_processor_creates_image_processor(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
