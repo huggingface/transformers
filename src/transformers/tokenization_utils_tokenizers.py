@@ -107,10 +107,13 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         add_prefix_space = kwargs.get("add_prefix_space", False)
 
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
-            raise ValueError(
-                "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
-                "have sentencepiece installed."
+            # Some tokenizers saved with very old versions still set `from_slow=True` even though they no longer
+            # have a dedicated slow implementation. In that case we can safely ignore the flag and rely on the
+            logger.warning_once(
+                "Tokenizer was saved with `from_slow=True`, but no slow tokenizer class is available. "
+                "Falling back to loading the fast tokenizer directly."
             )
+            from_slow = False
 
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
