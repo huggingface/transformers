@@ -55,7 +55,6 @@ DYNAMO_UNSUPPORTED_MODEL_TYPES: set[str] = {
     "hiera",  # torch.export struggles with a reshape operation in HieraEncoder.reroll
     "ibert",  # Uses numpy arrays and decimal.Decimal in batch_frexp
     "led",  # global attention implementation is data-dependent
-    "lfm2_vl",  # Uses siglip2 which is not exportable
     "lightglue",  # torch.export struggles with sigmoid_log_double_softmax
     "llava_next",  # All three have the same unexplicable error during export
     "llava_next_video",  # All three have the same unexplicable error during export
@@ -74,8 +73,6 @@ DYNAMO_UNSUPPORTED_MODEL_TYPES: set[str] = {
     "qwen3_omni_moe_thinker",  # Qwen3OmniMoeAudioEncoder.forward does data-dependent chunking
     "qwen3_vl",  # fast_pos_embed_interpolate is data-dependent
     "qwen3_vl_moe",  # fast_pos_embed_interpolate is highly data-dependent
-    "siglip2",  # torch.export is failing on torch.nn.functional.interpolate
-    "siglip2_vision_model",  # torch.export is failing on torch.nn.functional.interpolate
     "superpoint",  # torch.export is failing on torch.nn.functional.grid_sample
     "video_llama_3",  # VideoLlama3VisionAttention implementation is highly data-dependent
     "video_llama_3_vision",  # VideoLlama3VisionAttention implementation is highly data-dependent

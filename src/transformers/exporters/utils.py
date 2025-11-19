@@ -96,21 +96,6 @@ def get_inputs_outputs_names(inputs: dict[str, Any], outputs: dict[str, Any]) ->
 
 
 # Pytree registration utilities
-def _dynamic_cache_from_dict(dictionary):
-    cache = DynamicCache()
-    key_list = dictionary["keys"]
-    value_list = dictionary["values"]
-    for idx in range(max(len(key_list), len(value_list))):
-        key = key_list[idx] if idx < len(key_list) else None
-        value = value_list[idx] if idx < len(value_list) else None
-        cache_layer = DynamicLayer()
-        cache_layer.keys = key
-        cache_layer.values = value
-        cache_layer.is_initialized = True
-        cache.layers.append(cache_layer)
-    return cache
-
-
 def _dict_from_dynamic_cache(cache: DynamicCache):
     return {
         "keys": [layer.keys for layer in cache.layers if layer.keys is not None],
@@ -123,6 +108,20 @@ def _dict_from_encoder_decoder_cache(cache: EncoderDecoderCache):
         "self_attention_cache": _dict_from_dynamic_cache(cache.self_attention_cache),
         "cross_attention_cache": _dict_from_dynamic_cache(cache.cross_attention_cache),
     }
+
+
+def _dynamic_cache_from_dict(dictionary):
+    cache = DynamicCache()
+    key_list = dictionary["keys"]
+    value_list = dictionary["values"]
+    assert len(key_list) == len(value_list), "Mismatched keys and values lengths in DynamicCache."
+    for idx in range(len(key_list)):
+        cache_layer = DynamicLayer()
+        cache_layer.keys = key_list[idx]
+        cache_layer.values = value_list[idx]
+        cache_layer.is_initialized = True
+        cache.layers.append(cache_layer)
+    return cache
 
 
 def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):

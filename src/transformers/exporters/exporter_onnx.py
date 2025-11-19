@@ -21,12 +21,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__file__)
 
-DISABLED_OPTIMIZATION_MODEL_TYPES: set[str] = {
-    "conditional_detr",  # optimization breaks the model (missing outputs)
-    "fuyu",  # optimization breaks the model (missing outputs)
-    "helium",  # nan outputs after optimization
-    "t5gemma",  # optimization breaks the model (duplicate outputs)
-}
 
 ONNX_UNSUPPORTED_MODEL_TYPES: set[str] = {
     *DYNAMO_UNSUPPORTED_MODEL_TYPES,
@@ -108,10 +102,19 @@ ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
     "patchtst",
     "rt_detr",
     "rt_detr_v2",
+    "siglip2_vision_model",
     "superglue",
     "vit_mae",
     "voxtral",
     "xlm",
+}
+
+
+ONNX_DISABLED_OPTIMIZATION_MODEL_TYPES: set[str] = {
+    "conditional_detr",  # optimization breaks the model (missing outputs)
+    "fuyu",  # optimization breaks the model (missing outputs)
+    "helium",  # nan outputs after optimization
+    "t5gemma",  # optimization breaks the model (duplicate outputs)
 }
 
 
@@ -141,7 +144,7 @@ class OnnxExporter(DynamoExporter):
             )
 
         optimize = self.export_config.optimize
-        if optimize and model.config.model_type in DISABLED_OPTIMIZATION_MODEL_TYPES:
+        if model.config.model_type in ONNX_DISABLED_OPTIMIZATION_MODEL_TYPES and optimize:
             logger.warning(
                 f"Disabling optimization for model type '{model.config.model_type}' as it results in an invalid ONNX model."
             )
@@ -150,8 +153,7 @@ class OnnxExporter(DynamoExporter):
         # we use a copy to avoid side effects
         inputs = copy.deepcopy(sample_inputs)
 
-        # we need to compute the outputs before the dynamo export because torch.onnx.export
-        # might end up modifying the model and making it unsable afterwards ;-;
+        # we need to compute the outputs and prepare them to get the true list of inputs/outputs names
         with torch.no_grad():
             outputs = model(**copy.deepcopy(inputs))
         model, inputs = prepare_for_export(model, inputs, outputs)

@@ -186,6 +186,13 @@ class Siglip2VisionEmbeddings(nn.Module):
         for i in range(batch_size):
             # (1, dim, height, width) -> (1, dim, target_height, target_width)
             height, width = spatial_shapes[i]
+
+            if torch.compiler.is_exporting():
+                height, width = height.item(), width.item()
+                torch._check(height * width <= max_length)
+                torch._check(height > 0)
+                torch._check(width > 0)
+
             resized_embeddings = F.interpolate(
                 positional_embeddings,
                 size=(height, width),
