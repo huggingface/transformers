@@ -97,6 +97,39 @@ Processed 51 frames
 >>> print(f"Masks shape: {frame_0_outputs['masks'].shape}")
 ```
 
+You can also track multiple object categories simultaneously by providing multiple prompts. The model efficiently reuses vision features across all prompts:
+
+```python
+>>> # Add multiple text prompts (or use a list in add_text_prompt)
+>>> multi_prompt_session = processor.init_video_session(
+...     video=video_frames,
+...     inference_device=device,
+...     processing_device="cpu",
+...     video_storage_device="cpu",
+...     dtype=torch.bfloat16,
+... )
+>>>
+>>> prompts = ["person", "bed", "lamp"]
+>>> processor.add_text_prompt(multi_prompt_session, prompts)
+>>>
+>>> # Process video - detects objects from ALL prompts in a single pass
+>>> multi_outputs_per_frame = {}
+>>> for model_outputs in model.propagate_in_video_iterator(
+...     inference_session=multi_prompt_session, max_frame_num_to_track=50
+... ):
+...     processed_outputs = processor.postprocess_outputs(multi_prompt_session, model_outputs)
+...     multi_outputs_per_frame[model_outputs.frame_idx] = processed_outputs
+>>>
+>>> # Check which objects were detected by each prompt
+>>> frame_0_outputs = multi_outputs_per_frame[0]
+>>> prompt_to_obj_ids = frame_0_outputs["prompt_to_obj_ids"]
+>>> for prompt, obj_ids in prompt_to_obj_ids.items():
+...     print(f"{prompt}: {len(obj_ids)} objects")
+person: 2 objects
+bed: 1 objects
+lamp: 1 objects
+```
+
 #### Streaming Video Inference
 
 <div class="warning">

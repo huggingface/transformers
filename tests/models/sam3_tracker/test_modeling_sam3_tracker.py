@@ -510,7 +510,7 @@ def prepare_video():
 class Sam3TrackerModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        checkpoint_path = "../sam3-hf-v4-video-full"
+        checkpoint_path = "facebook/sam3"
         self.model = Sam3TrackerModel.from_pretrained(checkpoint_path).to(torch.float32)
         self.processor = Sam3TrackerProcessor.from_pretrained(checkpoint_path)
         self.model.to(torch_device)
@@ -817,7 +817,7 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
         )
 
     def test_dummy_pipeline_generation(self):
-        generator = pipeline("mask-generation", model="../sam3-hf-v4-video-full", device=torch_device)
+        generator = pipeline("mask-generation", model="facebook/sam3", device=torch_device)
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)

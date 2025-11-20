@@ -42,7 +42,7 @@ def prepare_video():
 class Sam3VideoModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        checkpoint_path = "../sam3-hf-v4-video-full"
+        checkpoint_path = "facebook/sam3"
         self.video_model = Sam3VideoModel.from_pretrained(checkpoint_path).to(torch.float32)
         self.processor = Sam3VideoProcessor.from_pretrained(checkpoint_path)
         self.video_model.to(torch_device)
@@ -473,3 +473,62 @@ class Sam3VideoModelIntegrationTest(unittest.TestCase):
                     atol=5e-3,  # Higher tolerance for raw logits
                     rtol=5e-3,
                 )
+
+    def test_inference_video_multi_prompt(self):
+        """Test multi-prompt tracking - detecting multiple object categories in one pass."""
+        raw_video = prepare_video()
+        inference_session = self.processor.init_video_session(
+            video=raw_video,
+            inference_device=torch_device,
+            processing_device="cpu",
+            video_storage_device="cpu",
+        )
+
+        # Add multiple text prompts
+        prompts = ["person", "bed"]
+        self.processor.add_text_prompt(
+            inference_session=inference_session,
+            text=prompts,
+        )
+
+        # Propagate through video frames
+        outputs_per_frame = {}
+        for model_outputs in self.video_model.propagate_in_video_iterator(
+            inference_session=inference_session,
+            max_frame_num_to_track=3,
+        ):
+            processed_outputs = self.processor.postprocess_outputs(inference_session, model_outputs)
+            outputs_per_frame[model_outputs.frame_idx] = processed_outputs
+
+        # Check we processed the expected number of frames
+        self.assertGreaterEqual(len(outputs_per_frame), 1)
+        self.assertLessEqual(len(outputs_per_frame), 4)
+
+        # Check output structure for each frame
+        for processed_outputs in outputs_per_frame.values():
+            self.assertIn("object_ids", processed_outputs)
+            self.assertIn("scores", processed_outputs)
+            self.assertIn("boxes", processed_outputs)
+            self.assertIn("masks", processed_outputs)
+            self.assertIn("prompt_to_obj_ids", processed_outputs)  # Multi-prompt specific
+
+            # Check prompt_to_obj_ids structure
+            prompt_to_obj_ids = processed_outputs["prompt_to_obj_ids"]
+            self.assertIsInstance(prompt_to_obj_ids, dict)
+            for prompt, obj_ids in prompt_to_obj_ids.items():
+                self.assertIsInstance(prompt, str)
+                self.assertIsInstance(obj_ids, list)
+                # Each object ID should be in the main object_ids list
+                for obj_id in obj_ids:
+                    self.assertIn(obj_id, processed_outputs["object_ids"].tolist())
+
+        # Check that we detected objects from multiple prompts
+        first_frame_outputs = outputs_per_frame[min(outputs_per_frame.keys())]
+        prompt_to_obj_ids = first_frame_outputs["prompt_to_obj_ids"]
+
+        # Should have at least one prompt with detections
+        self.assertGreater(len(prompt_to_obj_ids), 0)
+
+        # All prompts in prompt_to_obj_ids should be from our original prompts
+        for prompt in prompt_to_obj_ids.keys():
+            self.assertIn(prompt, prompts)
