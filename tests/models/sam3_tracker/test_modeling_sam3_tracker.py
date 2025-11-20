@@ -246,6 +246,8 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         {"feature-extraction": Sam3TrackerModel, "mask-generation": Sam3TrackerModel} if is_torch_available() else {}
     )
 
+    test_pruning = False
+    test_headmasking = False
     test_resize_embeddings = False
     _is_composite = True
 

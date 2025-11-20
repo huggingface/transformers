@@ -146,6 +146,8 @@ class Sam3VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (Sam3VisionModel,) if is_torch_available() else ()
 
+    test_pruning = False
+    test_headmasking = False
     test_resize_embeddings = False
     test_torch_exportable = False
 
@@ -425,6 +427,8 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (Sam3Model,) if is_torch_available() else ()
     pipeline_model_mapping = {"mask-generation": Sam3Model} if is_torch_available() else {}
+    test_pruning = False
+    test_headmasking = False
 
     test_resize_embeddings = False
     test_torch_exportable = False

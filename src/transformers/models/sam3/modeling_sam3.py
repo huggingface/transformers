@@ -39,8 +39,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import auto_docstring
-from ...utils.generic import TransformersKwargs
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import AutoModel
 from .configuration_sam3 import (
     Sam3Config,
@@ -775,6 +775,11 @@ class Sam3PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Sam3ViTModel(Sam3PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": Sam3ViTLayer,
+        "attentions": Sam3ViTRoPEAttention,
+    }
+
     def __init__(self, config: Sam3ViTConfig):
         super().__init__(config)
         self.config = config
@@ -791,6 +796,7 @@ class Sam3ViTModel(Sam3PreTrainedModel):
     def get_input_embeddings(self) -> Sam3ViTPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -995,6 +1001,10 @@ class Sam3VisionNeck(nn.Module):
 class Sam3VisionModel(Sam3PreTrainedModel):
     config_class = Sam3VisionConfig
     main_input_name = "pixel_values"
+    _can_record_outputs = {
+        "hidden_states": Sam3ViTLayer,
+        "attentions": Sam3ViTRoPEAttention,
+    }
 
     def __init__(self, config: Sam3VisionConfig):
         super().__init__(config)
@@ -1007,6 +1017,7 @@ class Sam3VisionModel(Sam3PreTrainedModel):
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
+    @check_model_inputs
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1322,6 +1333,11 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
     resolutions) and fuses them with text prompts through a stack of transformer encoder layers.
     """
 
+    _can_record_outputs = {
+        "hidden_states": Sam3DetrEncoderLayer,
+        "attentions": Sam3Attention,
+    }
+
     def __init__(self, config: Sam3DETREncoderConfig):
         super().__init__(config)
         self.config = config
@@ -1371,6 +1387,7 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
             spatial_shapes,
         )
 
+    @check_model_inputs
     def forward(
         self,
         vision_features: list[torch.Tensor],
@@ -1596,6 +1613,11 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
     - Presence token is used
     """
 
+    _can_record_outputs = {
+        "hidden_states": Sam3DetrDecoderLayer,
+        "attentions": Sam3Attention,
+    }
+
     def __init__(
         self,
         config: Sam3DETRDecoderConfig,
@@ -1681,6 +1703,7 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         rpb_matrix = rpb_matrix.permute(0, 3, 1, 2).contiguous()  # [batch_size, num_heads, num_queries, height*width]
         return rpb_matrix
 
+    @check_model_inputs
     def forward(
         self,
         vision_features: torch.Tensor,
@@ -1955,6 +1978,10 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
     Also produces a semantic segmentation output and supports cross-attention to prompts.
     """
 
+    _can_record_outputs = {
+        "attentions": Sam3Attention,
+    }
+
     def __init__(self, config: Sam3MaskDecoderConfig):
         super().__init__(config)
         self.config = config
@@ -1976,6 +2003,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         self.prompt_cross_attn_norm = nn.LayerNorm(hidden_size)
         self.prompt_cross_attn_dropout = nn.Dropout(config.dropout)
 
+    @check_model_inputs
     def forward(
         self,
         decoder_queries: torch.Tensor,
@@ -2184,6 +2212,7 @@ class Sam3Model(Sam3PreTrainedModel):
         vision_outputs = self.vision_encoder(pixel_values, **kwargs)
         return vision_outputs
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
