@@ -172,7 +172,9 @@ def replace_with_awq_linear(
                 out_features = module.out_features
 
                 model._modules[name] = target_cls(
-                    w_bit=quantization_config.bits,
+                    bits=quantization_config.bits,
+                    sym=quantization_config.sym,
+                    desc_act=quantization_config.desc_act,
                     group_size=quantization_config.group_size,
                     in_features=in_features,
                     out_features=out_features,
