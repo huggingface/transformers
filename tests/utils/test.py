@@ -109,8 +109,11 @@ except Exception as e:
             if "NETWORK_ATTEMPTED" in result.stdout:
                 self.fail(f"Network access attempted despite warm cache: {result.stdout}")
 
-            self.assertIn("OFFLINE_SUCCESS", result.stdout,
-                         f"Failed to load offline:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}")
+            self.assertIn(
+                "OFFLINE_SUCCESS",
+                result.stdout,
+                f"Failed to load offline:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}",
+            )
             self.assertEqual(result.returncode, 0)
 
     def test_pipeline_offline_after_subprocess_warm(self):
@@ -134,8 +137,9 @@ pipe = pipeline("text-classification", model="{model_name}")
 print("WARMED")
 """
 
-            result = subprocess.run([sys.executable, "-c", warm_script],
-                                  capture_output=True, text=True, env=env, timeout=120)
+            result = subprocess.run(
+                [sys.executable, "-c", warm_script], capture_output=True, text=True, env=env, timeout=120
+            )
             self.assertEqual(result.returncode, 0)
 
             # Load offline
@@ -165,8 +169,9 @@ except Exception as e:
     exit(1)
 """
 
-            result = subprocess.run([sys.executable, "-c", offline_script],
-                                  capture_output=True, text=True, env=env, timeout=120)
+            result = subprocess.run(
+                [sys.executable, "-c", offline_script], capture_output=True, text=True, env=env, timeout=120
+            )
 
             self.assertNotIn("BLOCKED", result.stdout, "Network access attempted")
             self.assertIn("SUCCESS", result.stdout)

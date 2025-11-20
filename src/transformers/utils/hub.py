@@ -414,15 +414,15 @@ def cached_files(
         subfolder = ""
 
     if local_files_only or is_offline_mode():
-        cache_dirs_to_try= []
+        cache_dirs_to_try = []
 
         if cache_dir is not None:
             cache_dirs_to_try.append(cache_dir)
 
-        for env_var in ["HF_HOME","TRANSFORMERS_CACHE", "HF_HUB_CACHE"]:
-                env_cache = os.environ.get(env_var)
-                if env_cache and env_cache not in cache_dirs_to_try:
-                    cache_dirs_to_try.append(env_cache)
+        for env_var in ["HF_HOME", "TRANSFORMERS_CACHE", "HF_HUB_CACHE"]:
+            env_cache = os.environ.get(env_var)
+            if env_cache and env_cache not in cache_dirs_to_try:
+                cache_dirs_to_try.append(env_cache)
 
         default_cache = default_cache_path
         if default_cache not in cache_dirs_to_try:
