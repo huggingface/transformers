@@ -45,6 +45,7 @@ from ...test_modeling_common import (
 
 
 if is_datasets_available():
+    # NOTE: if voice cloning enabled
     from huggingface_hub import snapshot_download
 
 
@@ -265,6 +266,21 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
     @pytest.mark.generate
     @unittest.skip(reason="VibeVoice generation has unique generation")
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="VibeVoice generation has unique generation")
+    def test_generate_continue_from_past_key_values(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="VibeVoice generation has unique generation")
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="VibeVoice generation has unique generation")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
@@ -363,6 +379,8 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
                 min_new_tokens=max_new_tokens,
                 do_sample=False,
                 return_dict_in_generate=True,
+                cfg_scale=1.3,
+                n_diffusion_steps=10,
             )
         
         # Check that we get the expected output type
@@ -381,8 +399,8 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         )
         
         # Check that we have speech_outputs (audio) as well
-        self.assertIsNotNone(output.speech_outputs)
-        self.assertEqual(len(output.speech_outputs), self.model_tester.batch_size)
+        self.assertIsNotNone(output.audio)
+        self.assertEqual(len(output.audio), self.model_tester.batch_size)
 
 
 class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -393,8 +411,9 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+
     @slow
-    def test_1b5_inference(self):
+    def test_1b5_inference_no_voice(self):
         """
         reproducer that generates JSON with expected output: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
         standalone script for this test: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-test_integration_single-py
@@ -402,9 +421,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         diffusers library is needed (working with `diffusers==0.35.2`)
         """
         set_seed(42)
-        fixtures_path = Path(__file__).parent.parent.parent / "fixtures/vibevoice/expected_results_single.json"
-        example_files_repo = "bezzam/vibevoice_samples"
-        audio_fn = ["voices/en-Alice_woman.wav", "voices/en-Frank_man.wav"]
+        fixtures_path = Path(__file__).parent.parent.parent / "fixtures/vibevoice/expected_results_single_noaudio.json"
         max_new_tokens = 32
 
         # Load model and processor
@@ -415,17 +432,13 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).eval()
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 
-        # Prepare inputs
-        repo_dir = snapshot_download(repo_id=example_files_repo, repo_type="dataset")
-        audio_paths = [f"{repo_dir}/{fn}" for fn in audio_fn]
+        # Prepare input
         conversation = [
             {"role": "0", "content": [
                 {"type": "text", "text": "Hello everyone, and welcome to the VibeVoice podcast. I'm your host, Linda, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Thomas here to talk about it with me."},
-                {"type": "audio", "path": load_audio_librosa(audio_paths[0], sampling_rate=self.sampling_rate)}
             ]},
             {"role": "1", "content": [
                 {"type": "text", "text": "Thanks so much for having me, Linda. You're absolutely right—this question always brings out some seriously strong feelings."},
-                {"type": "audio", "path": load_audio_librosa(audio_paths[1], sampling_rate=self.sampling_rate)}
             ]},
         ]
         inputs = processor.apply_chat_template(
@@ -448,3 +461,59 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_speech = torch.tensor(expected_results["speech_outputs"])
         generated_speech = generated_speech[..., :expected_speech.shape[-1]]
         torch.testing.assert_close(generated_speech, expected_speech, rtol=1e-5, atol=1e-5)
+
+    # @slow
+    # def test_1b5_inference(self):
+    #     """
+    #     reproducer that generates JSON with expected output: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
+    #     standalone script for this test: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-test_integration_single-py
+
+    #     diffusers library is needed (working with `diffusers==0.35.2`)
+    #     """
+    #     set_seed(42)
+    #     fixtures_path = Path(__file__).parent.parent.parent / "fixtures/vibevoice/expected_results_single.json"
+    #     example_files_repo = "bezzam/vibevoice_samples"
+    #     audio_fn = ["voices/en-Alice_woman.wav", "voices/en-Frank_man.wav"]
+    #     max_new_tokens = 32
+
+    #     # Load model and processor
+    #     model = VibeVoiceForConditionalGeneration.from_pretrained(
+    #         self.model_checkpoint,
+    #         dtype=torch.float32,
+    #         device_map=torch_device,
+    #     ).eval()
+    #     processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+
+    #     # Prepare inputs
+    #     repo_dir = snapshot_download(repo_id=example_files_repo, repo_type="dataset")
+    #     audio_paths = [f"{repo_dir}/{fn}" for fn in audio_fn]
+    #     conversation = [
+    #         {"role": "0", "content": [
+    #             {"type": "text", "text": "Hello everyone, and welcome to the VibeVoice podcast. I'm your host, Linda, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Thomas here to talk about it with me."},
+    #             {"type": "audio", "path": load_audio_librosa(audio_paths[0], sampling_rate=self.sampling_rate)}
+    #         ]},
+    #         {"role": "1", "content": [
+    #             {"type": "text", "text": "Thanks so much for having me, Linda. You're absolutely right—this question always brings out some seriously strong feelings."},
+    #             {"type": "audio", "path": load_audio_librosa(audio_paths[1], sampling_rate=self.sampling_rate)}
+    #         ]},
+    #     ]
+    #     inputs = processor.apply_chat_template(
+    #         conversation, 
+    #         tokenize=True,
+    #         return_dict=True
+    #     ).to(torch_device, dtype=next(model.parameters()).dtype)
+
+    #     # Generate audio
+    #     generated_speech = model.generate(
+    #         **inputs,
+    #         max_new_tokens=max_new_tokens,
+    #         do_sample=False,
+    #         return_dict_in_generate=False,
+    #     )[0].cpu().float()
+
+    #     # Compare against expected results
+    #     with open(fixtures_path, "r") as f:
+    #         expected_results = json.load(f)
+    #     expected_speech = torch.tensor(expected_results["speech_outputs"])
+    #     generated_speech = generated_speech[..., :expected_speech.shape[-1]]
+    #     torch.testing.assert_close(generated_speech, expected_speech, rtol=1e-5, atol=1e-5)

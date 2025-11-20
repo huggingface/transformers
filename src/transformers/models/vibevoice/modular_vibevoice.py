@@ -315,8 +315,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         # TODO (ebezzam) cleaner way? Register scaling factors as buffers - use 1D tensors for FSDP compatibility
-        self.register_buffer("speech_scaling_factor", torch.tensor(float("nan")))
-        self.register_buffer("speech_bias_factor", torch.tensor(float("nan")))
+        self.register_buffer("speech_scaling_factor", torch.tensor(1.0))
+        self.register_buffer("speech_bias_factor", torch.tensor(0.0))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -403,10 +403,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
 
         loss = None
         if labels is not None:
-            # TODO (ebezzam) loss according to original implementation
-            # or use loss from language model? (see Flamingo)
-            # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L400
-            raise ValueError("Language modeling loss computation not implemented yet.")
+            # NOTE (ebezzam) not provided by original, so we use from Qwen2ForCausalLM (backbone LLM)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         diffusion_loss = None
         # TODO (ebezzam) original has an implementation which should be verified (would need noise scheduler from `diffusers`):

@@ -239,8 +239,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
         VibeVoice-specific parameters include:
         - `noise_scheduler`: An optional noise scheduler instance to use instead of the default.
-        - `input_features`: Optional input features for the model, namely pre-processed audio.
-        - `input_features_mask`: Optional mask for the input features.
+        - `cfg_scale`: A classifier-free guidance scale to use during generation.
+        - `n_diffusion_steps`: Number of diffusion steps to use during generation of each audio chunk.
         - `monitor_progress`: A callable to monitor generation progress. If provided, this function can be called to 
             report the progress of the audio generation. The function takes a tensor argument `p` of shape `(n, 3)`, 
             where `n` is the batch size. `p[i, 0]` contains the current generation step for batch item `i`, `p[i, 1]`
@@ -248,39 +248,51 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             `p[i, 2]` contains the actual completion step for finished samples. No return value is expected.
         
         """
-        monitor_progress = kwargs.pop("monitor_progress", None)
         noise_scheduler = kwargs.pop("noise_scheduler", None)
-        input_features = kwargs.pop("input_features", None)
-        input_features_mask = kwargs.get("input_features_mask", None)
         if "max_new_tokens" in kwargs and kwargs["max_new_tokens"] is None:
             # pop to default to generation_config max_length behavior instead of internal default of 20
             kwargs.pop("max_new_tokens")
+        cfg_scale = kwargs.pop("cfg_scale", None)
+        n_diffusion_steps = kwargs.pop("n_diffusion_steps", None)
+        monitor_progress = kwargs.pop("monitor_progress", None)
         
-        # Call the base class method with filtered kwargs
+        # Call the base class method to load from default generation_config.json
         generation_config, model_kwargs = super()._prepare_generation_config(generation_config, use_model_defaults, **kwargs)
 
         # try creating VibeVoice noise scheduler
-        if noise_scheduler is None:
-            # TODO (ebezzam) ok with this so user doesn't need to defined noise scheduler each time?
+        # TODO (ebezzam) ok with this so user doesn't need to defined noise scheduler each time? 
+        # Alternatively, require user to create noise scheduler outside
+        if noise_scheduler is None and hasattr(generation_config, "noise_scheduler_class") and generation_config.noise_scheduler_class:
             try:
                 scheduler_class = getattr(importlib.import_module("diffusers"), generation_config.noise_scheduler_class)
                 noise_scheduler = scheduler_class(**generation_config.noise_scheduler_config)
             except ImportError:
                 raise ImportError(
-                    "The default VibeVoice noise scheduler could not be created because `diffusers` is not installed. " \
-                    "Please install with `pip install diffusers`."
+                    "The default VibeVoice noise scheduler could not be created because `diffusers` is not installed or " \
+                    "the specified noise scheduler class is not available. " \
+                    f"Please install with `pip install diffusers` and verify that {generation_config.noise_scheduler_class} exists."
                 )
-        if not (hasattr(noise_scheduler, "set_timesteps") and hasattr(noise_scheduler, "step") and hasattr(noise_scheduler, "timesteps")):
+        if noise_scheduler is not None:
+            if not (hasattr(noise_scheduler, "set_timesteps") and hasattr(noise_scheduler, "step") and hasattr(noise_scheduler, "timesteps")):
+                raise ValueError(
+                    "The provided noise scheduler is not compatible with VibeVoice generation. "
+                    "It must implement `set_timesteps` and `step` methods, and have a `timesteps` attribute."
+                )
+            generation_config.noise_scheduler = noise_scheduler
+        if not hasattr(generation_config, "noise_scheduler"):
             raise ValueError(
-                "The provided noise scheduler is not compatible with VibeVoice generation. "
-                "It must implement `set_timesteps` and `step` methods, and have a `timesteps` attribute."
+                "A noise scheduler must be provided for VibeVoice generation, either through the `noise_scheduler` "
+                "argument or by defining `noise_scheduler_class` and `noise_scheduler_config` in the generation config."
             )
-        generation_config.noise_scheduler = noise_scheduler
+        if cfg_scale is not None:
+            generation_config.cfg_scale = cfg_scale
+        if not hasattr(generation_config, "cfg_scale"):
+            raise ValueError("cfg_scale must be provided for VibeVoice generation.")
+        if n_diffusion_steps is not None:
+            generation_config.n_diffusion_steps = n_diffusion_steps
+        if not hasattr(generation_config, "n_diffusion_steps"):
+            raise ValueError("n_diffusion_steps must be provided for VibeVoice generation.")
         generation_config.monitor_progress = monitor_progress
-        if input_features is not None:
-            model_kwargs['input_features'] = input_features
-        if input_features_mask is not None:
-            model_kwargs['input_features_mask'] = input_features_mask
         
         return generation_config, model_kwargs
 
@@ -334,6 +346,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         input_features_mask = model_kwargs.pop('input_features_mask', None)
         noise_scheduler = generation_config.noise_scheduler
         monitor_progress = getattr(generation_config, 'monitor_progress', None)
+        cfg_scale = generation_config.cfg_scale
+        n_diffusion_steps = generation_config.n_diffusion_steps
 
         # State tracking
         acoustic_cache = None
@@ -596,7 +610,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 positive_condition = outputs.last_hidden_state[diffusion_indices, -1, :]
                 negative_condition = negative_outputs.last_hidden_state[diffusion_indices, -1, :]
 
-                noise_scheduler.set_timesteps(num_inference_steps=generation_config.n_diffusion_steps)
+                noise_scheduler.set_timesteps(num_inference_steps=n_diffusion_steps)
                 condition = torch.cat([positive_condition, negative_condition], dim=0).to(self.diffusion_head.device)
                 speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
                 
@@ -619,7 +633,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     combined = torch.cat([half, half], dim=0)
                     eps = self.diffusion_head(combined, timestep.repeat(combined.shape[0]).to(combined), condition=condition)
                     cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
-                    half_eps = uncond_eps + generation_config.cfg_scale * (cond_eps - uncond_eps)
+                    half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
                     eps = torch.cat([half_eps, half_eps], dim=0)
                     speech = noise_scheduler.step(eps, timestep, speech).prev_sample
                 speech_latent = speech[: len(speech) // 2].unsqueeze(1)
