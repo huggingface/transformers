@@ -184,7 +184,7 @@ class Chunk(ConversionOps):
         tensors = next(iter(value.values()))
         tensor = tensors[0]
         sizes = len(target_keys)
-        chunks = torch.split(tensor, sizes, dim=self.dim)
+        chunks = torch.chunk(tensor, sizes, dim=self.dim)
         return {full_layer_name.replace(target_keys[0], target): [chunk] for target, chunk in zip(target_keys, chunks)}
 
 

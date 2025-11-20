@@ -124,8 +124,8 @@ class TestWeightGlobMatching(unittest.TestCase):
 
     def test_sub_key_rewrites_targets(self):
         rules = {
-            "*.block_sparse_moe.experts.*.w1.weight": "*.mlp.experts.gate_up_proj",
-            "*.block_sparse_moe.experts.*.w2.weight": "*.mlp.experts.down_proj",
+            "block_sparse_moe.experts.*.w1.weight": "mlp.experts.gate_up_proj",
+            "block_sparse_moe.experts.*.w2.weight": "mlp.experts.down_proj",
             "model.language_model.*": "language_model.*",
         }
 
@@ -147,7 +147,7 @@ class TestWeightGlobMatching(unittest.TestCase):
 
     def test_sub_key_no_match_returns_original(self):
         rules = {
-            "*.block_sparse_moe.experts.*.w1.weight": "*.mlp.experts.gate_up_proj",
+            "block_sparse_moe.experts.*.w1.weight": "*.mlp.experts.gate_up_proj",
         }
         compiled = {src: compile_glob_rule(src, tgt) for src, tgt in rules.items()}
         alt, mapping, _ = build_glob_alternation(list(rules.keys()))
