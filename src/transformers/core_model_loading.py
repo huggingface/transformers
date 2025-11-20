@@ -300,7 +300,9 @@ class WeightTransform:
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
 
-    def convert(self, layer_name: str, model=None, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
+    def convert(
+        self, layer_name: str, model=None, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None
+    ):
         misc = {}
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]

@@ -20,9 +20,13 @@ import re
 from functools import partial, reduce
 from typing import Optional
 
-import torch
-import torch.distributed as dist
-from torch import nn
+from ..utils.import_utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
+    import torch.distributed as dist
+    from torch import nn
 
 from ..distributed import DistributedConfig
 from ..utils import is_torch_greater_or_equal, logging
