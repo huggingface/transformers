@@ -4639,10 +4639,7 @@ class Trainer:
         Returns:
             `int`: The number of floating-point operations.
         """
-        if hasattr(self.model, "floating_point_ops"):
-            return self.model.floating_point_ops(inputs)
-        else:
-            return 0
+        return 6 * inputs[self.model.main_input_name].numel() * self.model.num_parameters(exclude_embeddings=True)
 
     def init_hf_repo(self, token: Optional[str] = None):
         """
