@@ -94,9 +94,9 @@ def _build_checkpoint_conversion_mapping():
                 source_keys=["mlp.moe_statics.e_score_correction_bias"],
                 target_keys=[
                     "mlp.text_moe.gate.moe_statics.e_score_correction_bias",
-                    "mlp.vision_moe.gate.moe_statics.e_score_correction_bias"
+                    "mlp.vision_moe.gate.moe_statics.e_score_correction_bias",
                 ],
-                operations=[Chunk(dim=0, chunks=2)]
+                operations=[Chunk(dim=0, chunks=2)],
             ),
             WeightConverter(
                 source_keys=["experts.*.down_proj.weight"],
@@ -104,7 +104,7 @@ def _build_checkpoint_conversion_mapping():
                     "text_moe.experts.down_proj",
                     "vision_moe.experts.down_proj",
                 ],
-                operations=[ModulelistSplitAndFuse(stack_dim=0, concat_dim=1)]
+                operations=[ModulelistSplitAndFuse(stack_dim=0, concat_dim=1)],
             ),
             WeightConverter(
                 source_keys=[
@@ -115,7 +115,7 @@ def _build_checkpoint_conversion_mapping():
                     "text_moe.experts.gate_up_proj",
                     "vision_moe.experts.gate_up_proj",
                 ],
-                operations=[ModulelistSplitAndFuse(stack_dim=0, concat_dim=1)]
+                operations=[ModulelistSplitAndFuse(stack_dim=0, concat_dim=1)],
             ),
         ],
         "legacy": [

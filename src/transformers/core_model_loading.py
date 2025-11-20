@@ -297,7 +297,7 @@ class ModulelistSplitAndFuse(ConversionOps):
 
     def split_list_into_chunks(self, tensor_list: list[torch.Tensor], chunks: int = 2):
         split_size = math.ceil(len(tensor_list) / chunks)  # best effort split size
-        return [tensor_list[i * split_size : (i+1) * split_size] for i in range(chunks)]
+        return [tensor_list[i * split_size : (i + 1) * split_size] for i in range(chunks)]
 
     @torch.no_grad()
     def convert(
@@ -308,7 +308,9 @@ class ModulelistSplitAndFuse(ConversionOps):
         full_layer_name: str,
         config,
     ) -> dict[str, list[torch.Tensor]]:
-        layer_name_prefix = full_layer_name.removesuffix(target_keys[0])  # full layer name is based on first best match
+        layer_name_prefix = full_layer_name.removesuffix(
+            target_keys[0]
+        )  # full layer name is based on first best match
         split_layer_names = [layer_name_prefix + key for key in target_keys]
 
         split_and_fused = defaultdict(list)
@@ -362,7 +364,9 @@ class ModulelistSplitAndDecouple(ConversionOps):
         config,
     ) -> dict[str, list[torch.Tensor]]:
         # TODO: check how reverse ops interacts here
-        layer_name_prefix = full_layer_name.removesuffix(target_keys[0])  # full layer name is based on first best match
+        layer_name_prefix = full_layer_name.removesuffix(
+            target_keys[0]
+        )  # full layer name is based on first best match
         decoupled_layer_names = [layer_name_prefix + key for key in target_keys]
 
         fused_modules = len(target_keys)
@@ -370,7 +374,9 @@ class ModulelistSplitAndDecouple(ConversionOps):
 
         decoupled = {}
         for idx, key in enumerate(decoupled_layer_names):
-            tensor_groups = [list(torch.unbind(tensor_group[idx], dim=self.stack_dim)) for tensor_group in split_tensors]
+            tensor_groups = [
+                list(torch.unbind(tensor_group[idx], dim=self.stack_dim)) for tensor_group in split_tensors
+            ]
             decoupled[key] = list(chain.from_iterable(tensor_groups))
 
         return decoupled
