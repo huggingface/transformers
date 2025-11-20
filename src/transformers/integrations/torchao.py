@@ -63,14 +63,13 @@ class TorchAoQuantize(ConversionOps):
         self, input_dict: dict[str, torch.Tensor], model: Optional[torch.nn.Module] = None, full_layer_name: str = None, missing_keys=None, **kwargs
     ) -> dict[str, torch.Tensor]:
         from torchao.quantization import quantize_
-
         _ , value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
 
-        module, tensor_name = get_module_from_name(model, full_layer_name)
-
-        if not isinstance(module, torch.nn.Linear):
+        if not self.hf_quantizer.param_needs_quantization(model, full_layer_name):
             return {full_layer_name: value}
+
+        module, tensor_name = get_module_from_name(model, full_layer_name)
 
         module._parameters[tensor_name] = torch.nn.Parameter(
             value, requires_grad=value.requires_grad
