@@ -32,7 +32,7 @@ from enum import Enum
 from functools import partial, wraps
 from itertools import cycle
 from threading import Thread
-from typing import Any, Optional, TypeVar, Union, get_type_hints
+from typing import Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
@@ -106,7 +106,6 @@ from .utils import (
     download_url,
     has_file,
     is_accelerate_available,
-    is_bitsandbytes_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_kernels_available,
@@ -116,13 +115,11 @@ from .utils import (
     is_torch_greater_or_equal,
     is_torch_mlu_available,
     is_torch_npu_available,
-    is_torch_xla_available,
     logging,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
-    ENV_VARS_TRUE_VALUES,
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
     is_tracing,
@@ -299,70 +296,6 @@ def get_torch_context_manager_or_global_device():
     return device_in_context
 
 
-def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
-    try:
-        return next(parameter.parameters()).device
-    except StopIteration:
-        # For nn.DataParallel compatibility in PyTorch 1.5
-
-        def find_tensor_attributes(module: nn.Module) -> list[tuple[str, Tensor]]:
-            tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-            return tuples
-
-        gen = parameter._named_members(get_members_fn=find_tensor_attributes)
-        first_tuple = next(gen)
-        return first_tuple[1].device
-
-
-def get_parameter_dtype(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
-    """
-    Returns the first found floating dtype in parameters if there is one, otherwise returns the last dtype it found.
-    """
-    last_dtype = None
-    for t in parameter.parameters():
-        last_dtype = t.dtype
-        if t.is_floating_point():
-            # Adding fix for https://github.com/pytorch/xla/issues/4152
-            # Fixes issue where the model code passes a value that is out of range for XLA_USE_BF16=1
-            # and XLA_DOWNCAST_BF16=1 so the conversion would cast it to -inf
-            # NOTE: `is_torch_xla_available()` is checked last as it induces a graph break in torch dynamo
-            if XLA_USE_BF16 in ENV_VARS_TRUE_VALUES and is_torch_xla_available():
-                return torch.bfloat16
-            if XLA_DOWNCAST_BF16 in ENV_VARS_TRUE_VALUES and is_torch_xla_available():
-                if t.dtype == torch.float:
-                    return torch.bfloat16
-                if t.dtype == torch.double:
-                    return torch.float32
-            return t.dtype
-
-    if last_dtype is not None:
-        # if no floating dtype was found return whatever the first dtype is
-        return last_dtype
-
-    # For nn.DataParallel compatibility in PyTorch > 1.5
-    def find_tensor_attributes(module: nn.Module) -> list[tuple[str, Tensor]]:
-        tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-        return tuples
-
-    gen = parameter._named_members(get_members_fn=find_tensor_attributes)
-    last_tuple = None
-    for gen_tuple in gen:
-        last_tuple = gen_tuple
-        if gen_tuple[1].is_floating_point():
-            return gen_tuple[1].dtype
-
-    if last_tuple is not None:
-        # fallback to the last dtype
-        return last_tuple[1].dtype
-
-    # fallback to buffer dtype
-    for t in parameter.buffers():
-        last_dtype = t.dtype
-        if t.is_floating_point():
-            return t.dtype
-    return last_dtype
-
-
 def get_state_dict_dtype(state_dict):
     """
     Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
@@ -398,11 +331,8 @@ if is_torch_greater_or_equal("2.3.0"):
 
 
 def load_state_dict(
-    checkpoint_file: Union[str, os.PathLike],
-    is_quantized: bool = False,
-    map_location: Optional[Union[str, torch.device]] = "cpu",
-    weights_only: bool = True,
-):
+    checkpoint_file: Union[str, os.PathLike], map_location: Union[str, torch.device] = "cpu", weights_only: bool = True
+) -> dict[str, torch.Tensor]:
     """
     Reads a `safetensor` or a `.bin` checkpoint file. We load the checkpoint on "cpu" by default.
     """
@@ -420,51 +350,18 @@ def load_state_dict(
                         raise ValueError(f"Cannot load safetensors of unknown dtype {k_dtype}")
                     state_dict[k] = torch.empty(size=_slice.get_shape(), dtype=dtype, device="meta")
                 else:
-                    state_dict[k] = f.get_tensor(k)
+                    state_dict[k] = f.get_tensor(k).to(map_location)
             return state_dict
 
     # Fallback to torch.load (if weights_only was explicitly False, do not check safety as this is known to be unsafe)
     if weights_only:
         check_torch_load_is_safe()
-    try:
-        if map_location is None:
-            if (
-                (
-                    is_deepspeed_zero3_enabled()
-                    and torch.distributed.is_initialized()
-                    and torch.distributed.get_rank() > 0
-                )
-                or (is_fsdp_enabled() and not is_local_dist_rank_0())
-            ) and not is_quantized:
-                map_location = "meta"
-            else:
-                map_location = "cpu"
-        extra_args = {}
-        # mmap can only be used with files serialized with zipfile-based format.
-        if isinstance(checkpoint_file, str) and map_location != "meta" and is_zipfile(checkpoint_file):
-            extra_args = {"mmap": True}
-        return torch.load(
-            checkpoint_file,
-            map_location=map_location,
-            weights_only=weights_only,
-            **extra_args,
-        )
-    except Exception as e:
-        try:
-            with open(checkpoint_file) as f:
-                if f.read(7) == "version":
-                    raise OSError(
-                        "You seem to have cloned a repository without having git-lfs installed. Please install "
-                        "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
-                        "you cloned."
-                    )
-                else:
-                    raise ValueError(
-                        f"Unable to locate the file {checkpoint_file} which is necessary to load this pretrained "
-                        "model. Make sure you have saved the model properly."
-                    ) from e
-        except (UnicodeDecodeError, ValueError):
-            raise OSError(f"Unable to load weights from pytorch checkpoint file '{checkpoint_file}'.")
+    extra_args = {}
+    # mmap can only be used with files serialized with zipfile-based format.
+    if isinstance(checkpoint_file, str) and map_location != "meta" and is_zipfile(checkpoint_file):
+        extra_args = {"mmap": True}
+
+    return torch.load(checkpoint_file, map_location=map_location, weights_only=weights_only, **extra_args)
 
 
 def _end_ptr(tensor: torch.Tensor) -> int:
@@ -918,67 +815,20 @@ class ModuleUtilsMixin:
     A few utilities for `torch.nn.Modules`, to be used as a mixin.
     """
 
-    @staticmethod
-    def _hook_rss_memory_pre_forward(module, *args, **kwargs):
-        try:
-            import psutil
-        except ImportError:
-            raise ImportError("You need to install psutil (pip install psutil) to use memory tracing.")
-
-        process = psutil.Process(os.getpid())
-        mem = process.memory_info()
-        module.mem_rss_pre_forward = mem.rss
-        return None
-
-    @staticmethod
-    def _hook_rss_memory_post_forward(module, *args, **kwargs):
-        try:
-            import psutil
-        except ImportError:
-            raise ImportError("You need to install psutil (pip install psutil) to use memory tracing.")
-
-        process = psutil.Process(os.getpid())
-        mem = process.memory_info()
-        module.mem_rss_post_forward = mem.rss
-        mem_rss_diff = module.mem_rss_post_forward - module.mem_rss_pre_forward
-        module.mem_rss_diff = mem_rss_diff + (module.mem_rss_diff if hasattr(module, "mem_rss_diff") else 0)
-        return None
-
-    def add_memory_hooks(self):
-        """
-        Add a memory hook before and after each sub-module forward pass to record increase in memory consumption.
-
-        Increase in memory consumption is stored in a `mem_rss_diff` attribute for each module and can be reset to zero
-        with `model.reset_memory_hooks_state()`.
-        """
-        for module in self.modules():
-            module.register_forward_pre_hook(self._hook_rss_memory_pre_forward)
-            module.register_forward_hook(self._hook_rss_memory_post_forward)
-        self.reset_memory_hooks_state()
-
-    def reset_memory_hooks_state(self):
-        """
-        Reset the `mem_rss_diff` attribute of each module (see [`~modeling_utils.ModuleUtilsMixin.add_memory_hooks`]).
-        """
-        for module in self.modules():
-            module.mem_rss_diff = 0
-            module.mem_rss_post_forward = 0
-            module.mem_rss_pre_forward = 0
-
     @property
     def device(self) -> torch.device:
         """
         `torch.device`: The device on which the module is (assuming that all the module parameters are on the same
         device).
         """
-        return get_parameter_device(self)
+        return next(param.device for param in self.parameters())
 
     @property
     def dtype(self) -> torch.dtype:
         """
         `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
-        return get_parameter_dtype(self)
+        return next(param.dtype for param in self.parameters() if param.is_floating_point())
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """
@@ -1104,25 +954,15 @@ class ModuleUtilsMixin:
             embedding_param_names = [
                 f"{name}.weight" for name, module_type in self.named_modules() if isinstance(module_type, nn.Embedding)
             ]
-            total_parameters = [
-                parameter for name, parameter in self.named_parameters() if name not in embedding_param_names
-            ]
-        else:
-            total_parameters = list(self.parameters())
 
-        total_numel = []
         is_loaded_in_4bit = getattr(self, "is_loaded_in_4bit", False)
-
         if is_loaded_in_4bit:
-            if is_bitsandbytes_available():
-                import bitsandbytes as bnb
-            else:
-                raise ValueError(
-                    "bitsandbytes is not installed but it seems that the model has been loaded in 4bit precision, something went wrong"
-                    " make sure to install bitsandbytes with `pip install bitsandbytes`. You also need a GPU. "
-                )
+            import bitsandbytes as bnb
 
-        for param in total_parameters:
+        total_params = 0
+        for name, param in self.named_parameters():
+            if exclude_embeddings and name in embedding_param_names:
+                continue
             if param.requires_grad or not only_trainable:
                 # For 4bit models, we need to multiply the number of parameters by 2 as half of the parameters are
                 # used for the 4bit quantization (uint8 tensors are stored)
@@ -1133,58 +973,11 @@ class ModuleUtilsMixin:
                         num_bytes = param.quant_storage.itemsize
                     else:
                         num_bytes = 1
-                    total_numel.append(param.numel() * 2 * num_bytes)
+                    total_params += param.numel() * 2 * num_bytes
                 else:
-                    total_numel.append(param.numel())
+                    total_params += param.numel()
 
-        return sum(total_numel)
-
-    def estimate_tokens(self, input_dict: dict[str, Union[torch.Tensor, Any]]) -> int:
-        """
-        Helper function to estimate the total number of tokens from the model inputs.
-
-        Args:
-            inputs (`dict`): The model inputs.
-
-        Returns:
-            `int`: The total number of tokens.
-        """
-        if not hasattr(self, "warnings_issued"):
-            self.warnings_issued = {}
-        if self.main_input_name in input_dict:
-            return input_dict[self.main_input_name].numel()
-        elif "estimate_tokens" not in self.warnings_issued:
-            logger.warning(
-                "Could not estimate the number of tokens of the input, floating-point operations will not be computed"
-            )
-            self.warnings_issued["estimate_tokens"] = True
-        return 0
-
-    def floating_point_ops(
-        self, input_dict: dict[str, Union[torch.Tensor, Any]], exclude_embeddings: bool = True
-    ) -> int:
-        """
-        Get number of (optionally, non-embeddings) floating-point operations for the forward and backward passes of a
-        batch with this transformer model. Default approximation neglects the quadratic dependency on the number of
-        tokens (valid if `12 * d_model << sequence_length`) as laid out in [this
-        paper](https://huggingface.co/papers/2001.08361) section 2.1. Should be overridden for transformers with parameter
-        re-use e.g. Albert or Universal Transformers, or if doing long-range modeling with very high sequence lengths.
-
-        Args:
-            batch_size (`int`):
-                The batch size for the forward pass.
-
-            sequence_length (`int`):
-                The number of tokens in each line of the batch.
-
-            exclude_embeddings (`bool`, *optional*, defaults to `True`):
-                Whether or not to count embedding and softmax operations.
-
-        Returns:
-            `int`: The number of floating-point operations.
-        """
-
-        return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
+        return total_params
 
 
 class EmbeddingAccessMixin:
@@ -3218,7 +3011,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model_to_save = unwrap_model(self)
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
-        dtype = get_parameter_dtype(model_to_save)
+        dtype = model_to_save.dtype
         model_to_save.config.dtype = str(dtype).split(".")[1]
 
         # Attach architecture to the config
@@ -4237,17 +4030,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
             if state_dict is None:
-                if checkpoint_files is None:
-                    raise ValueError(
-                        "DeepSpeed ZeRO-3 initialization requires a state_dict or checkpoint files to load from."
-                    )
                 merged_state_dict = {}
                 for ckpt_file in checkpoint_files:
-                    merged_state_dict.update(
-                        load_state_dict(
-                            ckpt_file, is_quantized=is_quantized, map_location="cpu", weights_only=weights_only
-                        )
-                    )
+                    merged_state_dict.update(load_state_dict(ckpt_file, map_location="cpu", weights_only=weights_only))
                 state_dict = merged_state_dict
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
             # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
