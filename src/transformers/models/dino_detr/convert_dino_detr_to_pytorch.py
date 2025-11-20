@@ -16,9 +16,6 @@ from transformers import (
 from transformers.utils import logging
 
 
-torch.manual_seed(42)
-
-
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
