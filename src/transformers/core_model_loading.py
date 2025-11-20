@@ -607,35 +607,6 @@ def convert_and_load_state_dict_in_model(
     ```
 
     """
-
-    Now that this is done, we can quantize / dequantize accordingly the collected_tensors.
-
-    For some quantization methods, we need to gather different tensors:
-
-    ```python
-    # for "medmekk/llama-3.2-1b-float8-torchao"
-    WeightConverter(
-        source_keys=[":qdata", ":scale"],
-        target_keys="",
-        operations=[TorchaoDeserialize()],
-    )
-    ```
-    This will collect all tensors that have the same prefix, but end with `:qdata` or `:scale`. This will give us:
-    ```python
-    all_weight_mapping = {
-        "model.layers.13.self_attn.o_proj.weight": WeightConverter(
-            source_keys=[":qdata", ":scale"],
-            target_keys="",
-            operations=[TorchaoDeserialize()],
-            collected_tensors={
-                ":qdata": [Future],
-                ":scale": [Future],
-            },
-        ...
-    }
-    ```
-
-    """
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
     device_map = device_map or {"": "cpu"}
@@ -705,8 +676,8 @@ def convert_and_load_state_dict_in_model(
                 source_pattern = renamed_key
 
             # 5. Handle dtype casting
-            if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, renamed_key):
-                mapping.quantization_operation = hf_quantizer.get_quantize_ops()
+            # if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, renamed_key):
+            #     mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
             _dtype = dtype
             if dtype_plan != {} and dtype_policy_alt.search(renamed_key):
@@ -770,7 +741,8 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation,
                         hf_quantizer,
                     )
-            except SkipLayer:
+            except SkipLayer as e:
+                logger.warning(f"Skipping layer {layer_name} because: {e}")
                 continue
     thread_pool.shutdown(wait=False)
     return missing_keys, unexpected_keys, mismatch_keys, misc
