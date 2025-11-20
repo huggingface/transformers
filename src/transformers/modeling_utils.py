@@ -2008,7 +2008,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and not (is_flash_attn_2_available() or is_flash_attn_3_available())
             and is_kernels_available()
             and not is_torch_npu_available()
-            and not is_torch_xpu_available()
         ):
             if attn_implementation.endswith("2"):
                 applicable_attn_implementation = "kernels-community/flash-attn2"
