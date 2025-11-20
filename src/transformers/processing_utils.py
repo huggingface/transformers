@@ -1420,6 +1420,28 @@ class ProcessorMixin(PushToHubMixin):
                 continue
             if sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING or "tokenizer" in sub_processor_type:
                 attributes.append(sub_processor_type)
+
+        # Legacy processors may not override `__init__` and instead expose modality
+        # attributes via `<attribute>_class`. In that case, `args_in_init` only exposes
+        # `*args`/`**kwargs`, so we need to infer the attributes from those class-level
+        # hints to keep backward compatibility (e.g. dynamic processors stored on the Hub).
+        if not attributes:
+            for attribute_name, value in cls.__dict__.items():
+                if (
+                    value is None
+                    or attribute_name == "audio_tokenizer_class"
+                    or not attribute_name.endswith("_class")
+                ):
+                    continue
+                inferred_attribute = attribute_name[: -len("_class")]
+                if inferred_attribute == "audio_tokenizer":
+                    continue
+                if (
+                    inferred_attribute in MODALITY_TO_AUTOPROCESSOR_MAPPING
+                    or "tokenizer" in inferred_attribute
+                ):
+                    attributes.append(inferred_attribute)
+
         return attributes
 
     @classmethod

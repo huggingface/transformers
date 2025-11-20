@@ -1081,6 +1081,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self.backend = kwargs.pop("backend", None)
         self.files_loaded = kwargs.pop("files_loaded", [])
 
+    def _set_processor_class(self, processor_class: str):
+        """Sets processor class so it can be serialized in `tokenizer_config.json`."""
+        self._processor_class = processor_class
+
     # ---- Special tokens API (moved from SpecialTokensMixin) ----
     def add_special_tokens(
         self,
