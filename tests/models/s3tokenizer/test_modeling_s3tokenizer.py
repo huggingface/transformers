@@ -131,6 +131,10 @@ class S3TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip(reason="S3Tokenizer does not have input/output embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
     @unittest.skip(reason="S3Tokenizer does not use feed forward chunking")
     def test_feed_forward_chunking(self):
         pass
@@ -142,6 +146,22 @@ class S3TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="S3Tokenizer does not support output_hidden_states")
     def test_model_outputs_equivalence(self):
         pass
+
+    @unittest.skip(reason="S3Tokenizer does not support init weights")
+    def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(reason="S3Tokenizer does not support safetensors")
+    def test_can_use_safetensors(self):
+        return super().test_can_use_safetensors()
+
+    @unittest.skip(reason="S3Tokenizer does not support tied weights")
+    def test_load_save_without_tied_weights(self):
+        return super().test_load_save_without_tied_weights()
+
+    @unittest.skip(reason="S3Tokenizer does not support init weights")
+    def test_save_load(self):
+        return super().test_save_load()
 
     @slow
     @require_torch

@@ -450,7 +450,7 @@ class AudioEncoderV2(torch.nn.Module):
         self.stride = stride
         self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, stride=stride, padding=1)
         self.conv2 = Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)
-        self.freqs_cis = precompute_freqs_cis(64, 1024 * 2)
+        self.register_buffer("freqs_cis", precompute_freqs_cis(64, 1024 * 2), persistent=False)
         self.blocks = torch.nn.ModuleList(
             [ResidualAttentionBlock(n_state, n_head, use_sdpa=use_sdpa) for _ in range(n_layer)]
         )
@@ -663,7 +663,7 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
     """
 
     ignore_state_dict_missing = ("_mel_filters", "window")
-    _tied_weights_keys = []
+    all_tied_weights_keys = {}
 
     def __init__(self, config: S3TokenizerConfig, name: str = "speech_tokenizer_v2_25hz"):
         super().__init__(config)
