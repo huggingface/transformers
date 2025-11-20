@@ -55,7 +55,7 @@ if is_torchao_available():
         MappingType,
         ModuleFqnToConfig,
         PerAxis
-    ),
+    )
     from torchao.quantization.autoquant import AQMixin
 
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0"):
@@ -153,7 +153,7 @@ class TorchAoTest(unittest.TestCase):
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What are we having for"
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
 
     def tearDown(self):
         gc.collect()
@@ -552,7 +552,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
-                ("cuda", 7): "What are we having for dinner?\n- 1. What are we having for",
+                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
             }
         )
         # fmt: on
@@ -609,7 +609,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
-                ("cuda", 7): "What are we having for dinner?\n- 1. What are we having for",
+                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
             }
         )
         # fmt: on
@@ -692,7 +692,7 @@ class TorchAoSerializationTest(unittest.TestCase):
         )
         cls.quant_scheme = Int4WeightOnlyConfig(**cls.quant_scheme_kwargs)
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What are we having for"
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
 
     def setUp(self):
         self.quant_config = TorchAoConfig(self.quant_scheme)
@@ -825,7 +825,7 @@ class TorchAoSerializationAcceleratorTest(TorchAoSerializationTest):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
-                ("cuda", 7): "What are we having for dinner?\n- 1. What are we having for",
+                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
             }
         )
         # fmt: on

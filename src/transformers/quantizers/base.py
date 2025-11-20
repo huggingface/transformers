@@ -179,7 +179,15 @@ class HfQuantizer(ABC):
             # The value passed is actually not used when the method is overriden
             if (custom_dtype := self.adjust_target_dtype(torch.float16)) in mapping:
                 return mapping[custom_dtype]
-        return model.get_parameter_or_buffer(param_name).element_size()
+        if hasattr(model, "get_parameter_or_buffer"):
+            return model.get_parameter_or_buffer(param_name).element_size()
+        elif hasattr(model, "get_parameter"):
+            try:
+                return model.get_parameter(param_name).element_size()
+            except AttributeError: 
+                return model.get_buffer(param_name).element_size()
+        else:
+            raise ValueError(f"Model {model.__class__.__name__} does not have a get_parameter_or_buffer method")
 
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         """
