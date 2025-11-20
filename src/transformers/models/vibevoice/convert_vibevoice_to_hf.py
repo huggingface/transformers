@@ -110,7 +110,29 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     if list(original_state_dict.keys())[0].startswith("model."):
         original_state_dict = {k[len("model."):]: v for k, v in original_state_dict.items()}
 
-    # 2) Prepare model configuration
+    # 2) Prepare feature extractor (same for all models)
+    audio_config = {}
+    if processor_config is not None:
+        with open(processor_config, "r") as f:
+            processor_config = json.load(f)
+        audio_config = processor_config.get("audio_processor", {})
+        language_model_pretrained_name = processor_config.get("language_model_pretrained_name", None)
+    if "sampling_rate" not in audio_config:
+        audio_config["sampling_rate"] = 24000
+    if "normalize_audio" not in audio_config:
+        audio_config["normalize_audio"] = True
+    if "target_dB_FS" not in audio_config:
+        audio_config["target_dB_FS"] = -25
+    if "eps" not in audio_config:
+        audio_config["eps"] = 1e-6
+    if language_model_pretrained_name is None:
+        if "1.5B" in checkpoint:
+            language_model_pretrained_name = "Qwen/Qwen2.5-1.5B"
+        else:
+            language_model_pretrained_name = "Qwen/Qwen2.5-7B"
+    feature_extractor = VibeVoiceFeatureExtractor(**audio_config)
+
+    # 3) Prepare model configuration
     # -- Load
     with open(config_path, "r") as f:
         model_config = json.load(f)
@@ -223,10 +245,10 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         del model_config["tie_word_embeddings"]
     model_config["dtype"] = model_config.pop("torch_dtype")
 
-    # 3) Update state dict to match HF model structure
+    # 4) Update state dict to match HF model structure
     updated_state_dict = update_state_dict_for_hf_model(original_state_dict)
 
-    # 4) Create and save semantic tokenizer
+    # 5) Create and save semantic tokenizer
     print("\n=== Creating semantic tokenizer ===")
     semantic_config = VibeVoiceSemanticTokenizerConfig(**model_config["semantic_tokenizer_config"])
     semantic_model = VibeVoiceSemanticTokenizerModel(semantic_config).to(dtype)
@@ -246,9 +268,10 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     if push_to_hub is not None and push_tokenizers:
         hub_repo = push_to_hub.split("/")[0] + "/VibeVoice-SemanticTokenizer"
         print(f"------ Pushing to hub as {hub_repo} ------")
+        feature_extractor.push_to_hub(hub_repo)
         semantic_model.push_to_hub(hub_repo)
 
-    # 5) Create and save acoustic tokenizer
+    # 6) Create and save acoustic tokenizer
     print("\n=== Creating acoustic tokenizer ===")
     acoustic_config = VibeVoiceAcousticTokenizerConfig(**model_config["acoustic_tokenizer_config"])
     acoustic_model = VibeVoiceAcousticTokenizerModel(acoustic_config).to(dtype)
@@ -268,29 +291,12 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     if push_to_hub is not None and push_tokenizers:
         hub_repo = push_to_hub.split("/")[0] + "/VibeVoice-AcousticTokenizer"
         print(f"------ Pushing to hub as {hub_repo} ------")
+        feature_extractor.push_to_hub(hub_repo)
         acoustic_model.push_to_hub(hub_repo)
 
-    # 6) Create VibeVoice processor
+    # 7) Create VibeVoice processor
     # -- load processor config
     print("\n=== Creating VibeVoice processor ===")
-    if processor_config is not None:
-        with open(processor_config, "r") as f:
-            processor_config = json.load(f)
-        audio_config = processor_config.get("audio_processor", {})
-        language_model_pretrained_name = processor_config.get("language_model_pretrained_name", None)
-    if "sampling_rate" not in audio_config:
-        audio_config["sampling_rate"] = 24000
-    if "normalize_audio" not in audio_config:
-        audio_config["normalize_audio"] = True
-    if "target_dB_FS" not in audio_config:
-        audio_config["target_dB_FS"] = -25
-    if "eps" not in audio_config:
-        audio_config["eps"] = 1e-6
-    if language_model_pretrained_name is None:
-        if "1.5B" in checkpoint:
-            language_model_pretrained_name = "Qwen/Qwen2.5-1.5B"
-        else:
-            language_model_pretrained_name = "Qwen/Qwen2.5-7B"
 
     # Define a chat template adapted for VibeVoice's speech use case
     chat_template = """{%- set system_prompt = system_prompt | default(" Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n") -%}
@@ -330,7 +336,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     # Explicitly use Qwen2TokenizerFast to ensure proper class name in config
     tokenizer = Qwen2TokenizerFast.from_pretrained(language_model_pretrained_name)
     processor = VibeVoiceProcessor(
-        feature_extractor=VibeVoiceFeatureExtractor(**audio_config),
+        feature_extractor=feature_extractor,
         tokenizer=tokenizer,
         chat_template=chat_template,
     )
@@ -350,7 +356,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         print(f"------ Pushing processor to hub as {push_to_hub} ------")
         processor.push_to_hub(push_to_hub)
 
-    # 7) Create and save full VibeVoice model
+    # 8) Create and save full VibeVoice model
     print("\n=== Creating full model ===")
     model_config["acoustic_tokenizer_config"] = acoustic_config.to_dict()
     model_config["semantic_tokenizer_config"] = semantic_config.to_dict()
@@ -415,7 +421,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         print(f"------ Pushing full VibeVoice model to hub as {push_to_hub} ------")
         vibevoice_model.push_to_hub(push_to_hub)
 
-    # 8) Check model
+    # 9) Check model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
     VibeVoiceProcessor.from_pretrained(output_dir)
