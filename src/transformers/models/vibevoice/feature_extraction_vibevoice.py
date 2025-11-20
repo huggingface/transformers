@@ -138,7 +138,7 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
 
         # add channel dimension if missing
         if output_values["input_features"].ndim == 2:
-            output_values["input_features"] = output_values["input_features"].unsqueeze(1)
+            output_values["input_features"] = output_values["input_features"][:, None, :]
 
         return output_values
 
