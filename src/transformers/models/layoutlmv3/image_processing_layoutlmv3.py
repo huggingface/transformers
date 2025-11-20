@@ -188,7 +188,10 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         self.size = size
         self.resample = resample
         self.do_rescale = do_rescale
-        self.rescale_factor = rescale_value
+        if "rescale_factor" in kwargs:
+            self.rescale_factor = kwargs["rescale_factor"]
+        else:
+            self.rescale_factor = rescale_value
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
