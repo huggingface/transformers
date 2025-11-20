@@ -129,7 +129,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         renamings = [
             WeightRenaming("block_sparse_moe.experts.*.w1.weight", "mlp.experts.gate_up_proj"),
             WeightRenaming("block_sparse_moe.experts.*.w2.weight", "mlp.experts.down_proj"),
-            WeightRenaming("model.language_model.*", "language_model.*"),
+            WeightRenaming("model.language_model.*", "language_model"),
         ]
         rename_alt, _, rename_by_group = build_glob_alternation(renamings)
 
@@ -138,7 +138,7 @@ class TestWeightGlobMatching(unittest.TestCase):
 
         self.assertEqual(rename("foo.block_sparse_moe.experts.3.w1.weight"), "foo.mlp.experts.gate_up_proj")
         self.assertEqual(rename("foo.block_sparse_moe.experts.3.w2.weight"), "foo.mlp.experts.down_proj")
-        self.assertEqual(rename("model.language_model.lm_head.weight"), "language_model.lm_head.weight")
+        self.assertEqual(rename("model.language_model.lm_head.weight"), "language_model")
 
     def test_sub_key_no_match_returns_original(self):
         renamings = [
