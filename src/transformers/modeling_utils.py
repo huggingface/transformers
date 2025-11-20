@@ -815,6 +815,21 @@ class ModuleUtilsMixin:
     A few utilities for `torch.nn.Modules`, to be used as a mixin.
     """
 
+    @property
+    def device(self) -> torch.device:
+        """
+        `torch.device`: The device on which the module is (assuming that all the module parameters are on the same
+        device).
+        """
+        return next(param.device for param in self.parameters())
+
+    @property
+    def dtype(self) -> torch.dtype:
+        """
+        `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
+        """
+        return next(param.dtype for param in self.parameters() if param.is_floating_point())
+
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """
         Invert an attention mask (e.g., switches 0. and 1.).
