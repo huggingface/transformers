@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...activations import get_activation
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
@@ -512,6 +513,7 @@ class FalconFlashAttention2(FalconAttention):
         device_type = query_layer.device.type if query_layer.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
+                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
                 target_dtype = (
                     torch.get_autocast_dtype(device_type)
                     if hasattr(torch, "get_autocast_dtype")
@@ -672,25 +674,16 @@ class FalconPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["FalconDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
-
     _can_compile_fullgraph = True
 
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, FalconLinear)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        super()._init_weights(module)
+        if isinstance(module, FalconLinear):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+                init.zeros_(module.bias)
 
     # Adapted from transformers.modeling_utils.PreTrainedModel._check_and_enable_sdpa
     @classmethod
@@ -1001,7 +994,7 @@ class FalconModel(FalconPreTrainedModel):
     """
 )
 class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "transformer.word_embeddings.weight"}
 
     def __init__(self, config: FalconConfig):
         super().__init__(config)

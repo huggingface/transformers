@@ -221,16 +221,6 @@ class TextNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "textnet"
     main_input_name = "pixel_values"
 
-    def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.BatchNorm2d):
-            module.weight.data.fill_(1.0)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
 
 @auto_docstring
 class TextNetModel(TextNetPreTrainedModel):

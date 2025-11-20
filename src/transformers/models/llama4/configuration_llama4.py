@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
@@ -104,7 +103,7 @@ class Llama4VisionConfig(PreTrainedConfig):
         multi_modal_projector_bias: Optional[bool] = False,
         projector_dropout: Optional[float] = 0.0,
         attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -133,19 +132,6 @@ class Llama4VisionConfig(PreTrainedConfig):
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
-
-        @property
-        def vision_feature_layer(self):
-            warnings.warn(
-                "The `vision_feature_layer` attribute is deprecated and will be removed in v4.58.0.",
-                FutureWarning,
-            )
-            return self._vision_feature_layer
-
-        @vision_feature_layer.setter
-        def vision_feature_layer(self, value):
-            self._vision_feature_layer = value
-
         super().__init__(**kwargs)
 
 
@@ -290,7 +276,7 @@ class Llama4TextConfig(PreTrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         no_rope_layers=None,
         no_rope_layer_interval=4,
         attention_chunk_size=8192,
