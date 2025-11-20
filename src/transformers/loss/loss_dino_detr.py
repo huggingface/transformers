@@ -262,14 +262,14 @@ class DinoDetrImageLoss(nn.Module):
         # Compute all the requested losses
         losses = {}
 
-        # prepare for dn loss
-        dn_meta = outputs["dn_meta"]
+        # prepare for denoising loss
+        denoising_meta = outputs["denoising_meta"]
 
-        if self.training and dn_meta and "output_known_lbs_bboxes" in dn_meta:
-            output_known_lbs_bboxes, single_pad, scalar = self.prep_for_dn(dn_meta)
+        if self.training and denoising_meta and "output_known_lbs_bboxes" in denoising_meta:
+            output_known_lbs_bboxes, single_pad, scalar = self.prep_for_denoising(denoising_meta)
 
-            dn_pos_idx = []
-            dn_neg_idx = []
+            denoising_pos_idx = []
+            denoising_neg_idx = []
             for i in range(len(targets)):
                 if len(targets[i]["class_labels"]) > 0:
                     t = torch.range(0, len(targets[i]["class_labels"]) - 1).long().to(device)
@@ -280,10 +280,10 @@ class DinoDetrImageLoss(nn.Module):
                 else:
                     output_idx = tgt_idx = torch.tensor([]).long().to(device)
 
-                dn_pos_idx.append((output_idx, tgt_idx))
-                dn_neg_idx.append((output_idx + single_pad // 2, tgt_idx))
+                denoising_pos_idx.append((output_idx, tgt_idx))
+                denoising_neg_idx.append((output_idx + single_pad // 2, tgt_idx))
 
-            output_known_lbs_bboxes = dn_meta["output_known_lbs_bboxes"]
+            output_known_lbs_bboxes = denoising_meta["output_known_lbs_bboxes"]
             l_dict = {}
             for loss in self.losses:
                 l_dict.update(
@@ -291,21 +291,21 @@ class DinoDetrImageLoss(nn.Module):
                         loss,
                         output_known_lbs_bboxes,
                         targets,
-                        dn_pos_idx,
+                        denoising_pos_idx,
                         num_boxes * scalar,
                     )
                 )
 
-            l_dict = {k + "_dn": v for k, v in l_dict.items()}
+            l_dict = {k + "_denoising": v for k, v in l_dict.items()}
             losses.update(l_dict)
         else:
             l_dict = {
-                "loss_bbox_dn": torch.as_tensor(0.0).to(device),
-                "loss_giou_dn": torch.as_tensor(0.0).to(device),
-                "loss_ce_dn": torch.as_tensor(0.0).to(device),
-                "loss_xy_dn": torch.as_tensor(0.0).to(device),
-                "loss_hw_dn": torch.as_tensor(0.0).to(device),
-                "cardinality_error_dn": torch.as_tensor(0.0).to(device),
+                "loss_bbox_denoising": torch.as_tensor(0.0).to(device),
+                "loss_giou_denoising": torch.as_tensor(0.0).to(device),
+                "loss_ce_denoising": torch.as_tensor(0.0).to(device),
+                "loss_xy_denoising": torch.as_tensor(0.0).to(device),
+                "loss_hw_denoising": torch.as_tensor(0.0).to(device),
+                "cardinality_error_denoising": torch.as_tensor(0.0).to(device),
             }
             losses.update(l_dict)
 
@@ -326,7 +326,7 @@ class DinoDetrImageLoss(nn.Module):
                     l_dict = {k + f"_{idx}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
-                if self.training and dn_meta and "output_known_lbs_bboxes" in dn_meta:
+                if self.training and denoising_meta and "output_known_lbs_bboxes" in denoising_meta:
                     aux_outputs_known = output_known_lbs_bboxes["aux_outputs"][idx]
                     l_dict = {}
                     for loss in self.losses:
@@ -335,21 +335,21 @@ class DinoDetrImageLoss(nn.Module):
                                 loss,
                                 aux_outputs_known,
                                 targets,
-                                dn_pos_idx,
+                                denoising_pos_idx,
                                 num_boxes * scalar,
                             )
                         )
 
-                    l_dict = {k + f"_dn_{idx}": v for k, v in l_dict.items()}
+                    l_dict = {k + f"_denoising_{idx}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
                 else:
                     l_dict = {
-                        "loss_bbox_dn": torch.as_tensor(0.0).to(device),
-                        "loss_giou_dn": torch.as_tensor(0.0).to(device),
-                        "loss_ce_dn": torch.as_tensor(0.0).to(device),
-                        "loss_xy_dn": torch.as_tensor(0.0).to(device),
-                        "loss_hw_dn": torch.as_tensor(0.0).to(device),
-                        "cardinality_error_dn": torch.as_tensor(0.0).to(device),
+                        "loss_bbox_denoising": torch.as_tensor(0.0).to(device),
+                        "loss_giou_denoising": torch.as_tensor(0.0).to(device),
+                        "loss_ce_denoising": torch.as_tensor(0.0).to(device),
+                        "loss_xy_denoising": torch.as_tensor(0.0).to(device),
+                        "loss_hw_denoising": torch.as_tensor(0.0).to(device),
+                        "cardinality_error_denoising": torch.as_tensor(0.0).to(device),
                     }
                     l_dict = {k + f"_{idx}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
@@ -382,12 +382,15 @@ class DinoDetrImageLoss(nn.Module):
 
         return losses
 
-    def prep_for_dn(self, dn_meta):
-        output_known_lbs_bboxes = dn_meta["output_known_lbs_bboxes"]
-        dn_num_groups, num_denoising_queries = dn_meta["dn_num_group"], dn_meta["dn_num_split"][0]
-        single_query = num_denoising_queries // dn_num_groups
+    def prep_for_denoising(self, denoising_meta):
+        output_known_lbs_bboxes = denoising_meta["output_known_lbs_bboxes"]
+        denoising_num_groups, num_denoising_queries = (
+            denoising_meta["dn_num_group"],
+            denoising_meta["dn_num_split"][0],
+        )
+        single_query = num_denoising_queries // denoising_num_groups
 
-        return output_known_lbs_bboxes, single_query, dn_num_groups
+        return output_known_lbs_bboxes, single_query, denoising_num_groups
 
 
 def DinoDetrForObjectDetectionLoss(
@@ -395,7 +398,7 @@ def DinoDetrForObjectDetectionLoss(
     labels,
     device,
     pred_boxes,
-    dn_meta,
+    denoising_meta,
     class_cost,
     bbox_cost,
     giou_cost,
@@ -406,7 +409,7 @@ def DinoDetrForObjectDetectionLoss(
     bbox_loss_coefficient,
     giou_loss_coefficient,
     mask_loss_coefficient,
-    use_dn,
+    use_denoising,
     use_masks,
     dice_loss_coefficient,
     num_decoder_layers,
@@ -433,7 +436,7 @@ def DinoDetrForObjectDetectionLoss(
     auxiliary_outputs = None
     outputs_loss["logits"] = logits
     outputs_loss["pred_boxes"] = pred_boxes
-    outputs_loss["dn_meta"] = dn_meta
+    outputs_loss["denoising_meta"] = denoising_meta
     if auxiliary_loss:
         auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
         outputs_loss["auxiliary_outputs"] = auxiliary_outputs
@@ -445,7 +448,7 @@ def DinoDetrForObjectDetectionLoss(
         bbox_loss_coefficient,
         giou_loss_coefficient,
         mask_loss_coefficient,
-        use_dn,
+        use_denoising,
         use_masks,
         dice_loss_coefficient,
         auxiliary_loss,
@@ -460,7 +463,7 @@ def compute_weight_dict(
     bbox_loss_coefficient,
     giou_loss_coefficient,
     mask_loss_coefficient,
-    use_dn,
+    use_denoising,
     use_masks,
     dice_loss_coefficient,
     auxiliary_loss,
@@ -472,13 +475,13 @@ def compute_weight_dict(
         "loss_bbox": bbox_loss_coefficient,
     }
     weight_dict["loss_giou"] = giou_loss_coefficient
-    clean_weight_dict_wo_dn = copy.deepcopy(weight_dict)
+    clean_weight_dict_wo_denoising = copy.deepcopy(weight_dict)
 
-    # for DN training
-    if use_dn:
-        weight_dict["loss_ce_dn"] = cls_loss_coefficient
-        weight_dict["loss_bbox_dn"] = bbox_loss_coefficient
-        weight_dict["loss_giou_dn"] = giou_loss_coefficient
+    # for denoising training
+    if use_denoising:
+        weight_dict["loss_ce_denoising"] = cls_loss_coefficient
+        weight_dict["loss_bbox_denoising"] = bbox_loss_coefficient
+        weight_dict["loss_giou_denoising"] = giou_loss_coefficient
 
     if use_masks:
         weight_dict["loss_mask"] = mask_loss_coefficient
@@ -498,6 +501,8 @@ def compute_weight_dict(
         "loss_bbox": 1.0,
         "loss_giou": 1.0,
     }
-    interm_weight_dict.update({k + "_interm": v * _coeff_weight_dict[k] for k, v in clean_weight_dict_wo_dn.items()})
+    interm_weight_dict.update(
+        {k + "_interm": v * _coeff_weight_dict[k] for k, v in clean_weight_dict_wo_denoising.items()}
+    )
     weight_dict.update(interm_weight_dict)
     return weight_dict

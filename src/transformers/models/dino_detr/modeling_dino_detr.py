@@ -1437,7 +1437,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
             - `num_feature_levels` (int): The number of feature levels.
             - `num_queries` (int): The number of queries.
             - `d_model` (int): The hidden size of the model.
-            - `embed_init_tgt` (bool): Whether to initialize target embeddings.
             - `normalize_before` (bool): Whether to apply normalization before the encoder layers.
             - `num_encoder_layers` (int): The number of encoder layers.
             - `num_decoder_layers` (int): The number of decoder layers.
@@ -1487,12 +1486,8 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
                 self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
             else:
                 self.level_embed = None
-        self.embed_init_tgt = config.embed_init_tgt
-        if config.embed_init_tgt:
-            self.content_query_embeddings = nn.Embedding(self.num_queries, config.d_model)
-            nn.init.normal_(self.content_query_embeddings.weight.data)
-        else:
-            self.content_query_embeddings = None
+        self.content_query_embeddings = nn.Embedding(self.num_queries, config.d_model)
+        nn.init.normal_(self.content_query_embeddings.weight.data)
         # Define layers for the two stage Dino method
         self.enc_output = nn.Linear(config.d_model, config.d_model)
         self.enc_output_norm = nn.LayerNorm(config.d_model)
@@ -1640,10 +1635,7 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
 
         # Either use learnable queries (shared across all train/test images) or use per sample queries
         query_reference_points = query_reference_points.detach()
-        if self.embed_init_tgt:
-            queries = self.content_query_embeddings.weight[:, None, :].repeat(1, batch_size, 1).transpose(0, 1)
-        else:
-            queries = queries.detach()
+        queries = self.content_query_embeddings.weight[:, None, :].repeat(1, batch_size, 1).transpose(0, 1)
 
         # Combine queries and reference points with their contrastive denoising versions
         if contrastive_query_reference_points is not None and contrastive_queries is not None:
@@ -1913,7 +1905,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         super().__init__(config)
         # Create deformable transformer
         self.transformer = DinoDetrEncoderDecoder(config=config)
-        self.label_enc = nn.Embedding(config.dn_num_classes + 1, config.d_model)
+        self.label_enc = nn.Embedding(config.denoising_num_classes + 1, config.d_model)
 
         # Create backbone + positional encoding
         backbone = DinoDetrConvEncoder(config)
@@ -2047,20 +2039,20 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 position_embeddings.append(additional_position_embedding)
 
         # Create contrastive denoising queries
-        if self.training and self.config.dn_number > 0 and labels is not None:
-            contrastive_queries, contrastive_query_reference_points, attn_mask, dn_meta = (
+        if self.training and self.config.denoising_query_number > 0 and labels is not None:
+            contrastive_queries, contrastive_query_reference_points, attn_mask, denoising_meta = (
                 get_contrastive_denoising_training_group(
                     targets=labels,
                     num_classes=self.config.num_classes,
                     num_queries=self.config.num_queries,
                     class_embed=self.label_enc,
-                    num_denoising_queries=self.config.dn_number,
-                    label_noise_ratio=self.config.dn_label_noise_ratio,
-                    box_noise_scale=self.config.dn_box_noise_scale,
+                    num_denoising_queries=self.config.denoising_query_number,
+                    label_noise_ratio=self.config.denoising_label_noise_ratio,
+                    box_noise_scale=self.config.denoising_box_noise_scale,
                 )
             )
         else:
-            contrastive_queries = contrastive_query_reference_points = attn_mask = dn_meta = None
+            contrastive_queries = contrastive_query_reference_points = attn_mask = denoising_meta = None
 
         # Apply transformer encoder decoder
         outputs_transformer_part = self.transformer(
@@ -2090,19 +2082,19 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             references=reference_points,
             encoder_last_hidden_state=hidden_states_encoder,
             encoder_reference=reference_points_encoder,
-            denoising_meta=dn_meta,
+            denoising_meta=denoising_meta,
         )
 
 
 def denoising_post_process(
     outputs_class: torch.FloatTensor,
     outputs_coord: torch.FloatTensor,
-    dn_meta: dict,
+    denoising_meta: dict,
     aux_loss: bool,
     _set_aux_loss: Callable,
 ):
     """
-    Post-processes the outputs of the denoising task in the Conditional Denoising (CDN) framework.
+    Post-processes the outputs of the denoising task in the Conditional Denoising (Cdenoising) framework.
 
     This function separates the known (denoising) outputs from the unknown outputs and updates the metadata with
     the processed known outputs. It also handles auxiliary losses if required.
@@ -2112,7 +2104,7 @@ def denoising_post_process(
             Classification logits of shape `(batch_size, num_queries, num_classes)`.
         outputs_coord (`torch.FloatTensor`):
             Predicted bounding box coordinates of shape `(batch_size, num_queries, 4)`.
-        dn_meta (`Dict`):
+        denoising_meta (`Dict`):
             Metadata dictionary containing information about the denoising task. Must include the key `"pad_size"`,
             which specifies the number of known (denoising) queries.
         aux_loss (`bool`):
@@ -2126,18 +2118,18 @@ def denoising_post_process(
             - `outputs_class` (`torch.FloatTensor`): Classification logits after removing the known queries.
             - `outputs_coord` (`torch.FloatTensor`): Bounding box coordinates after removing the known queries.
     """
-    if dn_meta and dn_meta["dn_num_split"][0] > 0:
-        output_known_class = outputs_class[:, :, : dn_meta["dn_num_split"][0], :]
-        output_known_coord = outputs_coord[:, :, : dn_meta["dn_num_split"][0], :]
-        outputs_class = outputs_class[:, :, dn_meta["dn_num_split"][0] :, :]
-        outputs_coord = outputs_coord[:, :, dn_meta["dn_num_split"][0] :, :]
+    if denoising_meta and denoising_meta["dn_num_split"][0] > 0:
+        output_known_class = outputs_class[:, :, : denoising_meta["dn_num_split"][0], :]
+        output_known_coord = outputs_coord[:, :, : denoising_meta["dn_num_split"][0], :]
+        outputs_class = outputs_class[:, :, denoising_meta["dn_num_split"][0] :, :]
+        outputs_coord = outputs_coord[:, :, denoising_meta["dn_num_split"][0] :, :]
         out = {
             "logits": output_known_class[-1],
             "pred_boxes": output_known_coord[-1],
         }
         if aux_loss:
             out["aux_outputs"] = _set_aux_loss(output_known_class, output_known_coord)
-        dn_meta["output_known_lbs_bboxes"] = out
+        denoising_meta["output_known_lbs_bboxes"] = out
     return outputs_class, outputs_coord
 
 
@@ -2280,7 +2272,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         outputs_class = torch.stack(outputs_class_list)
 
         # Apply denoising post processing
-        if self.config.dn_number > 0 and denoising_meta is not None:
+        if self.config.denoising_query_number > 0 and denoising_meta is not None:
             outputs_class, outputs_coord = denoising_post_process(
                 outputs_class,
                 outputs_coord,
@@ -2300,7 +2292,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                 labels=labels,
                 device=self.device,
                 pred_boxes=outputs_coord[-1],
-                dn_meta=denoising_meta,
+                denoising_meta=denoising_meta,
                 outputs_class=outputs_class,
                 outputs_coord=outputs_coord,
                 class_cost=self.config.class_cost,
@@ -2313,7 +2305,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                 bbox_loss_coefficient=self.config.bbox_loss_coefficient,
                 giou_loss_coefficient=self.config.giou_loss_coefficient,
                 mask_loss_coefficient=self.config.mask_loss_coefficient,
-                use_dn=self.config.use_dn,
+                use_denoising=self.config.use_denoising,
                 use_masks=self.config.use_masks,
                 dice_loss_coefficient=self.config.dice_loss_coefficient,
                 num_decoder_layers=self.config.num_decoder_layers,

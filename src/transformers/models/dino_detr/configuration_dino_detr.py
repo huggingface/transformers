@@ -76,13 +76,12 @@ class DinoDetrConfig(PretrainedConfig):
             query_dim (`int`, *optional*, defaults to 4): The dimension of the object query embeddings.
             num_encoder_layers (`int`, *optional*, defaults to 6): Number of encoder layers.
             num_decoder_layers (`int`, *optional*, defaults to 6): Number of decoder layers.
-            embed_init_tgt (`bool`, *optional*, defaults to `True`): Whether to initialize the target embeddings.
             num_classes (`int`, *optional*, defaults to 91): The number of object classes the model can predict.
-            use_dn (`bool`, *optional*, defaults to `True`): Whether to use denoising training.
-            dn_num_classes (`int`, *optional*, defaults to 91): The size of the label book for denoising training.
-            dn_number (`int`, *optional*, defaults to 100): The number of denoising queries.
-            dn_box_noise_scale (`float`, *optional*, defaults to 0.4): The scale of noise added to bounding boxes during denoising training.
-            dn_label_noise_ratio (`float`, *optional*, defaults to 0.5): The ratio of noise added to labels during denoising training.
+            use_denoising (`bool`, *optional*, defaults to `True`): Whether to use denoising training.
+            denoising_num_classes (`int`, *optional*, defaults to 91): The size of the label book for denoising training.
+            denoising_query_number (`int`, *optional*, defaults to 100): The number of denoising queries.
+            denoising_box_noise_scale (`float`, *optional*, defaults to 0.4): The scale of noise added to bounding boxes during denoising training.
+            denoising_label_noise_ratio (`float`, *optional*, defaults to 0.5): The ratio of noise added to labels during denoising training.
             auxiliary_loss (`bool`, *optional*, defaults to `True`):
                 Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
             use_masks (`bool`, *optional*, defaults to `True`): Whether to use masks in the model.
@@ -157,13 +156,12 @@ class DinoDetrConfig(PretrainedConfig):
         query_dim=4,
         num_encoder_layers=6,
         num_decoder_layers=6,
-        embed_init_tgt=True,
         num_classes=91,
-        use_dn=True,
-        dn_num_classes=91,
-        dn_number=100,
-        dn_box_noise_scale=0.4,
-        dn_label_noise_ratio=0.5,
+        use_denoising=True,
+        denoising_num_classes=91,
+        denoising_query_number=100,
+        denoising_box_noise_scale=0.4,
+        denoising_label_noise_ratio=0.5,
         auxiliary_loss=True,
         use_masks=True,
         class_cost=2.0,
@@ -219,15 +217,14 @@ class DinoDetrConfig(PretrainedConfig):
         self.query_dim = query_dim
         self.num_encoder_layers = num_encoder_layers
         self.num_decoder_layers = num_decoder_layers
-        self.embed_init_tgt = embed_init_tgt
         self.init_std = init_std
         self.num_classes = num_classes
-        self.dn_num_classes = dn_num_classes
-        self.dn_number = dn_number
-        self.dn_box_noise_scale = dn_box_noise_scale
-        self.dn_label_noise_ratio = dn_label_noise_ratio
+        self.denoising_num_classes = denoising_num_classes
+        self.denoising_query_number = denoising_query_number
+        self.denoising_box_noise_scale = denoising_box_noise_scale
+        self.denoising_label_noise_ratio = denoising_label_noise_ratio
         self.auxiliary_loss = auxiliary_loss
-        self.use_dn = use_dn
+        self.use_denoising = use_denoising
         self.use_masks = use_masks
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
