@@ -45,6 +45,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4vTextModel,
     Glm4vTextRotaryEmbedding,
+    Glm4vVisionModel,
     rotate_half,
 )
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
@@ -150,7 +151,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "Glm4vMoe_text"
+    model_type = "glm4v_moe_text"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `Glm4vMoe`
@@ -159,8 +160,9 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_up_proj": "colwise_rep",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "rowwise_rep",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -473,7 +475,7 @@ class Glm4vMoeTextDecoderLayer(Glm4MoeDecoderLayer):
 
 class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     config: Glm4vMoeConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     input_modalities = ["text", "image", "video"]
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -486,6 +488,11 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
 
 
 class Glm4vMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
+    pass
+
+
+@auto_docstring
+class Glm4vMoeVisionModel(Glm4vVisionModel):
     pass
 
 
@@ -646,8 +653,10 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
 __all__ = [
     "Glm4vMoeConfig",
     "Glm4vMoeTextConfig",
+    "Glm4vMoeVisionConfig",
     "Glm4vMoeForConditionalGeneration",
     "Glm4vMoeModel",  # noqa: F822
     "Glm4vMoePreTrainedModel",
-    "Glm4vMoeTextModel",  # noqa: F822
+    "Glm4vMoeTextModel",
+    "Glm4vMoeVisionModel",
 ]

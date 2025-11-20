@@ -35,7 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
-from ...utils.import_utils import is_causal_conv1d_available
+from ...utils.import_utils import is_causal_conv1d_available, is_torchdynamo_compiling
 from .configuration_lfm2 import Lfm2Config
 
 
@@ -536,7 +536,7 @@ class Lfm2ShortConv(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
-        if is_fast_path_available and "cuda" in hidden_states.device.type and not torch._dynamo.is_compiling():
+        if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, past_key_values, cache_position, attention_mask)
         return self.slow_forward(hidden_states, past_key_values, cache_position, attention_mask)
 
@@ -695,7 +695,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
 
 @auto_docstring
 class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
