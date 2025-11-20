@@ -32,6 +32,7 @@ from parameterized import parameterized
 from transformers import (
     AutoTokenizer,
     BertTokenizer,
+    BertTokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     TokenizersBackend,
@@ -2567,7 +2568,7 @@ class TokenizersBackendCommonTest(TokenizersBackendTesterMixin, unittest.TestCas
     """
 
     tokenizer_class = BertTokenizer
-    rust_tokenizer_class = BertTokenizer
+    rust_tokenizer_class = BertTokenizerFast
     from_pretrained_id = "google-bert/bert-base-uncased"
     from_pretrained_kwargs = {}
 
