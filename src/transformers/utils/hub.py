@@ -413,6 +413,75 @@ def cached_files(
     if subfolder is None:
         subfolder = ""
 
+    if local_files_only or is_offline_mode():
+        cache_dirs_to_try= []
+
+        if cache_dir is not None:
+            cache_dirs_to_try.append(cache_dir)
+
+        for env_var in ["HF_HOME","TRANSFORMERS_CACHE", "HF_HUB_CACHE"]:
+                env_cache = os.environ.get(env_var)
+                if env_cache and env_cache not in cache_dirs_to_try:
+                    cache_dirs_to_try.append(env_cache)
+
+        default_cache = default_cache_path
+        if default_cache not in cache_dirs_to_try:
+            cache_dirs_to_try.append(default_cache)
+
+        for potential_cache_dir in cache_dirs_to_try:
+            if not os.path.exists(potential_cache_dir):
+                continue
+
+            # Construct the cache path following HF Hub structure
+            repo_id_sanitized = path_or_repo_id.replace("/", "--")
+            model_cache_dir = os.path.join(potential_cache_dir, f"models--{repo_id_sanitized}")
+
+            if not os.path.exists(model_cache_dir):
+                continue
+
+            # Try to find the file in snapshots
+            refs_dir = os.path.join(model_cache_dir, "refs")
+            snapshots_dir = os.path.join(model_cache_dir, "snapshots")
+
+            if os.path.exists(refs_dir) and os.path.exists(snapshots_dir):
+                # Try to get commit hash from refs
+                ref_file = os.path.join(refs_dir, revision or "main")
+                if os.path.exists(ref_file):
+                    with open(ref_file, "r", encoding="utf-8") as f:
+                        commit_hash = f.read().strip()
+
+                    # Check if file exists in this snapshot
+                    found_files = []
+                    for fname in filenames:
+                        if subfolder:
+                            file_path = os.path.join(snapshots_dir, commit_hash, subfolder, fname)
+                        else:
+                            file_path = os.path.join(snapshots_dir, commit_hash, fname)
+
+                        if os.path.exists(file_path):
+                            found_files.append(file_path)
+
+                    # If we found all files, return them
+                    if len(found_files) == len(filenames):
+                        logger.info(f"Found all cached files in {snapshots_dir}/{commit_hash}")
+                        return found_files
+
+                # If ref doesn't exist, try to find any snapshot with the file
+                if os.path.exists(snapshots_dir):
+                    for commit_dir in os.listdir(snapshots_dir):
+                        commit_path = os.path.join(snapshots_dir, commit_dir)
+                        if not os.path.isdir(commit_path):
+                            continue
+
+                        if subfolder:
+                            file_path = os.path.join(commit_path, subfolder, fname)
+                        else:
+                            file_path = os.path.join(commit_path, fname)
+
+                        if os.path.exists(file_path):
+                            logger.info(f"Found cached file at {file_path}")
+                            return file_path
+
     # Add folder to filenames
     full_filenames = [os.path.join(subfolder, file) for file in filenames]
 
