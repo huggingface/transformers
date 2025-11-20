@@ -541,17 +541,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if new_tokens is None:
             return added_tokens
         # TODO this is fairly slow to improve!
-        # Build current_vocab from base vocab + already-added tokens (not get_vocab() which can cause circular dependencies)
-        # For tokenizers with a base vocab dict (like BertJapaneseTokenizer), use it directly
-        if hasattr(self, "vocab") and isinstance(self.vocab, dict):
-            current_vocab = dict(self.vocab)
-            # Add already-added tokens that aren't in base vocab
-            for token, index in self._added_tokens_encoder.items():
-                if token not in current_vocab:
-                    current_vocab[token] = index
-        else:
-            # Fallback to get_vocab() for tokenizers without a base vocab dict (e.g., sentencepiece)
-            current_vocab = self.get_vocab().copy()
+        current_vocab = self.get_vocab().copy()
         new_idx = len(current_vocab)  # only call this once, len gives the last index + 1
         for token in new_tokens:
             if not isinstance(token, (str, AddedToken)):
@@ -691,10 +681,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         raise NotImplementedError
 
     def _convert_token_to_id_with_added_voc(self, token):
-        # Check base vocab first to ensure tokens in base vocab use their base vocab ID
-        # This prevents conflicts when a token exists in both base vocab and added_tokens_encoder
-        if hasattr(self, "vocab") and isinstance(self.vocab, dict) and token in self.vocab:
-            return self._convert_token_to_id(token)
         if token in self.added_tokens_encoder:
             return self.added_tokens_encoder[token]
         return self._convert_token_to_id(token)
@@ -1041,29 +1027,22 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             `str` or `list[str]`: The decoded token(s).
         """
         if isinstance(ids, int):
-            # Check base vocab first to ensure tokens in base vocab use their base vocab mapping
-            # This prevents conflicts when an ID exists in both base vocab and _added_tokens_decoder
-            base_token = self._convert_id_to_token(ids)
-            # Only use _added_tokens_decoder if base vocab doesn't have this ID (i.e., returns unk_token)
-            if hasattr(self, "ids_to_tokens") and isinstance(self.ids_to_tokens, dict) and ids in self.ids_to_tokens:
-                return base_token
-            if ids in self._added_tokens_decoder:
-                return self._added_tokens_decoder[ids].content
-            return base_token
+            return (
+                self._added_tokens_decoder[ids].content
+                if ids in self._added_tokens_decoder
+                else self._convert_id_to_token(ids)
+            )
 
         tokens = []
         for index in ids:
             index = int(index)
             if skip_special_tokens and index in self.all_special_ids:
                 continue
-            # Check base vocab first to ensure tokens in base vocab use their base vocab mapping
-            base_token = self._convert_id_to_token(index)
-            if hasattr(self, "ids_to_tokens") and isinstance(self.ids_to_tokens, dict) and index in self.ids_to_tokens:
-                tokens.append(base_token)
-            elif index in self._added_tokens_decoder:
-                tokens.append(self._added_tokens_decoder[index].content)
-            else:
-                tokens.append(base_token)
+            tokens.append(
+                self._added_tokens_decoder[index].content
+                if index in self._added_tokens_decoder
+                else self._convert_id_to_token(index)
+            )
         return tokens
 
     def _convert_id_to_token(self, index: int) -> str:

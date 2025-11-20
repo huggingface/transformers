@@ -238,10 +238,9 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
             return vocab
         # base vocab
         vocab = dict(self.vocab)
-        # + added_tokens_encoder (only for tokens not in base vocab and IDs not already mapped)
+        # + added_tokens_encoder (only for tokens not in base vocab)
         for token, index in self.added_tokens_encoder.items():
-            # Only add if token is not in base vocab AND the index is not already mapped to a different token
-            if token not in self.vocab and index not in vocab.values():
+            if token not in self.vocab:
                 vocab[token] = index
         return vocab
 
