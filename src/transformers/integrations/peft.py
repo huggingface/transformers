@@ -298,6 +298,7 @@ class PeftAdapterMixin:
             raise ValueError("Hotswapping is currently only supported for LoRA, please set `hotswap=False`.")
 
         if not hotswap:
+            # TODO: WE NEED TOO APPLY OUR DYNAMIC WEIGHT CONVERSION AT SOME POINT HERE!
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
             inject_adapter_in_model(peft_config, self, adapter_name, **peft_load_kwargs)
 
@@ -480,6 +481,7 @@ class PeftAdapterMixin:
         # Retrieve the name or path of the model, one could also use self.config._name_or_path
         # but to be consistent with what we do in PEFT: https://github.com/huggingface/peft/blob/6e783780ca9df3a623992cc4d1d665001232eae0/src/peft/mapping.py#L100
         adapter_config.base_model_name_or_path = self.__dict__.get("name_or_path", None)
+        # TODO: WE NEED TOO APPLY OUR DYNAMIC WEIGHT CONVERSION AT SOME POINT HERE!
         inject_adapter_in_model(adapter_config, self, adapter_name)
 
         self.set_adapter(adapter_name)
@@ -765,7 +767,7 @@ def maybe_load_adapters(
     **adapter_kwargs,
 ):
     if pretrained_model_name_or_path is None or not is_peft_available():
-        return None, pretrained_model_name_or_path
+        return None, pretrained_model_name_or_path, adapter_kwargs
 
     token = download_kwargs.get("token")
 
@@ -788,18 +790,21 @@ def maybe_load_adapters(
 
     _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
 
+    token_from_adapter_kwargs = adapter_kwargs.pop("token", None)
+
     if _adapter_model_path is None:
+        peft_kwargs = adapter_kwargs.copy()
+        for arg_name in ("cache_dir", "proxies", "subfolder"):  # don't override revision
+            if (arg_name not in peft_kwargs) and (arg_name in download_kwargs):
+                peft_kwargs[arg_name] = download_kwargs[arg_name]
+        if "commit_hash" in download_kwargs:
+            peft_kwargs["_commit_hash"] = download_kwargs["commit_hash"]
+        peft_kwargs["force_download"] = bool(download_kwargs.get("force_download", False))
+        peft_kwargs["local_files_only"] = bool(download_kwargs.get("local_files_only", False))
+        peft_kwargs["token"] = token or token_from_adapter_kwargs
         _adapter_model_path = find_adapter_config_file(
             pretrained_model_name_or_path,
-            cache_dir=download_kwargs.get("cache_dir"),
-            force_download=bool(download_kwargs.get("force_download", False)),
-            proxies=download_kwargs.get("proxies"),
-            token=token,
-            revision=download_kwargs.get("revision"),
-            local_files_only=bool(download_kwargs.get("local_files_only", False)),
-            subfolder=download_kwargs.get("subfolder", ""),
-            _commit_hash=download_kwargs.get("commit_hash"),
-            **adapter_kwargs,
+            **peft_kwargs,
         )
 
     if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
@@ -807,4 +812,4 @@ def maybe_load_adapters(
             _adapter_model_path = pretrained_model_name_or_path
             pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
 
-    return _adapter_model_path, pretrained_model_name_or_path
+    return _adapter_model_path, pretrained_model_name_or_path, adapter_kwargs

@@ -171,7 +171,6 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_torchscript = False
     test_resize_embeddings = False
     test_torch_exportable = True
 

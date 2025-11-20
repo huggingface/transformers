@@ -292,7 +292,6 @@ class Zamba2ModelTester:
 
 @require_torch
 class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_torchscript = False
     all_model_classes = (
         (
             Zamba2Model,

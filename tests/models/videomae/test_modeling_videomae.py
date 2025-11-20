@@ -195,7 +195,6 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     # Addition keys that are required for forward, used in tests where we manipulate and create new input dict from scratch
     additional_model_inputs = ["bool_masked_pos"]
 
-    test_torchscript = False
     test_resize_embeddings = False
     test_torch_exportable = True
 

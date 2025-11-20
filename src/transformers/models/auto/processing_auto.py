@@ -17,7 +17,6 @@
 import importlib
 import inspect
 import json
-import warnings
 from collections import OrderedDict
 
 # Build the list of all feature extractors
@@ -49,6 +48,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("align", "AlignProcessor"),
         ("altclip", "AltCLIPProcessor"),
         ("aria", "AriaProcessor"),
+        ("audioflamingo3", "AudioFlamingo3Processor"),
         ("aya_vision", "AyaVisionProcessor"),
         ("bark", "BarkProcessor"),
         ("blip", "BlipProcessor"),
@@ -75,6 +75,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("gemma3", "Gemma3Processor"),
         ("gemma3n", "Gemma3nProcessor"),
         ("git", "GitProcessor"),
+        ("glm46v", "Glm46VProcessor"),
         ("glm4v", "Glm4vProcessor"),
         ("glm4v_moe", "Glm4vProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
@@ -101,13 +102,13 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("llava_next_video", "LlavaNextVideoProcessor"),
         ("llava_onevision", "LlavaOnevisionProcessor"),
         ("markuplm", "MarkupLMProcessor"),
-        ("mctct", "MCTCTProcessor"),
         ("metaclip_2", "CLIPProcessor"),
         ("mgp-str", "MgpstrProcessor"),
         ("mistral3", "PixtralProcessor"),
         ("mllama", "MllamaProcessor"),
         ("mm-grounding-dino", "GroundingDinoProcessor"),
         ("moonshine", "Wav2Vec2Processor"),
+        ("omdet-turbo", "OmDetTurboProcessor"),
         ("oneformer", "OneFormerProcessor"),
         ("ovis2", "Ovis2Processor"),
         ("owlv2", "Owlv2Processor"),
@@ -127,6 +128,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("qwen3_vl_moe", "Qwen3VLProcessor"),
         ("sam", "SamProcessor"),
         ("sam2", "Sam2Processor"),
+        ("sam3", "Sam3Processor"),
         ("sam_hq", "SamHQProcessor"),
         ("seamless_m4t", "SeamlessM4TProcessor"),
         ("sew", "Wav2Vec2Processor"),
@@ -136,10 +138,8 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("siglip2", "Siglip2Processor"),
         ("smolvlm", "SmolVLMProcessor"),
         ("speech_to_text", "Speech2TextProcessor"),
-        ("speech_to_text_2", "Speech2Text2Processor"),
         ("speecht5", "SpeechT5Processor"),
         ("trocr", "TrOCRProcessor"),
-        ("tvlt", "TvltProcessor"),
         ("tvp", "TvpProcessor"),
         ("udop", "UdopProcessor"),
         ("unispeech", "Wav2Vec2Processor"),
@@ -176,7 +176,7 @@ def processor_class_from_name(class_name: str):
         if getattr(processor, "__name__", None) == class_name:
             return processor
 
-    # We did not fine the class, but maybe it's because a dep is missing. In that case, the class will be in the main
+    # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # init and we return the proper dummy to get an appropriate error message.
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
@@ -265,18 +265,6 @@ class AutoProcessor:
         >>> # If processor files are in a directory (e.g. processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # processor = AutoProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
