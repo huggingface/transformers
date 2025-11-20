@@ -19,7 +19,7 @@ from packaging import version
 
 from ..activations import ACT2FN
 from ..modeling_utils import PreTrainedModel
-from ..utils import is_auto_awq_available, is_ipex_available, is_torch_available, logging
+from ..utils import is_gptqmodel_available, is_torch_available, logging
 from ..utils.quantization_config import (
     AwqBackendPackingMethod,
     AwqConfig,
@@ -124,9 +124,9 @@ def replace_with_awq_linear(
 
     backend = quantization_config.backend
 
-    if not is_auto_awq_available():
+    if not is_gptqmodel_available():
         raise ValueError(
-            "AWQ (either `autoawq` or `llmawq`) is not available. Please install it with `pip install autoawq` or check out the installation guide in https://github.com/mit-han-lab/llm-awq"
+            "AWQ (either `llmawq`) is not available. Please install it with `pip install gptqmodel` or check out the installation guide in https://github.com/mit-han-lab/llm-awq"
         )
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
