@@ -1010,6 +1010,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self._special_tokens_map = dict.fromkeys(self.SPECIAL_TOKENS_ATTRIBUTES)
         self._extra_special_tokens = []  # List of extra model-specific special tokens
 
+        # V5: track both explicit and auto-detected model-specific tokens
+        explicit_model_specific_tokens = kwargs.pop("model_specific_special_tokens", None)
+        if explicit_model_specific_tokens is None:
+            explicit_model_specific_tokens = {}
+        elif not isinstance(explicit_model_specific_tokens, dict):
+            raise TypeError("model_specific_special_tokens must be a dictionary of token name to token value")
+        auto_model_specific_tokens = {}
+
         # Directly set hidden values to allow init with tokens not yet in vocab
         for key in list(kwargs.keys()):
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
@@ -1036,6 +1044,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                             "extra_special_tokens must be a list/tuple of str or AddedToken, or a dict mapping names to tokens"
                         )
                     self._extra_special_tokens = list(value)
+            elif (
+                key.endswith("_token")
+                and key not in self.SPECIAL_TOKENS_ATTRIBUTES
+                and isinstance(kwargs[key], (str, AddedToken))
+            ):
+                value = kwargs.pop(key)
+                if value is None:
+                    continue
+                auto_model_specific_tokens[key] = value
 
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
@@ -1069,9 +1086,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
-        # V5: model_specific_special_tokens kwarg adds new NAMED tokens (e.g., image_token for multimodal models)
-        # This is different from extra_special_tokens property which is the list of extra unnamed tokens
-        model_specific_tokens = kwargs.pop("model_specific_special_tokens", {})
+        model_specific_tokens = {**auto_model_specific_tokens, **explicit_model_specific_tokens}
         if model_specific_tokens:
             self._set_model_specific_special_tokens(special_tokens=model_specific_tokens)
 
