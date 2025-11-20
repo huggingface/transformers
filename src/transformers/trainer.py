@@ -5081,7 +5081,7 @@ class Trainer:
         # We defer compatibility checks to accelerator
         if self.args.parallelism_config is not None:
             # XXX: this will need to change once https://github.com/huggingface/accelerate/pull/3817 is merged and 1.11.1 is out
-            min_accelerate_version = "1.10.1"
+            min_accelerate_version = "1.12.0"
             if not is_accelerate_available(min_accelerate_version):
                 raise ImportError(
                     f"ParallelismConfig requires accelerate>={min_accelerate_version}). Please upgrade accelerate to use this feature."
