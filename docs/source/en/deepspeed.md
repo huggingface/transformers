@@ -440,7 +440,7 @@ data_collator = DataCollatorForLanguageModeling(
 )
 ```
 
-By default, when you only configure `sp_size`, DP is automatically calculated as `dp_size = world_size / sp_size`. For example, with 8 GPUs and `sp_size=4`, you get `dp_size=2`. But sometimes you may want to explicitly configure data parallelism replicas. For example, let's say we have 8 GPUs and you want 2 replicas of SP across 4 GPUs each. Then set `sp_size=4` and `dp_replicate_size=2`:
+When using `sp_size` with multiple GPUs, you **must** explicitly set `dp_replicate_size` or `dp_shard_size` to ensure `total_size = dp_replicate_size * dp_shard_size * sp_size` equals your total number of GPUs. For example, with 8 GPUs and `sp_size=4`, you must set `dp_replicate_size=2` (since 2 × 1 × 4 = 8):
 
 ```py
 parallelism_config = ParallelismConfig(
