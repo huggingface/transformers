@@ -905,7 +905,7 @@ class AwqConfig(QuantizationConfigMixin):
 
     def get_loading_attributes(self):
         attributes_dict = copy.deepcopy(self.__dict__)
-        loading_attributes = ["version", "do_fuse", "modules_to_fuse", "fuse_max_seq_len", "exllama_config"]
+        loading_attributes = ["version", "exllama_config"]
         loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
         return loading_attributes_dict
 
