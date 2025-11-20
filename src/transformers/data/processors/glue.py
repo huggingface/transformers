@@ -18,7 +18,6 @@
 import os
 import warnings
 from enum import Enum
-from typing import Optional, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -37,7 +36,7 @@ DEPRECATION_WARNING = (
 def glue_convert_examples_to_features(
     examples: list[InputExample],
     tokenizer: PreTrainedTokenizer,
-    max_length: Optional[int] = None,
+    max_length: int | None = None,
     task=None,
     label_list=None,
     output_mode=None,
@@ -66,7 +65,7 @@ def glue_convert_examples_to_features(
 def _glue_convert_examples_to_features(
     examples: list[InputExample],
     tokenizer: PreTrainedTokenizer,
-    max_length: Optional[int] = None,
+    max_length: int | None = None,
     task=None,
     label_list=None,
     output_mode=None,
@@ -85,7 +84,7 @@ def _glue_convert_examples_to_features(
 
     label_map = {label: i for i, label in enumerate(label_list)}
 
-    def label_from_example(example: InputExample) -> Union[int, float, None]:
+    def label_from_example(example: InputExample) -> int | float | None:
         if example.label is None:
             return None
         if output_mode == "classification":
