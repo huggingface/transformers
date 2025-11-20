@@ -1712,6 +1712,8 @@ class MistralConverter:
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         import json
+        import base64
+
         with open(self.vocab_file, "r", encoding="utf-8") as f:
             untyped = json.load(f)
         self.pattern = untyped['config']['pattern']
@@ -1725,10 +1727,12 @@ class MistralConverter:
 
         merges = []
         vocab = {}
-        bpe_ranks = [ k["token_bytes"] for k in bpe_ranks]
+        for idx, token in enumerate(self.additional_special_tokens):
+            vocab[token.content] = idx
+        bpe_ranks = [base64.b64decode(k["token_bytes"]) for k in bpe_ranks]
         rank_set = set(bpe_ranks)
         for rank, token in enumerate(tqdm(bpe_ranks, desc="Converting tekken.json to tokenizer.json")):
-            vocab[token] = rank
+            vocab[token_bytes_to_string(token)] = rank
             if len(token) == 1:
                 continue
             local = []
@@ -1739,7 +1743,7 @@ class MistralConverter:
             local = sorted(local, key=lambda x: (bpe_ranks.index(x[0]), bpe_ranks.index(x[1])), reverse=False)
             merges.extend(local)
         merges = sorted(merges, key=lambda val: val[2], reverse=False)
-        merges = [(val[0], val[1]) for val in merges]
+        merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]
         return vocab, merges
 
     def tokenizer(self):
