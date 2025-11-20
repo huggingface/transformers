@@ -162,6 +162,7 @@ class TorchAoQuantize(ConversionOps):
                     quantize_(module, c, filter_fn=lambda x, fqn: True)
                     missing_keys.discard(full_layer_name)
                     module._is_hf_initialized = True
+                    return {}
                 return {full_layer_name: value}
 
         quantize_(module, self.hf_quantizer.quantization_config.get_apply_tensor_subclass())
