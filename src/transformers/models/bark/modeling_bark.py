@@ -338,7 +338,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 
         # if has _hf_hook, has been offloaded so the device has to be found in the hook
         if not hasattr(self, "_hf_hook"):
-            return self.device
+            return super().device
         for module in self.modules():
             if (
                 hasattr(module, "_hf_hook")
@@ -347,7 +347,7 @@ class BarkPreTrainedModel(PreTrainedModel):
             ):
                 return torch.device(module._hf_hook.execution_device)
 
-        return self.device
+        return super().device
 
 
 # GPT2-like autoregressive model
@@ -1318,7 +1318,7 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
         # for bark_model, device must be verified on its sub-models
         # if has _hf_hook, has been offloaded so the device has to be found in the hook
         if not hasattr(self.semantic, "_hf_hook"):
-            return self.device
+            return super().device
         for module in self.semantic.modules():
             if (
                 hasattr(module, "_hf_hook")
