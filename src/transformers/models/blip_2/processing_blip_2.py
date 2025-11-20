@@ -115,8 +115,15 @@ class Blip2Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         max_length = output_kwargs["text_kwargs"].pop("max_length", None)
         if max_length is not None:
-            output_kwargs["text_kwargs"]["max_length"] = max_length - self.num_query_tokens
-
+            # Treating None as 0 to avoid TypeError during subtraction.
+            num_query_tokens = self.num_query_tokens
+            if num_query_tokens is None:
+                logger.warning(
+                    "Blip2Processor.num_query_tokens is None. Treating as 0 for max_length calculations. "
+                    "Consider updating the processor to set num_query_tokens explicitly."
+                )
+                num_query_tokens = 0
+            output_kwargs["text_kwargs"]["max_length"] = max_length - int(num_query_tokens)
         encoding = BatchFeature(tensor_type=return_tensors)
         if text is not None:
             if isinstance(text, str):

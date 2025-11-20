@@ -118,3 +118,15 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
+
+    def test_none_num_query_tokens_is_handled(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+
+        processor = Blip2Processor(tokenizer=tokenizer, image_processor=image_processor, num_query_tokens=None)
+
+        input_str = "hello world"
+
+        outputs = processor(text=input_str, max_length=20, return_tensors="np")
+        self.assertIn("input_ids", outputs)
+        self.assertIn("attention_mask", outputs)
