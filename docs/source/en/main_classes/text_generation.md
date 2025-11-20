@@ -42,3 +42,8 @@ like token streaming.
 [[autodoc]] GenerationMixin
     - generate
     - compute_transition_scores
+
+
+> **Note**  
+> `max_new_tokens` is now the recommended argument to control how many tokens the model generates.  
+> `max_length` remains for backward compatibility because it includes the length of the input prompt, which can be less intuitive.
