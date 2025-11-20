@@ -566,9 +566,9 @@ def convert_and_load_state_dict_in_model(
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
     Then we load the tensors into the model, applying any conversion operations as needed.
 
-    The `all_weight_mappings` will look like this:
+    The `param_name_to_load` will look like this:
     {
-        "model.layers.0.attention.qkv.weight":
+        "model.layers.0.attention.q.weight": # Notice here there is only the first key of the target keys
             WeightConverter(
                 source_keys=["qkv"],
                 target_keys=["q", "k","v"],
@@ -608,12 +608,12 @@ def convert_and_load_state_dict_in_model(
     If we want to split `qkv` we would have:
     ```python
     collected_tensors = {
-        "attention.qkv.weight": [Future],
+        "attention.qkv.weight": [Future], # here its the full SOURCE keys.
     }
     ```
     The `Chunk` operation would then split the single tensor into 3 and rename them accordingly and update the collected tensors to:
     ```python
-    collected_tensors = {
+    realized_values = {
         "attention.q.weight": [Tensor],
         "attention.k.weight": [Tensor],
         "attention.v.weight": [Tensor],
@@ -621,6 +621,32 @@ def convert_and_load_state_dict_in_model(
     ```
 
     Now that this is done, we can quantize / dequantize accordingly the collected_tensors.
+
+    For some quantization methods, we need to gather different tensors:
+
+    ```python
+    # for "medmekk/llama-3.2-1b-float8-torchao"
+    WeightConverter(
+        source_keys=[":qdata", ":scale"],
+        target_keys="",
+        operations=[TorchaoDeserialize()],
+    )
+    ```
+    This will collect all tensors that have the same prefix, but end with `:qdata` or `:scale`. This will give us:
+    ```python
+    all_weight_mapping = {
+        "model.layers.13.self_attn.o_proj.weight": WeightConverter(
+            source_keys=[":qdata", ":scale"],
+            target_keys="",
+            operations=[TorchaoDeserialize()],
+            collected_tensors={
+                ":qdata": [Future],
+                ":scale": [Future],
+            },
+        ...
+    }
+    ```
+
     """
 
     prefix = model.base_model_prefix
@@ -643,9 +669,10 @@ def convert_and_load_state_dict_in_model(
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
     if hf_quantizer:
-        pass  # TODO @ArthurZucker handle dequantization that needs to add a weight converter?
+        # We will add the quantizer's deserialization WeightConverter here.
+        pass
 
-    all_mappings: dict[str, Union[WeightRenaming | WeightConverter]] = {}
+    param_name_to_load: dict[str, Union[WeightRenaming | WeightConverter]] = {}
 
     # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
     # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
@@ -657,7 +684,7 @@ def convert_and_load_state_dict_in_model(
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
-    pattern_to_converter = {k: converter for converter in converters for k in converter.target_keys}
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_keys}
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
@@ -682,12 +709,12 @@ def convert_and_load_state_dict_in_model(
         if renamed_key in missing_keys:
             empty_param = meta_model_state_dict.get(renamed_key)
             if matched_pattern:
-                new_converter = deepcopy(pattern_to_converter[tgt_group_to_glob[matched_pattern.lastgroup]])
+                new_converter = deepcopy(pattern_to_converter[src_group_to_glob[matched_pattern.lastgroup]])
                 # each target key gets its own converter instance
-                mapping = all_mappings.setdefault(renamed_key, new_converter)
+                mapping = param_name_to_load.setdefault(renamed_key, new_converter)
                 source_pattern = src_group_to_glob[matched_pattern.lastgroup]
             else:
-                mapping = all_mappings.setdefault(renamed_key, WeightRenaming(renamed_key, renamed_key))
+                mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(renamed_key, renamed_key))
                 source_pattern = renamed_key
 
             # 5. Handle dtype casting
@@ -728,15 +755,15 @@ def convert_and_load_state_dict_in_model(
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future)
         elif matched_pattern:  # add all target keys as unexpected
-            mapping = pattern_to_converter[tgt_group_to_glob[matched_pattern.lastgroup]]
+            mapping = pattern_to_converter[src_group_to_glob[matched_pattern.lastgroup]]
             for k in mapping.target_keys:
                 unexpected_keys.add(renamed_key.replace(mapping.target_keys[0], k))
         else:
             unexpected_keys.add(renamed_key)
 
-    total_entries = len(all_mappings)
+    total_entries = len(param_name_to_load)
     with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
-        for layer_name, mapping in all_mappings.items():
+        for layer_name, mapping in param_name_to_load.items():
             pbar.update(1)
             pbar.set_postfix({"Materializing param": layer_name})
             pbar.refresh()
