@@ -149,7 +149,6 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (InstructBlipVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -475,11 +474,9 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     )
     pipeline_model_mapping = {"image-text-to-text": InstructBlipForConditionalGeneration}
     additional_model_inputs = ["qformer_input_ids", "input_ids"]
-    fx_compatible = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -522,6 +519,10 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
     @unittest.skip(reason="InstructBlipModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="InstructBLIP has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_forward_signature(self):

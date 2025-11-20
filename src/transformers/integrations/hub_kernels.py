@@ -11,14 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import re
 from collections.abc import Callable
 from functools import partial
+from types import ModuleType
 from typing import Optional, Union
 
 from ..modeling_flash_attention_utils import lazy_import_flash_attention
+from ..utils import ENV_VARS_TRUE_VALUES, logging
+from ..utils.import_utils import is_kernels_available
 from .flash_attention import flash_attention_forward
 
+
+logger = logging.get_logger(__name__)
 
 try:
     from kernels import (
@@ -28,10 +34,22 @@ try:
         get_kernel,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
-        use_kernel_forward_from_hub,
     )
 
+    _TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
     _kernels_available = True
+    _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
+
+    def use_kernel_forward_from_hub(layer_name: str):
+        if _kernels_enabled:
+            from kernels import use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub
+
+            return _kernels_use_kernel_forward_from_hub(layer_name)
+        else:
+            logger.warning_once(
+                f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
+            )
+            return lambda cls: cls
 
     _KERNEL_MAPPING: dict[str, dict[Union[Device, str], LayerRepository]] = {
         "MultiScaleDeformableAttention": {
@@ -47,11 +65,26 @@ try:
             )
         },
         "RMSNorm": {
-            "cuda": LayerRepository(
-                repo_id="kernels-community/liger_kernels",
-                layer_name="LigerRMSNorm",
-            ),
+            "cuda": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/liger_kernels",
+                    layer_name="LigerRMSNorm",
+                    # revision="pure-layer-test",
+                ),
+            },
             "rocm": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/liger_kernels",
+                    layer_name="LigerRMSNorm",
+                )
+            },
+            "xpu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/rmsnorm",
+                    layer_name="RMSNorm",
+                )
+            },
+            "npu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
                     layer_name="LigerRMSNorm",
@@ -132,10 +165,22 @@ try:
         },
     }
 
-    register_kernel_mapping(_KERNEL_MAPPING)
+    def has_key(d, key):
+        return key in d or any(isinstance(v, dict) and has_key(v, key) for v in d.values())
+
+    def register_kernel_mapping_transformers(mapping=None):
+        if mapping is None:
+            mapping = _KERNEL_MAPPING
+        if has_key(mapping, "xpu") and not is_kernels_available(MIN_VERSION="0.10.2"):
+            raise ImportError(
+                "kernels uses an incompatible version. Please install the latest version with `pip install -U kernels`."
+            )
+        register_kernel_mapping(mapping)
+
 
 except ImportError:
     _kernels_available = False
+    _kernels_enabled = False
 
     # Stub to make decorators int transformers work when `kernels`
     # is not installed.
@@ -156,6 +201,13 @@ except ImportError:
 
     def register_kernel_mapping(*args, **kwargs):
         raise RuntimeError("register_kernel_mapping requires `kernels` to be installed. Run `pip install kernels`.")
+
+
+_HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
+    "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
+}
+
+_KERNEL_MODULE_MAPPING: dict[str, Optional[ModuleType]] = {}
 
 
 def is_kernel(attn_implementation: Optional[str]) -> bool:
@@ -220,9 +272,56 @@ def load_and_register_attn_kernel(attn_implementation: str, attention_wrapper: O
     ALL_MASK_ATTENTION_FUNCTIONS.register(attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
 
 
+def lazy_load_kernel(kernel_name: str, mapping: dict[str, Optional[ModuleType]] = _KERNEL_MODULE_MAPPING):
+    if kernel_name in mapping and isinstance(mapping[kernel_name], ModuleType):
+        return mapping[kernel_name]
+    if kernel_name not in _HUB_KERNEL_MAPPING:
+        logger.warning(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
+        mapping[kernel_name] = None
+        return None
+    if _kernels_available:
+        from kernels import get_kernel
+
+        try:
+            repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
+            version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
+            kernel = get_kernel(repo_id, version=version)
+            mapping[kernel_name] = kernel
+        except FileNotFoundError:
+            mapping[kernel_name] = None
+
+    else:
+        # Try to import is_{kernel_name}_available from ..utils
+        import importlib
+
+        new_kernel_name = kernel_name.replace("-", "_")
+        func_name = f"is_{new_kernel_name}_available"
+
+        try:
+            utils_mod = importlib.import_module("..utils.import_utils", __package__)
+            is_kernel_available = getattr(utils_mod, func_name, None)
+        except Exception:
+            is_kernel_available = None
+
+        if callable(is_kernel_available) and is_kernel_available():
+            # Try to import the module "{kernel_name}" from parent package level
+            try:
+                module = importlib.import_module(f"{kernel_name}")
+                mapping[kernel_name] = module
+                return module
+            except Exception:
+                mapping[kernel_name] = None
+        else:
+            mapping[kernel_name] = None
+
+    return mapping[kernel_name]
+
+
 __all__ = [
     "LayerRepository",
     "use_kernel_forward_from_hub",
     "register_kernel_mapping",
+    "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
+    "lazy_load_kernel",
 ]

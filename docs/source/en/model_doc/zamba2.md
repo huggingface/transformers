@@ -14,6 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 *This model was released on 2024-11-22 and added to Hugging Face Transformers on 2025-01-27.*
+
 # Zamba2
 
 <div class="flex flex-wrap space-x-1">
@@ -67,6 +68,7 @@ The model cards can be found at:
 * [Zamba2-7B](https://huggingface.co/Zyphra/Zamba2-7B)
 
 ## Issues
+
 For issues with model output, or community discussion, please use the Hugging Face community [forum](https://huggingface.co/Zyphra/Zamba2-7B/discussions)
 
 ## License

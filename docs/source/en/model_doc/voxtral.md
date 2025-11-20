@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 Voxtral is an upgrade of [Ministral 3B and Mistral Small 3B](https://mistral.ai/news/ministraux), extending its language capabilities with audio input support. It is designed to handle tasks such as speech transcription, translation, and audio understanding.
 
-You can read more in Mistral's [realease blog post](https://mistral.ai/news/voxtral).
+You can read more in Mistral's [release blog post](https://mistral.ai/news/voxtral).
 
 The model is available in two checkpoints:
 

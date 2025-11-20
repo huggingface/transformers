@@ -15,7 +15,6 @@ from ...image_utils import (
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
     validate_annotations,
@@ -116,13 +115,6 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
             self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
         BaseImageProcessorFast.__init__(self, **kwargs)
-
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[RTDetrImageProcessorKwargs],
-    ) -> BatchFeature:
-        return BaseImageProcessorFast.preprocess(self, images, **kwargs)
 
     def prepare_annotation(
         self,
@@ -321,21 +313,6 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
             )
 
         return results
-
-    def from_dict(self):
-        raise NotImplementedError("No need to override this method for RT-DETR yet.")
-
-    def post_process(self):
-        raise NotImplementedError("Post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_segmentation(self):
-        raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_instance(self):
-        raise NotImplementedError("Instance post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_panoptic(self):
-        raise NotImplementedError("Panoptic post-processing is not implemented for RT-DETR yet.")
 
     def post_process_instance_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")

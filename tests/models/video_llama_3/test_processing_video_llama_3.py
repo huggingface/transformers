@@ -17,7 +17,6 @@ import inspect
 import shutil
 import tempfile
 import unittest
-from typing import Optional
 
 import numpy as np
 import pytest
@@ -79,7 +78,7 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @require_vision
-    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+    def prepare_image_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
         if batch_size is None:
             return prepare_image_inputs()[0]
@@ -174,7 +173,7 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        if processor_name not in self.processor_class.attributes:
+        if processor_name not in self.processor_class.get_attributes():
             self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
 
         batch_messages = [
