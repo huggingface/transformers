@@ -2347,12 +2347,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 init.ones_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
                 init.zeros_(module.bias)
-        if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
-            init.normal_(module.gate_up_proj, mean=0.0, std=std)
-        if isinstance(getattr(module, "down_proj", None), nn.Parameter):
-            init.normal_(module.down_proj, mean=0.0, std=std)
-        if isinstance(getattr(module, "gate", None), nn.Parameter):
-            init.normal_(module.gate, mean=0.0, std=std)
 
     def _initialize_weights(self, module):
         """
