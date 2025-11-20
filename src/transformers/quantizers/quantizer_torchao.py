@@ -536,37 +536,31 @@ class TorchAoHfQuantizer(HfQuantizer):
         return TorchAoQuantize(self)
 
     def get_weight_conversions(self):
-        from ..integrations.torchao import TorchAoQuantize
-        return [
+        from ..integrations.torchao import TorchAoQuantize, TorchAoDeserialize
+        if self.pre_quantized: 
+            return [
+                WeightConverter(
+                    source_keys= ["weight:qdata", "weight:scale", "weight:zero_point"],
+                    target_keys= "weight",
+                    operations=[TorchAoDeserialize(self)],
+                ),
+                WeightConverter(
+                    source_keys= ["weight:_data"],
+                    target_keys= "weight",
+                    operations=[TorchAoDeserialize(self)],
+                ),
+                # used for unsafe serialization
+                WeightConverter(
+                    source_keys= ["weight"],
+                    target_keys= "weight",
+                    operations=[TorchAoDeserialize(self)],
+                ),
+            ]
+        else:
+            return [
             WeightConverter(
-                source_keys= ["self_attn.q_proj.weight:*"],
-                target_keys= "self_attn.q_proj.weight",
+                source_keys= ["weight"],
+                target_keys= "weight",
                 operations=[TorchAoQuantize(self)],
             ),
-            WeightConverter(
-                source_keys= ["self_attn.k_proj.weight:*"],
-                target_keys= "self_attn.k_proj.weight",
-                operations=[TorchAoQuantize(self)],
-            ),
-            WeightConverter(
-                source_keys= ["self_attn.v_proj.weight:*"],
-                target_keys= "self_attn.v_proj.weight",
-                operations=[TorchAoQuantize(self)],
-            ),
-            WeightConverter(
-                source_keys= ["mlp.gate_proj.weight:*"],
-                target_keys= "mlp.gate_proj.weight",
-                operations=[TorchAoQuantize(self)],
-            ),
-            WeightConverter(
-                source_keys= ["mlp.up_proj.weight:*"],
-                target_keys= "mlp.up_proj.weight",
-                operations=[TorchAoQuantize(self)],
-            ),
-            WeightConverter(
-                source_keys= ["mlp.down_proj.weight:*"],
-                target_keys= "mlp.down_proj.weight",
-                operations=[TorchAoQuantize(self)],
-            ),
-
         ]
