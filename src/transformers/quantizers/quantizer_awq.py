@@ -129,12 +129,6 @@ class AwqQuantizer(HfQuantizer):
             )
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        if self.quantization_config.do_fuse:
-            from ..integrations import fuse_awq_modules
-
-            model = fuse_awq_modules(model, self.quantization_config)
-            model._awq_is_fused = True  # TODO: consider storing this flag in model.config instead
-
         if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
             from ..integrations import post_init_awq_exllama_modules
 
