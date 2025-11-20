@@ -633,11 +633,8 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                     prob_threshold=self.score_threshold_detection,
                     iou_threshold=self.det_nms_thresh,
                 )
-                # set suppressed detections' logits to a very low value
-                detector_outputs.pred_logits[0] -= 1e4 * (~keep).float()
-                # Recompute pred_probs after NMS suppression
-                pred_probs = pred_logits.sigmoid()
-                pred_probs = pred_probs * presence_scores
+                # Set suppressed detections' probabilities to 0
+                pred_probs[0][~keep] = 0.0
 
             pred_boxes_xyxy = detector_outputs.pred_boxes
             pred_masks = detector_outputs.pred_masks
