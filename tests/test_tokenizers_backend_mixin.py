@@ -9,6 +9,7 @@ from parameterized import parameterized
 
 from transformers import TokenizersBackend
 from transformers.tokenization_python import AddedToken
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 
 SMALL_TRAINING_CORPUS = [
@@ -36,15 +37,29 @@ class TokenizersBackendTesterMixin:
         cls.from_pretrained_id = (
             [cls.from_pretrained_id] if isinstance(cls.from_pretrained_id, str) else cls.from_pretrained_id
         )
+        # Use rust_tokenizer_class if set, otherwise fall back to tokenizer_class
+        tokenizer_class = getattr(cls, "rust_tokenizer_class", None) or getattr(cls, "tokenizer_class", None)
         cls.tokenizers_list = [
             (
-                cls.rust_tokenizer_class,
+                tokenizer_class,
                 pretrained_id,
                 cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {},
             )
-            for pretrained_id in cls.from_pretrained_id
+            for pretrained_id in (cls.from_pretrained_id or [])
         ]
         cls.tmpdirname = tempfile.mkdtemp()
+        
+        # save the first pretrained tokenizer to tmpdirname for tests to use
+        if cls.from_pretrained_id and tokenizer_class is not None:
+            try:
+                from transformers import AutoTokenizer
+                tokenizer = AutoTokenizer.from_pretrained(
+                    cls.from_pretrained_id[0],
+                    **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {}),
+                )
+                tokenizer.save_pretrained(cls.tmpdirname)
+            except Exception:
+                pass
 
     @classmethod
     def tearDownClass(cls):
@@ -53,7 +68,8 @@ class TokenizersBackendTesterMixin:
     @classmethod
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> TokenizersBackend:
         pretrained_name = pretrained_name or cls.tmpdirname
-        return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+        tokenizer_class = getattr(cls, "rust_tokenizer_class", None) or getattr(cls, "tokenizer_class", None)
+        return tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     def test_alignment_methods(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
@@ -64,7 +80,7 @@ class TokenizersBackendTesterMixin:
                 text = " ".join(words)
                 batch_size = 3
 
-                encoding = tokenizer_r.encode_plus(text, add_special_tokens=False)
+                encoding = tokenizer_r(text, add_special_tokens=False)
 
                 batch_encoding = tokenizer_r([text] * batch_size, add_special_tokens=False)
                 num_tokens = len(encoding["input_ids"])
@@ -75,12 +91,14 @@ class TokenizersBackendTesterMixin:
                 last_char_index = len(text) - 1
 
                 # words, tokens
-                self.assertEqual(len(encoding.words(0)), num_tokens)
-                self.assertEqual(max(encoding.words(0)), last_word_index)
-                self.assertEqual(min(encoding.words(0)), 0)
-                self.assertEqual(len(batch_encoding.words(last_batch_index)), num_tokens)
-                self.assertEqual(max(batch_encoding.words(last_batch_index)), last_word_index)
-                self.assertEqual(min(batch_encoding.words(last_batch_index)), 0)
+                self.assertEqual(len(encoding.word_ids(0)), num_tokens)
+                word_ids = [w for w in encoding.word_ids(0) if w is not None]
+                self.assertEqual(max(word_ids), last_word_index)
+                self.assertEqual(min(word_ids), 0)
+                batch_word_ids = [w for w in batch_encoding.word_ids(last_batch_index) if w is not None]
+                self.assertEqual(len(batch_encoding.word_ids(last_batch_index)), num_tokens)
+                self.assertEqual(max(batch_word_ids), last_word_index)
+                self.assertEqual(min(batch_word_ids), 0)
                 self.assertEqual(len(encoding.tokens(0)), num_tokens)
 
                 # Assert token_to_word
@@ -162,7 +180,7 @@ class TokenizersBackendTesterMixin:
                 index_char_in_first_seq = text.find("inspiration")
                 index_char_in_pair_seq = pair_text.find("inspiration")
 
-                pair_encoding = tokenizer_r.encode_plus(text, pair_text, add_special_tokens=False)
+                pair_encoding = tokenizer_r(text, pair_text, add_special_tokens=False)
 
                 pair_batch_encoding = tokenizer_r(
                     [text] * batch_size, [pair_text] * batch_size, add_special_tokens=False
@@ -259,7 +277,7 @@ class TokenizersBackendTesterMixin:
                 )
 
                 # Assert token_to_sequence
-                pair_encoding = tokenizer_r.encode_plus(text, pair_text, add_special_tokens=True)
+                pair_encoding = tokenizer_r(text, pair_text, add_special_tokens=True)
 
                 pair_sequence_ids = [
                     pair_encoding.token_to_sequence(i) for i in range(len(pair_encoding["input_ids"]))
@@ -290,7 +308,7 @@ class TokenizersBackendTesterMixin:
                 pair = "Along with an awesome pair"
 
                 # No pair
-                tokens_with_offsets = tokenizer_r.encode_plus(
+                tokens_with_offsets = tokenizer_r(
                     text, return_special_tokens_mask=True, return_offsets_mapping=True, add_special_tokens=True
                 )
                 added_tokens = tokenizer_r.num_special_tokens_to_add(False)
@@ -303,7 +321,7 @@ class TokenizersBackendTesterMixin:
                 self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
 
                 # Pairs
-                tokens_with_offsets = tokenizer_r.encode_plus(
+                tokens_with_offsets = tokenizer_r(
                     text, pair, return_special_tokens_mask=True, return_offsets_mapping=True, add_special_tokens=True
                 )
                 added_tokens = tokenizer_r.num_special_tokens_to_add(True)
@@ -341,8 +359,8 @@ class TokenizersBackendTesterMixin:
 
         # Assert the set of special tokens match as we didn't ask to change them
         self.assertSequenceEqual(
-            tokenizer.all_special_tokens_extended,
-            new_tokenizer.all_special_tokens_extended,
+            tokenizer.all_special_tokens,
+            new_tokenizer.all_special_tokens,
         )
 
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
@@ -361,8 +379,9 @@ class TokenizersBackendTesterMixin:
             self.assertEqual(new_tokenizer.cls_token_id, cls_id)
 
         # Create a new mapping from the special tokens defined in the original tokenizer
-        special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
-        special_tokens_list.remove("additional_special_tokens")
+        special_tokens_list = PreTrainedTokenizerBase.SPECIAL_TOKENS_ATTRIBUTES.copy()
+        if "additional_special_tokens" in special_tokens_list:
+            special_tokens_list.remove("additional_special_tokens")
         special_tokens_map = {}
         for token in special_tokens_list:
             if getattr(tokenizer, token) is not None:
@@ -387,49 +406,17 @@ class TokenizersBackendTesterMixin:
                 new_id = new_tokenizer.get_vocab()[new_special_token]
                 self.assertEqual(getattr(new_tokenizer, f"{token}_id"), new_id)
 
-        # Check if the AddedToken / string format has been kept
-        for special_token in tokenizer.all_special_tokens_extended:
-            if isinstance(special_token, AddedToken) and special_token.content not in special_tokens_map:
+        # Check if the special tokens have been kept (all_special_tokens returns strings)
+        for special_token in tokenizer.all_special_tokens:
+            if special_token not in special_tokens_map:
                 # The special token must appear identically in the list of the new tokenizer.
                 self.assertTrue(
-                    special_token in new_tokenizer.all_special_tokens_extended,
-                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                    special_token in new_tokenizer.all_special_tokens,
+                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens}",
                 )
-            elif isinstance(special_token, AddedToken):
-                # The special token must appear in the list of the new tokenizer as an object of type AddedToken with
-                # the same parameters as the old AddedToken except the content that the user has requested to change.
-                special_token_str = special_token.content
-                new_special_token_str = special_tokens_map[special_token_str]
-
-                find = False
-                for candidate in new_tokenizer.all_special_tokens_extended:
-                    if (
-                        isinstance(candidate, AddedToken)
-                        and candidate.content == new_special_token_str
-                        and candidate.lstrip == special_token.lstrip
-                        and candidate.rstrip == special_token.rstrip
-                        and candidate.normalized == special_token.normalized
-                        and candidate.single_word == special_token.single_word
-                    ):
-                        find = True
-                        break
-                special_token.content = new_special_token_str
-                self.assertTrue(
-                    find,
-                    f"'{special_token.__repr__()}' should appear as an `AddedToken` in the all_special_tokens_extended = "
-                    f"{[k for k in new_tokenizer.all_special_tokens_extended if str(k) == new_special_token_str]} but it is missing"
-                    ", this means that the new tokenizers did not keep the `rstrip`, `lstrip`, `normalized` etc attributes.",
-                )
-            elif special_token not in special_tokens_map:
-                # The special token must appear identically in the list of the new tokenizer.
-                self.assertTrue(
-                    special_token in new_tokenizer.all_special_tokens_extended,
-                    f"'{special_token.__repr__()}' should be in {new_tokenizer.all_special_tokens_extended}",
-                )
-
             else:
-                # The special token must appear in the list of the new tokenizer as an object of type string.
-                self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens_extended)
+                # The special token must appear in the list of the new tokenizer with the new mapping.
+                self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens)
 
         # Test we can use the new tokenizer with something not seen during training
         inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])

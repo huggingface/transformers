@@ -85,8 +85,6 @@ class CLIPTokenizer(TokenizersBackend):
             }
 
         if merges is not None:
-            # Convert merges to tuples if they are lists (e.g., from JSON loading)
-            # BPE expects merges as list of tuples, not list of lists
             _merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
         else:
             _merges = []

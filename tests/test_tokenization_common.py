@@ -2560,13 +2560,14 @@ Hey how are you doing"""
 
 
 @require_tokenizers
-class TokenizersBackendCommonTest(unittest.TestCase, TokenizersBackendTesterMixin):
+class TokenizersBackendCommonTest(TokenizersBackendTesterMixin, unittest.TestCase):
     """
     A single test class that runs all tokenizers-backend tests once.
     Uses BertTokenizer as a representative tokenizer.
     """
 
     tokenizer_class = BertTokenizer
+    rust_tokenizer_class = BertTokenizer
     from_pretrained_id = "google-bert/bert-base-uncased"
     from_pretrained_kwargs = {}
 
