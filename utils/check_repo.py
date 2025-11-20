@@ -233,6 +233,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/sam3_tracker_video/test_modeling_sam3_tracker_video.py",
     "models/sam3_video/test_modeling_sam3_video.py",
     "models/edgetam_video/test_modeling_edgetam_video.py",
+    "models/helium/test_modeling_helium.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and

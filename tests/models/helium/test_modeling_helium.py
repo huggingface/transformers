@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...causal_lm_tester import CausalLMModelTest
 from ..gemma.test_modeling_gemma import GemmaModelTester
 
 

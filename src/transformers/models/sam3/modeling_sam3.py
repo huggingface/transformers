@@ -32,14 +32,11 @@ from transformers import CLIPTextModelWithProjection
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutput,
-    ModelOutput,
-)
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...utils import auto_docstring, can_return_tuple
 from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import AutoModel
 from .configuration_sam3 import (
