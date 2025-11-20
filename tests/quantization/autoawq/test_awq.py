@@ -23,7 +23,7 @@ from transformers.testing_utils import (
     backend_empty_cache,
     get_device_properties,
     require_accelerate,
-    require_auto_awq,
+    require_gptqmodel,
     require_flash_attn,
     require_intel_extension_for_pytorch,
     require_torch_accelerator,
@@ -102,7 +102,7 @@ class AwqConfigTest(unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-@require_auto_awq
+@require_gptqmodel
 @require_accelerate
 class AwqTest(unittest.TestCase):
     model_name = "TheBloke/Mistral-7B-v0.1-AWQ"
@@ -289,7 +289,7 @@ class AwqTest(unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-@require_auto_awq
+@require_gptqmodel
 @require_accelerate
 class AwqScaleTest(unittest.TestCase):
     model_name = "TechxGenus/starcoder2-3b-AWQ"
@@ -309,7 +309,7 @@ class AwqScaleTest(unittest.TestCase):
 
 
 @slow
-@require_auto_awq
+@require_gptqmodel
 @require_accelerate
 @require_intel_extension_for_pytorch
 class AwqIPEXTest(unittest.TestCase):

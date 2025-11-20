@@ -21,7 +21,7 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GPTQCo
 from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
-    require_gptq,
+    require_gptqmodel,
     require_optimum,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -76,7 +76,7 @@ class GPTQConfigTest(unittest.TestCase):
 
 @slow
 @require_optimum
-@require_gptq
+@require_gptqmodel
 class GPTQTest(unittest.TestCase):
     model_name = "bigscience/bloom-560m"
 
@@ -295,7 +295,7 @@ class GPTQTestDeviceMapExllama(GPTQTestCUDA):
 
 @slow
 @require_optimum
-@require_gptq
+@require_gptqmodel
 @require_torch_gpu
 @require_accelerate
 class GPTQTestActOrderExllama(unittest.TestCase):
@@ -371,7 +371,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
 
 @slow
 @require_optimum
-@require_gptq
+@require_gptqmodel
 @require_torch_gpu
 @require_accelerate
 class GPTQTestExllamaV2(unittest.TestCase):
