@@ -14,10 +14,10 @@
 
 import multiprocessing as mp
 import warnings
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from random import randint
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -723,7 +723,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
             if self.mask_replace_prob < 1:
                 warnings.warn(
-                    "Random token replacement is not supported with whole word masking.",
+                    "Random token replacement is not supported with whole word masking. "
                     "Setting mask_replace_prob to 1.",
                 )
                 self.mask_replace_prob = 1

@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Optional, Union
 import torch
 
 from ...image_processing_base import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -35,6 +35,7 @@ from ...utils import (
     requires_backends,
 )
 from ..beit.image_processing_beit_fast import BeitImageProcessorFast
+from .image_processing_dpt import DPTImageProcessorKwargs
 
 
 if TYPE_CHECKING:
@@ -82,29 +83,6 @@ def get_resize_output_image_size(
     return SizeDict(height=new_height, width=new_width)
 
 
-class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    ensure_multiple_of (`int`, *optional*, defaults to 1):
-        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
-        by `ensure_multiple_of` in `preprocess`.
-    size_divisor (`int`, *optional*):
-        If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
-        DINOv2 paper, which uses the model in combination with DPT.
-    keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
-        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-        be overridden by `keep_aspect_ratio` in `preprocess`.
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
-    """
-
-    ensure_multiple_of: Optional[int]
-    size_divisor: Optional[int]
-    keep_aspect_ratio: Optional[bool]
-    do_reduce_labels: Optional[bool]
-
-
 @auto_docstring
 class DPTImageProcessorFast(BeitImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -118,12 +96,11 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
     rescale_factor = 1 / 255
     ensure_multiple_of = 1
     keep_aspect_ratio = False
-    do_reduce_labels = False
     crop_size = None
     do_center_crop = None
     do_reduce_labels = None
 
-    valid_kwargs = DPTFastImageProcessorKwargs
+    valid_kwargs = DPTImageProcessorKwargs
 
     def resize(
         self,

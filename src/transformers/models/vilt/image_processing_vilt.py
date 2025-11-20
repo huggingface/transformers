@@ -35,6 +35,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 from ...utils.import_utils import requires
 
@@ -44,6 +45,10 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class ViltImageProcessorKwargs(ImagesKwargs, total=False):
+    size_divisor: int
 
 
 def max_across_indices(values: Iterable[Any]) -> list[Any]:
@@ -162,6 +167,7 @@ class ViltImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = ViltImageProcessorKwargs
 
     def __init__(
         self,
@@ -177,9 +183,6 @@ class ViltImageProcessor(BaseImageProcessor):
         do_pad: bool = True,
         **kwargs,
     ) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 384}
         size = get_size_dict(size, default_to_square=False)
@@ -193,19 +196,7 @@ class ViltImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self.do_pad = do_pad
-
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure `pad_and_return_pixel_mask` is updated if image processor
-        is created using from_dict and kwargs e.g. `ViltImageProcessor.from_pretrained(checkpoint,
-        pad_and_return_pixel_mask=False)`
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
-        return super().from_dict(image_processor_dict, **kwargs)
+        self.do_pad = kwargs.pop("pad_and_return_pixel_mask", do_pad)
 
     def resize(
         self,

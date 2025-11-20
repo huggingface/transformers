@@ -27,12 +27,13 @@ rendered properly in your Markdown viewer.
 Parakeet models, [introduced by NVIDIA NeMo](https://developer.nvidia.com/blog/pushing-the-boundaries-of-speech-recognition-with-nemo-parakeet-asr-models/), are models that combine a [Fast Conformer](https://docs.nvidia.com/nemo-framework/user-guide/latest/nemotoolkit/asr/models.html#fast-conformer) encoder with connectionist temporal classification (CTC), recurrent neural network transducer (RNNT) or token and duration transducer (TDT) decoder for automatic speech recognition.
 
 **Model Architecture**
+
 - **Fast Conformer Encoder**: A linearly scalable Conformer architecture that processes mel-spectrogram features and reduces sequence length through subsampling. This is more efficient version of the Conformer Encoder found in [FastSpeech2Conformer](./fastspeech2_conformer.md) (see [`ParakeetEncoder`] for the encoder implementation and details).
 - [**ParakeetForCTC**](#parakeetforctc): a Fast Conformer Encoder + a CTC decoder
-    - **CTC Decoder**: Simple but effective decoder consisting of:
-        - 1D convolution projection from encoder hidden size to vocabulary size (for optimal NeMo compatibility).
-        - CTC loss computation for training.
-        - Greedy CTC decoding for inference.
+  - **CTC Decoder**: Simple but effective decoder consisting of:
+    - 1D convolution projection from encoder hidden size to vocabulary size (for optimal NeMo compatibility).
+    - CTC loss computation for training.
+    - Greedy CTC decoding for inference.
 
 The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo).
 Model checkpoints are to be found under [the NVIDIA organization](https://huggingface.co/nvidia/models?search=parakeet).
@@ -189,7 +190,7 @@ outputs.loss.backward()
 
 ## ParakeetTokenizerFast
 
-[[autodoc]] ParakeetTokenizerFast 
+[[autodoc]] ParakeetTokenizerFast
 
 ## ParakeetFeatureExtractor
 
@@ -205,11 +206,11 @@ outputs.loss.backward()
 
 ## ParakeetEncoderConfig
 
-[[autodoc]] ParakeetEncoderConfig 
+[[autodoc]] ParakeetEncoderConfig
 
 ## ParakeetCTCConfig
 
-[[autodoc]] ParakeetCTCConfig 
+[[autodoc]] ParakeetCTCConfig
 
 ## ParakeetEncoder
 
@@ -218,4 +219,3 @@ outputs.loss.backward()
 ## ParakeetForCTC
 
 [[autodoc]] ParakeetForCTC
-

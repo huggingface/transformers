@@ -61,12 +61,13 @@ EdgeTAM can be used for automatic mask generation to segment all objects in an i
 You can segment objects by providing a single point click on the object you want to segment:
 
 ```python
->>> from transformers import Sam2Processor, EdgeTamModel, infer_device
+>>> from transformers import Sam2Processor, EdgeTamModel
+from accelerate import Accelerator
 >>> import torch
 >>> from PIL import Image
 >>> import requests
 
->>> device = infer_device()
+>>> device = Accelerator().device
 
 >>> model = EdgeTamModel.from_pretrained("yonigozlan/edgetam-1").to(device)
 >>> processor = Sam2Processor.from_pretrained("yonigozlan/edgetam-1")
@@ -157,12 +158,13 @@ IoU scores: tensor([0.7616, 0.9465], device='cuda:0')
 Process multiple images simultaneously for improved efficiency:
 
 ```python
->>> from transformers import Sam2Processor, EdgeTamModel, infer_device
+>>> from transformers import Sam2Processor, EdgeTamModel
+from accelerate import Accelerator
 >>> import torch
 >>> from PIL import Image
 >>> import requests
 
->>> device = infer_device()
+>>> device = Accelerator().device
 
 >>> model = EdgeTamModel.from_pretrained("yonigozlan/edgetam-1").to(device)
 >>> processor = Sam2Processor.from_pretrained("yonigozlan/edgetam-1")
@@ -302,7 +304,6 @@ EdgeTAM can use masks from previous predictions as input to refine segmentation:
 ...         multimask_output=False,
 ...     )
 ```
-
 
 ## EdgeTamConfig
 

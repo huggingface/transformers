@@ -36,6 +36,7 @@ being a large model means it requires significant computational resources and in
 this approach suits your use case better than fine-tuning specialized models for each individual task.
 
 In this guide, you'll learn how to:
+
 - [Load IDEFICS](#loading-the-model) and [load the quantized version of the model](#quantized-model)
 - Use IDEFICS for:
   - [Image captioning](#image-captioning)
@@ -109,6 +110,7 @@ on the fly while loading.
 Now that you have the model loaded in one of the suggested ways, let's move on to exploring tasks that you can use IDEFICS for.
 
 ## Image captioning
+
 Image captioning is the task of predicting a caption for a given image. A common application is to aid visually impaired
 people navigate through different situations, for instance, explore image content online.
 

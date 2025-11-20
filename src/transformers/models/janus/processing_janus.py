@@ -64,10 +64,6 @@ class JanusProcessor(ProcessorMixin):
             Use default system prompt for Text Generation.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "JanusImageProcessor"
-    tokenizer_class = "LlamaTokenizerFast"
-
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=False, **kwargs):
         self.num_image_tokens = 576
         self.image_token = tokenizer.image_token
@@ -81,8 +77,6 @@ class JanusProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         images: Optional[ImageInput] = None,
-        videos=None,
-        audio=None,
         **kwargs: Unpack[JanusProcessorKwargs],
     ) -> BatchFeature:
         """

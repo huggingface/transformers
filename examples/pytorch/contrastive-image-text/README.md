@@ -97,6 +97,5 @@ python run_clip.py \
     --per_device_train_batch_size="64" \
     --per_device_eval_batch_size="64" \
     --learning_rate="5e-5" --warmup_steps="0" --weight_decay 0.1 \
-    --overwrite_output_dir \
     --push_to_hub
 ```

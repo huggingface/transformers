@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
-from typing import Any, Union, overload
+from typing import Any, overload
 
 from ..generation import GenerationConfig
 from ..utils import is_torch_available
@@ -79,9 +79,6 @@ class TextToAudioPipeline(Pipeline):
 
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-to-speech).
     """
-
-    # Introducing the processor at load time for new behaviour
-    _load_processor = True
 
     _pipeline_calls_generate = True
     _load_processor = False
@@ -196,9 +193,7 @@ class TextToAudioPipeline(Pipeline):
     @overload
     def __call__(self, text_inputs: list[str], **forward_params: Any) -> list[dict[str, Any]]: ...
 
-    def __call__(
-        self, text_inputs: Union[str, list[str]], **forward_params
-    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
+    def __call__(self, text_inputs: str | list[str], **forward_params) -> dict[str, Any] | list[dict[str, Any]]:
         """
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 

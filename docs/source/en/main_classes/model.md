@@ -22,7 +22,6 @@ file or directory, or from a pretrained model configuration provided by the libr
 [`PreTrainedModel`] also implements a few methods which are common among all the models to:
 
 - resize the input token embeddings when new tokens are added to the vocabulary
-- prune the attention heads of the model.
 
 The other methods that are common to each model are defined in [`~modeling_utils.ModuleUtilsMixin`] and [`~generation.GenerationMixin`].
 
@@ -43,7 +42,3 @@ set this to `False`.
 ## Pushing to the Hub
 
 [[autodoc]] utils.PushToHubMixin
-
-## Sharded checkpoints
-
-[[autodoc]] modeling_utils.load_sharded_checkpoint

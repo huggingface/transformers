@@ -1,6 +1,6 @@
 import inspect
 import warnings
-from typing import Any, Union
+from typing import Any
 
 import numpy as np
 
@@ -120,7 +120,7 @@ class TextClassificationPipeline(Pipeline):
 
     def __call__(
         self,
-        inputs: Union[str, list[str], dict[str, str], list[dict[str, str]]],
+        inputs: str | list[str] | dict[str, str] | list[dict[str, str]],
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """

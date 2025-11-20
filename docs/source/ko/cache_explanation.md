@@ -158,31 +158,3 @@ inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, ret
 generated_ids = model.generate(**inputs, use_cache=True, max_new_tokens=10)
 
 ```
-
-
-## 레거시 캐시 형식[[legacy-cache-format]]
-
-[`Cache`] 클래스 이전에는 캐시가 텐서의 튜플의 튜플로 저장되었습니다. 이 형식은 텍스트가 생성됨에 따라 증가하기 때문에 동적이며, [`DynamicCache`]와 유사합니다.
-
-레거시 형식은 본질적으로 동일한 데이터 구조이지만 다르게 조직화되었습니다.
-- 각 내부 튜플은 레이어의 키와 값 텐서를 포함하는 튜플의 튜플입니다.
-- 텐서는 동일한 형태 `[batch_size, num_heads, seq_len, head_dim]`를 갖습니다.
-- 이 형식은 덜 유연하며 양자화나 오프로딩과 같은 기능을 지원하지 않습니다.
-
-프로젝트가 이 레거시 형식에 의존한다면, [`~DynamicCache.from_legacy_cache`]를 사용하여 [`DynamicCache`]로 변환하는 것을 권장합니다. 레거시 캐시 형식은 사용이 중단되었으며 `Transformers`에서 더 이상 사용되지 않습니다. 특정 형식에서 캐시를 조작하는 커스텀 로직이 있는 경우 도움이 되는 [`DynamicCache.to_legacy_cache`] 함수를 사용하여 튜플 형식으로 다시 변환할 수 있습니다.
-
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", dtype=torch.float16, device_map="auto")
-inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
-
-# 캐시를 반환하려면 `return_dict_in_generate=True`가 필요하고 `return_legacy_cache`는 반환된 캐시를
-# 레거시 형식으로 강제합니다
-generation_outputs = model.generate(**inputs, return_dict_in_generate=True, return_legacy_cache=True, max_new_tokens=5)
-
-cache = DynamicCache.from_legacy_cache(generation_outputs.past_key_values)
-legacy_format_cache = cache.to_legacy_cache()
-```

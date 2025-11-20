@@ -1413,7 +1413,7 @@ class MarkupLMConverter(Converter):
 class MoshiConverter(SpmConverter):
     handle_byte_fallback = True
 
-    def __init__(self, vocab_file, model_max_length=None, **kwargs):
+    def __init__(self, vocab_file, **kwargs):
         requires_backends(self, "protobuf")
 
         Converter.__init__(self, vocab_file)
@@ -1731,10 +1731,8 @@ SLOW_TO_FAST_CONVERTERS = {
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
     "Qwen2Tokenizer": Qwen2Converter,
-    "RealmTokenizer": BertConverter,
     "ReformerTokenizer": ReformerConverter,
     "RemBertTokenizer": RemBertConverter,
-    "RetriBertTokenizer": BertConverter,
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
