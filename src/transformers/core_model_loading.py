@@ -100,39 +100,6 @@ def build_glob_alternation(
     return alternation, src_group_to_glob, tgt_group_to_glob
 
 
-def sub_key(
-    key: str,
-    alternation: re.Pattern,
-    group_to_glob: dict[str, str],
-    compiled_rules: dict[str, tuple[re.Pattern, str]],
-) -> str:
-    """
-    Apply glob-based rewrite rules to a single key.
-    """
-    match = alternation.match(key)
-    if not match:
-        return key
-
-    matched_globs = [group_to_glob[group_name] for group_name, value in match.groupdict().items() if value is not None]
-
-    result: str | None = None
-
-    for source_glob in matched_globs:
-        regex, replacement = compiled_rules[source_glob]
-
-        if not regex.search(key):
-            continue
-
-        candidate = regex.sub(replacement, key, count=1)
-
-        if result is None:
-            result = candidate
-        elif candidate != result:
-            raise ValueError(f"Contradictory rules for key {key!r}: {result!r} vs {candidate!r}")
-
-    return result if result is not None else key
-
-
 def match_glob(key: str, alt: re.Pattern, name_map: dict[str, str]) -> Optional[str]:
     """
     Match the key against the alternation; return the original glob string that matched.
