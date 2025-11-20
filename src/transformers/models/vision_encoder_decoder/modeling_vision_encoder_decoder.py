@@ -67,7 +67,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
-    _supports_param_buffer_assignment = False
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -145,8 +144,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
-    def get_encoder(self):
-        return self.encoder
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.decoder.get_input_embeddings()
