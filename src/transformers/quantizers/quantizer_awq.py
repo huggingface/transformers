@@ -140,11 +140,6 @@ class AwqQuantizer(HfQuantizer):
             model = post_init_awq_ipex_modules(model)
 
     def is_serializable(self, safe_serialization=None):
-        # AWQ through auto-awq has been always serializable, except if the model is fused.
-        if self.quantization_config.do_fuse:
-            logger.warning("You cannot save an AWQ model that uses fused modules!")
-            return False
-
         if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
             logger.warning("You cannot save an AWQ model that uses Exllama backend!")
             return False
