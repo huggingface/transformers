@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -678,6 +679,13 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
         "hidden_states": Lfm2MoeDecoderLayer,
         "attentions": Lfm2MoeAttention,
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Lfm2MoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring

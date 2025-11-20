@@ -16,8 +16,10 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.import_utils import is_causal_conv1d_available
@@ -130,6 +132,13 @@ class Lfm2MoeDecoderLayer(Lfm2DecoderLayer):
 
 class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Lfm2MoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 class Lfm2MoeModel(MixtralModel):
