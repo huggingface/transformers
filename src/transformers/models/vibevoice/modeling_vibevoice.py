@@ -219,49 +219,49 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
                 # 1D parameter tensors (like gamma, ffn_gamma)
                 nn.init.constant_(module.weight, 1e-6)  # Default layer scale value
         elif isinstance(module, VibeVoiceForConditionalGeneration):
-            # The tokenizer parameters are not handled correctly, as `self.acoustic_tokenizer/semantic_tokenizer` are initialized 
+            # The tokenizer parameters are not handled correctly, as `self.acoustic_tokenizer/semantic_tokenizer` are initialized
             # from a PreTrainedModel, but then only the submodules are used -> here we reinit them properly
             for submodule in module.acoustic_tokenizer.modules():
                 # Re-initialize gamma and ffn_gamma parameters
-                for attr_name in ['gamma', 'ffn_gamma']:
+                for attr_name in ["gamma", "ffn_gamma"]:
                     if hasattr(submodule, attr_name):
                         param = getattr(submodule, attr_name)
                         if isinstance(param, nn.Parameter):
                             nn.init.constant_(param, 1e-6)
                 # Re-initialize norm weights
-                for attr_name in ['norm', 'ffn_norm']:
+                for attr_name in ["norm", "ffn_norm"]:
                     if hasattr(submodule, attr_name):
                         norm_module = getattr(submodule, attr_name)
-                        if hasattr(norm_module, 'weight') and norm_module.weight is not None:
+                        if hasattr(norm_module, "weight") and norm_module.weight is not None:
                             nn.init.ones_(norm_module.weight)
-            
+
             for submodule in module.semantic_tokenizer.modules():
                 # Re-initialize gamma and ffn_gamma parameters
-                for attr_name in ['gamma', 'ffn_gamma']:
+                for attr_name in ["gamma", "ffn_gamma"]:
                     if hasattr(submodule, attr_name):
                         param = getattr(submodule, attr_name)
                         if isinstance(param, nn.Parameter):
                             nn.init.constant_(param, 1e-6)
                 # Re-initialize norm weights
-                for attr_name in ['norm', 'ffn_norm']:
+                for attr_name in ["norm", "ffn_norm"]:
                     if hasattr(submodule, attr_name):
                         norm_module = getattr(submodule, attr_name)
-                        if hasattr(norm_module, 'weight') and norm_module.weight is not None:
+                        if hasattr(norm_module, "weight") and norm_module.weight is not None:
                             nn.init.ones_(norm_module.weight)
-        
+
         # Handle special parameters that are direct attributes of modules
         # (like gamma, ffn_gamma from acoustic/semantic tokenizers)
-        for attr_name in ['gamma', 'ffn_gamma']:
+        for attr_name in ["gamma", "ffn_gamma"]:
             if hasattr(module, attr_name):
                 param = getattr(module, attr_name)
                 if isinstance(param, nn.Parameter):
                     nn.init.constant_(param, 1e-6)  # Layer scale parameters
-        
+
         # Handle norm weights that might not be caught above
-        for attr_name in ['norm', 'ffn_norm']:
+        for attr_name in ["norm", "ffn_norm"]:
             if hasattr(module, attr_name):
                 norm_module = getattr(module, attr_name)
-                if hasattr(norm_module, 'weight') and norm_module.weight is not None:
+                if hasattr(norm_module, "weight") and norm_module.weight is not None:
                     nn.init.ones_(norm_module.weight)
 
 
@@ -367,7 +367,6 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-
     def get_audio_features(self, input_features, input_features_mask):
         """
         This method is used to get the audio embeddings from the input features (normalized audio).
@@ -409,32 +408,17 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, slice] = 0,
-        input_features: Optional[torch.FloatTensor] = None,
-        input_features_mask: Optional[torch.BoolTensor] = None,
         acoustic_loss_mask: Optional[torch.BoolTensor] = None,
         **kwargs,
     ) -> Union[tuple, VibeVoiceOutputWithPast]:
         """
         Args:
-            input_features (`torch.FloatTensor`, *optional*):
-                Input features for voice cloning or speech understanding.
-            input_features_mask (`torch.BoolTensor`, *optional*):
-                Masks indicating valid input frames.
             acoustic_loss_mask (`torch.BoolTensor`, *optional*):
                 Mask to compute diffusion loss only on specific acoustic tokens. Diffusion loss calculation is not supported yet.
 
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask)
-
-            # replace text-audio token placeholders with audio embeddings
-            audio_token_mask = (input_ids == self.config.speech_diffusion_id).unsqueeze(-1)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
-            )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
