@@ -331,11 +331,8 @@ if is_torch_greater_or_equal("2.3.0"):
 
 
 def load_state_dict(
-    checkpoint_file: Union[str, os.PathLike],
-    is_quantized: bool = False,
-    map_location: Optional[Union[str, torch.device]] = "cpu",
-    weights_only: bool = True,
-):
+    checkpoint_file: Union[str, os.PathLike], map_location: Union[str, torch.device] = "cpu", weights_only: bool = True
+) -> dict[str, torch.Tensor]:
     """
     Reads a `safetensor` or a `.bin` checkpoint file. We load the checkpoint on "cpu" by default.
     """
@@ -353,51 +350,18 @@ def load_state_dict(
                         raise ValueError(f"Cannot load safetensors of unknown dtype {k_dtype}")
                     state_dict[k] = torch.empty(size=_slice.get_shape(), dtype=dtype, device="meta")
                 else:
-                    state_dict[k] = f.get_tensor(k)
+                    state_dict[k] = f.get_tensor(k).to(map_location)
             return state_dict
 
     # Fallback to torch.load (if weights_only was explicitly False, do not check safety as this is known to be unsafe)
     if weights_only:
         check_torch_load_is_safe()
-    try:
-        if map_location is None:
-            if (
-                (
-                    is_deepspeed_zero3_enabled()
-                    and torch.distributed.is_initialized()
-                    and torch.distributed.get_rank() > 0
-                )
-                or (is_fsdp_enabled() and not is_local_dist_rank_0())
-            ) and not is_quantized:
-                map_location = "meta"
-            else:
-                map_location = "cpu"
-        extra_args = {}
-        # mmap can only be used with files serialized with zipfile-based format.
-        if isinstance(checkpoint_file, str) and map_location != "meta" and is_zipfile(checkpoint_file):
-            extra_args = {"mmap": True}
-        return torch.load(
-            checkpoint_file,
-            map_location=map_location,
-            weights_only=weights_only,
-            **extra_args,
-        )
-    except Exception as e:
-        try:
-            with open(checkpoint_file) as f:
-                if f.read(7) == "version":
-                    raise OSError(
-                        "You seem to have cloned a repository without having git-lfs installed. Please install "
-                        "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
-                        "you cloned."
-                    )
-                else:
-                    raise ValueError(
-                        f"Unable to locate the file {checkpoint_file} which is necessary to load this pretrained "
-                        "model. Make sure you have saved the model properly."
-                    ) from e
-        except (UnicodeDecodeError, ValueError):
-            raise OSError(f"Unable to load weights from pytorch checkpoint file '{checkpoint_file}'.")
+    extra_args = {}
+    # mmap can only be used with files serialized with zipfile-based format.
+    if isinstance(checkpoint_file, str) and map_location != "meta" and is_zipfile(checkpoint_file):
+        extra_args = {"mmap": True}
+
+    return torch.load(checkpoint_file, map_location=map_location, weights_only=weights_only, **extra_args)
 
 
 def _end_ptr(tensor: torch.Tensor) -> int:
@@ -4051,17 +4015,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
             if state_dict is None:
-                if checkpoint_files is None:
-                    raise ValueError(
-                        "DeepSpeed ZeRO-3 initialization requires a state_dict or checkpoint files to load from."
-                    )
                 merged_state_dict = {}
                 for ckpt_file in checkpoint_files:
-                    merged_state_dict.update(
-                        load_state_dict(
-                            ckpt_file, is_quantized=is_quantized, map_location="cpu", weights_only=weights_only
-                        )
-                    )
+                    merged_state_dict.update(load_state_dict(ckpt_file, map_location="cpu", weights_only=weights_only))
                 state_dict = merged_state_dict
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
             # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
