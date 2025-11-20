@@ -89,7 +89,7 @@ class PeftAdapterMixin:
     """
 
     _hf_peft_config_loaded = False
-    _prepare_peft_hotswap_kwargs: Optional[dict] = None
+    _prepare_peft_hotswap_kwargs: dict | None = None
 
     def load_adapter(
         self,
@@ -446,7 +446,7 @@ class PeftAdapterMixin:
         self._hotswap_enabled = True
         self._prepare_peft_hotswap_kwargs = {"target_rank": target_rank, "check_compiled": check_compiled}
 
-    def add_adapter(self, adapter_config, adapter_name: Optional[str] = None) -> None:
+    def add_adapter(self, adapter_config, adapter_name: str | None = None) -> None:
         r"""
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
