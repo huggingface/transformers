@@ -31,6 +31,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Optional, Union, overload
+from huggingface_hub import list_repo_files
 
 import numpy as np
 from packaging import version
@@ -150,7 +151,7 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
-_re_tokenizer_file = re.compile(r"tokenizer\.(.*)\.json")
+_re_tokenizer_file = re.compile(r"(tokenizer|tekken)\.(.*)\.json")
 
 
 class TruncationStrategy(ExplicitEnum):
@@ -2098,7 +2099,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             template = template.removesuffix(".jinja")
                             vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
-        # Get files from url, cache, or disk depending on the case
+        # Find the first file matching pattern
+        remote_files = list_repo_files(pretrained_model_name_or_path)
+        vocab_files["vocab_file"] += "|tekken.json|tokenizer.model.*"
+        for file_name in remote_files:
+            if re.search(vocab_files["vocab_file"], file_name):
+                vocab_files["vocab_file"] = file_name
+                break
+
         resolved_vocab_files = {}
         for file_id, file_path in vocab_files.items():
             if file_path is None:
