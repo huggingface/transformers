@@ -16,14 +16,17 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 from abc import abstractmethod
+from collections import defaultdict
 from collections.abc import MutableMapping, MutableSet, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
+from itertools import chain
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
@@ -267,6 +270,112 @@ class PermuteForRope(ConversionOps):
         return output
 
 
+class ModulelistSplitAndFuse(ConversionOps):
+    """
+    Special operation that splits a module list over all keys and fuses over the number of original modules.
+
+    Example with 2 original modules "Gate" and "Up" with 2 target keys "Text" and "Vision":
+
+                 ModuleList 1            ModuleList 2
+                [   Gate    ]            [   Up    ]
+                |           |            |         |
+          [Gate_Text] [Gate_Vision] [Up_Text]   [Up_Vision]
+              \                  \  /                /
+               \                 \ /                /
+                \               /  \               /
+                 \            /     \             /
+                 [GateUp_Text]      [GateUp_Vision]
+
+    The splits are equal and are defined by the amount of target keys.
+    The final fusions are defined by the amount of original module lists.
+    """  # noqa: W605
+
+    def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
+        self.stack_dim = stack_dim
+        self.concat_dim = concat_dim
+        self.reverse_op = ModulelistSplitAndDecouple
+
+    def split_list_into_chunks(self, tensor_list: list[torch.Tensor], chunks: int = 2):
+        split_size = math.ceil(len(tensor_list) / chunks)  # best effort split size
+        return [tensor_list[i * split_size : (i+1) * split_size] for i in range(chunks)]
+
+    @torch.no_grad()
+    def convert(
+        self,
+        value: dict[str, list[torch.Tensor]],
+        source_keys: list[str],
+        target_keys: list[str],
+        full_layer_name: str,
+        config,
+    ) -> dict[str, list[torch.Tensor]]:
+        layer_name_prefix = full_layer_name.removesuffix(target_keys[0])  # full layer name is based on first best match
+        split_layer_names = [layer_name_prefix + key for key in target_keys]
+
+        split_and_fused = defaultdict(list)
+        for key in value.keys():
+            tensors = value.get(key, [])
+
+            split_tensor_lists = self.split_list_into_chunks(tensors, chunks=len(split_layer_names))
+            stacked_tensors = (torch.stack(tensor_group, dim=self.stack_dim) for tensor_group in split_tensor_lists)
+            for idx, tensor_group in enumerate(stacked_tensors):
+                split_and_fused[split_layer_names[idx]].append(tensor_group)
+
+        for k, v in split_and_fused.items():
+            split_and_fused[k] = torch.cat(v, dim=self.concat_dim)
+
+        return split_and_fused
+
+
+class ModulelistSplitAndDecouple(ConversionOps):
+    """
+    Special operation that splits a fused module list over all original modules and
+    then decouples them into a mixed module list each over all keys.
+
+    Example with 2 original modules "Gate" and "Up" with 2 target keys "Text" and "Vision":
+
+                    [GateUp_Text]     [GateUp_Vision]
+                  /              \   /             \
+                 /                \ /               \
+                /                / \                 \
+               /                /   \                 \
+          [Gate_Text] [Gate_Vision] [Up_Text]   [Up_Vision]
+                |           |            |         |
+                [   Gate    ]            [   Up    ]
+                 ModuleList 1            ModuleList 2
+
+    The splits are equal and are defined by the amount of original module lists.
+    The final decoupled module lists are defined by the amount of keys.
+    """  # noqa: W605
+
+    def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
+        self.stack_dim = stack_dim
+        self.concat_dim = concat_dim
+        self.reverse_op = ModulelistSplitAndFuse
+
+    @torch.no_grad()
+    def convert(
+        self,
+        value: dict[str, list[torch.Tensor]],
+        source_keys: list[str],
+        target_keys: list[str],
+        full_layer_name: str,
+        config,
+    ) -> dict[str, list[torch.Tensor]]:
+        # TODO: check how reverse ops interacts here
+        layer_name_prefix = full_layer_name.removesuffix(target_keys[0])  # full layer name is based on first best match
+        decoupled_layer_names = [layer_name_prefix + key for key in target_keys]
+
+        fused_modules = len(target_keys)
+        split_tensors = [value[key].chunk(fused_modules, dim=self.concat_dim) for key in value.keys()]
+
+        decoupled = {}
+        for idx, key in enumerate(decoupled_layer_names):
+            tensor_groups = [list(torch.unbind(tensor_group[idx], dim=self.stack_dim)) for tensor_group in split_tensors]
+            decoupled[key] = list(chain.from_iterable(tensor_groups))
+
+        return decoupled
+
+
 @dataclass(slots=True)
 class WeightTransform:
     source_keys: Union[str, list[str]] = field(init=True)
@@ -324,9 +433,7 @@ class WeightConverter(WeightTransform):
     def __post_init__(self):
         WeightTransform.__post_init__(self)
         if bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
-            raise ValueError(
-                f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
-            )
+            logger.warning_once("Many-to-many conversions are risky; use at your own risk.")
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
 

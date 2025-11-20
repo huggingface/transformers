@@ -15,7 +15,14 @@
 
 from copy import deepcopy
 
-from .core_model_loading import Concatenate, MergeModulelist, WeightConverter, WeightRenaming
+from .core_model_loading import (
+    Chunk,
+    Concatenate,
+    MergeModulelist,
+    ModulelistSplitAndFuse,
+    WeightConverter,
+    WeightRenaming,
+)
 from .utils import is_torch_available
 
 
@@ -65,6 +72,50 @@ def _build_checkpoint_conversion_mapping():
                 source_keys=["mlp.experts.*.down_proj.weight"],
                 target_keys="mlp.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "ernie4_5_vl": [
+            # vision
+            WeightRenaming("^vision_model", "model.vision_tower"),
+            # resampler
+            WeightRenaming("resampler_model.spatial_linear.0", "resampler_model.spatial_linear.fc1"),
+            WeightRenaming("resampler_model.spatial_linear.2", "resampler_model.spatial_linear.fc2"),
+            WeightRenaming("resampler_model.spatial_linear.3", "resampler_model.spatial_linear.ln"),
+            WeightRenaming("resampler_model.temporal_linear.0", "resampler_model.temporal_linear.fc1"),
+            WeightRenaming("resampler_model.temporal_linear.2", "resampler_model.temporal_linear.fc2"),
+            WeightRenaming("resampler_model.temporal_linear.3", "resampler_model.temporal_linear.ln"),
+            # language model
+            WeightRenaming("^model.norm", "model.language_model.norm"),
+            WeightRenaming("^model.embed_tokens", "model.language_model.embed_tokens"),
+            WeightRenaming("^model.layers", "model.language_model.layers"),
+            WeightRenaming("mlp.gate.weight", "mlp.text_moe.gate.weight"),
+            WeightRenaming("mlp.gate.weight_1", "mlp.vision_moe.gate.weight"),
+            WeightConverter(
+                source_keys=["mlp.moe_statics.e_score_correction_bias"],
+                target_keys=[
+                    "mlp.text_moe.gate.moe_statics.e_score_correction_bias",
+                    "mlp.vision_moe.gate.moe_statics.e_score_correction_bias"
+                ],
+                operations=[Chunk(dim=0, chunks=2)]
+            ),
+            WeightConverter(
+                source_keys=["experts.*.down_proj.weight"],
+                target_keys=[
+                    "text_moe.experts.down_proj",
+                    "vision_moe.experts.down_proj",
+                ],
+                operations=[ModulelistSplitAndFuse(stack_dim=0, concat_dim=1)]
+            ),
+            WeightConverter(
+                source_keys=[
+                    "experts.*.gate_proj.weight",
+                    "experts.*.up_proj.weight",
+                ],
+                target_keys=[
+                    "text_moe.experts.gate_up_proj",
+                    "vision_moe.experts.gate_up_proj",
+                ],
+                operations=[ModulelistSplitAndFuse(stack_dim=0, concat_dim=1)]
             ),
         ],
         "legacy": [
