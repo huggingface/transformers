@@ -50,7 +50,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
-from .utils.import_utils import is_rocm_platform
+from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling
 
 
 if is_vision_available():
@@ -343,7 +343,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # This is a workaround to avoid a bug in torch.compile when dealing with uint8 on AMD MI3XX GPUs
         # Tracked in PyTorch issue: https://github.com/pytorch/pytorch/issues/155209
         # TODO: remove this once the bug is fixed (detected with torch==2.7.0+git1fee196, torchvision==0.22.0+9eb57cd)
-        if torch.compiler.is_compiling() and is_rocm_platform():
+        if is_torchdynamo_compiling() and is_rocm_platform():
             return self.compile_friendly_resize(image, new_size, interpolation, antialias)
         return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
