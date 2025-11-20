@@ -204,9 +204,6 @@ class PeftAdapterMixin:
             hotswap = hotswap_enabled and not_first_adapter
 
         if hotswap:
-            min_version_hotswap = "0.15.0"
-            if version.parse(importlib.metadata.version("peft")) < version.parse(min_version_hotswap):
-                raise ValueError(f"To hotswap the adapter, you need PEFT >= v{min_version_hotswap}.")
             if (not self._hf_peft_config_loaded) or (adapter_name not in self.peft_config):
                 raise ValueError(
                     "To hotswap an adapter, there must already be an existing adapter with the same adapter name."
@@ -415,10 +412,6 @@ class PeftAdapterMixin:
                   - "warn": issue a warning
                   - "ignore": do nothing
         """
-        min_version_hotswap = "0.15.0"
-        if version.parse(importlib.metadata.version("peft")) < version.parse(min_version_hotswap):
-            raise ValueError(f"To hotswap the adapter, you need PEFT >= v{min_version_hotswap}.")
-
         if getattr(self, "peft_config", {}):
             if check_compiled == "error":
                 raise RuntimeError("Call `enable_peft_hotswap` before loading the first adapter.")
