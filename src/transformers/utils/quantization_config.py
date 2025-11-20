@@ -832,10 +832,6 @@ class AwqConfig(QuantizationConfigMixin):
         zero_point: bool = True,
         version: AWQLinearVersion = AWQLinearVersion.GEMM,
         backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
-        do_fuse: bool | None = None,
-        fuse_max_seq_len: int | None = None,
-        modules_to_fuse: dict | None = None,
-        modules_to_not_convert: list | None = None,
         exllama_config: dict[str, int] | None = None,
         **kwargs,
     ):
@@ -846,14 +842,7 @@ class AwqConfig(QuantizationConfigMixin):
         self.zero_point = zero_point
         self.version = version
         self.backend = backend
-        self.fuse_max_seq_len = fuse_max_seq_len
-        self.modules_to_not_convert = modules_to_not_convert
         self.exllama_config = exllama_config
-
-        if do_fuse or modules_to_fuse:
-            raise ValueError("awq fuse feature is deprecated")
-
-        self.fuse_max_seq_len = fuse_max_seq_len
 
         self.post_init()
 
@@ -886,19 +875,6 @@ class AwqConfig(QuantizationConfigMixin):
                 major, minor = compute_capability
                 if major < 8:
                     raise ValueError("LLM-AWQ backend is only supported on CUDA GPUs with compute capability >= 8.0")
-
-        if self.modules_to_not_convert is not None:
-            awq_version_supports_non_conversion = False
-            MIN_AWQ_VERSION = "0.1.8"
-            if is_auto_awq_available():
-                awq_version_supports_non_conversion = version.parse(
-                    importlib.metadata.version("autoawq")
-                ) >= version.parse(MIN_AWQ_VERSION)
-
-            if not awq_version_supports_non_conversion:
-                raise ValueError(
-                    f"You current version of `autoawq` does not support module quantization skipping, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
-                )
 
         if self.version == AWQLinearVersion.EXLLAMA:
             awq_version_supports_exllama = False
