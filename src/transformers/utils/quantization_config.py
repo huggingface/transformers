@@ -835,6 +835,7 @@ class AwqConfig(GPTQConfig):
         version: AWQLinearVersion = AWQLinearVersion.GEMM,
         backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
         exllama_config: dict[str, int] | None = None,
+        modules_to_not_convert: list | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ
@@ -845,6 +846,7 @@ class AwqConfig(GPTQConfig):
         self.version = version
         self.backend = backend
         self.exllama_config = exllama_config
+        self.modules_to_not_convert = modules_to_not_convert
 
         self.post_init()
 
