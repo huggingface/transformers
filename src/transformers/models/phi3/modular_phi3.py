@@ -37,6 +37,7 @@ from ..mistral.modeling_mistral import (
     eager_attention_forward,
     rotate_half,
 )
+from ..phi.modeling_phi import PhiRotaryEmbedding
 from .configuration_phi3 import Phi3Config
 
 
@@ -62,6 +63,10 @@ class Phi3MLP(nn.Module):
         up_states = up_states * self.activation_fn(gate)
 
         return self.down_proj(up_states)
+
+
+class Phi3RotaryEmbedding(PhiRotaryEmbedding):
+    pass
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -182,7 +187,7 @@ class Phi3DecoderLayer(MistralDecoderLayer):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -231,7 +236,7 @@ class Phi3ForCausalLM(MistralForCausalLM):
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
             past_key_values
-            and self.config.rope_scaling
+            and hasattr(self.config, "original_max_position_embeddings")
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
             past_length = cache_position[0]

@@ -45,7 +45,6 @@ class ArceeModelTester(CausalLMModelTester):
 
 @require_torch
 class ArceeModelTest(CausalLMModelTest, unittest.TestCase):
-    fx_compatible = False
     model_tester_class = ArceeModelTester
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`

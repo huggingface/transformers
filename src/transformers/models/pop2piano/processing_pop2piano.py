@@ -42,10 +42,6 @@ class Pop2PianoProcessor(ProcessorMixin):
             An instance of ['Pop2PianoTokenizer`]. The tokenizer is a required input.
     """
 
-    attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "Pop2PianoFeatureExtractor"
-    tokenizer_class = "Pop2PianoTokenizer"
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 

@@ -185,6 +185,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     input_data_format = None
     device = None
     model_input_names = ["pixel_values"]
+    image_seq_length = None
     valid_kwargs = ImagesKwargs
     unused_kwargs = None
 
@@ -227,6 +228,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         padding_mode: Optional[str] = "constant",
         return_mask: bool = False,
         disable_grouping: Optional[bool] = False,
+        is_nested: Optional[bool] = False,
         **kwargs,
     ) -> Union[tuple["torch.Tensor", "torch.Tensor"], "torch.Tensor"]:
         """
@@ -257,7 +259,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         else:
             pad_size = get_max_height_width(images)
 
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        grouped_images, grouped_images_index = group_images_by_shape(
+            images, disable_grouping=disable_grouping, is_nested=is_nested
+        )
         processed_images_grouped = {}
         processed_masks_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -280,9 +284,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 stacked_masks[..., : image_size[0], : image_size[1]] = 1
                 processed_masks_grouped[shape] = stacked_masks
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=is_nested)
         if return_mask:
-            processed_masks = reorder_images(processed_masks_grouped, grouped_images_index)
+            processed_masks = reorder_images(processed_masks_grouped, grouped_images_index, is_nested=is_nested)
             return processed_images, processed_masks
 
         return processed_images
@@ -305,6 +309,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
+            antialias (`bool`, *optional*, defaults to `True`):
+                Whether to use antialiasing.
 
         Returns:
             `torch.Tensor`: The resized image.

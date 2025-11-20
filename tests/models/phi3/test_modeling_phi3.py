@@ -352,8 +352,8 @@ class Phi3IntegrationTest(unittest.TestCase):
         # NOTE: To make the model exportable we need to set the rope scaling to default to avoid hitting
         # the data-dependent control flow in _longrope_frequency_update. Alternatively, we can rewrite
         # that function to avoid the data-dependent control flow.
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            config.rope_scaling["type"] = "default"
+        if hasattr(config, "rope_parameters") and config.rope_parameters is not None:
+            config.rope_parameters["type"] = "default"
 
         # Load model
         device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM

@@ -201,7 +201,6 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         if is_torch_available()
         else ()
     )
-    fx_compatible = False
 
     test_resize_embeddings = True
     _is_composite = True

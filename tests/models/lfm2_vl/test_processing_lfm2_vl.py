@@ -291,7 +291,7 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: off
         inputs = processor(text=text, images=self.large_image, add_special_tokens=False, max_pixels_tolerance=2.0, do_image_splitting=True)
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        large_image_tokens = self.get_split_image_expected_tokens(processor, 2, 4, True, 8)
+        large_image_tokens = self.get_split_image_expected_tokens(processor, 4, 2, True, 8)
         expected_input_ids = [tokenized_sentence["input_ids"] + large_image_tokens]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         # fmt: on

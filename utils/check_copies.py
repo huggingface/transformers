@@ -97,7 +97,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_ja.md": {
-        "start_prompt": "🤗Transformersは現在、以下のアーキテクチャを提供しています",
+        "start_prompt": "🤗 Transformersは現在、以下のアーキテクチャを提供しています",
         "end_prompt": "1. 新しいモデルを投稿したいですか？",
         "format_model_list": (
             "**[{title}]({model_link})** ({paper_affiliations} から) {paper_authors}.{supplements} から公開された研究論文"

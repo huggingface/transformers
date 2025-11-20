@@ -171,7 +171,7 @@ class InformerModelTester:
         embed_positions = InformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         )
-        embed_positions._init_weight()
+        embed_positions.weight.copy_(embed_positions.create_weight())
         embed_positions = embed_positions.to(torch_device)
         self.parent.assertTrue(torch.equal(model.encoder.embed_positions.weight, embed_positions.weight))
         self.parent.assertTrue(torch.equal(model.decoder.embed_positions.weight, embed_positions.weight))
@@ -218,7 +218,7 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()

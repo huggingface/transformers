@@ -32,12 +32,14 @@ from transformers.models.dinov2.modeling_dinov2 import (
 from transformers.models.llama.modeling_llama import LlamaMLP
 from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotate_half
 
+from ... import initialization as init
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import check_model_inputs
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
@@ -342,36 +344,23 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
         "attentions": DINOv3ViTAttention,
     }
 
-    def _init_weights(self, module):
+    @torch.no_grad()
+    def _init_weights(self, module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.weight.dtype)
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, DINOv3ViTEmbeddings):
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.config.num_register_tokens > 0:
-                module.register_tokens.data = nn.init.trunc_normal_(
-                    module.register_tokens.data.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                ).to(module.register_tokens.dtype)
-            module.mask_token.data.zero_()
+                init.trunc_normal_(module.register_tokens, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.mask_token)
         elif isinstance(module, DINOv3ViTLayerScale):
-            module.lambda1.data.fill_(self.config.layerscale_value)
+            init.constant_(module.lambda1, self.config.layerscale_value)
 
 
 @auto_docstring
@@ -417,10 +406,79 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         sequence_output = self.norm(hidden_states)
         pooled_output = sequence_output[:, 0, :]
 
-        return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-        )
+        return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
 
 
-__all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel"]
+@auto_docstring
+class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
+    def __init__(self, config):
+        super().__init__(config)
+        super()._init_backbone(config)
+
+        self.embeddings = DINOv3ViTEmbeddings(config)
+        self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
+        self.layer = nn.ModuleList([DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.gradient_checkpointing = False
+
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.patch_embeddings
+
+    @check_model_inputs()
+    @can_return_tuple
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BackboneOutput:
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
+        hidden_states = self.embeddings(pixel_values)
+        position_embeddings = self.rope_embeddings(pixel_values)
+
+        stage_hidden_states: list[torch.Tensor] = [hidden_states]
+
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings)
+            stage_hidden_states.append(hidden_states)
+
+        batch_size, _, image_height, image_width = pixel_values.shape
+        patch_size = self.config.patch_size
+        num_patches_height = image_height // patch_size
+        num_patches_width = image_width // patch_size
+
+        num_prefix = 1 + getattr(self.config, "num_register_tokens", 0)
+
+        feature_maps = []
+        sequence_output = None
+        last_stage_idx = len(self.stage_names) - 1
+        for idx, (stage_name, hidden_state) in enumerate(zip(self.stage_names, stage_hidden_states)):
+            if idx == last_stage_idx:
+                hidden_state = self.norm(hidden_state)
+                sequence_output = hidden_state
+            elif self.config.apply_layernorm:
+                hidden_state = self.norm(hidden_state)
+
+            if stage_name in self.out_features:
+                patch_tokens = hidden_state[:, num_prefix:, :]
+                if self.config.reshape_hidden_states:
+                    fmap = (
+                        patch_tokens.reshape(batch_size, num_patches_height, num_patches_width, patch_tokens.shape[-1])
+                        .permute(0, 3, 1, 2)
+                        .contiguous()
+                    )
+                else:
+                    fmap = patch_tokens
+
+                feature_maps.append(fmap)
+
+        output = BackboneOutput(feature_maps=tuple(feature_maps))
+        output.last_hidden_state = sequence_output
+
+        return output
+
+
+__all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel", "DINOv3ViTBackbone"]

@@ -174,7 +174,6 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         else ()
     )
     pipeline_model_mapping = {"feature-extraction": MaskFormerSwinModel} if is_torch_available() else {}
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_torch_exportable = True

@@ -390,7 +390,6 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
     model_split_percents = [0.5, 0.8, 0.9]
 
     # Overwriting to add `is_decoder` flag

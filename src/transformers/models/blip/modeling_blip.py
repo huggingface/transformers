@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn.functional import normalize
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
@@ -419,34 +420,16 @@ class BlipPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BlipEncoderLayer", "BlipTextEmbeddings"]
     _skip_keys_device_placement = ["past_key_values"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        factor = self.config.initializer_range
-        if isinstance(module, (nn.Conv2d, nn.Embedding, nn.Linear)):
-            module.weight.data.normal_(mean=0.0, std=factor)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
-
+        super()._init_weights(module)
+        std = self.config.initializer_range
         if isinstance(module, BlipVisionEmbeddings):
             if hasattr(self.config, "vision_config"):
-                factor = self.config.vision_config.initializer_range
-            nn.init.trunc_normal_(
-                module.position_embedding,
-                mean=0.0,
-                std=factor,
-            )
-
-            nn.init.trunc_normal_(
-                module.class_embedding,
-                mean=0.0,
-                std=factor,
-            )
-
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+                std = self.config.vision_config.initializer_range
+            init.trunc_normal_(module.position_embedding, mean=0.0, std=std)
+            init.trunc_normal_(module.class_embedding, mean=0.0, std=std)
 
 
 class BlipEncoder(nn.Module):
@@ -797,8 +780,11 @@ class BlipModel(BlipPreTrainedModel):
 )
 class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
     config: BlipConfig
-    _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
     main_input_name = "pixel_values"
+    _tied_weights_keys = {
+        "text_decoder.cls.predictions.decoder.bias": "text_decoder.cls.predictions.bias",
+        "text_decoder.cls.predictions.decoder.weight": "text_decoder.bert.embeddings.word_embeddings.weight",
+    }  # TODO @arthurzucker check why we need this when for other models, their subPreTrainedModel handle it themselves.
 
     def __init__(self, config: BlipConfig):
         super().__init__(config)
@@ -963,7 +949,10 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
 )
 class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
     config: BlipConfig
-    _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "text_decoder.cls.predictions.decoder.bias": "text_decoder.cls.predictions.bias",
+        "text_decoder.cls.predictions.decoder.weight": "text_decoder.bert.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config: BlipConfig):
         super().__init__(config)
@@ -971,7 +960,6 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
         self.vision_model = BlipVisionModel(config.vision_config)
 
         self.text_encoder = BlipTextModel(config.text_config, add_pooling_layer=False)
-
         self.text_decoder = BlipTextLMHeadModel(config.text_config)
 
         self.decoder_pad_token_id = config.text_config.pad_token_id

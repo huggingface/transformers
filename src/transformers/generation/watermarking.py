@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import BCELoss
 
+from .. import initialization as init
 from ..modeling_utils import PreTrainedModel
 from ..utils import ModelOutput, logging
 from .configuration_utils import PreTrainedConfig, WatermarkingConfig
@@ -383,10 +384,11 @@ class BayesianDetectorModel(PreTrainedModel):
         )
         self.prior = torch.nn.Parameter(torch.tensor([self.base_rate]))
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Parameter):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            init.normal_(module.weight, mean=0.0, std=0.02)
 
     def _compute_posterior(
         self,

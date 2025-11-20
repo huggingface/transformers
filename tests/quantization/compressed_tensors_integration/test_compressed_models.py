@@ -85,7 +85,11 @@ class StackCompressedModelTest(unittest.TestCase):
                             )
                         else:
                             self.assertTrue(
-                                torch.allclose(submodule.weight, comp_decomp_obj.weight, atol=0.2),
+                                torch.allclose(
+                                    submodule.weight.to(torch_device),
+                                    comp_decomp_obj.weight.to(torch_device),
+                                    atol=0.2,
+                                ),
                                 f"Weight mismatch for module '{name}' in quantized-only or stacked model.",
                             )
 
@@ -151,8 +155,8 @@ class StackCompressedModelTest(unittest.TestCase):
 @require_compressed_tensors
 @require_torch
 class RunCompressedTest(unittest.TestCase):
-    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed-hf-quantizer"
-    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed-hf-quantizer"
+    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed"
+    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed"
 
     prompt = "Paris is the capital of which country?"
 

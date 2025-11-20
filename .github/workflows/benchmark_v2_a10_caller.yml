@@ -9,7 +9,7 @@ jobs:
     uses: ./.github/workflows/benchmark_v2.yml
     with:
       runner: aws-g5-4xlarge-cache-use1-public-80
-      container_image: huggingface/transformers-pytorch-gpu
+      container_image: huggingface/transformers-all-latest-gpu
       container_options: --gpus all --privileged --ipc host --shm-size "16gb"
       commit_sha: ${{ github.sha }}
       run_id: ${{ github.run_id }}

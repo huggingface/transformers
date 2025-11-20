@@ -24,7 +24,7 @@ pip install -e ".[dev]"
 ```
 
 > [!NOTE]
-> This command might fail for some OS that are missing dependencies. Check step 4 in [Create a Pull Request](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#create-a-pull-request) to workaround it.
+> This command might fail for some OS that are missing dependencies. Check step 4 in [Create a Pull Request](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#create-a-pull-request) to work around it.
 
 Then you need to install our special tool that builds the documentation:
 
@@ -38,7 +38,7 @@ pip install git+https://github.com/huggingface/doc-builder
 
 ## Building the documentation
 
-Once you have setup the `doc-builder` and additional packages, you can generate the documentation by 
+Once you have set up the `doc-builder` and additional packages, you can generate the documentation by 
 typing the following command:
 
 ```bash
@@ -295,12 +295,11 @@ Here's an example of a tuple return, comprising several objects:
 Due to the rapidly growing repository, it is important to make sure that no files that would significantly weigh down the repository are added. This includes images, videos, and other non-text files. We prefer to leverage a hf.co hosted `dataset` like
 the ones hosted on [`hf-internal-testing`](https://huggingface.co/hf-internal-testing) in which to place these files and reference
 them by URL. We recommend putting them in the following dataset: [huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images).
-If an external contribution, feel free to add the images to your PR and ask a Hugging Face member to migrate your images
-to this dataset.
+If an external contribution, feel free to add the images to your PR and ask a Hugging Face member to migrate them to this dataset.
 
 ## Styling the docstring
 
-We have an automatic script running with the `make style` comment that will make sure that:
+We have an automatic script running with the `make style` command that will make sure that:
 - the docstrings fully take advantage of the line width
 - all code examples are formatted using black, like the code of the Transformers library
 

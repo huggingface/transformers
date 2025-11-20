@@ -39,9 +39,10 @@ from typing import Any, Optional
 
 import torch
 from huggingface_hub import snapshot_download
+from peft import PeftModel
 from safetensors import safe_open
 
-from transformers import AutoConfig
+from transformers import AutoConfig, AutoModel
 from transformers.models.colqwen2 import ColQwen2ForRetrieval
 from transformers.models.colqwen2.configuration_colqwen2 import ColQwen2Config
 from transformers.utils import logging
@@ -69,7 +70,7 @@ def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> d
                     original_state_dict[key] = f.get_tensor(key)
 
     # Some weights are tied, so `lm.head`` is not saved. Let's clone to load state dict.
-    if "lm_head.weight" not in original_state_dict:
+    if "lm_head.weight" not in original_state_dict and "model.embed_tokens.weight" in original_state_dict:
         original_state_dict["lm_head.weight"] = original_state_dict["model.embed_tokens.weight"].clone()
 
     return original_state_dict
@@ -124,7 +125,21 @@ def convert_colqwen2_weights_to_hf(
     config.is_composition = False
 
     # Load the untrained model
-    model = ColQwen2ForRetrieval(config=config).to("cpu").eval()
+    vlm_name_or_path = getattr(config.vlm_config, "_name_or_path", None)
+    if vlm_name_or_path and "2.5" in str(vlm_name_or_path):
+        print(
+            "Detected colqwen2.5 adapters in vlm_config; loading base model %s and merging PEFT weights."
+            % vlm_name_or_path
+        )
+        base_model = AutoModel.from_pretrained(
+            vlm_name_or_path,
+            device_map="cpu",
+            trust_remote_code=True,
+        )
+        peft_model = PeftModel.from_pretrained(base_model, model_id)
+        model = peft_model.merge_and_unload()
+    else:
+        model = ColQwen2ForRetrieval(config=config).to("cpu").eval()
     print("Created model with new config and randomly initialized weights")
 
     # NOTE: The new model was initialized with float32 weights. We need to convert it to the desired precision.
@@ -201,6 +216,7 @@ if __name__ == "__main__":
         help="Name or path of the original VLM backbone model",
         default=None,
     )
+
     args = parser.parse_args()
 
     convert_colqwen2_weights_to_hf(

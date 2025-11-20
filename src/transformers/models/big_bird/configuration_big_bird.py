@@ -14,11 +14,7 @@
 # limitations under the License.
 """BigBird model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -158,19 +154,4 @@ class BigBirdConfig(PreTrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
-class BigBirdOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-            ]
-        )
-
-
-__all__ = ["BigBirdConfig", "BigBirdOnnxConfig"]
+__all__ = ["BigBirdConfig"]

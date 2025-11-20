@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN, get_activation
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -108,24 +109,15 @@ class ConvBertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "convbert"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, SeparableConv1D):
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, SeparableConv1D):
+            init.zeros_(module.bias)
         elif isinstance(module, GroupedLinearLayer):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            module.bias.data.zero_()
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.bias)
 
 
 class SeparableConv1D(nn.Module):
@@ -707,7 +699,7 @@ class ConvBertGeneratorPredictions(nn.Module):
 
 @auto_docstring
 class ConvBertForMaskedLM(ConvBertPreTrainedModel):
-    _tied_weights_keys = ["generator.lm_head.weight"]
+    _tied_weights_keys = {"generator_lm_head.weight": "convbert.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

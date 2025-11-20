@@ -336,7 +336,6 @@ class SeamlessM4TModelTester:
 @require_torch
 class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
-    fx_compatible = False
     test_missing_keys = False
 
     test_resize_embeddings = False
@@ -529,7 +528,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
-    fx_compatible = False
     test_missing_keys = False
 
     test_resize_embeddings = True
@@ -869,7 +867,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         sampling_rate = 16000
         input_features = torch.rand((2, seq_len))
 
-        return self.processor(audios=[input_features.tolist()], sampling_rate=sampling_rate, return_tensors="pt").to(
+        return self.processor(audio=[input_features.tolist()], sampling_rate=sampling_rate, return_tensors="pt").to(
             torch_device
         )
 

@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...modeling_layers import GradientCheckpointingLayer
@@ -481,15 +482,8 @@ class TapasLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -513,24 +507,13 @@ class TapasPreTrainedModel(PreTrainedModel):
     config: TapasConfig
     base_model_prefix = "tapas"
     supports_gradient_checkpointing = True
-    _supports_param_buffer_assignment = False
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with Bert->Tapas
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, TapasLMPredictionHead):
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, TapasLMPredictionHead):
+            init.zeros_(module.bias)
 
 
 @auto_docstring
@@ -684,7 +667,10 @@ class TapasModel(TapasPreTrainedModel):
 
 @auto_docstring
 class TapasForMaskedLM(TapasPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "tapas.embeddings.word_embeddings.weight",
+    }
     config: TapasConfig
     base_model_prefix = "tapas"
 
@@ -823,11 +809,11 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             self.column_output_weights = nn.Parameter(torch.zeros(config.hidden_size))
         else:
             self.output_weights = nn.Parameter(torch.empty(config.hidden_size))
-            nn.init.normal_(
+            init.normal_(
                 self.output_weights, std=config.initializer_range
             )  # here, a truncated normal is used in the original implementation
             self.column_output_weights = nn.Parameter(torch.empty(config.hidden_size))
-            nn.init.normal_(
+            init.normal_(
                 self.column_output_weights, std=config.initializer_range
             )  # here, a truncated normal is used in the original implementation
         self.output_bias = nn.Parameter(torch.zeros([]))

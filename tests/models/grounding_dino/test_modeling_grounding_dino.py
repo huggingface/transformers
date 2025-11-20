@@ -682,7 +682,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [[0.4526, 0.4082]],
+                (None, None): [0.4526, 0.4082],
                 ("cuda", 8): [0.4524, 0.4074],
             }
         )

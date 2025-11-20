@@ -25,6 +25,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -256,27 +257,6 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    def _init_weights(self, module):
-        # important: this ported version of Qwen2Audio isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.audio_config.initializer_range
-        )
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
 
 @auto_docstring(
     custom_intro="""
@@ -459,8 +439,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         self.multi_modal_projector = Qwen2AudioMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
@@ -560,7 +538,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                     "[INST] <|AUDIO|>\nWhat is that in this audio? [/INST]",
                     "[INST] <|AUDIO|>\nWhat is that in this audio? [/INST]",
                 ]
-                inputs = processor(text=prompts, audios=[audio1, audio2], return_tensors='pt', padding=True).to("cuda")
+                inputs = processor(text=prompts, audio=[audio1, audio2], return_tensors='pt', padding=True).to("cuda")
                     audio1 has 101 tokens, while audio2 has 72 tokens
                 ```
 
@@ -734,7 +712,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         >>> url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
         >>> audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
 
-        >>> inputs = processor(text=prompt, audios=audio, return_tensors="pt")
+        >>> inputs = processor(text=prompt, audio=audio, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
@@ -774,14 +752,19 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                 lengths_expand = audio_feat_lengths.unsqueeze(1).expand(batch_size, max_seq_len)
                 # Create mask
                 padding_mask = seq_range >= lengths_expand
+                audio_attention_mask_2d = (~padding_mask).to(dtype=torch.long, device=audio_feat_lengths.device)
 
-                audio_attention_mask_ = padding_mask.view(batch_size, 1, 1, max_seq_len).expand(
-                    batch_size, 1, max_seq_len, max_seq_len
+                dummy_embeds = torch.zeros(
+                    (batch_size, max_seq_len, 1),
+                    dtype=inputs_embeds.dtype,
+                    device=inputs_embeds.device,
                 )
-                audio_attention_mask = audio_attention_mask_.to(
-                    dtype=self.audio_tower.conv1.weight.dtype, device=self.audio_tower.conv1.weight.device
+
+                audio_attention_mask = create_bidirectional_mask(
+                    config=self.audio_tower.config,
+                    input_embeds=dummy_embeds,
+                    attention_mask=audio_attention_mask_2d,
                 )
-                audio_attention_mask[audio_attention_mask_] = float("-inf")
 
                 audio_outputs = self.audio_tower(input_features, attention_mask=audio_attention_mask)
                 selected_audio_feature = audio_outputs.last_hidden_state

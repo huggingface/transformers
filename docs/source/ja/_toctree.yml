@@ -200,8 +200,6 @@
       title: モデル
     - local: main_classes/text_generation
       title: テキストの生成
-    - local: main_classes/onnx
-      title: ONNX
     - local: main_classes/optimizer_schedules
       title: 最適化
     - local: main_classes/output
@@ -254,8 +252,6 @@
         title: Blenderbot Small
       - local: model_doc/bloom
         title: BLOOM
-      - local: model_doc/bort
-        title: BORT
       - local: model_doc/byt5
         title: ByT5
       - local: model_doc/camembert
@@ -299,8 +295,6 @@
         title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
-      - local: model_doc/deta
-        title: DETA
       - local: model_doc/detr
         title: DETR
       - local: model_doc/dinat

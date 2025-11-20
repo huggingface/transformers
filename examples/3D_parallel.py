@@ -151,7 +151,6 @@ def main():
     if dist.is_initialized() and dp_mesh.size() > 1:
         model = FSDP(model, device_mesh=dp_mesh, sharding_strategy=ShardingStrategy.NO_SHARD)
         use_ddp = True
-        pass
 
     model.train()
 

@@ -744,20 +744,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
     # Flaky logits
     _supports_sdpa = False
     _supports_flex_attn = True
-
     _can_compile_fullgraph = True
-
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
 
 
 class PegasusXEncoder(PegasusXPreTrainedModel):
@@ -770,7 +757,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: PegasusXConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: PegasusXConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -781,12 +768,9 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = PegasusXScaledWordEmbedding(
-                config.vocab_size, embed_dim, padding_idx, embed_scale=embed_scale
-            )
+        self.embed_tokens = PegasusXScaledWordEmbedding(
+            config.vocab_size, embed_dim, padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_global = nn.Embedding(config.num_global_tokens, embed_dim)
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(embed_dim)
@@ -972,7 +956,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: PegasusXConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: PegasusXConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -980,12 +964,9 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         padding_idx = config.pad_token_id
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = PegasusXScaledWordEmbedding(
-                config.vocab_size, config.d_model, padding_idx=padding_idx, embed_scale=embed_scale
-            )
+        self.embed_tokens = PegasusXScaledWordEmbedding(
+            config.vocab_size, config.d_model, padding_idx=padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(config.d_model)
         self.layers = nn.ModuleList([PegasusXDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])
@@ -1192,7 +1173,10 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
 @auto_docstring
 class PegasusXModel(PegasusXPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: PegasusXConfig):
         super().__init__(config)
@@ -1204,8 +1188,8 @@ class PegasusXModel(PegasusXPreTrainedModel):
             vocab_size, config.d_model, padding_idx=padding_idx, embed_scale=embed_scale
         )
 
-        self.encoder = PegasusXEncoder(config, self.shared)
-        self.decoder = PegasusXDecoder(config, self.shared)
+        self.encoder = PegasusXEncoder(config)
+        self.decoder = PegasusXDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1217,9 +1201,6 @@ class PegasusXModel(PegasusXPreTrainedModel):
         self.shared = value
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
-
-    def get_encoder(self):
-        return self.encoder
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
@@ -1355,7 +1336,9 @@ class PegasusXModel(PegasusXPreTrainedModel):
 )
 class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: PegasusXConfig):
         super().__init__(config)
@@ -1364,12 +1347,6 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """

@@ -51,7 +51,7 @@ def run(
         Optional[str],
         typer.Option(help="Name of the column to use as input. For multi columns input use 'column1,columns2'"),
     ] = None,
-    format: Annotated[FormatEnum, typer.Option(help="Input format to read from", case_sensitive=False)] = "infer",  # type: ignore
+    format: Annotated[FormatEnum, typer.Option(help="Input format to read from", case_sensitive=False)] = "pipe",  # type: ignore
     device: Annotated[
         int, typer.Option(help="Indicate the device to run onto, -1 indicates CPU, >= 0 indicates GPU.")
     ] = -1,

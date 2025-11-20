@@ -26,6 +26,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import gelu, get_activation
 from ...cache_utils import DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -52,6 +53,7 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
     out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
     out.detach_()
+    return out
 
 
 def get_masks(slen, lengths, causal, padding_mask=None):
@@ -614,24 +616,31 @@ class XLMPreTrainedModel(PreTrainedModel):
             langs_list = None
         return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Embedding):
             if self.config is not None and self.config.embed_init_std is not None:
-                nn.init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         if isinstance(module, nn.Linear):
             if self.config is not None and self.config.init_std is not None:
-                nn.init.normal_(module.weight, mean=0, std=self.config.init_std)
+                init.normal_(module.weight, mean=0, std=self.config.init_std)
                 if module.bias is not None:
-                    nn.init.constant_(module.bias, 0.0)
+                    init.constant_(module.bias, 0.0)
         if isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         if isinstance(module, XLMModel) and self.config.sinusoidal_embeddings:
-            create_sinusoidal_embeddings(
-                self.config.max_position_embeddings, self.config.emb_dim, out=module.position_embeddings.weight
+            init.copy_(
+                module.position_embeddings.weight,
+                create_sinusoidal_embeddings(
+                    self.config.max_position_embeddings,
+                    self.config.emb_dim,
+                    out=torch.empty_like(module.position_embeddings.weight),
+                ),
             )
 
 
@@ -921,7 +930,7 @@ class XLMPredLayer(nn.Module):
     """
 )
 class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["pred_layer.proj.weight"]
+    _tied_weights_keys = {"pred_layer.proj.weight": "transformer.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

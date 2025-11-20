@@ -279,6 +279,10 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_tied_weights_keys(self):
         pass
 
+    @unittest.skip(reason="CSM has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def _get_custom_4d_mask_test_data(self):
         """
         Overrides [ModelTesterMixin._get_custom_4d_mask_test_data] to handle third input_ids dimension.

@@ -353,7 +353,9 @@ if __name__ == "__main__":
         help="Whether or not to verify the logits against the original implementation.",
     )
     parser.add_argument(
-        "--push-to-hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push-to-hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     parser.add_argument(
         "--base-model",

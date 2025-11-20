@@ -225,7 +225,6 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False  # Fix me Michael
 
     test_missing_keys = False
 
@@ -262,7 +261,7 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -330,7 +329,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:
@@ -438,6 +437,7 @@ class PLBartJavaCsIntegrationTest(AbstractSeq2SeqIntegrationTest):
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@slow
 class PLBartBaseIntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "uclanlp/plbart-base"
     src_text = ["Is 0 the first Fibonacci number ?", "Find the sum of all prime numbers ."]
@@ -453,7 +453,6 @@ class PLBartBaseIntegrationTest(AbstractSeq2SeqIntegrationTest):
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         self.assertEqual(self.tgt_text[0], decoded[0])
 
-    @slow
     def test_fill_mask(self):
         inputs = self.tokenizer(["Is 0 the <mask> Fibonacci <mask> ?"], return_tensors="pt").to(torch_device)
         src_lan = self.tokenizer._convert_lang_code_special_format("en_XX")

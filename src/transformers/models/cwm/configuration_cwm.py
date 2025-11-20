@@ -22,7 +22,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
 
 
 class CwmConfig(PreTrainedConfig):
@@ -71,8 +71,6 @@ class CwmConfig(PreTrainedConfig):
             The id of the *beginning-of-sequence* token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         pretraining_tp (`int`, *optional*, defaults to 1):
@@ -81,8 +79,10 @@ class CwmConfig(PreTrainedConfig):
             issue](https://github.com/pytorch/pytorch/issues/76232).
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         sliding_window (`int`, *optional*, defaults to 8192):
             Sliding window attention window size.
         layer_types (`List[str]`, *optional*):
@@ -126,18 +126,18 @@ class CwmConfig(PreTrainedConfig):
         eos_token_id=[128001, 128008, 128009],
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
-        rope_theta: float = 1_000_000.0,
         attention_dropout: float = 0.0,
         pretraining_tp: int = 1,
         mlp_bias: bool = False,
-        rope_scaling: Optional[dict] = None,
+        rope_parameters: Optional[dict] = None,
         # CWM interleaved sliding window fields
         sliding_window: int = 8192,
         layer_types: Optional[list[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
         **kwargs,
     ):
-        if rope_scaling is None:
-            rope_scaling = {
+        if rope_parameters is None:
+            rope_parameters = {
+                "rope_theta": 1_000_000.0,
                 "factor": 16.0,
                 "high_freq_factor": 4.0,
                 "low_freq_factor": 1.0,
@@ -154,6 +154,9 @@ class CwmConfig(PreTrainedConfig):
             ]
         else:
             layer_type_validation(layer_types, num_hidden_layers)
+
+        self.sliding_window = int(sliding_window) if sliding_window else None
+        self.layer_types = list(layer_types)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -171,15 +174,16 @@ class CwmConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 1_000_000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
         super().__init__(
@@ -189,9 +193,6 @@ class CwmConfig(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        self.sliding_window = int(sliding_window) if sliding_window else None
-        self.layer_types = list(layer_types)
 
 
 __all__ = ["CwmConfig"]

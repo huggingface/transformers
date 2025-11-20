@@ -219,7 +219,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert.extend(keys_on_cpu)
 
         model = replace_with_bnb_linear(
-            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
+            model,
+            modules_to_not_convert=self.modules_to_not_convert,
+            quantization_config=self.quantization_config,
+            pre_quantized=self.pre_quantized,
         )
 
         model.config.quantization_config = self.quantization_config
@@ -238,3 +241,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             model, self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         return model
+
+    def get_quantize_ops(self):
+        from ..integrations.bitsandbytes import Bnb8bitQuantize
+
+        return Bnb8bitQuantize(self)

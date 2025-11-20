@@ -62,11 +62,6 @@ class PerceptionLMProcessor(ProcessorMixin):
             Pooling ratio for vision tokens. If not 1, 2D adaptive pooling is applied over projected vision tokens.
     """
 
-    attributes = ["video_processor", "image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         video_processor=None,

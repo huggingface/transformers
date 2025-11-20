@@ -340,15 +340,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
-
     test_missing_keys = False
-
-    def test_torch_fx(self):
-        super().test_torch_fx()
-
-    def test_torch_fx_output_loss(self):
-        super().test_torch_fx_output_loss()
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(

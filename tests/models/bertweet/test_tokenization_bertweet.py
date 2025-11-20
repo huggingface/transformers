@@ -38,8 +38,7 @@ class BertweetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
         with open(cls.vocab_file, "w", encoding="utf-8") as fp:
-            for token in vocab_tokens:
-                fp.write(f"{token} {vocab_tokens[token]}\n")
+            fp.writelines(f"{token} {vocab_tokens[token]}\n" for token in vocab_tokens)
         with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 

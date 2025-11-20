@@ -748,19 +748,18 @@ class MinPLogitsWarper(LogitsProcessor):
         # Convert logits to probabilities
         probs = torch.softmax(scores, dim=-1)
         # Get the probability of the top token for each sequence in the batch
-        top_probs, _ = probs.max(dim=-1, keepdim=True)
+        top_probs = probs.amax(dim=-1, keepdim=True)
         # Calculate the actual min_p threshold by scaling min_p with the top token's probability
         scaled_min_p = self.min_p * top_probs
         # Create a mask for tokens that have a probability less than the scaled min_p
         tokens_to_remove = probs < scaled_min_p
 
-        sorted_indices = torch.argsort(scores, descending=True, dim=-1)
-        sorted_indices_to_remove = torch.gather(tokens_to_remove, dim=-1, index=sorted_indices)
-        # Keep at least min_tokens_to_keep
-        sorted_indices_to_remove[..., : self.min_tokens_to_keep] = False
+        # Keep at least min_tokens_to_keep tokens (clip k to vocab size if needed, avoids index out of range)
+        k = min(self.min_tokens_to_keep, probs.shape[-1])
+        sorted_indices = torch.topk(probs, k, dim=-1).indices
+        tokens_to_remove.scatter_(-1, sorted_indices, False)
 
-        indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
-        scores_processed = scores.masked_fill(indices_to_remove, self.filter_value)
+        scores_processed = scores.masked_fill(tokens_to_remove, self.filter_value)
         return scores_processed
 
 

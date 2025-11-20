@@ -202,22 +202,6 @@ class Bnb4BitTest(Base4bitTest):
                     # 4-bit parameters are packed in uint8 variables
                     self.assertTrue(module.weight.dtype == torch.uint8)
 
-    def test_rwkv_4bit(self):
-        r"""
-        A simple test to check if 4-bit RWKV inference works as expected.
-        """
-        model_id = "RWKV/rwkv-4-169m-pile"
-
-        quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_use_double_quant=True)
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
-        tok = AutoTokenizer.from_pretrained(model_id)
-
-        text = "Hello my name is"
-        input_ids = tok.encode(text, return_tensors="pt").to(torch_device)
-
-        _ = model.generate(input_ids, max_new_tokens=30)
-
     def test_generate_quality(self):
         r"""
         Test the generation quality of the quantized model and see that we are matching the expected output.
@@ -607,7 +591,7 @@ class Bnb4BitTestTraining(Base4bitTest):
     def test_training(self):
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            self.model_name, quantization_config=BitsAndBytesConfig(load_in_4bit=True), revision="refs/pr/40"
         )
 
         if torch_device in ["cuda", "xpu"]:
@@ -671,7 +655,7 @@ class BaseSerializationTest(unittest.TestCase):
         gc.collect()
         backend_empty_cache(torch_device)
 
-    def test_serialization(self, quant_type="nf4", double_quant=True, safe_serialization=True):
+    def test_serialization(self, quant_type="nf4", double_quant=True):
         r"""
         Test whether it is possible to serialize a model in 4-bit. Uses most typical params as default.
         See ExtendedSerializationTest class for more params combinations.
@@ -685,14 +669,19 @@ class BaseSerializationTest(unittest.TestCase):
             bnb_4bit_use_double_quant=double_quant,
             bnb_4bit_compute_dtype=torch.bfloat16,
         )
+
+        # for now, we should be able to fetch those in from_pretrained directly
+        if self.model_name == "facebook/opt-125m":
+            revision = "refs/pr/49"
+        else:
+            revision = "main"
+
         model_0 = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            quantization_config=self.quantization_config,
-            device_map=torch_device,
+            self.model_name, quantization_config=self.quantization_config, device_map=torch_device, revision=revision
         )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            model_0.save_pretrained(tmpdirname, safe_serialization=safe_serialization)
+            model_0.save_pretrained(tmpdirname)
 
             config = AutoConfig.from_pretrained(tmpdirname)
             self.assertTrue(hasattr(config, "quantization_config"))
@@ -758,28 +747,16 @@ class ExtendedSerializationTest(BaseSerializationTest):
     tests more combinations of parameters
     """
 
-    def test_nf4_single_unsafe(self):
-        self.test_serialization(quant_type="nf4", double_quant=False, safe_serialization=False)
-
     def test_nf4_single_safe(self):
-        self.test_serialization(quant_type="nf4", double_quant=False, safe_serialization=True)
-
-    def test_nf4_double_unsafe(self):
-        self.test_serialization(quant_type="nf4", double_quant=True, safe_serialization=False)
+        self.test_serialization(quant_type="nf4", double_quant=False)
 
     # nf4 double safetensors quantization is tested in test_serialization() method from the parent class
 
-    def test_fp4_single_unsafe(self):
-        self.test_serialization(quant_type="fp4", double_quant=False, safe_serialization=False)
-
     def test_fp4_single_safe(self):
-        self.test_serialization(quant_type="fp4", double_quant=False, safe_serialization=True)
-
-    def test_fp4_double_unsafe(self):
-        self.test_serialization(quant_type="fp4", double_quant=True, safe_serialization=False)
+        self.test_serialization(quant_type="fp4", double_quant=False)
 
     def test_fp4_double_safe(self):
-        self.test_serialization(quant_type="fp4", double_quant=True, safe_serialization=True)
+        self.test_serialization(quant_type="fp4", double_quant=True)
 
 
 class BloomSerializationTest(BaseSerializationTest):

@@ -165,7 +165,7 @@ python run_mae.py \
     --lr_scheduler_type cosine \
     --weight_decay 0.05 \
     --num_train_epochs 800 \
-    --warmup_ratio 0.05 \
+    --warmup_steps 0.05 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \

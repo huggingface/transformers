@@ -50,7 +50,7 @@ class Lfm2VlConfig(PreTrainedConfig):
             The downsample_factor factor of the vision backbone.
     """
 
-    model_type = "lfm2-vl"
+    model_type = "lfm2_vl"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(

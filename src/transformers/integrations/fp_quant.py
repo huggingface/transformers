@@ -35,6 +35,10 @@ def adapt_fp_quant_config(config: FPQuantConfig):
 
     if config.backward_dtype == "bf16":
         backward_dtype = FPQuantDtype.BF16
+    elif config.backward_dtype == "mxfp8":
+        backward_dtype = FPQuantDtype.MXFP8
+    elif config.backward_dtype == "mxfp4":
+        backward_dtype = FPQuantDtype.MXFP4
     else:
         raise ValueError(f"Unsupported backward dtype: {config.backward_dtype}")
 

@@ -22,7 +22,6 @@ from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
-from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -54,18 +53,14 @@ class SeamlessM4TProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
-    feature_extractor_class = "SeamlessM4TFeatureExtractor"
-    tokenizer_class = ("SeamlessM4TTokenizer", "SeamlessM4TTokenizerFast")
     valid_processor_kwargs = SeamlessM4TProcessorKwargs
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    @deprecate_kwarg("audios", version="v4.59.0", new_name="audio")
     def __call__(
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audios: Optional[AudioInput] = None,
         audio: Optional[AudioInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
@@ -94,15 +89,10 @@ class SeamlessM4TProcessor(ProcessorMixin):
               `None`).
             - **input_features** -- Audio input features to be fed to a model. Returned when `audios` is not `None`.
         """
-        if text is not None and audios is not None:
+        if text is not None and audio is not None:
             raise ValueError(
                 "Text and audios are mututally exclusive when passed to `SeamlessM4T`. Specify one or another."
             )
-        if audio is None and audios is not None:
-            logger.warning(
-                "Passing `audios` as keyword argument is deprecated and will be removed in v4.63, please pass `audio` instead."
-            )
-            audio = audios
         return super().__call__(text=text, audio=audio, **kwargs)
 
 

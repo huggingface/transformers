@@ -154,7 +154,7 @@ pip install schedulefree
 
 [Schedule Free optimizer (SFO)](https://hf.co/papers/2405.15682)는 기본 옵티마이저의 모멘텀 대신 평균화(averaging)와 보간(interpolation)을 조합하여 사용합니다. 덕분에 기존의 학습률 스케줄러와 달리, SFO는 학습률을 점진적으로 낮추는 절차가 아예 필요 없습니다.
 
-SFO는 RAdam(`schedule_free_radam`), AdamW(`schedule_free_adamw`), SGD(`schedule_free_sgd`) 옵티마이저를 지원합니다. RAdam 스케줄러는 `warmup_steps`나 `warmup_ratio` 설정이 필요하지 않습니다. 
+SFO는 RAdam(`schedule_free_radam`), AdamW(`schedule_free_adamw`), SGD(`schedule_free_sgd`) 옵티마이저를 지원합니다. RAdam 스케줄러는 `warmup_steps`.
 
 기본적으로 `lr_scheduler_type="constant"`로 설정하는 것을 권장합니다. 다른 `lr_scheduler_type` 값도 동작할 순 있으나, SFO 옵티마이저와 다른 학습률 스케줄을 함께 사용하면 SFO의 의도된 동작과 성능에 영향을 줄 수 있습니다. 
 

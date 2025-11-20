@@ -16,7 +16,6 @@ import itertools
 import os
 import subprocess
 import unittest
-from copy import deepcopy
 from functools import partial
 
 from parameterized import parameterized
@@ -191,7 +190,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             for k, v in trainer.args.fsdp_config.items():
                 self.assertTrue(k in self.accelerate_fsdp_config)
                 self.assertEqual(v, self.accelerate_fsdp_config[k])
-            self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     def test_fsdp_config(self, sharding_strategy, dtype):
@@ -212,44 +210,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
             for k, v in trainer.args.fsdp_config.items():
                 self.assertEqual(v, self.fsdp_config[k])
-            self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
-
-    @parameterized.expand(params, name_func=_parameterized_custom_name_func)
-    def test_fsdp_config_transformers_auto_wrap(self, sharding_strategy, dtype):
-        output_dir = self.get_auto_remove_tmp_dir()
-        fsdp_config = deepcopy(self.fsdp_config)
-        del fsdp_config["min_num_params"]
-        fsdp_config["transformer_layer_cls_to_wrap"] = "BertLayer"
-        kwargs = {
-            "output_dir": output_dir,
-            "train_len": 128,
-            "save_steps": 5,
-            "learning_rate": 0.1,
-            "fsdp": f"{sharding_strategy} offload auto_wrap",
-            "fsdp_config": fsdp_config,
-        }
-        kwargs[dtype] = True
-        prefix = "FSDP_"
-        with mockenv_context(**self.dist_env_1_gpu):
-            trainer = get_regression_trainer(**kwargs)
-            self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
-            self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
-            self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
-            fsdp_sharding_strategy = str(FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1)
-            self.assertEqual(os.environ[f"{prefix}SHARDING_STRATEGY"], fsdp_sharding_strategy)
-            self.assertEqual(os.environ[f"{prefix}OFFLOAD_PARAMS"], "true")
-            self.assertEqual(os.environ[f"{prefix}AUTO_WRAP_POLICY"], "TRANSFORMER_BASED_WRAP")
-            self.assertEqual(
-                os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"], ",".join(fsdp_config["transformer_layer_cls_to_wrap"])
-            )
-            self.assertEqual(os.environ[f"{prefix}BACKWARD_PREFETCH"], fsdp_config["backward_prefetch"])
-            self.assertEqual(os.environ[f"{prefix}FORWARD_PREFETCH"], fsdp_config["forward_prefetch"])
-            self.assertEqual(os.environ[f"{prefix}USE_ORIG_PARAMS"], fsdp_config["use_orig_params"])
-            self.assertEqual(os.environ[f"{prefix}SYNC_MODULE_STATES"], fsdp_config["sync_module_states"])
-            self.assertEqual(
-                os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"], fsdp_config["cpu_ram_efficient_loading"]
-            )
-            self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator

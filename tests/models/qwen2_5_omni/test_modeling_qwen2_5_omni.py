@@ -95,7 +95,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             "output_dim": 32,
         },
         text_config={
-            "rope_scaling": {"mrope_section": [1, 1, 2], "rope_type": "default", "type": "default"},
+            "rope_parameters": {"mrope_section": [1, 1, 2], "rope_type": "default", "type": "default"},
             "vocab_size": 99,
             "hidden_size": 32,
             "intermediate_size": 37,
@@ -291,6 +291,10 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
 
     @unittest.skip(reason="QwenOmniThinker does not support output_hidden_states test")
     def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip("Qwen2Omni has no base model, model architecture is special")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):
@@ -816,6 +820,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     @slow
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-Omni-7B",

@@ -53,11 +53,18 @@ class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
     """
     max_patches (`int`, *optional*):
         Maximum number of patches to extract.
+    patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+        The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
+    is_vqa (`bool`, *optional*, defaults to `False`):
+        Whether or not the image processor is for the VQA task. If `True` and `header_text` is passed in, text is
+        rendered onto the input images.
     header_text (`Union[list[str], str]`, *optional*):
         Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
     """
 
     max_patches: int
+    patch_size: dict[str, int]
+    is_vqa: bool
     header_text: Optional[Union[list[str], str]]
 
 

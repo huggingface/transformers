@@ -455,7 +455,6 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
     # Overwriting to add `is_decoder` flag
     def prepare_config_and_inputs_for_generate(self, batch_size=2):

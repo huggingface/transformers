@@ -109,9 +109,6 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = Mask2FormerImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[Mask2FormerImageProcessorKwargs]) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
-
         size = kwargs.pop("size", None)
         max_size = kwargs.pop("max_size", None)
 
@@ -224,7 +221,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             padding = [0, 0, padding_right, padding_bottom]
             images = F.pad(images, padding, fill=fill)
             if segmentation_maps is not None:
-                segmentation_maps = F.pad(segmentation_maps, padding, fill=ignore_index)
+                segmentation_maps = [F.pad(mask, padding, fill=ignore_index) for mask in segmentation_maps]
 
         # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
         pixel_mask = torch.zeros((images.shape[0], *padded_size), dtype=torch.int64, device=images.device)
@@ -318,9 +315,11 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
                 stacked_images = self.resize(
                     image=stacked_images, size=size, size_divisor=size_divisor, interpolation=interpolation
                 )
-                if segmentation_maps is not None:
+            if segmentation_maps is not None:
+                stacked_segmentation_maps = grouped_segmentation_maps[shape]
+                if do_resize:
                     stacked_segmentation_maps = self.resize(
-                        image=grouped_segmentation_maps[shape],
+                        image=stacked_segmentation_maps,
                         size=size,
                         size_divisor=size_divisor,
                         interpolation=F.InterpolationMode.NEAREST_EXACT,
@@ -357,14 +356,18 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
                 mask_labels.append(masks)
                 class_labels.append(classes)
 
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        processed_pixel_masks_grouped = {}
         if segmentation_maps is not None:
-            grouped_segmentation_maps, grouped_segmentation_maps_index = group_images_by_shape(
-                mask_labels, disable_grouping=disable_grouping
+            # group mask_labels as paired inputs and not images so as not to stack them
+            grouped_images, grouped_segmentation_maps, grouped_images_index = group_images_by_shape(
+                resized_images, mask_labels, disable_grouping=disable_grouping
             )
             processed_segmentation_maps_grouped = {}
+        else:
+            grouped_images, grouped_images_index = group_images_by_shape(
+                resized_images, disable_grouping=disable_grouping
+            )
+        processed_images_grouped = {}
+        processed_pixel_masks_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
@@ -379,7 +382,8 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = padded_images
             processed_pixel_masks_grouped[shape] = pixel_masks
             if segmentation_maps is not None:
-                processed_segmentation_maps_grouped[shape] = padded_segmentation_maps.squeeze(1)
+                processed_segmentation_maps_grouped[shape] = padded_segmentation_maps
+
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_pixel_masks = reorder_images(processed_pixel_masks_grouped, grouped_images_index)
         encoded_inputs = BatchFeature(
@@ -390,7 +394,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             tensor_type=return_tensors,
         )
         if segmentation_maps is not None:
-            mask_labels = reorder_images(processed_segmentation_maps_grouped, grouped_segmentation_maps_index)
+            mask_labels = reorder_images(processed_segmentation_maps_grouped, grouped_images_index)
             # we cannot batch them since they don't share a common class size
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels

@@ -232,8 +232,6 @@ class FalconMambaCache(MambaCache):
         ```
     """
 
-    pass
-
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
     """

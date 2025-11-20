@@ -34,9 +34,10 @@ class KyutaiSpeechToTextProcessor(ProcessorMixin):
     information.
     """
 
-    feature_extractor_class = "KyutaiSpeechToTextFeatureExtractor"
-    tokenizer_class = "PreTrainedTokenizerFast"
     valid_processor_kwargs = KyutaiSpeechToTextProcessorKwargs
+
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
 
 
 __all__ = ["KyutaiSpeechToTextProcessor"]

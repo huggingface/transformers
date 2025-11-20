@@ -146,7 +146,7 @@ class GraniteMoeSharedModel(GraniteMoeModel):
 
 
 class GraniteMoeSharedForCausalLM(GraniteMoeForCausalLM):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: GraniteMoeSharedConfig):
         super().__init__(config)

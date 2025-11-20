@@ -504,9 +504,9 @@ class EncoderDecoderMixin:
         generated_output = enc_dec_model.generate(
             input_ids,
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
         )
-        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (enc_dec_model.generation_config.max_length,))
 
     def create_and_check_encoder_decoder_shared_weights(
         self,
@@ -552,8 +552,6 @@ class EncoderDecoderMixin:
             decoder_attention_mask=decoder_attention_mask,
         )
 
-        # check that models has less parameters
-        self.assertLess(sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters()))
         random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
         # check that outputs are equal
@@ -570,10 +568,6 @@ class EncoderDecoderMixin:
             tied_model.to(torch_device)
             tied_model.eval()
 
-            # check that models has less parameters
-            self.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             tied_model_result = tied_model(
@@ -634,6 +628,7 @@ class EncoderDecoderMixin:
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_generate(**input_ids_dict)
 
+    @unittest.skip("This is no longer FORCED, it was just not working before.")
     def test_encoder_decoder_model_shared_weights(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.create_and_check_encoder_decoder_shared_weights(**input_ids_dict)

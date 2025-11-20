@@ -15,7 +15,7 @@
 
 """PyTorch Phimoe model."""
 
-from typing import Optional
+from collections.abc import Callable
 
 import torch
 from torch import nn
@@ -30,36 +30,42 @@ from ..mixtral.modeling_mixtral import (
     MixtralDecoderLayer,
     MixtralExperts,
     MixtralForCausalLM,
-    MixtralMLP,
     MixtralModel,
     MixtralPreTrainedModel,
+    MixtralRotaryEmbedding,
 )
 from .configuration_phimoe import PhimoeConfig
 
 
-class PhimoeRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: Optional[PhimoeConfig] = None,
-    ):
-        super().__init__()
+class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
+    def __init__(self, config: PhimoeConfig, device=None):
+        nn.Module.__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        if config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            self.short_mscale = config.rope_scaling.get("short_mscale")
-            self.long_mscale = config.rope_scaling.get("long_mscale")
-        else:
-            self.rope_type = "default"
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-    def forward(self, x, position_ids):
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        self.rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = inv_freq
+
+    def forward(self, x, position_ids=None, layer_type=None):
+        if layer_type is not None:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support layer types, but got `layer_type={layer_type}`"
+            )
+
         mscale = None
         seq_len = torch.max(position_ids) + 1
-        if self.config.rope_scaling and seq_len:
+        if self.config.rope_parameters["rope_type"] != "default" and seq_len:
             mscale = (
                 self.long_mscale
-                if seq_len > self.config.rope_scaling["original_max_position_embeddings"]
+                if seq_len > self.config.rope_parameters["original_max_position_embeddings"]
                 else self.short_mscale
             )
         inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
@@ -77,10 +83,6 @@ class PhimoeRotaryEmbedding(nn.Module):
 
 
 class PhimoeAttention(LlamaAttention):
-    pass
-
-
-class PhimoeMLP(MixtralMLP):
     pass
 
 
@@ -269,30 +271,29 @@ def sparsemixer(scores, jitter_eps, training, top_k=2):
     )
 
 
-class PhimoeExperts(MixtralExperts, nn.ModuleList):
-    def __init__(self, config: PhimoeConfig):
-        nn.ModuleList.__init__(self)
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(PhimoeMLP(config))
+class PhimoeExperts(MixtralExperts):
+    pass
 
 
-class PhimoeRouter(nn.Linear):
+class PhimoeTopKRouter(nn.Linear):
     def __init__(self, config: PhimoeConfig):
         super().__init__(config.hidden_size, config.num_local_experts, bias=False)
-        self.top_k = config.num_experts_per_tok
-        self.hidden_dim = config.hidden_size
         self.router_jitter_noise = config.router_jitter_noise
-        self.input_jitter_noise = config.router_jitter_noise
+        self.input_jitter_noise = config.input_jitter_noise
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if self.training and self.input_jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(
                 1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
             )
         router_logits = super().forward(hidden_states)
-        return router_logits
+        routing_weights, selected_experts = sparsemixer(
+            router_logits,
+            jitter_eps=self.router_jitter_noise,
+            training=self.training,
+        )
+        routing_weights = torch.zeros_like(router_logits).scatter_(1, selected_experts, routing_weights)
+        return routing_weights, selected_experts
 
 
 class PhimoeSparseMoeBlock(nn.Module):
@@ -313,18 +314,9 @@ class PhimoeSparseMoeBlock(nn.Module):
         self.ffn_dim = config.intermediate_size
         self.num_experts = config.num_local_experts
         self.top_k = config.num_experts_per_tok
-        self.router_jitter_noise = config.router_jitter_noise
-        self.gate = PhimoeRouter(config)
+        self.router = PhimoeTopKRouter(config)
         self.experts = PhimoeExperts(config)
         self.input_jitter_noise = config.input_jitter_noise
-
-    def route_tokens_to_experts(self, router_logits):
-        routing_weights, selected_experts = sparsemixer(
-            router_logits,
-            jitter_eps=self.router_jitter_noise,
-            training=self.training,
-        )
-        return routing_weights, selected_experts
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -335,8 +327,7 @@ class PhimoeSparseMoeBlock(nn.Module):
 
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
-        router_logits = self.gate(hidden_states)
-        routing_weights, selected_experts = self.route_tokens_to_experts(router_logits)
+        routing_weights, selected_experts = self.router(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
@@ -347,7 +338,7 @@ class PhimoeDecoderLayer(MixtralDecoderLayer):
 
 class PhimoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(PhimoeTopKRouter, layer_name="mlp.router", index=0),
         "hidden_states": PhimoeDecoderLayer,
         "attentions": PhimoeAttention,
     }
@@ -384,7 +375,7 @@ class PhimoeForCausalLM(MixtralForCausalLM):
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
             past_key_values
-            and self.config.rope_scaling
+            and hasattr(self.config, "original_max_position_embeddings")
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
             past_length = cache_position[0]

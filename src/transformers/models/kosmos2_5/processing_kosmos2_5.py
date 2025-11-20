@@ -61,10 +61,6 @@ class Kosmos2_5Processor(ProcessorMixin):
             Number of image tokens used as a placeholder.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "PreTrainedTokenizerFast"
-
     def __init__(self, image_processor, tokenizer, num_image_tokens: int = 2048):
         self.image_start_token = tokenizer.boi_token  # "<image>" : fixed token for the start of image
         self.image_end_token = tokenizer.eoi_token  # "</image>" : fixed token for the end of image

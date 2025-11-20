@@ -260,6 +260,10 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    @unittest.skip(reason="Fuyu has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 @slow
 @require_torch_accelerator

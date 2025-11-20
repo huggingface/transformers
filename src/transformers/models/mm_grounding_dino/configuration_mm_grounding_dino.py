@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
@@ -281,6 +280,7 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        self.tie_encoder_decoder = True
 
 
 __all__ = ["MMGroundingDinoConfig"]

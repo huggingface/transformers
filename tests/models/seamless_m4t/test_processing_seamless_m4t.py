@@ -86,7 +86,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         raw_speech = floats_list((3, 1000))
 
         input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
-        input_processor = processor(audios=raw_speech, return_tensors="np")
+        input_processor = processor(audio=raw_speech, return_tensors="np")
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)

@@ -157,7 +157,6 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
     _is_composite = True
 

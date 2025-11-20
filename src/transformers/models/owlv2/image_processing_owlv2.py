@@ -291,7 +291,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         image = pad(
             image=image,
             padding=((0, size - height), (0, size - width)),
-            constant_values=0.5,
+            constant_values=0.0,
             data_format=data_format,
             input_data_format=input_data_format,
         )

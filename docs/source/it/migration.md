@@ -170,7 +170,7 @@ Per quanto riguarda la classe `TrainingArguments`:
 - L'argomento `evaluate_during_training` di `TrainingArguments` è deprecato a favore di `eval_strategy`.
 
 Per quanto riguarda il modello Transfo-XL:
-- L'attributo di configurazione `tie_weight` di Transfo-XL diventa `tie_words_embeddings`.
+- L'attributo di configurazione `tie_weight` di Transfo-XL diventa `tie_word_embeddings`.
 - Il metodo di modellazione `reset_length` di Transfo-XL diventa `reset_memory_length`.
 
 Per quanto riguarda le pipeline:

@@ -142,7 +142,6 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Pix2StructVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -310,7 +309,6 @@ class Pix2StructTextModelTester:
 @require_torch
 class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Pix2StructTextModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     def setUp(self):
         self.model_tester = Pix2StructTextModelTester(self)
@@ -408,7 +406,6 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
@@ -650,6 +647,10 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             [layer_hidden_states.shape for layer_hidden_states in hidden_states],
             [encoder_expected_shape] * len(hidden_states),
         )
+
+    @unittest.skip("Pix2Struct has no base model, it was implemented before standardization")
+    def test_model_base_model_prefix(self):
+        pass
 
 
 # We will verify our results on an image of a stop sign

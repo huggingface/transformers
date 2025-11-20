@@ -667,6 +667,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
+@slow
 class RTDetrV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):

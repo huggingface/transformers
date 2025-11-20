@@ -168,7 +168,6 @@ class BloomModelTester(CausalLMModelTester):
 @require_torch
 class BloomModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = BloomModelTester
-    fx_compatible = True
     test_missing_keys = False
 
     def test_bloom_model_past(self):

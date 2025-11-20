@@ -24,12 +24,12 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
+from ... import initialization as init
 from ...integrations.deepspeed import is_deepspeed_available
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     ContextManagers,
     auto_docstring,
-    is_scipy_available,
     logging,
 )
 from .modeling_esm import EsmModel, EsmPreTrainedModel
@@ -137,6 +137,7 @@ class EsmForProteinFoldingOutput(ModelOutput):
 
 def is_fp16_enabled(device_type):
     # Autocast world
+    # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
     autocast_dtype = (
         torch.get_autocast_dtype(device_type)
         if hasattr(torch, "get_autocast_dtype")
@@ -205,33 +206,6 @@ def dict_multimap(fn, dicts):
             new_dict[k] = fn(all_v)
 
     return new_dict
-
-
-def trunc_normal_init_(weights, scale=1.0, fan="fan_in"):
-    shape = weights.shape
-    scale = scale / max(1, shape[1])
-
-    if not is_scipy_available():
-        logger.warning(
-            "This init requires scipy, but scipy was not found, default to an approximation that might not be"
-            " equivalent."
-        )
-        std = math.sqrt(scale)
-        torch.nn.init.normal_(weights, std=std).clamp(min=0.0, max=2.0 * std)
-
-    else:
-        from scipy.stats import truncnorm
-
-        std = math.sqrt(scale) / truncnorm.std(a=-2, b=2, loc=0, scale=1)
-        samples = truncnorm.rvs(a=-2, b=2, loc=0, scale=std, size=weights.numel())
-        samples = np.reshape(samples, shape)
-        weights.copy_(torch.tensor(samples, device=weights.device))
-
-
-def ipa_point_weights_init_(weights):
-    with torch.no_grad():
-        softplus_inverse_1 = 0.541324854612918
-        weights.fill_(softplus_inverse_1)
 
 
 class EsmFoldLinear(nn.Linear):
@@ -915,6 +889,7 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
     """
 
     # Subclass `EsMPreTrainedModel` to deal with special init
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, EsmFoldLinear):
@@ -922,40 +897,47 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
                 if module.init_fn is not None:
                     module.init_fn(module.weight, module.bias)
                 elif module.init == "default":
-                    trunc_normal_init_(module.weight, scale=1.0)
+                    shape = module.weight.shape
+                    scale = 1.0 / max(1, shape[1])
+                    std = math.sqrt(scale)
+                    init.normal_(module.weight, std=std)
                 elif module.init == "relu":
-                    trunc_normal_init_(module.weight, scale=2.0)
+                    shape = module.weight.shape
+                    scale = 2.0 / max(1, shape[1])
+                    std = math.sqrt(scale)
+                    init.normal_(module.weight, std=std)
                 elif module.init == "glorot":
-                    nn.init.xavier_uniform_(module.weight, gain=1)
+                    init.xavier_uniform_(module.weight, gain=1)
                 elif module.init == "gating":
-                    module.weight.fill_(0.0)
+                    init.zeros_(module.weight)
                     if module.bias:
-                        module.bias.fill_(1.0)
+                        init.ones(module.bias)
                 elif module.init == "normal":
-                    torch.nn.init.kaiming_normal_(module.weight, nonlinearity="linear")
+                    init.kaiming_normal_(module.weight, nonlinearity="linear")
                 elif module.init == "final":
-                    module.weight.fill_(0.0)
+                    init.zeros_(module.weight)
         elif isinstance(module, EsmFoldInvariantPointAttention):
-            ipa_point_weights_init_(module.head_weights)
+            softplus_inverse_1 = 0.541324854612918
+            init.constant_(module.head_weights, softplus_inverse_1)
         elif isinstance(module, EsmFoldTriangularSelfAttentionBlock):
-            torch.nn.init.zeros_(module.tri_mul_in.linear_z.weight)
-            torch.nn.init.zeros_(module.tri_mul_in.linear_z.bias)
-            torch.nn.init.zeros_(module.tri_mul_out.linear_z.weight)
-            torch.nn.init.zeros_(module.tri_mul_out.linear_z.bias)
-            torch.nn.init.zeros_(module.tri_att_start.mha.linear_o.weight)
-            torch.nn.init.zeros_(module.tri_att_start.mha.linear_o.bias)
-            torch.nn.init.zeros_(module.tri_att_end.mha.linear_o.weight)
-            torch.nn.init.zeros_(module.tri_att_end.mha.linear_o.bias)
+            init.zeros_(module.tri_mul_in.linear_z.weight)
+            init.zeros_(module.tri_mul_in.linear_z.bias)
+            init.zeros_(module.tri_mul_out.linear_z.weight)
+            init.zeros_(module.tri_mul_out.linear_z.bias)
+            init.zeros_(module.tri_att_start.mha.linear_o.weight)
+            init.zeros_(module.tri_att_start.mha.linear_o.bias)
+            init.zeros_(module.tri_att_end.mha.linear_o.weight)
+            init.zeros_(module.tri_att_end.mha.linear_o.bias)
 
-            torch.nn.init.zeros_(module.sequence_to_pair.o_proj.weight)
-            torch.nn.init.zeros_(module.sequence_to_pair.o_proj.bias)
-            torch.nn.init.zeros_(module.pair_to_sequence.linear.weight)
-            torch.nn.init.zeros_(module.seq_attention.o_proj.weight)
-            torch.nn.init.zeros_(module.seq_attention.o_proj.bias)
-            torch.nn.init.zeros_(module.mlp_seq.mlp[-2].weight)
-            torch.nn.init.zeros_(module.mlp_seq.mlp[-2].bias)
-            torch.nn.init.zeros_(module.mlp_pair.mlp[-2].weight)
-            torch.nn.init.zeros_(module.mlp_pair.mlp[-2].bias)
+            init.zeros_(module.sequence_to_pair.o_proj.weight)
+            init.zeros_(module.sequence_to_pair.o_proj.bias)
+            init.zeros_(module.pair_to_sequence.linear.weight)
+            init.zeros_(module.seq_attention.o_proj.weight)
+            init.zeros_(module.seq_attention.o_proj.bias)
+            init.zeros_(module.mlp_seq.mlp[-2].weight)
+            init.zeros_(module.mlp_seq.mlp[-2].bias)
+            init.zeros_(module.mlp_pair.mlp[-2].weight)
+            init.zeros_(module.mlp_pair.mlp[-2].bias)
         else:
             super()._init_weights(module)
 
@@ -974,12 +956,12 @@ class EsmFoldSelfAttention(nn.Module):
         self.gated = gated
         if gated:
             self.g_proj = nn.Linear(embed_dim, embed_dim)
-            torch.nn.init.zeros_(self.g_proj.weight)
-            torch.nn.init.ones_(self.g_proj.bias)
+            init.zeros_(self.g_proj.weight)
+            init.ones_(self.g_proj.bias)
 
         self.rescale_factor = self.head_width**-0.5
 
-        torch.nn.init.zeros_(self.o_proj.bias)
+        init.zeros_(self.o_proj.bias)
 
     def forward(self, x, mask=None, bias=None, indices=None):
         """
@@ -1052,8 +1034,8 @@ class EsmFoldSequenceToPair(nn.Module):
         self.proj = nn.Linear(sequence_state_dim, inner_dim * 2, bias=True)
         self.o_proj = nn.Linear(2 * inner_dim, pairwise_state_dim, bias=True)
 
-        torch.nn.init.zeros_(self.proj.bias)
-        torch.nn.init.zeros_(self.o_proj.bias)
+        init.zeros_(self.proj.bias)
+        init.zeros_(self.o_proj.bias)
 
     def forward(self, sequence_state):
         """
@@ -2051,6 +2033,8 @@ class EsmForProteinFolding(EsmPreTrainedModel):
             nn.Linear(self.config.esmfold_config.lddt_head_hid_dim, 37 * self.lddt_bins),
         )
 
+        self.post_init()
+
     @staticmethod
     def _af2_to_esm_from_vocab_list(vocab_list: list[str]) -> torch.Tensor:
         # Remember that t is shifted from residue_constants by 1 (0 is padding).
@@ -2274,7 +2258,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
 
     @staticmethod
     def output_to_pdb(output: dict) -> list[str]:
-        """Returns the pbd (file) string from the model given the model output."""
+        """Returns the pdb (file) string from the model given the model output."""
         output = {k: v.to("cpu").numpy() for k, v in output.items()}
         pdbs = []
         final_atom_positions = atom14_to_atom37(output["positions"][-1], output)

@@ -1,0 +1,22 @@
+---
+name: CodeQL Security Analysis
+
+on:
+  push:
+    branches: ["main", "fix_security_issue_*"]
+  # pull_request:
+  #   branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  codeql:
+    name: CodeQL Analysis
+    uses: huggingface/security-workflows/.github/workflows/codeql-reusable.yml@main
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    with:
+      languages: '["actions"]'
+      queries: 'security-extended,security-and-quality'

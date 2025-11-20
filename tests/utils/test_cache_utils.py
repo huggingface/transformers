@@ -628,7 +628,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         past_key_values = res.past_key_values
 
         shapes = torch.export.ShapesCollection()
-        dyn = torch.export.Dim("seq", max=512)
+        dyn = torch.export.Dim.DYNAMIC(max=512)
 
         for ix in range(len(past_key_values)):
             shapes[past_key_values.layers[ix].keys] = (None, None, dyn, None)

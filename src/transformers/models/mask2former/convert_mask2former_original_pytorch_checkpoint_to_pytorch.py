@@ -826,7 +826,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
         checkpoints: list[Path] = checkpoints_dir.glob("**/*.pkl")
 
         for checkpoint in checkpoints:
-            logger.info(f"💪 Converting {checkpoint.stem}")
+            logger.info(f"Converting {checkpoint.stem}")
             # find associated config file
 
             # dataset_name e.g 'coco'
@@ -902,7 +902,7 @@ def test(
             "The predicted masks are not the same."
         )
 
-        logger.info("✅ Test passed!")
+        logger.info("Test passed!")
 
 
 def get_model_name(checkpoint_file: Path):
@@ -1012,9 +1012,9 @@ if __name__ == "__main__":
         if model_name in high_tolerance_models:
             tolerance = 3e-1
 
-        logger.info(f"🪄 Testing {model_name}...")
+        logger.info(f"Testing {model_name}...")
         test(original_model, mask2former_for_segmentation, image_processor, tolerance)
-        logger.info(f"🪄 Pushing {model_name} to hub...")
+        logger.info(f"Pushing {model_name} to hub...")
 
         image_processor.push_to_hub(model_name)
         mask2former_for_segmentation.push_to_hub(model_name)
