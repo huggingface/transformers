@@ -19,14 +19,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     divide_to_patches,
     group_images_by_shape,
     reorder_images,
@@ -39,31 +39,10 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size,
-    make_flat_list_of_images,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    image_grid_pinpoints (`List[List[int]]`, *optional*):
-        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-        method.
-    do_pad (`bool`, *optional*):
-        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    """
-
-    image_grid_pinpoints: Optional[List[List[int]]]
-    do_pad: Optional[bool]
+from ...utils import TensorType, auto_docstring
+from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 
 @auto_docstring
@@ -81,14 +60,14 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[384, 384], [384, 768], [384, 1152], [384, 1536], [384, 1920], [384, 2304], [768, 384], [768, 768], [768, 1152], [768, 1536], [768, 1920], [768, 2304], [1152, 384], [1152, 768], [1152, 1152], [1152, 1536], [1152, 1920], [1152, 2304], [1536, 384], [1536, 768], [1536, 1152], [1536, 1536], [1536, 1920], [1536, 2304], [1920, 384], [1920, 768], [1920, 1152], [1920, 1536], [1920, 1920], [1920, 2304], [2304, 384], [2304, 768], [2304, 1152], [2304, 1536], [2304, 1920], [2304, 2304]]  # fmt: skip
-    valid_kwargs = LlavaOnevisionFastImageProcessorKwargs
-    model_input_names = ["pixel_values_videos"]
+    valid_kwargs = LlavaOnevisionImageProcessorKwargs
+    model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]
 
-    def __init__(self, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[LlavaOnevisionImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionImageProcessorKwargs]) -> BatchFeature:
         if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
             # if the first element is a list, we assume that all elements are lists
             batch_num_images = [len(x) for x in images]
@@ -97,24 +76,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             batch_num_images = [1] * len(images)
         else:
             batch_num_images = [1]
-        kwargs["batch_num_images"] = batch_num_images
-        return super().preprocess(images, **kwargs)
-
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-    ) -> ImageInput:
-        """
-        Prepare the images structure for processing.
-
-        Args:
-            images (`ImageInput`):
-                The input images to process.
-
-        Returns:
-            `ImageInput`: The images with a valid nesting.
-        """
-        return make_flat_list_of_images(images)
+        return super().preprocess(images, batch_num_images, **kwargs)
 
     def _resize_for_patching(
         self,
@@ -142,7 +104,11 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
 
         # Resize the image
-        resized_image = F.resize(image, (new_height, new_width), interpolation=interpolation)
+        resized_image = self.resize(
+            image=image,
+            size=SizeDict(height=new_height, width=new_width),
+            interpolation=interpolation,
+        )
 
         return resized_image
 
@@ -173,7 +139,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         size: tuple,
         patch_size: int,
         interpolation: "F.InterpolationMode",
-    ) -> List["torch.Tensor"]:
+    ) -> list["torch.Tensor"]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
@@ -190,7 +156,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
                 Resampling filter to use if resizing the image.
 
         Returns:
-            List["torch.Tensor"]: A list of NumPy arrays containing the processed image patches.
+            list["torch.Tensor"]: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")
@@ -212,17 +178,17 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
 
     def _pad_for_batching(
         self,
-        pixel_values: List["torch.Tensor"],
-    ) -> List["torch.Tensor"]:
+        pixel_values: list["torch.Tensor"],
+    ) -> list["torch.Tensor"]:
         """
         Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
 
         Args:
-            pixel_values (`List[torch.Tensor]`):
+            pixel_values (`list[torch.Tensor]`):
                 An array of pixel values of each images of shape (`batch_size`, `num_patches`, `image_in_3D`)
 
         Returns:
-            List[`torch.Tensor`]: The padded images.
+            list[`torch.Tensor`]: The padded images.
         """
         max_patch = max(len(x) for x in pixel_values)
         pixel_values = [
@@ -234,21 +200,23 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
+        batch_num_images: list[int],
         do_resize: bool,
         size: SizeDict,
-        image_grid_pinpoints: List[List[int]],
+        image_grid_pinpoints: list[list[int]],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        batch_num_images: List[int],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         processed_images = []
         image_sizes = []
@@ -287,7 +255,9 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
 
             # Group images by size for batched processing
             processed_image_patches_grouped = {}
-            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(image_patches)
+            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(
+                image_patches, disable_grouping=disable_grouping
+            )
             for shape, stacked_image_patches in grouped_image_patches.items():
                 if do_resize:
                     stacked_image_patches = self.resize(
@@ -321,7 +291,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     def pad_to_square(
         self,
         images: "torch.Tensor",
-        background_color: Union[int, Tuple[int, int, int]] = 0,
+        background_color: Union[int, tuple[int, int, int]] = 0,
     ) -> "torch.Tensor":
         """
         Pads an image to a square based on the longest edge.
@@ -329,10 +299,10 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         Args:
             images (`np.ndarray`):
                 The images to pad.
-            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+            background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
         Returns:
             `torch.Tensor`: The padded images.
         """

@@ -17,14 +17,15 @@
 """PyTorch MobileViT model."""
 
 import math
-from typing import Dict, Optional, Set, Tuple, Union
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -32,7 +33,6 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging, torch_int
 from .configuration_mobilevit import MobileViTConfig
 
@@ -42,9 +42,7 @@ logger = logging.get_logger(__name__)
 
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
     """
-    Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the
-    original TensorFlow repo. It can be seen here:
-    https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
+    Ensure that all layers have a channel count that is divisible by `divisor`.
     """
     if min_value is None:
         min_value = divisor
@@ -210,17 +208,23 @@ class MobileViTSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -258,25 +262,6 @@ class MobileViTAttention(nn.Module):
         super().__init__()
         self.attention = MobileViTSelfAttention(config, hidden_size)
         self.output = MobileViTSelfOutput(config, hidden_size)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         self_outputs = self.attention(hidden_states)
@@ -350,7 +335,7 @@ class MobileViTTransformer(nn.Module):
         return hidden_states
 
 
-class MobileViTLayer(nn.Module):
+class MobileViTLayer(GradientCheckpointingLayer):
     """
     MobileViT block: https://huggingface.co/papers/2110.02178
     """
@@ -413,7 +398,7 @@ class MobileViTLayer(nn.Module):
             config, in_channels=2 * in_channels, out_channels=in_channels, kernel_size=config.conv_kernel_size
         )
 
-    def unfolding(self, features: torch.Tensor) -> Tuple[torch.Tensor, Dict]:
+    def unfolding(self, features: torch.Tensor) -> tuple[torch.Tensor, dict]:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 
@@ -464,7 +449,7 @@ class MobileViTLayer(nn.Module):
         }
         return patches, info_dict
 
-    def folding(self, patches: torch.Tensor, info_dict: Dict) -> torch.Tensor:
+    def folding(self, patches: torch.Tensor, info_dict: dict) -> torch.Tensor:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 
@@ -603,13 +588,7 @@ class MobileViTEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layer):
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -622,23 +601,23 @@ class MobileViTEncoder(nn.Module):
 
 @auto_docstring
 class MobileViTPreTrainedModel(PreTrainedModel):
-    config_class = MobileViTConfig
+    config: MobileViTConfig
     base_model_prefix = "mobilevit"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MobileViTLayer"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 @auto_docstring
@@ -673,16 +652,6 @@ class MobileViTModel(MobileViTPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base class PreTrainedModel
-        """
-        for layer_index, heads in heads_to_prune.items():
-            mobilevit_layer = self.encoder.layer[layer_index]
-            if isinstance(mobilevit_layer, MobileViTLayer):
-                for transformer_layer in mobilevit_layer.transformer.layer:
-                    transformer_layer.attention.prune_heads(heads)
 
     @auto_docstring
     def forward(
@@ -773,26 +742,7 @@ class MobileViTForImageClassification(MobileViTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]

@@ -85,7 +85,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:
@@ -210,7 +210,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
-        help="Whether or not to push the converted model and processor to the 🤗 hub using the provided `model_name`.",
+        help="Whether or not to push the converted model and processor to the Hugging Face hub using the provided `model_name`.",
     )
     args = parser.parse_args()
 

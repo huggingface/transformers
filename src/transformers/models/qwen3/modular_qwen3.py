@@ -14,29 +14,28 @@
 # limitations under the License.
 """PyTorch Qwen3 model."""
 
-from typing import Callable, Optional, Tuple
+from collections.abc import Callable
+from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, logging
+from ...utils import TransformersKwargs, logging
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
 )
 from ..qwen2.modeling_qwen2 import (
-    Qwen2DecoderLayer,
     Qwen2ForCausalLM,
     Qwen2ForQuestionAnswering,
     Qwen2ForSequenceClassification,
     Qwen2ForTokenClassification,
-    Qwen2Model,
     Qwen2RMSNorm,
+    Qwen2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -56,22 +55,27 @@ class Qwen3MLP(GemmaMLP):
     pass
 
 
+class Qwen3RotaryEmbedding(Qwen2RotaryEmbedding):
+    pass
+
+
 class Qwen3Attention(LlamaAttention):
     def __init__(self, config: Qwen3Config, layer_idx: int):
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         super().__init__(config, layer_idx)
         self.q_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -82,10 +86,10 @@ class Qwen3Attention(LlamaAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -108,21 +112,10 @@ class Qwen3Attention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class Qwen3DecoderLayer(Qwen2DecoderLayer):
-    pass
-
-
-class Qwen3Model(Qwen2Model):
-    pass
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 class Qwen3ForCausalLM(Qwen2ForCausalLM):
     def forward(
         self,
-        **super_kwargs: Unpack[KwargsForCausalLM],
+        **super_kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -164,8 +157,8 @@ class Qwen3ForQuestionAnswering(Qwen2ForQuestionAnswering):
 __all__ = [
     "Qwen3ForCausalLM",
     "Qwen3ForQuestionAnswering",
-    "Qwen3Model",
     "Qwen3PreTrainedModel",  # noqa: F822
+    "Qwen3Model",  # noqa: F822
     "Qwen3ForSequenceClassification",
     "Qwen3ForTokenClassification",
 ]

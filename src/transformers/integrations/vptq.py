@@ -35,7 +35,7 @@ def replace_with_vptq_linear(
             The model to convert, can be any `torch.nn.Module` instance.
         quantization_config (`VptqConfig`):
             The quantization config object that contains the quantization parameters.
-        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
             Names of the modules to not convert in `VQuantLinear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
         current_key_name (`list`, *optional*):
@@ -45,7 +45,7 @@ def replace_with_vptq_linear(
             should not be passed by the user.
     """
 
-    modules_to_not_convert = ["lm_head"] if not modules_to_not_convert else modules_to_not_convert
+    modules_to_not_convert = modules_to_not_convert if modules_to_not_convert else ["lm_head"]
 
     for name, module in model.named_children():
         if current_key_name is None:

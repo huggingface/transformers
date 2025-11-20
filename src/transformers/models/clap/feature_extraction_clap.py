@@ -15,7 +15,7 @@
 """Feature extractor class for CLAP."""
 
 import copy
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -136,12 +136,12 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance, except for the
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance, except for the
             mel filter banks, which do not need to be saved or printed as they are too long.
         """
         output = copy.deepcopy(self.__dict__)
@@ -152,7 +152,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             del output["mel_filters_slaney"]
         return output
 
-    def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
+    def _np_extract_fbank_features(self, waveform: np.ndarray, mel_filters: Optional[np.ndarray] = None) -> np.ndarray:
         """
         Compute the log-mel spectrogram of the provided `waveform` using the Hann window. In CLAP, two different filter
         banks are used depending on the truncation pattern:
@@ -199,7 +199,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         mel_fusion = np.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], axis=0)
         return mel_fusion
 
-    def _get_input_mel(self, waveform: np.array, max_length, truncation, padding) -> np.array:
+    def _get_input_mel(self, waveform: np.ndarray, max_length, truncation, padding) -> np.ndarray:
         """
         Extracts the mel spectrogram and prepares it for the mode based on the `truncation` and `padding` arguments.
         Four different path are possible:
@@ -259,7 +259,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         truncation: Optional[str] = None,
         padding: Optional[str] = None,
         max_length: Optional[int] = None,
@@ -271,7 +271,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -289,8 +289,6 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                     - `pad`: the audio is padded.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.np.array` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
@@ -349,7 +347,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             rand_idx = np.random.randint(0, len(input_mel))
             is_longer[rand_idx] = True
 
-        if isinstance(input_mel[0], List):
+        if isinstance(input_mel[0], list):
             input_mel = [np.asarray(feature, dtype=np.float64) for feature in input_mel]
 
         # is_longer is a list of bool

@@ -12,12 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
@@ -30,66 +32,45 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     VJEPA Predictor outputs that also contains the masked encoder outputs
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        masked_hidden_state (`torch.FloatTensor`), *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        target_hidden_state (`torch.FloatTensor`), *optional*):
-            Returned when `target_mask` is provided which is applied on VJEPA2Encoder outputs.
+    """
+)
+class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
+    r"""
+    masked_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):
+        The masked hidden state of the model.
+    target_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `target_mask` is provided which is applied on VJEPA2Encoder outputs):
+        The target hidden state of the model.
     """
 
     last_hidden_state: torch.FloatTensor
     masked_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     target_hidden_state: Optional[torch.FloatTensor] = None
 
 
 @dataclass
-class VJEPA2WithMaskedInputModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     VJEPA outputs that also contains the masked encoder outputs
     Optionally contains the predictor outputs
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        masked_hidden_state (`torch.FloatTensor`), *optional*):
-            Returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        predictor_output (`VJEPA2WithMaskedInputPredictorOutput`, *optional*):
-            Returns the output from the Predictor module
+    """
+)
+class VJEPA2WithMaskedInputModelOutput(ModelOutput):
+    r"""
+    masked_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):
+        The masked hidden state of the model.
+    predictor_output (`VJEPA2WithMaskedInputPredictorOutput`, *optional*):
+        The output from the Predictor module.
     """
 
     last_hidden_state: torch.FloatTensor
     masked_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     predictor_output: Optional[VJEPA2WithMaskedInputPredictorOutput] = None
 
     def to_tuple(self):
@@ -189,10 +170,6 @@ def eager_attention_forward(
     # seem a bit unusual, but is taken from the original Transformer paper.
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
-    # Mask heads if we want to
-    if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
-
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -208,7 +185,7 @@ def rotate_queries_or_keys(x, pos):
     omega = torch.arange(D // 2, dtype=x.dtype, device=x.device)
     omega /= D / 2.0
     omega = 1.0 / 10000**omega  # (D/2,)
-    freq = torch.einsum("..., f -> ... f", pos, omega)  # (..., N, D/2), outer product
+    freq = pos.unsqueeze(-1) * omega  # (..., N, D/2), outer product
 
     # -- build rotation matrix and apply
     emb_sin = freq.sin()  # (..., N, D/2)
@@ -263,14 +240,6 @@ class VJEPA2RopeAttention(nn.Module):
 
         self.scaling = self.attention_head_size**-0.5
         self.is_causal = False
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
 
     def _get_frame_pos(self, ids):
         tokens_per_frame = int(self.grid_size * self.grid_size)
@@ -328,13 +297,23 @@ class VJEPA2RopeAttention(nn.Module):
         hidden_states,
         position_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        head_mask: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         pos_ids = self.get_position_ids(hidden_states, masks=position_mask)
         key_layer = self.apply_rotary_embeddings(key_layer, pos_ids)
@@ -342,20 +321,14 @@ class VJEPA2RopeAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         context_layer, attention_probs = attention_interface(
             self,
             query_layer,
             key_layer,
             value_layer,
-            head_mask,
+            None,
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -374,11 +347,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -402,7 +370,7 @@ class VJEPA2DropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class VJEPA2MLP(nn.Module):
@@ -448,16 +416,14 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         position_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         # Self-Attention
         residual = hidden_states
         hidden_states = self.norm1(hidden_states)
         self_attention_outputs = self.attention(
             hidden_states,
             position_mask=position_mask,  # position mask for context/target selection
-            head_mask=head_mask,  # head mask is applied at F.scaled_dot_product_attention
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -505,9 +471,9 @@ class VJEPA2Encoder(nn.Module):
     def forward(
         self,
         pixel_values_videos: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs,
     ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -518,8 +484,7 @@ class VJEPA2Encoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            layer_outputs = layer_module(hidden_states, None, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, None, output_attentions)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -537,7 +502,7 @@ class VJEPA2Encoder(nn.Module):
         )
 
 
-def apply_masks(tensor: torch.Tensor, masks: List[torch.Tensor]) -> torch.Tensor:
+def apply_masks(tensor: torch.Tensor, masks: list[torch.Tensor]) -> torch.Tensor:
     """
     Args:
         tensor (`torch.Tensor`):
@@ -586,10 +551,10 @@ class VJEPA2PredictorEmbeddings(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        context_mask: List[torch.Tensor],
-        target_mask: List[torch.Tensor],
+        context_mask: list[torch.Tensor],
+        target_mask: list[torch.Tensor],
         mask_index: int = 1,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         hidden_states : encoder outputs (context)
         context_mask: tokens of the context (outputs from the encoder)
@@ -653,7 +618,7 @@ class VJEPA2Predictor(nn.Module):
         self.layernorm = nn.LayerNorm(config.pred_hidden_size, eps=config.layer_norm_eps)
         self.proj = nn.Linear(config.pred_hidden_size, config.hidden_size, bias=True)
 
-    def sort_tokens(self, hidden_states, position_masks, argsort, head_mask=None):
+    def sort_tokens(self, hidden_states, position_masks, argsort):
         # gather position masks
         argsort = argsort.to(position_masks.device)
         position_masks = torch.gather(position_masks, dim=1, index=argsort)
@@ -663,28 +628,7 @@ class VJEPA2Predictor(nn.Module):
         hidden_states_argsort = argsort.unsqueeze(-1).expand(-1, -1, hidden_states.size(-1))
         hidden_states = torch.gather(hidden_states, dim=1, index=hidden_states_argsort)
 
-        # gather head mask
-        if head_mask is not None and head_mask[0] is not None:
-            argsort = argsort.to(head_mask.device)
-            head_mask = head_mask.permute(1, 0, 2, 3, 4)
-            argsort_4d = (
-                argsort.unsqueeze(1)
-                .unsqueeze(1)
-                .expand(-1, head_mask.size(1), head_mask.size(2), -1)
-                .unsqueeze(-1)
-                .expand(-1, -1, -1, -1, head_mask.size(-1))
-            )
-            head_mask = torch.gather(head_mask, dim=3, index=argsort_4d)
-            argsort_5d = (
-                argsort.unsqueeze(1)
-                .unsqueeze(1)
-                .unsqueeze(1)
-                .expand(-1, head_mask.size(1), head_mask.size(2), head_mask.size(3), -1)
-            )
-            head_mask = torch.gather(head_mask, dim=4, index=argsort_5d)
-            head_mask = head_mask.permute(1, 0, 2, 3, 4)
-
-        return hidden_states, position_masks, head_mask
+        return hidden_states, position_masks
 
     def unsort_tokens(self, hidden_states, argsort):
         argsort = argsort.to(hidden_states.device)
@@ -697,11 +641,11 @@ class VJEPA2Predictor(nn.Module):
     def forward(
         self,
         encoder_hidden_states: torch.Tensor,
-        context_mask: List[torch.Tensor],
-        target_mask: List[torch.Tensor],
-        head_mask: Optional[torch.Tensor] = None,
+        context_mask: list[torch.Tensor],
+        target_mask: list[torch.Tensor],
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs,
     ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -714,14 +658,13 @@ class VJEPA2Predictor(nn.Module):
 
         # Put tokens in sorted order
         argsort = torch.argsort(position_masks, dim=1)  # [B, N]
-        hidden_states, position_masks, head_mask = self.sort_tokens(hidden_states, position_masks, argsort, head_mask)
+        hidden_states, position_masks = self.sort_tokens(hidden_states, position_masks, argsort)
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            layer_outputs = layer_module(hidden_states, position_masks, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, position_masks, output_attentions)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -772,7 +715,7 @@ class VJEPA2PoolerSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, seq_length, embed_dim = hidden_states.shape
@@ -787,13 +730,7 @@ class VJEPA2PoolerSelfAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -846,7 +783,7 @@ class VJEPA2PoolerCrossAttention(nn.Module):
         values: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, q_seq_length, embed_dim = queries.shape
@@ -862,13 +799,7 @@ class VJEPA2PoolerCrossAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -903,7 +834,7 @@ class VJEPA2PoolerSelfAttentionLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         """
         Args:
             hidden_states (`torch.FloatTensor`):
@@ -950,7 +881,7 @@ class VJEPA2PoolerCrossAttentionLayer(GradientCheckpointingLayer):
         hidden_state: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         # Apply cross-attention
         residual = queries
         hidden_state = self.layer_norm1(hidden_state)
@@ -997,9 +928,10 @@ class VJEPA2AttentivePooler(nn.Module):
 
 @auto_docstring
 class VJEPA2PreTrainedModel(PreTrainedModel):
-    config_class = VJEPA2Config
+    config: VJEPA2Config
     base_model_prefix = "vjepa2"
     main_input_name = "pixel_values_videos"
+    input_modalities = "video"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "VJEPA2Layer",
@@ -1008,55 +940,33 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
         "VJEPA2PredictorEmbeddings",
     ]
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
 
         init_std = self.config.initializer_range
-
-        # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-        # `trunc_normal_cpu` not implemented in `half` issues
-        def trunc_normal_f32_(weight, std):
-            data_float_32 = weight.data.to(torch.float32)
-            data_init = nn.init.trunc_normal_(data_float_32, mean=0.0, std=std)
-            weight.data = data_init.to(weight.dtype)
-
         if isinstance(module, VJEPA2AttentivePooler):
-            trunc_normal_f32_(module.query_tokens, std=init_std)
+            init.trunc_normal_(module.query_tokens, std=init_std)
             for i, layer in enumerate(module.self_attention_layers, 1):
                 std = init_std / (i**0.5)
-                trunc_normal_f32_(layer.self_attn.out_proj.weight, std=std)
-                trunc_normal_f32_(layer.mlp.fc2.weight, std=std)
+                init.trunc_normal_(layer.self_attn.out_proj.weight, std=std)
+                init.trunc_normal_(layer.mlp.fc2.weight, std=std)
             std = init_std / (len(module.self_attention_layers) + 1) ** 0.5
-            trunc_normal_f32_(module.cross_attention_layer.mlp.fc2.weight, std=std)
+            init.trunc_normal_(module.cross_attention_layer.mlp.fc2.weight, std=std)
         elif isinstance(module, VJEPA2PredictorEmbeddings):
             if module.zero_init_mask_tokens:
-                module.mask_tokens.data.zero_()
+                init.zeros_(module.mask_tokens)
             else:
-                trunc_normal_f32_(module.mask_tokens, std=init_std)
+                init.trunc_normal_(module.mask_tokens, std=init_std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
-            trunc_normal_f32_(module.weight, std=init_std)
+            init.trunc_normal_(module.weight, std=init_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-
-def _convert_head_mask_to_5d(head_mask, num_hidden_layers):
-    """
-    Inputs:
-        - head_mask: bsz x seq_length x seq_length | None
-    Returns
-        - [num_hidden_layers x batch x num_heads x seq_length x seq_length] | [num_hidden_layers]
-    """
-    if head_mask is not None:
-        head_mask = head_mask.unsqueeze(1).unsqueeze(0)
-        head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
-    else:
-        head_mask = [None] * num_hidden_layers
-    return head_mask
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 @auto_docstring
@@ -1079,21 +989,14 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
     def forward(
         self,
         pixel_values_videos: torch.Tensor,
-        context_head_mask: Optional[torch.Tensor] = None,
-        context_mask: Optional[List[torch.Tensor]] = None,
-        target_head_mask: Optional[torch.Tensor] = None,
-        target_mask: Optional[List[torch.Tensor]] = None,
+        context_mask: Optional[list[torch.Tensor]] = None,
+        target_mask: Optional[list[torch.Tensor]] = None,
         skip_predictor: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> VJEPA2WithMaskedInputModelOutput:
         r"""
-        pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`, required):
-            The input video pixels which is processed by VJEPA2VideoProcessor.
-        context_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
-            The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the context.
-        target_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
-            The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the target.
         context_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
             The mask position ids indicating which encoder output patches are going to be exposed to the predictor.
             By default, this mask is created as torch.arange(N).unsqueeze(0).repeat(B,1), indicating full context
@@ -1113,13 +1016,8 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
 
-        # Prepare head mask if needed
-        context_head_mask = _convert_head_mask_to_5d(context_head_mask, self.config.num_hidden_layers)
-        target_head_mask = _convert_head_mask_to_5d(target_head_mask, self.config.pred_num_hidden_layers)
-
         encoder_outputs: BaseModelOutput = self.encoder(
             pixel_values_videos=pixel_values_videos,
-            head_mask=context_head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
@@ -1136,7 +1034,6 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
                 encoder_hidden_states=sequence_output,
                 context_mask=context_mask,
                 target_mask=target_mask,
-                head_mask=target_head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
@@ -1160,7 +1057,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         return encoder_output
 
     def get_vision_features(self, pixel_values_videos) -> torch.Tensor:
-        encoder_output = self.forward(pixel_values_videos)
+        encoder_output = self.forward(pixel_values_videos, skip_predictor=True)
         return encoder_output.last_hidden_state
 
 
@@ -1191,10 +1088,8 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Union[Tuple, ImageClassifierOutput]:
+    ) -> Union[tuple, ImageClassifierOutput]:
         r"""
-        pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`):
-            The input video pixels which is processed by VJEPA2VideoProcessor.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

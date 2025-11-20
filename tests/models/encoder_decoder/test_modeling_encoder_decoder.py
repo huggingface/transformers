@@ -22,7 +22,6 @@ from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -505,9 +504,9 @@ class EncoderDecoderMixin:
         generated_output = enc_dec_model.generate(
             input_ids,
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
         )
-        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (enc_dec_model.generation_config.max_length,))
 
     def create_and_check_encoder_decoder_shared_weights(
         self,
@@ -553,8 +552,6 @@ class EncoderDecoderMixin:
             decoder_attention_mask=decoder_attention_mask,
         )
 
-        # check that models has less parameters
-        self.assertLess(sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters()))
         random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
         # check that outputs are equal
@@ -571,10 +568,6 @@ class EncoderDecoderMixin:
             tied_model.to(torch_device)
             tied_model.eval()
 
-            # check that models has less parameters
-            self.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             tied_model_result = tied_model(
@@ -635,6 +628,7 @@ class EncoderDecoderMixin:
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_generate(**input_ids_dict)
 
+    @unittest.skip("This is no longer FORCED, it was just not working before.")
     def test_encoder_decoder_model_shared_weights(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.create_and_check_encoder_decoder_shared_weights(**input_ids_dict)
@@ -696,7 +690,6 @@ class EncoderDecoderMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.supports_sdpa:
             self.skipTest("SDPA is not supported")
@@ -802,24 +795,6 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             "encoder_hidden_states": encoder_hidden_states,
             "labels": decoder_token_labels,
         }
-
-    def test_relative_position_embeds(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-
-        encoder_config = config_and_inputs["config"]
-        decoder_config = config_and_inputs["decoder_config"]
-
-        encoder_config.position_embedding_type = "relative_key_query"
-        decoder_config.position_embedding_type = "relative_key_query"
-
-        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
-        model = EncoderDecoderModel(config).eval().to(torch_device)
-
-        logits = model(
-            input_ids=config_and_inputs["input_ids"], decoder_input_ids=config_and_inputs["decoder_input_ids"]
-        ).logits
-
-        self.assertTrue(logits.shape, (13, 7))
 
     @slow
     def test_bert2bert_summarization(self):
@@ -1071,7 +1046,6 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             decoder_config,
             decoder_input_ids,
             decoder_input_mask,
-            decoder_head_mask,
             decoder_token_type_ids,
             decoder_sequence_labels,
             decoder_token_labels,

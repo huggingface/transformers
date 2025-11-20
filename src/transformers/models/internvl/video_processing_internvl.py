@@ -14,46 +14,23 @@
 # limitations under the License.
 """Fast Video processor class for InternVL."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
+
+import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    SizeDict,
-)
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import (
-    TensorType,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    is_vision_available,
-)
-from ...utils.import_utils import requires
+from ...utils import TensorType
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-if is_torch_available():
-    import torch
-
-if is_vision_available():
-    from ...image_utils import PILImageResampling
-
-
-class InternVLVideoProcessorInitKwargs(VideosKwargs):
+class InternVLVideoProcessorInitKwargs(VideosKwargs, total=False):
     initial_shift: Union[bool, float, int]
 
 
-@requires(backends=("torchvision",))
 class InternVLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -66,18 +43,17 @@ class InternVLVideoProcessor(BaseVideoProcessor):
     initial_shift = True
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
     valid_kwargs = InternVLVideoProcessorInitKwargs
-    model_input_names = ["pixel_values_videos"]
 
     def __init__(self, **kwargs: Unpack[InternVLVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
 
     def sample_frames(
         self,
-        video: "torch.Tensor",
-        metadata: Optional[Union[VideoMetadata, dict]] = None,
+        metadata: VideoMetadata,
         num_frames: Optional[int] = None,
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
         initial_shift: Optional[Union[bool, float, int]] = None,
+        **kwargs,
     ):
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
@@ -85,33 +61,31 @@ class InternVLVideoProcessor(BaseVideoProcessor):
         and `fps` are mutually exclusive.
 
         Args:
-            video (`torch.Tensor`):
-                Video that need to be sampled.
-            metadata (`VideoMetadata`, *optional*):
+            metadata (`VideoMetadata`):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
                 Maximum number of frames to sample. Defaults to `self.num_frames`.
-            fps (`int`, *optional*):
+            fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
             initial_shift (`bool`, `float` or `int`, defaults to `self.initial_shift`):
                 The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
 
         Returns:
-            torch.Tensor:
-                Sampled video frames.
+            np.ndarray:
+                Indices to sample video frames.
         """
         num_frames = num_frames if num_frames is not None else self.num_frames
         initial_shift = initial_shift if initial_shift is not None else self.initial_shift
-        total_num_frames = video.shape[0]
+        total_num_frames = metadata.total_num_frames
 
         # If num_frames is not given but fps is, calculate num_frames from fps
         if num_frames is None and fps is not None:
-            if metadata is None:
+            if metadata is None or metadata.fps is None:
                 raise ValueError(
                     "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
                     "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
                 )
-            num_frames = int(total_num_frames / metadata["fps"] * fps)
+            num_frames = int(total_num_frames / metadata.fps * fps)
 
         if initial_shift is True:
             initial_shift = total_num_frames / num_frames / 2
@@ -122,39 +96,25 @@ class InternVLVideoProcessor(BaseVideoProcessor):
             )
 
         indices = torch.arange(initial_shift, total_num_frames, total_num_frames / num_frames).int()
-        video = video[indices].contiguous()
-        return video
+        return indices
 
     def _preprocess(
         self,
-        videos: List["torch.Tensor"],
-        video_metadata: Union[List[VideoMetadata], List[dict]],
+        videos: list["torch.Tensor"],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        size_divisor: Optional[int],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
-        do_pad: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
-        do_sample_frames: Optional[bool] = None,
-        fps: Optional[int] = None,
-        num_frames: Optional[int] = None,
-        initial_shift: Optional[Union[bool, float, int]] = None,
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs,
     ) -> BatchFeature:
-        if do_sample_frames:
-            # Sample video frames
-            videos = [
-                self.sample_frames(video, metadata, fps=fps, num_frames=num_frames, initial_shift=initial_shift)
-                for video, metadata in zip(videos, video_metadata)
-            ]
-
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
@@ -162,9 +122,7 @@ class InternVLVideoProcessor(BaseVideoProcessor):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.resize(
-                    stacked_videos, size=size, size_divisor=size_divisor, interpolation=interpolation
-                )
+                stacked_videos = self.resize(stacked_videos, size=size, interpolation=interpolation)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 

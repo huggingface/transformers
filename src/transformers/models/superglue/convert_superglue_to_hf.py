@@ -15,7 +15,6 @@ import argparse
 import gc
 import os
 import re
-from typing import List
 
 import torch
 from datasets import load_dataset
@@ -98,7 +97,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: List[str], conversion_mapping=ORIGINAL_TO_CONVERTED_KEY_MAPPING):
+def convert_old_keys_to_new_keys(state_dict_keys: list[str], conversion_mapping=ORIGINAL_TO_CONVERTED_KEY_MAPPING):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.

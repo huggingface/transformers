@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-02-19 and added to Hugging Face Transformers on 2025-01-23.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -24,7 +25,6 @@ rendered properly in your Markdown viewer.
 # Qwen2.5-VL
 
 [Qwen2.5-VL](https://huggingface.co/papers/2502.13923) is a multimodal vision-language model, available in 3B, 7B, and 72B parameters, pretrained on 4.1T tokens. The model introduces window attention in the ViT encoder to accelerate training and inference, dynamic FPS sampling on the spatial and temporal dimensions for better video understanding across different sampling rates, and an upgraded MRoPE (multi-resolutional rotary positional encoding) mechanism to better capture and learn temporal dynamics.
-
 
 You can find all the original Qwen2.5-VL checkpoints under the [Qwen2.5-VL](https://huggingface.co/collections/Qwen/qwen25-vl-6795ffac22b334a837c0f9a5) collection.
 
@@ -43,7 +43,7 @@ pipe = pipeline(
     task="image-text-to-text",
     model="Qwen/Qwen2.5-VL-7B-Instruct",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 messages = [
     {
@@ -60,6 +60,7 @@ messages = [
 pipe(text=messages,max_new_tokens=20, return_full_text=False)
 
 ```
+
 </hfoption>
 
 <hfoption id="AutoModel">
@@ -70,7 +71,7 @@ from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
 
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-VL-7B-Instruct",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -98,7 +99,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt"
-).to("cuda")
+).to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=128)
 generated_ids_trimmed = [
@@ -109,6 +110,7 @@ output_text = processor.batch_decode(
 )
 print(output_text)
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -123,15 +125,17 @@ from transformers import TorchAoConfig, Qwen2_5_VLForConditionalGeneration, Auto
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-VL-7B-Instruct",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
 
 ```
+
 ### Notes
 
 - Use Qwen2.5-VL for video inputs by setting `"type": "video"` as shown below.
+
     ```python
     conversation = [
         {
@@ -145,7 +149,7 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     
     inputs = processor.apply_chat_template(
         conversation,
-        video_fps=1,
+        fps=1,
         add_generation_prompt=True,
         tokenize=True,
         return_dict=True,
@@ -158,15 +162,17 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
     print(output_text)
     ```
+
 - Use Qwen2.5-VL for a mixed batch of inputs (images, videos, text). Add labels when handling multiple images or videos for better reference
  as show below.
+
     ```python
     import torch
     from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
     
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         "Qwen/Qwen2.5-VL-7B-Instruct",
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
         device_map="auto",
         attn_implementation="sdpa"
     )
@@ -220,14 +226,15 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     max_pixels = 2048*2048
     processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
     ```
-    
+
     Higher resolution can require more compute whereas reducing the resolution can save memory as follows:
-    
+
     ```python
     min_pixels = 256*28*28
     max_pixels = 1024*28*28 
     processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
     ```
+
 ## Qwen2_5_VLConfig
 
 [[autodoc]] Qwen2_5_VLConfig

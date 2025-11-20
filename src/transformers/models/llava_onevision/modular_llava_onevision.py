@@ -14,26 +14,28 @@
 # limitations under the License.
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
+from torchvision.transforms.v2 import functional as F
 
 from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
 from transformers.models.llava_next_video.modeling_llava_next_video import (
-    KwargsForCausalLM,
     LlavaNextVideoCausalLMOutputWithPast,
     LlavaNextVideoForConditionalGeneration,
     LlavaNextVideoModel,
     LlavaNextVideoModelOutputWithPast,
     LlavaNextVideoPreTrainedModel,
+    TransformersKwargs,
     get_anyres_image_grid_shape,
     image_size_to_num_patches,
     unpad_image,
 )
 
+from ...cache_utils import Cache
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import DefaultFastImageProcessorKwargs, group_images_by_shape, reorder_images
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
@@ -49,36 +51,12 @@ from ...utils import (
     TensorType,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
 )
-
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
-
-
-class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    image_grid_pinpoints (`List[List[int]]`, *optional*):
-        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-        method.
-    do_pad (`bool`, *optional*):
-        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    """
-
-    image_grid_pinpoints: Optional[List[List[int]]]
-    do_pad: Optional[bool]
 
 
 class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
@@ -95,13 +73,13 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[384, 384], [384, 768], [384, 1152], [384, 1536], [384, 1920], [384, 2304], [768, 384], [768, 768], [768, 1152], [768, 1536], [768, 1920], [768, 2304], [1152, 384], [1152, 768], [1152, 1152], [1152, 1536], [1152, 1920], [1152, 2304], [1536, 384], [1536, 768], [1536, 1152], [1536, 1536], [1536, 1920], [1536, 2304], [1920, 384], [1920, 768], [1920, 1152], [1920, 1536], [1920, 1920], [1920, 2304], [2304, 384], [2304, 768], [2304, 1152], [2304, 1536], [2304, 1920], [2304, 2304]]  # fmt: skip
-    model_input_names = ["pixel_values_videos"]
+    model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]
 
     # Copied from transformers.models.llava.image_processing_llava_fast.LlavaImageProcessorFast.pad_to_square
     def pad_to_square(
         self,
         images: "torch.Tensor",
-        background_color: Union[int, Tuple[int, int, int]] = 0,
+        background_color: Union[int, tuple[int, int, int]] = 0,
     ) -> "torch.Tensor":
         """
         Pads an image to a square based on the longest edge.
@@ -109,10 +87,10 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
         Args:
             images (`np.ndarray`):
                 The images to pad.
-            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+            background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
         Returns:
             `torch.Tensor`: The padded images.
         """
@@ -141,7 +119,7 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
         return padded_images
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionImageProcessorKwargs]) -> BatchFeature:
         if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
             # if the first element is a list, we assume that all elements are lists
             batch_num_images = [len(x) for x in images]
@@ -150,26 +128,27 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
             batch_num_images = [1] * len(images)
         else:
             batch_num_images = [1]
-        kwargs["batch_num_images"] = batch_num_images
-        return super().preprocess(images, **kwargs)
+        return BaseImageProcessorFast.preprocess(images, batch_num_images, **kwargs)
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
+        batch_num_images: list[int],
         do_resize: bool,
         size: SizeDict,
-        image_grid_pinpoints: List[List[int]],
+        image_grid_pinpoints: list[list[int]],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        batch_num_images: List[int],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         processed_images = []
         image_sizes = []
@@ -208,7 +187,9 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
 
             # Group images by size for batched processing
             processed_image_patches_grouped = {}
-            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(image_patches)
+            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(
+                image_patches, disable_grouping=disable_grouping
+            )
             for shape, stacked_image_patches in grouped_image_patches.items():
                 if do_resize:
                     stacked_image_patches = self.resize(
@@ -261,7 +242,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
 
         Args:
-            image_features (`List[torch.Tensor]` of length num_images, each of shape `(num_patches, image_length, embed_dim)`)
+            image_features (`list[torch.Tensor]` of length num_images, each of shape `(num_patches, image_length, embed_dim)`)
                 List of image feature tensor, each contains all the visual feature of all patches.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
@@ -271,7 +252,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 Aspect ratio used when processong image features. The default value is "anyres_max_9".
         Returns:
             image_features (`torch.Tensor` of shape `(all_feat_len, embed_dim)`)
-            feature_lens (`List[int]`)
+            feature_lens (`list[int]`)
                 token length of each image in image_features
         """
         new_image_features = []
@@ -316,7 +297,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 image_feature = image_feature[0]
                 if image_newline is not None:
                     image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
-                image_feature = image_feature.flatten(0, 1)
             new_image_features.append(image_feature)
             feature_lens.append(image_feature.size(0))
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
@@ -340,7 +320,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
         batch_num_images: Optional[torch.LongTensor] = None,
@@ -353,7 +333,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                The tensors corresponding to the input images.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
-            vision_feature_layer (`Union[int, List[int]]`):
+            vision_feature_layer (`Union[int, list[int]]`):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
@@ -363,7 +343,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             batch_num_images (`torch.LongTensor`, *optional*):
                 Number of images in each sample.
         Returns:
-            image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
+            image_features (list[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_patches, image_length, embed_dim)`).
         """
         vision_feature_layer = (
@@ -413,8 +393,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
 
@@ -429,7 +407,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Union[int, List[int]],
+        vision_feature_layer: Union[int, list[int]],
         vision_feature_select_strategy: str,
     ):
         """
@@ -438,7 +416,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
                The tensors corresponding to the input video.
-            vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
+            vision_feature_layer (`Union[int, list[int]], *optional*, defaults to -2`):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
@@ -446,7 +424,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
         Returns:
-            video_features (List[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
+            video_features (list[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_videos, video_length, embed_dim)`).
         """
         batch_size, frames, channels, height, width = pixel_values.shape
@@ -463,8 +441,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         if vision_feature_select_strategy == "default":
             selected_video_feature = selected_video_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_video_feature = selected_video_feature
         video_features = self.multi_modal_projector(selected_video_feature)
 
         video_features = self.apply_pooling(video_features)
@@ -474,16 +450,16 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
-        pixel_values_videos: torch.FloatTensor = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_sizes_videos: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
         batch_num_images: Optional[torch.LongTensor] = None,
@@ -493,18 +469,10 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, LlavaOnevisionModelOutputWithPast]:
+    ) -> Union[tuple, LlavaOnevisionModelOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
-            [`LlavaNextVideoProcessor`] for processing videos.
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):
@@ -531,12 +499,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both `pixel_values`/`pixel_values_videos` and `inputs_embeds` at the same time, "
-                "and must specify either one"
-            )
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -550,16 +512,10 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 batch_num_images=batch_num_images,
             )
             image_features = torch.cat(image_features, dim=0)
-
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
-                n_image_features = image_features.shape[0]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # Video are simply embedded and further pooled to decrease seq len
@@ -573,17 +529,10 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 self.image_newline[None, None, :].repeat(video_features.shape[0], 1, 1).to(video_features.device)
             )
             video_features = torch.cat((video_features, image_newline), dim=1)
-            video_features = video_features.flatten(0, 1)
-
-            special_video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
-            special_video_mask = special_video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_video_mask].numel() != video_features.numel():
-                n_video_tokens = (input_ids == self.config.video_token_id).sum()
-                n_video_features = video_features.shape[0]
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = video_features.flatten(0, 1).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, special_video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
         outputs = self.language_model(
@@ -614,16 +563,16 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
-        pixel_values_videos: torch.FloatTensor = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_sizes_videos: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
         batch_num_images: Optional[torch.LongTensor] = None,
@@ -634,19 +583,11 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, LlavaOnevisionCausalLMOutputWithPast]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, LlavaOnevisionCausalLMOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
-            [`LlavaNextVideoProcessor`] for processing videos.
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):
@@ -664,7 +605,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         >>> import torch
         >>> from transformers import LlavaOnevisionProcessor, LlavaOnevisionForConditionalGeneration
 
-        >>> model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype="float16", device_map="cuda:0")
+        >>> model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", dtype="float16", device_map="cuda:0")
         >>> processor = LlavaOnevisionProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
         >>> conversation = [

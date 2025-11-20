@@ -15,16 +15,16 @@
 """PyTorch ConvBERT model."""
 
 import math
-import os
-from operator import attrgetter
-from typing import Callable, Optional, Tuple, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN, get_activation
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
     MaskedLMOutput,
@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     auto_docstring,
     logging,
@@ -43,130 +43,6 @@ from .configuration_convbert import ConvBertConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    tf_data = {}
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        tf_data[name] = array
-
-    param_mapping = {
-        "embeddings.word_embeddings.weight": "electra/embeddings/word_embeddings",
-        "embeddings.position_embeddings.weight": "electra/embeddings/position_embeddings",
-        "embeddings.token_type_embeddings.weight": "electra/embeddings/token_type_embeddings",
-        "embeddings.LayerNorm.weight": "electra/embeddings/LayerNorm/gamma",
-        "embeddings.LayerNorm.bias": "electra/embeddings/LayerNorm/beta",
-        "embeddings_project.weight": "electra/embeddings_project/kernel",
-        "embeddings_project.bias": "electra/embeddings_project/bias",
-    }
-    if config.num_groups > 1:
-        group_dense_name = "g_dense"
-    else:
-        group_dense_name = "dense"
-
-    for j in range(config.num_hidden_layers):
-        param_mapping[f"encoder.layer.{j}.attention.self.query.weight"] = (
-            f"electra/encoder/layer_{j}/attention/self/query/kernel"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.self.query.bias"] = (
-            f"electra/encoder/layer_{j}/attention/self/query/bias"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.self.key.weight"] = (
-            f"electra/encoder/layer_{j}/attention/self/key/kernel"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.self.key.bias"] = (
-            f"electra/encoder/layer_{j}/attention/self/key/bias"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.self.value.weight"] = (
-            f"electra/encoder/layer_{j}/attention/self/value/kernel"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.self.value.bias"] = (
-            f"electra/encoder/layer_{j}/attention/self/value/bias"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.self.key_conv_attn_layer.depthwise.weight"] = (
-            f"electra/encoder/layer_{j}/attention/self/conv_attn_key/depthwise_kernel"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.self.key_conv_attn_layer.pointwise.weight"] = (
-            f"electra/encoder/layer_{j}/attention/self/conv_attn_key/pointwise_kernel"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.self.key_conv_attn_layer.bias"] = (
-            f"electra/encoder/layer_{j}/attention/self/conv_attn_key/bias"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.self.conv_kernel_layer.weight"] = (
-            f"electra/encoder/layer_{j}/attention/self/conv_attn_kernel/kernel"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.self.conv_kernel_layer.bias"] = (
-            f"electra/encoder/layer_{j}/attention/self/conv_attn_kernel/bias"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.self.conv_out_layer.weight"] = (
-            f"electra/encoder/layer_{j}/attention/self/conv_attn_point/kernel"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.self.conv_out_layer.bias"] = (
-            f"electra/encoder/layer_{j}/attention/self/conv_attn_point/bias"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.output.dense.weight"] = (
-            f"electra/encoder/layer_{j}/attention/output/dense/kernel"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.output.LayerNorm.weight"] = (
-            f"electra/encoder/layer_{j}/attention/output/LayerNorm/gamma"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.output.dense.bias"] = (
-            f"electra/encoder/layer_{j}/attention/output/dense/bias"
-        )
-        param_mapping[f"encoder.layer.{j}.attention.output.LayerNorm.bias"] = (
-            f"electra/encoder/layer_{j}/attention/output/LayerNorm/beta"
-        )
-        param_mapping[f"encoder.layer.{j}.intermediate.dense.weight"] = (
-            f"electra/encoder/layer_{j}/intermediate/{group_dense_name}/kernel"
-        )
-        param_mapping[f"encoder.layer.{j}.intermediate.dense.bias"] = (
-            f"electra/encoder/layer_{j}/intermediate/{group_dense_name}/bias"
-        )
-        param_mapping[f"encoder.layer.{j}.output.dense.weight"] = (
-            f"electra/encoder/layer_{j}/output/{group_dense_name}/kernel"
-        )
-        param_mapping[f"encoder.layer.{j}.output.dense.bias"] = (
-            f"electra/encoder/layer_{j}/output/{group_dense_name}/bias"
-        )
-        param_mapping[f"encoder.layer.{j}.output.LayerNorm.weight"] = (
-            f"electra/encoder/layer_{j}/output/LayerNorm/gamma"
-        )
-        param_mapping[f"encoder.layer.{j}.output.LayerNorm.bias"] = f"electra/encoder/layer_{j}/output/LayerNorm/beta"
-
-    for param in model.named_parameters():
-        param_name = param[0]
-        retriever = attrgetter(param_name)
-        result = retriever(model)
-        tf_name = param_mapping[param_name]
-        value = torch.from_numpy(tf_data[tf_name])
-        logger.info(f"TF: {tf_name}, PT: {param_name} ")
-        if tf_name.endswith("/kernel"):
-            if not tf_name.endswith("/intermediate/g_dense/kernel"):
-                if not tf_name.endswith("/output/g_dense/kernel"):
-                    value = value.T
-        if tf_name.endswith("/depthwise_kernel"):
-            value = value.permute(1, 2, 0)  # 2, 0, 1
-        if tf_name.endswith("/pointwise_kernel"):
-            value = value.permute(2, 1, 0)  # 2, 1, 0
-        if tf_name.endswith("/conv_attn_key/bias"):
-            value = value.unsqueeze(-1)
-        result.data = value
-    return model
 
 
 class ConvBertEmbeddings(nn.Module):
@@ -178,8 +54,6 @@ class ConvBertEmbeddings(nn.Module):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.embedding_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.embedding_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -231,31 +105,19 @@ class ConvBertEmbeddings(nn.Module):
 
 @auto_docstring
 class ConvBertPreTrainedModel(PreTrainedModel):
-    config_class = ConvBertConfig
-    load_tf_weights = load_tf_weights_in_convbert
+    config: ConvBertConfig
     base_model_prefix = "convbert"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, SeparableConv1D):
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, SeparableConv1D):
+            init.zeros_(module.bias)
         elif isinstance(module, GroupedLinearLayer):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            module.bias.data.zero_()
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.bias)
 
 
 class SeparableConv1D(nn.Module):
@@ -324,21 +186,14 @@ class ConvBertSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-        batch_size = hidden_states.size(0)
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        batch_size, seq_length, _ = hidden_states.shape
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
@@ -352,9 +207,16 @@ class ConvBertSelfAttention(nn.Module):
         mixed_key_conv_attn_layer = self.key_conv_attn_layer(hidden_states.transpose(1, 2))
         mixed_key_conv_attn_layer = mixed_key_conv_attn_layer.transpose(1, 2)
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_for_scores(mixed_key_layer)
-        value_layer = self.transpose_for_scores(mixed_value_layer)
+        mixed_query_layer = self.query(hidden_states)
+        query_layer = mixed_query_layer.view(
+            batch_size, -1, self.num_attention_heads, self.attention_head_size
+        ).transpose(1, 2)
+        key_layer = mixed_key_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
+            1, 2
+        )
+        value_layer = mixed_value_layer.view(
+            batch_size, -1, self.num_attention_heads, self.attention_head_size
+        ).transpose(1, 2)
         conv_attn_layer = torch.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
 
         conv_kernel_layer = self.conv_kernel_layer(conv_attn_layer)
@@ -392,10 +254,6 @@ class ConvBertSelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
 
@@ -431,38 +289,17 @@ class ConvBertAttention(nn.Module):
         super().__init__()
         self.self = ConvBertSelfAttention(config)
         self.output = ConvBertSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.FloatTensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.FloatTensor]]:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
-            head_mask,
             encoder_hidden_states,
             output_attentions,
         )
@@ -532,7 +369,7 @@ class ConvBertOutput(nn.Module):
         return hidden_states
 
 
-class ConvBertLayer(nn.Module):
+class ConvBertLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -551,15 +388,13 @@ class ConvBertLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.FloatTensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.FloatTensor]]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -574,7 +409,6 @@ class ConvBertLayer(nn.Module):
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 encoder_attention_mask,
-                head_mask,
                 encoder_hidden_states,
                 output_attentions,
             )
@@ -604,13 +438,12 @@ class ConvBertEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -618,27 +451,13 @@ class ConvBertEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                output_attentions,
+            )
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -799,14 +618,6 @@ class ConvBertModel(ConvBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
@@ -814,12 +625,11 @@ class ConvBertModel(ConvBertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -850,7 +660,6 @@ class ConvBertModel(ConvBertPreTrainedModel):
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         hidden_states = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
@@ -862,7 +671,6 @@ class ConvBertModel(ConvBertPreTrainedModel):
         hidden_states = self.encoder(
             hidden_states,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -891,7 +699,7 @@ class ConvBertGeneratorPredictions(nn.Module):
 
 @auto_docstring
 class ConvBertForMaskedLM(ConvBertPreTrainedModel):
-    _tied_weights_keys = ["generator.lm_head.weight"]
+    _tied_weights_keys = {"generator_lm_head.weight": "convbert.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -916,13 +724,12 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MaskedLMOutput]:
+    ) -> Union[tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -936,7 +743,6 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask,
             inputs_embeds,
             output_attentions,
             output_hidden_states,
@@ -1013,13 +819,12 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1033,7 +838,6 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1097,13 +901,12 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MultipleChoiceModelOutput]:
+    ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1153,7 +956,6 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1206,13 +1008,12 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1224,7 +1025,6 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1272,14 +1072,13 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.convbert(
@@ -1287,7 +1086,6 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1340,5 +1138,4 @@ __all__ = [
     "ConvBertLayer",
     "ConvBertModel",
     "ConvBertPreTrainedModel",
-    "load_tf_weights_in_convbert",
 ]

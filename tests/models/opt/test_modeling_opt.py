@@ -215,10 +215,8 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else {}
     )
     is_encoder_decoder = False
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
-    test_pruning = False
+
     test_missing_keys = False
-    test_head_masking = False  # new attn API doesn't support head mask
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -258,7 +256,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -342,7 +340,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:
@@ -529,7 +527,7 @@ class OPTGenerationTest(unittest.TestCase):
         model_name = "facebook/opt-1.3b"
         tokenizer = GPT2Tokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
 
-        model = OPTForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).to(torch_device)
+        model = OPTForCausalLM.from_pretrained(model_name, dtype=torch.float16, use_cache=True).to(torch_device)
         model = model.eval()
 
         batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")
@@ -543,6 +541,7 @@ class OPTGenerationTest(unittest.TestCase):
                 torch.isnan(outputs.logits[0]).any().item()
             )  # the first logits could contain NaNs if it fails
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_opt(self):
         article = (
@@ -555,7 +554,14 @@ class OPTGenerationTest(unittest.TestCase):
         opt_model = OPTForCausalLM.from_pretrained("facebook/opt-1.3b").to(torch_device)
         input_ids = opt_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
-        outputs = opt_model.generate(input_ids, penalty_alpha=0.6, top_k=5, max_length=256)
+        outputs = opt_model.generate(
+            input_ids,
+            penalty_alpha=0.6,
+            top_k=5,
+            max_length=256,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
         generated_text = opt_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         self.assertListEqual(

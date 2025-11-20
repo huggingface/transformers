@@ -18,12 +18,12 @@ import os
 import sys
 import types
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, ArgumentTypeError
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from copy import copy
 from enum import Enum
 from inspect import isclass
 from pathlib import Path
-from typing import Any, Callable, Literal, NewType, Optional, Union, get_type_hints
+from typing import Any, Literal, NewType, Optional, Union, get_type_hints
 
 import yaml
 
@@ -81,7 +81,7 @@ def HfArg(
     ```
 
     Args:
-        aliases (Union[str, List[str]], optional):
+        aliases (Union[str, list[str]], optional):
             Single string or list of strings of aliases to pass on to argparse, e.g. `aliases=["--example", "-e"]`.
             Defaults to None.
         help (str, optional): Help string to pass on to argparse that can be displayed with --help. Defaults to None.
@@ -119,7 +119,7 @@ class HfArgumentParser(ArgumentParser):
     Args:
         dataclass_types (`DataClassType` or `Iterable[DataClassType]`, *optional*):
             Dataclass type, or list of dataclass types for which we will "fill" instances with the parsed args.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Passed to `argparse.ArgumentParser()` in the regular way.
     """
 
@@ -262,19 +262,6 @@ class HfArgumentParser(ArgumentParser):
                 "removing line of `from __future__ import annotations` which opts in Postponed "
                 "Evaluation of Annotations (PEP 563)"
             )
-        except TypeError as ex:
-            # Remove this block when we drop Python 3.9 support
-            if sys.version_info[:2] < (3, 10) and "unsupported operand type(s) for |" in str(ex):
-                python_version = ".".join(map(str, sys.version_info[:3]))
-                raise RuntimeError(
-                    f"Type resolution failed for {dtype} on Python {python_version}. Try removing "
-                    "line of `from __future__ import annotations` which opts in union types as "
-                    "`X | Y` (PEP 604) via Postponed Evaluation of Annotations (PEP 563). To "
-                    "support Python versions that lower than 3.10, you need to use "
-                    "`typing.Union[X, Y]` instead of `X | Y` and `typing.Optional[X]` instead of "
-                    "`X | None`."
-                ) from ex
-            raise
 
         for field in dataclasses.fields(dtype):
             if not field.init:
@@ -294,7 +281,7 @@ class HfArgumentParser(ArgumentParser):
         Parse command-line args into instances of the specified dataclass types.
 
         This relies on argparse's `ArgumentParser.parse_known_args`. See the doc at:
-        docs.python.org/3.7/library/argparse.html#argparse.ArgumentParser.parse_args
+        docs.python.org/3/library/argparse.html#argparse.ArgumentParser.parse_args
 
         Args:
             args:

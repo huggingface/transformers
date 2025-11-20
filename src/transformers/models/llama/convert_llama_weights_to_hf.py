@@ -17,7 +17,6 @@ import json
 import os
 import tempfile
 import warnings
-from typing import List
 
 import torch
 from tokenizers import AddedToken, processors
@@ -361,8 +360,8 @@ def write_model(
         # Write configs
         index_dict["metadata"] = {"total_size": param_count * 2}
         write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
-        ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
-        multiple_of = params["multiple_of"] if "multiple_of" in params else 256
+        ffn_dim_multiplier = params.get("ffn_dim_multiplier", 1)
+        multiple_of = params.get("multiple_of", 256)
 
         if is_llama_3(llama_version):
             bos_token_id = 128000
@@ -376,7 +375,7 @@ def write_model(
             eos_token_id = 2
 
         if llama_version in ["3.1", "3.2", "Guard-3"]:
-            rope_scaling = {
+            rope_parameters = {
                 "factor": 32.0 if llama_version == "3.2" else 8.0,
                 "low_freq_factor": 1.0,
                 "high_freq_factor": 4.0,
@@ -384,7 +383,7 @@ def write_model(
                 "rope_type": "llama3",
             }
         else:
-            rope_scaling = None
+            rope_parameters = None
 
         config = LlamaConfig(
             hidden_size=dim,
@@ -395,11 +394,11 @@ def write_model(
             num_key_value_heads=num_key_value_heads,
             vocab_size=vocab_size,
             rope_theta=base,
-            rope_scaling=rope_scaling,
+            rope_parameters=rope_parameters,
             max_position_embeddings=max_position_embeddings,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=True if llama_version in ["3.2"] else False,
+            tie_word_embeddings=llama_version == "3.2",
         )
 
         config.save_pretrained(tmp_model_path)
@@ -419,11 +418,11 @@ def write_model(
         gc.collect()
 
         print("Loading the checkpoint in a Llama model.")
-        model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16)
+        model = LlamaForCausalLM.from_pretrained(tmp_model_path, dtype=torch.bfloat16)
 
         # Avoid saving this as part of the config.
         del model.config._name_or_path
-        model.config.torch_dtype = torch.float16
+        model.config.dtype = torch.float16
 
         print("Saving in the Transformers format.")
         if push_to_hub:
@@ -452,7 +451,7 @@ class Llama3Converter(TikTokenConverter):
         # Prevents a null chat_template, which triggers
         # a parsing warning in the Hub.
         additional_kwargs = {}
-        if instruct or llama_version in ["Guard-3"]:
+        if instruct or llama_version == "Guard-3":
             model_id, revision = templates_for_version.get(llama_version, (None, None))
             if model_id is not None:
                 from transformers import AutoTokenizer
@@ -560,7 +559,7 @@ def main():
     parser.add_argument(
         "--special_tokens",
         default=None,
-        type=List[str],
+        type=list[str],
         help="The list of special tokens that should be added to the model.",
     )
     parser.add_argument(

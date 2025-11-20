@@ -16,8 +16,8 @@ import copy
 import math
 import warnings
 import zlib
-from collections.abc import Iterator
-from typing import Callable, List, Optional, Tuple, Union
+from collections.abc import Callable, Iterator
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -136,7 +136,18 @@ def _pad_to_max_length(
     cut_off_length=None,
     return_token_timestamps=False,
     force_unique_generate_call=False,
+    skip_ending_double_timestamps=False,
+    timestamp_begin=None,
 ):
+    """
+    skip_ending_double_timestamps: when the segment ended with two timestamp tokens, whether to ignore the last timestamp token
+    see https://github.com/huggingface/transformers/pull/35750
+
+    _pad_to_max_length is used in different contexts:
+    1. At the end of generation: we need to keep both ending timestamp tokens in the segment (see https://github.com/huggingface/transformers/pull/34537).
+    2. In the middle of generation, e.g. when condition_on_prev_tokens=True and we want to use the last generated tokens as decoder_input_ids:
+       we must skip one of the double ending timestamp tokens (see https://github.com/huggingface/transformers/pull/35750).
+    """
     max_total_length = 0
     sequences = []
     token_timestamps_list = []
@@ -166,7 +177,17 @@ def _pad_to_max_length(
 
     for current_segment_list in current_segments:
         if current_segment_list is not None and len([d["tokens"] for d in current_segment_list]) > 0:
-            sequence = torch.cat([d["tokens"] for d in current_segment_list], dim=-1)
+            sequences_list = []
+            for d in current_segment_list:
+                if skip_ending_double_timestamps and len(d["tokens"]) > 2 and d["tokens"][-2] >= timestamp_begin:
+                    # the segment finishes with two timestamp tokens
+                    # we need to ignore the last timestamp token
+                    # see https://github.com/huggingface/transformers/pull/34537
+                    sequences_list.append(d["tokens"][:-1])
+                else:
+                    sequences_list.append(d["tokens"])
+            sequence = torch.cat(sequences_list, dim=-1)
+
             if return_token_timestamps:
                 token_timestamps = torch.cat(
                     [d["result"]["token_timestamps"][d["idxs"][0] : d["idxs"][1]] for d in current_segment_list],
@@ -310,6 +331,16 @@ class WhisperGenerationMixin(GenerationMixin):
                 num_frames = num_frames.cpu() if isinstance(num_frames, (torch.Tensor)) else num_frames
                 num_frames = np.repeat(num_frames, repeat_time)
 
+        # let's ignore decoder_input_ids that can negatively impact the DTW while we know they have timestamps 0.0s
+        # (they are not taken into account for the DTW in OAI implementation)
+        if num_input_ids is not None:
+            weights = weights[:, :, num_input_ids:, :]
+
+        # Since we ignore `decoder_input_ids` in the DTW and in the case where we generated only one token (for which we don't have cross attentions, see below comments),
+        # the DTW sequence length is 0 and we should return only 0.0s for the token timestamps
+        if weights.shape[2] == 0:
+            return timestamps
+
         if num_frames is None or isinstance(num_frames, int):
             # Normalize and smoothen the weights.
             std = torch.std(weights, dim=-2, keepdim=True, unbiased=False)
@@ -339,7 +370,16 @@ class WhisperGenerationMixin(GenerationMixin):
             text_indices, time_indices = _dynamic_time_warping(-matrix.cpu().double().numpy())
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
             jump_times = time_indices[jumps] * time_precision
-            timestamps[batch_idx, 1:] = torch.tensor(jump_times)
+
+            # each predicted token has a corresponding timestamp, expect the eos token (or last predicted token) for which we don't retrieve cross attentions
+            # (indeed contrary to OAI that re-run a full forward to retrieve cross attentions for each token and therefore also the last one predicted, we retrieve
+            # cross attentions directly from the auto-regressive generation, so we don't have cross attentiosn for the token at the end of the sequence. Nevertheless,
+            # that is not important since we expect this last token to be the eos token)
+            # 1. for decoder_input_ids, we set the timestamps to 0.0
+            # 2. for the eos token (or last predicted token), we simply duplicate the timestamp of the last non-eos token
+            timestamps[batch_idx] = torch.cat(
+                [torch.zeros(num_input_ids), torch.tensor(jump_times), torch.tensor([jump_times[-1]])]
+            )
 
         return timestamps
 
@@ -349,16 +389,16 @@ class WhisperGenerationMixin(GenerationMixin):
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
         synced_gpus: bool = False,
         return_timestamps: Optional[bool] = None,
         task: Optional[str] = None,
-        language: Optional[Union[str, List[str]]] = None,
+        language: Optional[Union[str, list[str]]] = None,
         is_multilingual: Optional[bool] = None,
         prompt_ids: Optional[torch.Tensor] = None,
         prompt_condition_type: Optional[str] = None,  # first-segment, all-segments
         condition_on_prev_tokens: Optional[bool] = None,
-        temperature: Optional[Union[float, Tuple[float, ...]]] = None,
+        temperature: Optional[Union[float, tuple[float, ...]]] = None,
         compression_ratio_threshold: Optional[float] = None,
         logprob_threshold: Optional[float] = None,
         no_speech_threshold: Optional[float] = None,
@@ -370,6 +410,7 @@ class WhisperGenerationMixin(GenerationMixin):
         return_segments: bool = False,
         return_dict_in_generate: Optional[bool] = None,
         force_unique_generate_call: Optional[bool] = None,
+        monitor_progress: Optional[Callable[[torch.Tensor], None]] = None,
         **kwargs,
     ):
         """
@@ -389,10 +430,11 @@ class WhisperGenerationMixin(GenerationMixin):
         Parameters:
             input_features (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`, *optional*):
                 Float values of log-mel features extracted from the raw speech waveform. The raw speech waveform can be obtained by
-                loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
-                the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-                [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-                tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
+                loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`,
+                *e.g.*  via the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+                To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel
+                features, padding and conversion into a tensor of type `torch.FloatTensor`.
+                See [`~WhisperFeatureExtractor.__call__`] for details.
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
@@ -408,7 +450,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 Custom stopping criteria that complement the default stopping criteria built from arguments and a
                 generation config. If a stopping criteria is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
-            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], list[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
@@ -420,6 +462,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             return_timestamps (`bool`, *optional*):
                 Whether to return the timestamps with the text. This enables the `WhisperTimestampsLogitsProcessor`.
+                For audios longer than 30 seconds, it is necessary to set `return_timestamps=True`.
             task (`str`, *optional*):
                 Task to use for generation, either "translate" or "transcribe".
             language (`str` or list of `str`, *optional*):
@@ -492,16 +535,21 @@ class WhisperGenerationMixin(GenerationMixin):
             force_unique_generate_call (`bool`, *optional*):
                 Whether to force a unique call to the underlying GenerationMixin's [`~generation.GenerationMixin.generate`] method. This is useful for assisted decoding and testing purposes to ensure
                 that only one call to [`~generation.GenerationMixin.generate`] is made and therefore decoder input token ids and eos token ids are returned.
-            kwargs (`Dict[str, Any]`, *optional*):
+            monitor_progress (`Callable[[torch.Tensor], None]`, *optional*):
+                If provided, this function can be called to report the progress of the audio transcription. The function
+                takes a tensor argument `p` of shape `(n, 2)`, where `n` is the batch size. `p[i, 0]`  contains the
+                index of the audio frame that is currently being transcribed for batch item `i`. `p[i, 1]` contains
+                the total number of frames for batch item `i`. No return value is expected.
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
         Return:
-            [`~utils.ModelOutput`] or `Dict[str, Any]` or `torch.LongTensor`:
+            [`~utils.ModelOutput`] or `dict[str, Any]` or `torch.LongTensor`:
 
-                A:
+                One of the following:
                 - [`~utils.ModelOutput`] when `return_dict_in_generate=True` and (`return_timestamps=False` or `force_unique_generate_call=True`), including the decoder input ids and end of sequence id.
-                - `Dict[str, Any]` when (`return_dict_in_generate=True` and `return_timestamps=True`) or `return_segments=True` or `return_token_timestamps=True`.
+                - `dict[str, Any]` when (`return_dict_in_generate=True` and `return_timestamps=True`) or `return_segments=True` or `return_token_timestamps=True`.
                 - `torch.LongTensor` in all other cases, excluding the decoder input ids and end of sequence id.
 
                 The possible [`~utils.ModelOutput`] types are:
@@ -545,10 +593,34 @@ class WhisperGenerationMixin(GenerationMixin):
         >>> inputs = inputs.to("cuda", torch.float32)
 
         >>> # transcribe audio to ids
-        >>> generated_ids = model.generate(**inputs)
+        >>> generated_ids = model.generate(**inputs, return_timestamps=True)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
         >>> transcription[0]
+        " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."
+        ```
+
+        The `monitor_progress` callback can be used to monitor the progress of the transcription:
+        ```python
+        >>> from tqdm import tqdm
+
+        >>> # prepare inputs like above
+
+        >>> # define a callback to monitor the progress of the transcription.
+        >>> with tqdm(desc="Progress") as pbar:
+        >>>     def monitor_progress(p_batch):
+        >>>         i = torch.argmax(p_batch[:, 1])
+        >>>         p = p_batch[i].detach().cpu()
+        >>>         pbar.total = int(p[1])
+        >>>         pbar.n = int(p[0])
+        >>>         pbar.update()
+
+        >>>     # transcribe audio to ids
+        >>>     generated_ids = model.generate(**inputs, return_timestamps=True, monitor_progress=monitor_progress)
+
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        >>> transcription[0]
+        Progress:  95%|█████████████████████████████████████████████████████████████████████████████████████████████████▎    | 8497/8901 [00:04<00:00, 2052.79it/s]
         " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."
         ```
 
@@ -611,7 +683,10 @@ class WhisperGenerationMixin(GenerationMixin):
             language=language, task=task, is_multilingual=is_multilingual, generation_config=generation_config
         )
         self._set_num_frames(
-            return_token_timestamps=return_token_timestamps, generation_config=generation_config, kwargs=kwargs
+            return_token_timestamps=return_token_timestamps,
+            generation_config=generation_config,
+            attention_mask=attention_mask,
+            kwargs=kwargs,
         )
         self._set_thresholds_and_condition(
             generation_config=generation_config,
@@ -719,6 +794,9 @@ class WhisperGenerationMixin(GenerationMixin):
 
         # 6 Transcribe audio until we reach the end of all input audios
         while (seek < max_frames).any():
+            if monitor_progress is not None:
+                monitor_progress(torch.stack((seek, max_frames), dim=1))
+
             # 6.1 NOTE: When in longform transcription mode and batch size > 1 we need to dynamically reduce the batch size during the loop
             # in case one audio finished earlier than another one. Thus, we need to keep a table of "previous-index-2-current-index" in order
             # to know which original audio is being decoded
@@ -789,10 +867,8 @@ class WhisperGenerationMixin(GenerationMixin):
                 segment_input=segment_input,
                 decoder_input_ids=decoder_input_ids,
                 cur_bsz=cur_bsz,
-                batch_idx_map=batch_idx_map,
                 seek=seek,
-                num_segment_frames=num_segment_frames,
-                max_frames=max_frames,
+                batch_idx_map=batch_idx_map,
                 temperatures=temperatures,
                 generation_config=generation_config,
                 logits_processor=logits_processor,
@@ -907,10 +983,8 @@ class WhisperGenerationMixin(GenerationMixin):
         segment_input,
         decoder_input_ids,
         cur_bsz,
-        batch_idx_map,
         seek,
-        num_segment_frames,
-        max_frames,
+        batch_idx_map,
         temperatures,
         generation_config,
         logits_processor,
@@ -982,6 +1056,8 @@ class WhisperGenerationMixin(GenerationMixin):
                 return_token_timestamps=return_token_timestamps,
                 generation_config=generation_config,
                 is_shortform=is_shortform,
+                seek=seek,
+                batch_idx_map=batch_idx_map,
             )
 
             if cur_bsz < batch_size:
@@ -1068,6 +1144,8 @@ class WhisperGenerationMixin(GenerationMixin):
         return_token_timestamps,
         generation_config,
         is_shortform,
+        seek,
+        batch_idx_map,
     ):
         # remove all previously passed decoder input ids
         # should happen only if it is the first generated segment
@@ -1077,7 +1155,11 @@ class WhisperGenerationMixin(GenerationMixin):
             return seek_outputs[:, start_idx:], seek_outputs
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
-            num_frames = getattr(generation_config, "num_frames", None)
+            num_frames = getattr(generation_config, "num_frames")
+            if num_frames is not None:
+                num_frames = num_frames - seek
+                num_frames = num_frames[batch_idx_map]
+
             seek_outputs["token_timestamps"] = self._extract_token_timestamps(
                 seek_outputs,
                 generation_config.alignment_heads,
@@ -1096,26 +1178,16 @@ class WhisperGenerationMixin(GenerationMixin):
                 if not is_shortform:
                     # we don't save `past_key_values` as this is too costly for longform
                     return None
-                elif isinstance(values, EncoderDecoderCache):
-                    all_past_key_values = []
-                    for layer_idx in range(self.config.decoder_layers):
-                        layer_past_key_values = []
-                        for cache_cls in [values.self_attention_cache, values.cross_attention_cache]:
-                            for v in [cache_cls.key_cache, cache_cls.value_cache]:
-                                layer_past_key_values.append(v[layer_idx][batch_idx][None].cpu())
-                        all_past_key_values.append(tuple(layer_past_key_values))
-                    return tuple(all_past_key_values)
-                else:
-                    all_past_key_values = []
-                    for v in range(len(values)):
-                        layer_past_key_values = []
-                        for w in values[v]:
-                            if len(w) != 0:
-                                layer_past_key_values.append(w[batch_idx][None].cpu())
-                            else:
-                                layer_past_key_values.append(w)
-                        all_past_key_values.append(tuple(layer_past_key_values))
-                    return tuple(all_past_key_values)
+                all_past_key_values = []
+                for layer_idx in range(self.config.decoder_layers):
+                    layer_cache = (
+                        values.self_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
+                        values.self_attention_cache.layers[layer_idx].values[batch_idx][None].cpu(),
+                        values.cross_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
+                        values.cross_attention_cache.layers[layer_idx].values[batch_idx][None].cpu(),
+                    )
+                    all_past_key_values.append(layer_cache)
+                return EncoderDecoderCache(all_past_key_values)
 
             return values[batch_idx].cpu()
 
@@ -1133,7 +1205,7 @@ class WhisperGenerationMixin(GenerationMixin):
     def _stack_split_outputs(self, seek_outputs, model_output_type, device, kwargs):
         # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
-        for key in seek_outputs[0].keys():
+        for key in seek_outputs[0]:
             if key in ["sequences", "beam_indices", "token_timestamps"]:
                 outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
             elif key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
@@ -1151,21 +1223,29 @@ class WhisperGenerationMixin(GenerationMixin):
                     for i in range(len(seek_outputs[0][key]))
                 )
             elif key == "past_key_values":
-                past_key_value_type = kwargs.get("past_key_values")
                 if seek_outputs[0][key] is not None:
-                    outputs[key] = tuple(
-                        tuple(
-                            torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device)
-                            for j in range(len(seek_outputs[0][key][0]))
+                    all_past_key_values = []
+                    for layer_idx in range(len(seek_outputs[0][key])):
+                        self_attention_k, self_attention_v, cross_attention_k, cross_attention_v = (
+                            torch.stack(
+                                [
+                                    getattr(getattr(sub_output[key], sub_cache).layers[layer_idx], sub_key)
+                                    for sub_output in seek_outputs
+                                ]
+                            )
+                            .squeeze(1)
+                            .to(device)
+                            for sub_cache in ["self_attention_cache", "cross_attention_cache"]
+                            for sub_key in ["keys", "values"]
                         )
-                        for i in range(len(seek_outputs[0][key]))
-                    )
-                    if past_key_value_type is not None and isinstance(past_key_value_type, EncoderDecoderCache):
-                        outputs[key] = past_key_value_type.from_legacy_cache(outputs[key])
+                        all_past_key_values.append(
+                            (self_attention_k, self_attention_v, cross_attention_k, cross_attention_v)
+                        )
+                    outputs[key] = EncoderDecoderCache(tuple(all_past_key_values))
                 else:
                     outputs[key] = None
 
-        token_timestamps = outputs.get("token_timestamps", None)
+        token_timestamps = outputs.get("token_timestamps")
         if token_timestamps is not None:
             model_output_type = dict
 
@@ -1384,7 +1464,7 @@ class WhisperGenerationMixin(GenerationMixin):
             generation_config.task = task
 
     def _retrieve_init_tokens(self, input_features, batch_size, generation_config, config, num_segment_frames, kwargs):
-        def replace_or_add(lst: List[int], num: int, itr: Iterator[int]):
+        def replace_or_add(lst: list[int], num: int, itr: Iterator[int]):
             """short function to replace num with a itr in lst"""
             found = any(i in lst for i in itr)
             if found:
@@ -1395,9 +1475,9 @@ class WhisperGenerationMixin(GenerationMixin):
 
         def language_to_id(language: str) -> int:
             language = language.lower()
-            if language in generation_config.lang_to_id.keys():
+            if language in generation_config.lang_to_id:
                 language_token = language
-            elif language in TO_LANGUAGE_CODE.keys():
+            elif language in TO_LANGUAGE_CODE:
                 language_token = f"<|{TO_LANGUAGE_CODE[language]}|>"
             elif language in TO_LANGUAGE_CODE.values():
                 language_token = f"<|{language}|>"
@@ -1513,7 +1593,7 @@ class WhisperGenerationMixin(GenerationMixin):
                     # if task is defined it'll overwrite task ids that might have already been defined via the generation_config
                     replace_or_add(init_tokens[i], task_id, generation_config.task_to_id.values())
                 else:
-                    raise ValueError(f"The `{task}`task is not supported. The task should be one of `{TASK_IDS}`")
+                    raise ValueError(f"The `{task}` task is not supported. The task should be one of `{TASK_IDS}`")
             elif language is not None and hasattr(generation_config, "task_to_id"):
                 # if language is defined, but no task id is in `init_tokens`, default to transcribe
                 if not any(ti in init_tokens[i] for ti in generation_config.task_to_id.values()):
@@ -1551,7 +1631,7 @@ class WhisperGenerationMixin(GenerationMixin):
         Parameters:
             input_features (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`, *optional*):
                 Float values of log-mel features extracted from the raw speech waveform. The raw speech waveform can be obtained by
-                loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+                loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
                 the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
                 [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
                 tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
@@ -1613,7 +1693,7 @@ class WhisperGenerationMixin(GenerationMixin):
             )
 
     @staticmethod
-    def _set_num_frames(return_token_timestamps, generation_config, kwargs):
+    def _set_num_frames(return_token_timestamps, generation_config, attention_mask, kwargs):
         if return_token_timestamps:
             if getattr(generation_config, "task", None) == "translate":
                 logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
@@ -1622,7 +1702,24 @@ class WhisperGenerationMixin(GenerationMixin):
                     "Model generation config has no `alignment_heads`, token-level timestamps not available. "
                     "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
                 )
-            generation_config.num_frames = kwargs.pop("num_frames", None)
+            if "num_frames" in kwargs:
+                generation_config.num_frames = kwargs.pop("num_frames")
+                if isinstance(generation_config.num_frames, torch.Tensor):
+                    generation_config.num_frames = generation_config.num_frames.cpu()
+                else:
+                    generation_config.num_frames = torch.tensor(generation_config.num_frames)
+
+                logger.warning_once(
+                    "`num_frames` is deprecated and will be removed in Transformers v5. Use `attention_mask` instead, as it can be used to infer the number of frames. "
+                    "You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True"
+                )
+            elif attention_mask is not None:
+                generation_config.num_frames = attention_mask.sum(-1).cpu()
+            else:
+                logger.warning_once(
+                    "When setting `return_token_timestamps` to `True`, make sure to pass an `attention_mask` to get precise token-level timestamps. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` "
+                )
+                generation_config.num_frames = None
 
     @staticmethod
     def _set_thresholds_and_condition(
@@ -1809,14 +1906,6 @@ class WhisperGenerationMixin(GenerationMixin):
             # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609
             active_segments = [current_segments[i] if do_condition_on_prev_tokens[i] else None for i in batch_idx_map]
 
-            for segments in active_segments:
-                for seg in segments:
-                    if len(seg["tokens"]) > 2 and seg["tokens"][-2] >= timestamp_begin:
-                        # the segment finishes with two timestamp tokens
-                        # we need to ignore the last timestamp token
-                        # see https://github.com/huggingface/transformers/pull/34537
-                        seg["tokens"] = seg["tokens"][:-1]
-
             if prompt_ids is not None and generation_config.prompt_condition_type == "all-segments":
                 prev_ids = prompt_ids
             else:
@@ -1833,6 +1922,8 @@ class WhisperGenerationMixin(GenerationMixin):
                 padding=padding,
                 bos_token_tensor=prev_ids,
                 cut_off_length=cut_off_length,
+                skip_ending_double_timestamps=True,
+                timestamp_begin=timestamp_begin,
             )
             decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
 

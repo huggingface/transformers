@@ -14,13 +14,14 @@
 # limitations under the License.
 """Fast Image processor class for ViTMatte."""
 
-from functools import partial
 from typing import Optional, Union
+
+import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -30,45 +31,18 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     get_image_size,
-    make_list_of_images,
-    validate_kwargs,
 )
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
     filter_out_non_signature_kwargs,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+from .image_processing_vitmatte import VitMatteImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
-
-
-class VitMatteFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Whether to pad the image to make the width and height divisible by `size_divisibility`. Can be overridden
-        by the `do_pad` parameter in the `preprocess` method.
-    size_divisibility (`int`, *optional*, defaults to 32):
-        The width and height of the image will be padded to be divisible by this number.
-    """
-
-    do_pad: Optional[bool]
-    size_divisibility: int
 
 
 @auto_docstring
@@ -79,116 +53,70 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
     image_mean: Optional[Union[float, list[float]]] = IMAGENET_STANDARD_MEAN
     image_std: Optional[Union[float, list[float]]] = IMAGENET_STANDARD_STD
     do_pad: bool = True
-    size_divisibility: int = 32
-    valid_kwargs = VitMatteFastImageProcessorKwargs
+    size_divisor: int = 32
+    valid_kwargs = VitMatteImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[VitMatteFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[VitMatteImageProcessorKwargs]) -> None:
+        size_divisibility = kwargs.pop("size_divisibility", None)
+        kwargs.setdefault("size_divisor", size_divisibility)
         super().__init__(**kwargs)
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images: list["torch.Tensor"],
-        trimaps: list["torch.Tensor"],
-        **kwargs: Unpack[VitMatteFastImageProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        trimaps (`list[torch.Tensor]`):
-            The trimaps to preprocess.
-        """
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Extract parameters that are only used for preparing the input images
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
-        input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
-
-        # Prepare input images
-        images = self._prepare_input_images(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-
-        # Prepare input trimaps
-        trimaps = self._prepare_input_trimaps(trimaps=trimaps, device=device)
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._further_process_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
-        # Pop kwargs that are not needed in _preprocess
-        kwargs.pop("resample")
-        kwargs.pop("default_to_square")
-        kwargs.pop("data_format")
-        kwargs.pop("do_resize")
-        kwargs.pop("do_center_crop")
-        kwargs.pop("size")
-        kwargs.pop("crop_size")
-
-        return self._preprocess(images, trimaps, **kwargs)
-
-    def _prepare_input_trimaps(
-        self, trimaps: ImageInput, device: Optional["torch.device"] = None
-    ) -> list["torch.Tensor"]:
-        """
-        Prepare input trimaps for processing,m this can not yet deal with nested list
-
-        Args:
-            trimaps ('ImageInout):
-                The input trimaps to be process, should not be nested
-            device('Optional['torch.device'] defaults to 'self.device'):
-                The device to process the trimaps on
-
-        Returns:
-            list['torch.Tensor']:
-                Input trimaps converted to a list of tensors
-        """
-        # from batch or single image to list, and insert channel dimension
-        trimaps = make_list_of_images(trimaps, expected_ndims=2)
-
-        # passing ChannelDimension.First achieves correct functionality on grayscale/single channel
-        process_image_fn = partial(
-            self._process_image,
-            input_data_format=ChannelDimension.FIRST,
-            device=device,
-        )
-
-        processed_trimaps = []
-        for trimap in trimaps:
-            processed_trimaps.append(torch.unsqueeze(process_image_fn(trimap), dim=0))
-
-        return processed_trimaps
 
     def _pad_image(
         self,
-        images: "torch.tensor",
-        size_divisibility: int = 32,
-    ) -> "torch.tensor":
+        images: torch.Tensor,
+        size_divisor: int = 32,
+    ) -> torch.Tensor:
         """
-        Pads an image or batched images constantly so that width and height are divisible by size_divisibility
+        Pads an image or batched images constantly so that width and height are divisible by size_divisor
 
         Args:
-            image (`torch,tensor`):
+            image (`torch.Tensor`):
                 Image to pad.
-            size_divisibility (`int`, *optional*, defaults to 32):
+            size_divisor (`int`, *optional*, defaults to 32):
                 The width and height of the image will be padded to be divisible by this number.
         """
         height, width = get_image_size(images, channel_dim=ChannelDimension.FIRST)
 
-        pad_height = 0 if height % size_divisibility == 0 else size_divisibility - height % size_divisibility
-        pad_width = 0 if width % size_divisibility == 0 else size_divisibility - width % size_divisibility
+        pad_height = 0 if height % size_divisor == 0 else size_divisor - height % size_divisor
+        pad_width = 0 if width % size_divisor == 0 else size_divisor - width % size_divisor
 
         if pad_width + pad_height > 0:
             padding = (0, 0, pad_width, pad_height)
             images = F.pad(images, padding)
 
         return images
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: list["torch.Tensor"],
+        trimaps: list["torch.Tensor"],
+        **kwargs: Unpack[VitMatteImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        trimaps (`list[torch.Tensor]`):
+            The trimaps to preprocess.
+        """
+        return super().preprocess(images, trimaps, **kwargs)
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        trimaps: ImageInput,
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[VitMatteImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs.
+        """
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        trimaps = self._prepare_image_like_inputs(images=trimaps, expected_ndims=2, device=device)
+
+        return self._preprocess(images, trimaps, **kwargs)
 
     @filter_out_non_signature_kwargs()
     def _preprocess(
@@ -201,11 +129,12 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         do_pad: Optional[bool] = None,
-        size_divisibility: Optional[int] = None,
+        size_divisor: Optional[int] = None,
+        disable_grouping: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images)
-        grouped_trimaps, grouped_trimaps_index = group_images_by_shape(trimaps)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        grouped_trimaps, grouped_trimaps_index = group_images_by_shape(trimaps, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape in grouped_images:
             stacked_images = grouped_images[shape]
@@ -219,7 +148,7 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
             )
             stacked_images = torch.cat([stacked_images, stacked_trimaps], dim=1)
             if do_pad:
-                stacked_images = self._pad_image(stacked_images, self.size_divisibility)
+                stacked_images = self._pad_image(stacked_images, size_divisor)
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)

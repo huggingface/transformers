@@ -43,6 +43,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 [[autodoc]] AwqConfig
 
 ## EetqConfig
+
 [[autodoc]] EetqConfig
 
 ## GPTQConfig
@@ -64,6 +65,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## HqqConfig
 
 [[autodoc]] HqqConfig
+
+## Mxfp4Config
+
+[[autodoc]] Mxfp4Config
 
 ## FbgemmFp8Config
 
@@ -92,6 +97,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## QuarkConfig
 
 [[autodoc]] QuarkConfig
+
+## FPQuantConfig
+
+[[autodoc]] FPQuantConfig
 
 ## AutoRoundConfig
 

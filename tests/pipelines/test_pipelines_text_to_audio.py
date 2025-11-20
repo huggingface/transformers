@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     require_torch,
     require_torch_accelerator,
-    require_torch_or_tf,
     slow,
     torch_device,
 )
@@ -36,7 +35,7 @@ from .test_pipelines_common import ANY
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 class TextToAudioPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING
     # for now only test text_to_waveform and not text_to_spectrogram
@@ -44,7 +43,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_musicgen_pt(self):
         music_generator = pipeline(
-            task="text-to-audio", model="facebook/musicgen-small", framework="pt", do_sample=False, max_new_tokens=5
+            task="text-to-audio", model="facebook/musicgen-small", do_sample=False, max_new_tokens=5
         )
 
         outputs = music_generator("This is a test")
@@ -56,7 +55,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
         # test batching, this time with parameterization in the forward pass
-        music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
+        music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small")
         forward_params = {"do_sample": False, "max_new_tokens": 5}
         outputs = music_generator(
             ["This is a test", "This is a second test"], forward_params=forward_params, batch_size=2
@@ -67,9 +66,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_medium_seamless_m4t_pt(self):
-        speech_generator = pipeline(
-            task="text-to-audio", model="facebook/hf-seamless-m4t-medium", framework="pt", max_new_tokens=5
-        )
+        speech_generator = pipeline(task="text-to-audio", model="facebook/hf-seamless-m4t-medium", max_new_tokens=5)
 
         for forward_params in [{"tgt_lang": "eng"}, {"return_intermediate_token_ids": True, "tgt_lang": "eng"}]:
             outputs = speech_generator("This is a test", forward_params=forward_params)
@@ -90,7 +87,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_small_bark_pt(self):
-        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt")
+        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small")
 
         forward_params = {
             # Using `do_sample=False` to force deterministic output
@@ -140,7 +137,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_conversion_additional_tensor(self):
-        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt", device=torch_device)
+        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", device=torch_device)
         processor = AutoProcessor.from_pretrained("suno/bark-small")
 
         forward_params = {
@@ -178,7 +175,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_vits_model_pt(self):
-        speech_generator = pipeline(task="text-to-audio", model="facebook/mms-tts-eng", framework="pt")
+        speech_generator = pipeline(task="text-to-audio", model="facebook/mms-tts-eng")
 
         outputs = speech_generator("This is a test")
         self.assertEqual(outputs["sampling_rate"], 16000)
@@ -198,7 +195,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @require_torch
     def test_forward_model_kwargs(self):
         # use vits - a forward model
-        speech_generator = pipeline(task="text-to-audio", model="kakao-enterprise/vits-vctk", framework="pt")
+        speech_generator = pipeline(task="text-to-audio", model="kakao-enterprise/vits-vctk")
 
         # for reproducibility
         set_seed(555)
@@ -222,7 +219,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @require_torch
     def test_generative_model_kwargs(self):
         # use musicgen - a generative model
-        music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
+        music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small")
 
         forward_params = {
             "do_sample": True,
@@ -247,6 +244,26 @@ class TextToAudioPipelineTests(unittest.TestCase):
         outputs = music_generator("This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs)
         self.assertListEqual(outputs["audio"].tolist(), audio.tolist())
 
+    @slow
+    @require_torch
+    def test_csm_model_pt(self):
+        speech_generator = pipeline(task="text-to-audio", model="sesame/csm-1b")
+
+        outputs = speech_generator("[0]This is a test")
+        self.assertEqual(outputs["sampling_rate"], 24000)
+
+        audio = outputs["audio"]
+        self.assertEqual(ANY(np.ndarray), audio)
+
+        # test two examples side-by-side
+        outputs = speech_generator(["[0]This is a test", "[0]This is a second test"])
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+
+        # test batching
+        outputs = speech_generator(["[0]This is a test", "[0]This is a second test"], batch_size=2)
+        self.assertEqual(ANY(np.ndarray), outputs[0]["audio"])
+
     def get_test_pipeline(
         self,
         model,
@@ -254,7 +271,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         model_test_kwargs = {}
         if model.can_generate():  # not all models in this pipeline can generate and, therefore, take `generate` kwargs
@@ -266,7 +283,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             **model_test_kwargs,
         )
 

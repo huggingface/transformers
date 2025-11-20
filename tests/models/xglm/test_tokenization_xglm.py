@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pickle
-import shutil
-import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import SPIECE_UNDERLINE, XGLMTokenizer, XGLMTokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
-from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -140,13 +137,6 @@ class XGLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @cached_property
     def big_tokenizer(self):
         return XGLMTokenizer.from_pretrained("facebook/xglm-564M")
-
-    def test_picklable_without_disk(self):
-        with tempfile.NamedTemporaryFile() as f:
-            shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = XGLMTokenizer(f.name, keep_accents=True)
-            pickled_tokenizer = pickle.dumps(tokenizer)
-        pickle.loads(pickled_tokenizer)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:

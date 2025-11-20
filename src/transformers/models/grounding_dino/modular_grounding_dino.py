@@ -1,20 +1,38 @@
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+# coding=utf-8
+# Copyright 2025 the HuggingFace Inc. team. All rights reserved.
+#
+# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
+# and OPT implementations in this library. It has been modified from its
+# original forms to accommodate minor architectural differences compared
+# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from typing import TYPE_CHECKING, Optional, Union
+
+import torch
 
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
 from ...image_transforms import center_to_corners_format
 from ...utils import (
     TensorType,
-    is_torch_available,
     logging,
 )
 
 
 if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
-
-if is_torch_available():
-    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -27,7 +45,7 @@ def _scale_boxes(boxes, target_sizes):
     Args:
         boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`):
             Bounding boxes to scale. Each box is expected to be in (x1, y1, x2, y2) format.
-        target_sizes (`List[Tuple[int, int]]` or `torch.Tensor` of shape `(batch_size, 2)`):
+        target_sizes (`list[tuple[int, int]]` or `torch.Tensor` of shape `(batch_size, 2)`):
             Target sizes to scale the boxes to. Each target size is expected to be in (height, width) format.
 
     Returns:
@@ -40,7 +58,7 @@ def _scale_boxes(boxes, target_sizes):
     elif isinstance(target_sizes, torch.Tensor):
         image_height, image_width = target_sizes.unbind(1)
     else:
-        raise ValueError("`target_sizes` must be a list, tuple or torch.Tensor")
+        raise TypeError("`target_sizes` must be a list, tuple or torch.Tensor")
 
     scale_factor = torch.stack([image_width, image_height, image_width, image_height], dim=1)
     scale_factor = scale_factor.unsqueeze(1).to(boxes.device)
@@ -53,7 +71,7 @@ class GroundingDinoImageProcessorFast(DetrImageProcessorFast):
         self,
         outputs: "GroundingDinoObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
     ):
         """
         Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -64,12 +82,12 @@ class GroundingDinoImageProcessorFast(DetrImageProcessorFast):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.1):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the following keys:
+            `list[Dict]`: A list of dictionaries, each dictionary containing the following keys:
             - "scores": The confidence scores for each predicted box on the image.
             - "labels": Indexes of the classes predicted by the model on the image.
             - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
@@ -102,25 +120,13 @@ class GroundingDinoImageProcessorFast(DetrImageProcessorFast):
 
         return results
 
-    def post_process():
-        raise NotImplementedError("Post-processing is not implemented for Grounding-Dino yet.")
-
-    def post_process_segmentation():
+    def post_process_instance_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for Grounding-Dino yet.")
 
-    def post_process_instance():
-        raise NotImplementedError("Instance post-processing is not implemented for Grounding-Dino yet.")
-
-    def post_process_panoptic():
-        raise NotImplementedError("Panoptic post-processing is not implemented for Grounding-Dino yet.")
-
-    def post_process_instance_segmentation():
-        raise NotImplementedError("Segmentation post-processing is not implemented for Grounding-Dino yet.")
-
-    def post_process_semantic_segmentation():
+    def post_process_semantic_segmentation(self):
         raise NotImplementedError("Semantic segmentation post-processing is not implemented for Grounding-Dino yet.")
 
-    def post_process_panoptic_segmentation():
+    def post_process_panoptic_segmentation(self):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Grounding-Dino yet.")
 
 

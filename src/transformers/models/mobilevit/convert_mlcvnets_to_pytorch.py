@@ -155,7 +155,7 @@ def convert_state_dict(orig_state_dict, model, base_model=False):
     else:
         model_prefix = "mobilevit."
 
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if key[:8] == "encoder.":
@@ -302,7 +302,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", required=True, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

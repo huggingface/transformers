@@ -127,14 +127,14 @@ def convert_deformable_detr_checkpoint(
     # load original state dict
     state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
     # rename keys
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
     prefix = "model."
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if not key.startswith("class_embed") and not key.startswith("bbox_embed"):
             val = state_dict.pop(key)
             state_dict[prefix + key] = val
@@ -222,7 +222,9 @@ if __name__ == "__main__":
         help="Path to the folder to output PyTorch model.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     args = parser.parse_args()
     convert_deformable_detr_checkpoint(

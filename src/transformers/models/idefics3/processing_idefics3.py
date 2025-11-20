@@ -16,16 +16,15 @@
 Processor class for Idefics3.
 """
 
-import math
 import re
 from itertools import accumulate
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import logging
 
@@ -88,14 +87,7 @@ def get_image_prompt_string(
     )
 
 
-class Idefics3ImagesKwargs(ImagesKwargs, total=False):
-    return_row_col_info: Optional[bool]
-    max_image_size: Optional[Dict[str, int]]
-
-
 class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Idefics3ImagesKwargs
-
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -107,9 +99,6 @@ class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
             "return_row_col_info": True,
         },
     }
-
-
-Idefics3ProcessorKwargs.__annotations__["images_kwargs"] = Idefics3ImagesKwargs  # python 3.8 compatibility
 
 
 class Idefics3Processor(ProcessorMixin):
@@ -132,18 +121,9 @@ class Idefics3Processor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Idefics3ImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: Optional[str] = None, **kwargs
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
         self.image_token = AddedToken("<image>", normalized=False, special=True).content
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True).content
@@ -186,10 +166,8 @@ class Idefics3Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
-        text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
-        audio=None,
-        videos=None,
+        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         image_seq_len: Optional[int] = None,
         **kwargs: Unpack[Idefics3ProcessorKwargs],
     ) -> BatchEncoding:
@@ -224,10 +202,10 @@ class Idefics3Processor(ProcessorMixin):
         ```
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`, *optional*):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. If is of type `List[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
-            text (`Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]`, *optional*):
+                tensor. If is of type `list[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
+            text (`Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -304,8 +282,8 @@ class Idefics3Processor(ProcessorMixin):
                         f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
                     )
 
-                image_rows = inputs.pop("rows", [[0] * len(text)])
-                image_cols = inputs.pop("cols", [[0] * len(text)])
+                image_rows = inputs.pop("rows", [[0] * n_images for n_images in n_images_in_text])
+                image_cols = inputs.pop("cols", [[0] * n_images for n_images in n_images_in_text])
 
                 fake_image_token = self.fake_image_token
                 image_token = self.image_token
@@ -377,7 +355,7 @@ class Idefics3Processor(ProcessorMixin):
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
-            image_sizes (`List[List[int]]`, *optional*):
+            image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
 
         Returns:
@@ -390,7 +368,7 @@ class Idefics3Processor(ProcessorMixin):
             images_kwargs = Idefics3ProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
 
-            num_image_patches = [
+            num_image_row_cols = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
                 for image_size in image_sizes
             ]
@@ -398,37 +376,16 @@ class Idefics3Processor(ProcessorMixin):
             base_image_length = self.image_seq_len + 3
             col_length = self.image_seq_len + 2
             num_image_tokens = []
+            num_image_patches = []
 
-            for num_patches in num_image_patches:
-                num_cols = num_rows = int(math.sqrt(num_patches - 1))
+            for num_patches, num_rows, num_cols in num_image_row_cols:
                 row_length = col_length * num_cols + 1
                 num_image_tokens.append(base_image_length + (row_length * num_rows))
+                num_image_patches.append(num_patches)
 
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Idefics3TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        batched_decode_output = self.tokenizer.batch_decode(*args, **kwargs)
-        return [self._regex_to_remove_extra_special_tokens.sub("<image>", s) for s in batched_decode_output]
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Idefics3TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        decode_output = self.tokenizer.decode(*args, **kwargs)
-        return self._regex_to_remove_extra_special_tokens.sub("<image>", decode_output)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names + tokenizer_input_names))
 
 
 __all__ = ["Idefics3Processor"]

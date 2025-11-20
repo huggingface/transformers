@@ -16,7 +16,9 @@
 
 import unittest
 
-from transformers import Phi3Config, StaticCache, is_torch_available
+import pytest
+
+from transformers import StaticCache, is_torch_available
 from transformers.models.auto.configuration_auto import AutoConfig
 from transformers.testing_utils import (
     Expectations,
@@ -34,11 +36,8 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         Phi3ForCausalLM,
-        Phi3ForSequenceClassification,
-        Phi3ForTokenClassification,
         Phi3Model,
     )
-    from transformers.models.phi3.modeling_phi3 import Phi3RotaryEmbedding
 
     end_of_text_token = 32000
 
@@ -46,13 +45,7 @@ if is_torch_available():
         def __init__(self, model: Phi3ForCausalLM, batch_size: int, max_seq_len: int):
             super().__init__()
             self.model = model
-            self.cache = StaticCache(
-                config=model.config,
-                max_batch_size=batch_size,
-                max_cache_len=max_seq_len,
-                device=self.model.device,
-                dtype=self.model.dtype,
-            )
+            self.cache = StaticCache(config=model.config, max_cache_len=max_seq_len)
 
         def forward(
             self,
@@ -91,36 +84,13 @@ if is_torch_available():
 
 
 class Phi3ModelTester(CausalLMModelTester):
-    config_class = Phi3Config
     if is_torch_available():
         base_model_class = Phi3Model
-        causal_lm_class = Phi3ForCausalLM
-        sequence_class = Phi3ForSequenceClassification
-        token_class = Phi3ForTokenClassification
 
 
 @require_torch
 class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (Phi3Model, Phi3ForCausalLM, Phi3ForSequenceClassification, Phi3ForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Phi3Model,
-            "text-classification": Phi3ForSequenceClassification,
-            "token-classification": Phi3ForTokenClassification,
-            "text-generation": Phi3ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = Phi3ModelTester
-    rotary_embedding_layer = Phi3RotaryEmbedding
 
 
 @slow
@@ -138,7 +108,12 @@ class Phi3IntegrationTest(unittest.TestCase):
 
         output = model(**input_ids).logits
 
-        EXPECTED_OUTPUT = torch.tensor([[ 0.9979, -1.9449, -2.5613, -2.2110, -0.9323, -2.2726, -3.2468, -2.0122,-1.0021, -1.2764, -1.0876, -1.2358,  3.9385,  6.2152, -0.3695, -2.3285,-1.2907, -1.8238, -1.9941, -2.2098, -0.6923, -1.6793, -1.1660, -2.0469,-0.7369, -1.4101, -1.4091, -3.1694, -1.8383, -1.1952],[ 3.0525,  1.9178,  3.7016,  0.9263,  0.3397,  1.9584,  2.1347,  0.3482, 1.3773,  0.2153,  0.2798,  0.8360,  9.0936, 11.4944, -0.3575, -0.9442,-0.1246,  1.3869,  0.9846,  1.7243,  0.9150,  1.0823,  0.4313,  1.5742, 0.2566, -0.1401, -1.3019,  0.4967,  0.6941,  0.7214]]).to(torch_device)  # fmt: skip
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                [8.9005, 8.5380, 12.0361, 9.1562, 7.4068, 10.2581, 7.8991, 7.2447,7.0626, 7.5760, 7.8315, 9.4076, 16.1104, 20.1290, 7.7500, 7.1947, 6.1550, 7.0563, 8.5344, 8.7248, 7.1359, 7.8237, 7.6817, 7.6395, 7.7924, 6.9702, 6.9097, 8.7074, 9.5768, 8.1145],
+                [18.7090, 18.5701, 19.3660, 21.5171, 17.5042, 17.8716, 16.3554, 17.4617, 18.1623, 16.5641, 17.7547, 18.0193, 23.8355, 29.4481, 16.3864, 16.0560, 16.1543, 18.5507, 18.1343, 17.3883, 17.7422, 17.3012, 16.7657, 17.6874,17.9067, 16.8301, 16.2719, 18.3709, 19.0318, 16.7315],
+            ]
+        ).to(torch_device)  # fmt: skip
 
         torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
 
@@ -199,7 +174,12 @@ class Phi3IntegrationTest(unittest.TestCase):
 
         output = model(**input_ids).logits
 
-        EXPECTED_OUTPUT = torch.tensor([[ 1.8478, -0.5709, -1.6792, -1.2133, -0.7809, -0.8817, -2.0969, -1.1191,-0.7731, -1.0483, -0.5961, -1.3067,  3.1325,  6.9442, -0.4803, -0.9154,-1.3085, -1.0822, -1.1433, -0.7660, -0.8531, -0.9150, -0.6179, -1.6153,-0.2239, -1.3207, -1.1187, -2.4795, -1.4733, -0.4931],[ 3.5839,  2.4722,  3.7130,  1.2032,  0.7356,  2.7777,  2.5256,  0.9157, 1.6431,  0.3533,  0.5100,  1.3512,  8.9873, 10.9815,  0.3530,  0.1473, 0.2051,  1.8553,  1.5988,  2.2268,  1.1897,  1.2829,  0.7894,  1.8895, 0.7666,  0.4122, -0.9316,  0.9936,  1.2722,  0.8263]]).to(torch_device)  # fmt: skip
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                [10.6076, 10.6499, 14.0601, 19.8499, 15.1787, 19.3717, 19.9782, 17.0394, 15.7875, 18.1403, 19.2748, 12.6627, 20.2804, 24.5362, 18.8105, 15.3394, 12.1219, 15.9941, 19.0679, 16.4936, 17.0505, 16.8738, 17.3090, 16.6572, 16.8754, 16.6912, 15.1627, 18.8721, 19.6017, 18.5513],
+                [16.2141, 18.7298, 17.4216, 21.9312, 17.7606, 17.6177, 16.7766, 17.9859, 18.4132, 17.4505, 18.6385, 18.5396, 23.6260, 28.7443, 16.1817, 15.5148, 16.0035, 18.6652, 18.3087, 17.2960, 17.8223, 17.7776, 16.8686, 17.4093, 17.8037, 17.2544, 16.7231, 18.6195, 19.6784, 16.6647],
+            ]
+        ).to(torch_device)  # fmt: skip
 
         torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
 
@@ -255,7 +235,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         See #33586 for more
         """
         model = Phi3ForCausalLM.from_pretrained(
-            "microsoft/Phi-3-mini-4k-instruct", device_map=torch_device, torch_dtype=torch.bfloat16
+            "microsoft/Phi-3-mini-4k-instruct", device_map=torch_device, dtype=torch.bfloat16
         )
         tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
 
@@ -338,6 +318,7 @@ class Phi3IntegrationTest(unittest.TestCase):
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
@@ -356,6 +337,7 @@ class Phi3IntegrationTest(unittest.TestCase):
 
         expected_text_completions = Expectations(
             {
+                ("xpu", None): ["You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user. A 45-year-old patient with a 10-year history of type 2 diabetes mellitus, who is currently on metformin and a SGLT2 inhibitor, presents with a 2-year history"],
                 ("rocm", (9, 5)): ["You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user. A 45-year-old patient with a 10-year history of type 2 diabetes mellitus presents with a 2-year history of progressive, non-healing, and painful, 2.5 cm"],
                 ("cuda", None): ["You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user. A 45-year-old patient with a 10-year history of type 2 diabetes mellitus, who is currently on metformin and a SGLT2 inhibitor, presents with a 2-year history"],
             }
@@ -370,11 +352,11 @@ class Phi3IntegrationTest(unittest.TestCase):
         # NOTE: To make the model exportable we need to set the rope scaling to default to avoid hitting
         # the data-dependent control flow in _longrope_frequency_update. Alternatively, we can rewrite
         # that function to avoid the data-dependent control flow.
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            config.rope_scaling["type"] = "default"
+        if hasattr(config, "rope_parameters") and config.rope_parameters is not None:
+            config.rope_parameters["type"] = "default"
 
         # Load model
-        device = "cpu"
+        device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"
@@ -383,7 +365,7 @@ class Phi3IntegrationTest(unittest.TestCase):
             model_id,
             config=config,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
@@ -407,7 +389,10 @@ class Phi3IntegrationTest(unittest.TestCase):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
-        exported_program = exportable_module.export()
+        exported_program = exportable_module.export(
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
+        )
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )

@@ -64,7 +64,7 @@ def get_paligemma_config(variant: str, precision: str):
             "num_hidden_layers": 18,
             "num_key_value_heads": 1,
             "head_dim": 256,
-            "torch_dtype": precision,
+            "dtype": precision,
             "hidden_size": 2048,
             "hidden_activation": "gelu_pytorch_tanh",
             "num_attention_heads": 8,
@@ -72,7 +72,7 @@ def get_paligemma_config(variant: str, precision: str):
             "is_encoder_decoder": False,
         }
         vision_config = {
-            "torch_dtype": precision,
+            "dtype": precision,
             "image_size": image_size,
             "patch_size": patch_size,
             "num_image_tokens": num_image_tokens,
@@ -279,19 +279,16 @@ def convert_paligemma_checkpoint(
     # We add an image token so we resize the model
     model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
     model.language_model.model.embed_tokens.weight.data[257152:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[257152:].shape[0]))),
+        tuple(dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[257152:].shape[0])),
         dim=0,
     )
     model.language_model.lm_head.weight.data[257152:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[257152:].shape[0]))),
+        tuple(dist.sample() for _ in range(model.language_model.lm_head.weight.data[257152:].shape[0])),
         dim=0,
     )
 
     model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
     processor.save_pretrained(pytorch_dump_folder_path)
-
-
-#
 
 
 if __name__ == "__main__":

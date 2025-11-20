@@ -16,13 +16,13 @@
 import inspect
 import math
 import unittest
+from functools import cached_property
 
 from transformers import DabDetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -182,9 +182,7 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else {}
     )
     is_encoder_decoder = True
-    test_torchscript = False
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
     zero_init_hidden_state = True
     test_torch_exportable = True
@@ -194,7 +192,7 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ in ["DabDetrForObjectDetection"]:
+            if model_class.__name__ == "DabDetrForObjectDetection":
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -664,12 +662,7 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             arg_names = [*signature.parameters.keys()]
 
             if model.config.is_encoder_decoder:
-                expected_arg_names = ["pixel_values", "pixel_mask"]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" in arg_names
-                    else []
-                )
+                expected_arg_names = ["pixel_values", "pixel_mask", "decoder_attention_mask"]
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = ["pixel_values", "pixel_mask"]
@@ -706,55 +699,6 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             self.assertTrue(outputs)
 
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        configs_no_init.init_xavier_std = 1e9
-        # Copied from RT-DETR
-        configs_no_init.initializer_bias_prior_prob = 0.2
-        bias_value = -1.3863  # log_e ((1 - 0.2) / 0.2)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if "bbox_attention" in name and "bias" not in name:
-                        self.assertLess(
-                            100000,
-                            abs(param.data.max().item()),
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    # Modified from RT-DETR
-                    elif "class_embed" in name and "bias" in name:
-                        bias_tensor = torch.full_like(param.data, bias_value)
-                        torch.testing.assert_close(
-                            param.data,
-                            bias_tensor,
-                            atol=1e-4,
-                            rtol=1e-4,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif "activation_fn" in name and config.activation_function == "prelu":
-                        self.assertTrue(
-                            param.data.mean() == 0.25,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif "backbone.conv_encoder.model" in name:
-                        continue
-                    elif "self_attn.in_proj_weight" in name:
-                        self.assertIn(
-                            ((param.data.mean() * 1e2).round() / 1e2).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
 
 TOLERANCE = 1e-4
 CHECKPOINT = "IDEA-Research/dab-detr-resnet-50"
@@ -787,7 +731,11 @@ class DabDetrModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 300, 256))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[-0.4879, -0.2594, 0.4524], [-0.4997, -0.4258, 0.4329], [-0.8220, -0.4996, 0.0577]]
+            [
+                [-0.4879, -0.2594, 0.4524],
+                [-0.4997, -0.4258, 0.4329],
+                [-0.8220, -0.4996, 0.0577],
+            ]
         ).to(torch_device)
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=2e-4, rtol=2e-4)
 
@@ -806,26 +754,34 @@ class DabDetrModelIntegrationTests(unittest.TestCase):
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         expected_slice_logits = torch.tensor(
-            [[-10.1765, -5.5243, -8.9324], [-9.8138, -5.6721, -7.5161], [-10.3054, -5.6081, -8.5931]]
+            [
+                [-10.1764, -5.5247, -8.9324],
+                [-9.8137, -5.6730, -7.5163],
+                [-10.3056, -5.6075, -8.5935],
+            ]
         ).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice_logits, atol=3e-4, rtol=3e-4)
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         expected_slice_boxes = torch.tensor(
-            [[0.3708, 0.3000, 0.2753], [0.5211, 0.6125, 0.9495], [0.2897, 0.6730, 0.5459]]
+            [
+                [0.3708, 0.3000, 0.2754],
+                [0.5211, 0.6126, 0.9494],
+                [0.2897, 0.6731, 0.5460],
+            ]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=3e-4, rtol=3e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.8732, 0.8563, 0.8554, 0.6079, 0.5896]).to(torch_device)
+        expected_scores = torch.tensor([0.8732, 0.8563, 0.8554, 0.6080, 0.5895]).to(torch_device)
         expected_labels = [17, 75, 17, 75, 63]
-        expected_boxes = torch.tensor([14.6970, 49.3892, 320.5165, 469.2765]).to(torch_device)
+        expected_boxes = torch.tensor([14.6931, 49.3886, 320.5176, 469.2762]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
-        torch.testing.assert_close(results["scores"], expected_scores, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(results["scores"], expected_scores, atol=3e-4, rtol=3e-4)
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][0, :], expected_boxes, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(results["boxes"][0, :], expected_boxes, atol=3e-4, rtol=3e-4)

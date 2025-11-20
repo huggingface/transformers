@@ -20,6 +20,7 @@ import unittest
 from functools import reduce
 
 import numpy as np
+import pytest
 import requests
 
 from transformers import (
@@ -89,7 +90,7 @@ class JanusVisionText2TextModelTester:
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
-            "num_image_tokens": 4,
+            "num_image_tokens": 16,
             "num_channels": 3,
             "is_training": True,
             "hidden_size": 32,
@@ -153,6 +154,7 @@ class JanusVisionText2TextModelTester:
             text_config=self.text_config,
             vision_config=self.vision_config,
             vq_config=self.get_vq_config(),
+            image_token_id=self.image_token_index,
         )
 
     def prepare_config_and_inputs(self):
@@ -191,58 +193,12 @@ class JanusVisionText2TextModelTester:
 class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (JanusModel, JanusForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (JanusForConditionalGeneration,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
-    test_head_masking = False
+
     _is_composite = True
 
     def setUp(self):
         self.model_tester = JanusVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=JanusConfig, has_text_modality=False)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["generation_mode"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # Overwrite inputs_embeds tests because we need to delete "pixel values" for VLMs.
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["generation_mode"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
 
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
@@ -337,7 +293,8 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
                             pass
 
     @unittest.skip("There are recompilations in Janus")  # TODO (joao, raushan): fix me
-    def test_generate_compile_model_forward(self):
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
 
@@ -395,9 +352,7 @@ class JanusVQModelTester:
 @require_torch
 class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (JanusVQVAE,) if is_torch_available() else ()
-    test_head_masking = False
-    test_pruning = False
-    fx_compatible = False
+
     has_attentions = False
     test_resize_embeddings = False
 
@@ -439,6 +394,10 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip("Janus VQ module has no hidden states")
     def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip("Janus VQ module has no gradient checkpointing layers")
+    def test_gradient_checkpointing_enable_disable(self):
         pass
 
 
@@ -554,6 +513,12 @@ class JanusIntegrationTest(unittest.TestCase):
                     897, 4044, 1762, 4676
                 ],
                 ("cuda", None): [
+                    4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
+                    13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
+                    15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,
+                    897, 4044, 1762, 4676
+                ],
+                ("xpu", None): [
                     4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
                     13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
                     15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,

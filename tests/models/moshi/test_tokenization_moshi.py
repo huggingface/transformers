@@ -13,9 +13,6 @@
 # limitations under the License.
 
 import inspect
-import pickle
-import shutil
-import tempfile
 import unittest
 
 from transformers import (
@@ -171,18 +168,6 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assertTrue(special_token_id in r_output)
 
-    def test_picklable(self):
-        with tempfile.NamedTemporaryFile() as f:
-            shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = PreTrainedTokenizerFast(
-                tokenizer_object=MoshiConverter(vocab_file=f.name).converted(),
-                bos_token="<s>",
-                unk_token="<unk>",
-                eos_token="</s>",
-            )
-            pickled_tokenizer = pickle.dumps(tokenizer)
-        pickle.loads(pickled_tokenizer)
-
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
@@ -312,7 +297,7 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(expected_result, decoded_input)
 
-    def test_alignement_methods(self):
+    def test_alignment_methods(self):
         # TODO: @ArthurZucker - alignment is broken
         pass
 

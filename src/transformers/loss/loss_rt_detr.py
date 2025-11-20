@@ -35,11 +35,7 @@ if is_vision_available():
 
 
 # different for RT-DETR: not slicing the last element like in DETR one
-@torch.jit.unused
 def _set_aux_loss(outputs_class, outputs_coord):
-    # this is a workaround to make torchscript happy, as torchscript
-    # doesn't support dictionary with non-homogeneous values, such
-    # as a dict having both a Tensor and a list.
     return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
 
@@ -136,7 +132,7 @@ class RTDetrLoss(nn.Module):
         weight_dict (`Dict`):
             Dictionary relating each loss with its weights. These losses are configured in RTDetrConf as
             `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
         alpha (`float`):
             Parameter alpha used to compute the focal loss.
@@ -374,7 +370,7 @@ class RTDetrLoss(nn.Module):
         Args:
              outputs (`dict`, *optional*):
                 Dictionary of tensors, see the output specification of the model for the format.
-             targets (`List[dict]`, *optional*):
+             targets (`list[dict]`, *optional*):
                 List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
                 losses applied, see each loss' doc.
         """
@@ -451,6 +447,7 @@ def RTDetrForObjectDetectionLoss(
     outputs_loss = {}
     outputs_loss["logits"] = logits
     outputs_loss["pred_boxes"] = pred_boxes
+    auxiliary_outputs = None
     if config.auxiliary_loss:
         if denoising_meta_values is not None:
             dn_out_coord, outputs_coord = torch.split(outputs_coord, denoising_meta_values["dn_num_split"], dim=2)

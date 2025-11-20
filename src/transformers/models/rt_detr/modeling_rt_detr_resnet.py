@@ -20,8 +20,10 @@ See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b14
 import math
 from typing import Optional
 
+import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
@@ -297,24 +299,26 @@ class RTDetrResNetEncoder(nn.Module):
 @auto_docstring
 # Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->RTDetrResNet
 class RTDetrResNetPreTrainedModel(PreTrainedModel):
-    config_class = RTDetrResNetConfig
+    config: RTDetrResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["RTDetrResNetConvLayer", "RTDetrResNetShortCut"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
         # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
         elif isinstance(module, nn.Linear):
-            nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
-                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-                nn.init.uniform_(module.bias, -bound, bound)
+                init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-            nn.init.constant_(module.weight, 1)
-            nn.init.constant_(module.bias, 0)
+            init.constant_(module.weight, 1)
+            init.constant_(module.bias, 0)
 
 
 @auto_docstring(
@@ -323,6 +327,8 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
     """
 )
 class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
@@ -339,24 +345,29 @@ class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
     ) -> BackboneOutput:
         r"""
-        Examples:
+                        Examples:
 
-        ```python
-        >>> from transformers import RTDetrResNetConfig, RTDetrResNetBackbone
-        >>> import torch
+                        ```python
+                        >>> from transformers import RTDetrResNetConfig, RTDetrResNetBackbone
+                        >>> import torch
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+                from ...utils.deprecation import deprecate_kwarg
+                from ...utils.deprecation import deprecate_kwarg
 
-        >>> config = RTDetrResNetConfig()
-        >>> model = RTDetrResNetBackbone(config)
+                        >>> config = RTDetrResNetConfig()
+                        >>> model = RTDetrResNetBackbone(config)
 
-        >>> pixel_values = torch.randn(1, 3, 224, 224)
+                        >>> pixel_values = torch.randn(1, 3, 224, 224)
 
-        >>> with torch.no_grad():
-        ...     outputs = model(pixel_values)
+                        >>> with torch.no_grad():
+                        ...     outputs = model(pixel_values)
 
-        >>> feature_maps = outputs.feature_maps
-        >>> list(feature_maps[-1].shape)
-        [1, 2048, 7, 7]
-        ```"""
+                        >>> feature_maps = outputs.feature_maps
+                        >>> list(feature_maps[-1].shape)
+                        [1, 2048, 7, 7]
+                        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

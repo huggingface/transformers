@@ -57,7 +57,7 @@ class Pop2PianoModelTester:
         use_attention_mask=True,
         use_labels=True,
         hidden_size=64,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=8,
@@ -208,8 +208,6 @@ class Pop2PianoModelTester:
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_with_lm_head(
         self,
@@ -406,10 +404,6 @@ class Pop2PianoModelTester:
                 decoder_attention_mask=decoder_attention_mask,
             )
 
-            # check that models has less parameters
-            self.parent.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             # check that outputs are equal
@@ -426,10 +420,6 @@ class Pop2PianoModelTester:
                 tied_model.to(torch_device)
                 tied_model.eval()
 
-                # check that models has less parameters
-                self.parent.assertLess(
-                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-                )
                 random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
                 tied_model_result = tied_model(
@@ -491,11 +481,8 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     pipeline_model_mapping = (
         {"automatic-speech-recognition": Pop2PianoForConditionalGeneration} if is_torch_available() else {}
     )
-    all_parallelizable_model_classes = ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_model_parallel = False
     is_encoder_decoder = True
 
     def setUp(self):

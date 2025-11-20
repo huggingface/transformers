@@ -15,7 +15,7 @@
 """Image processor class for LayoutLMv3."""
 
 from collections.abc import Iterable
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -29,11 +29,12 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -53,6 +54,25 @@ if is_pytesseract_available():
     import pytesseract
 
 logger = logging.get_logger(__name__)
+
+
+class LayoutLMv3ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    apply_ocr (`bool`, *optional*, defaults to `True`):
+        Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
+        the `apply_ocr` parameter in the `preprocess` method.
+    ocr_lang (`str`, *optional*):
+        The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
+        used. Can be overridden by the `ocr_lang` parameter in the `preprocess` method.
+    tesseract_config (`str`, *optional*):
+        Any additional custom configuration flags that are forwarded to the `config` parameter when calling
+        Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
+        `preprocess` method.
+    """
+
+    apply_ocr: bool
+    ocr_lang: Optional[str]
+    tesseract_config: Optional[str]
 
 
 def normalize_box(box, width, height):
@@ -111,7 +131,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to `(size["height"], size["width"])`. Can be
             overridden by `do_resize` in `preprocess`.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after resizing. Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
@@ -143,11 +163,12 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = LayoutLMv3ImageProcessorKwargs
 
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_value: float = 1 / 255,
@@ -179,7 +200,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -191,7 +212,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
@@ -229,7 +250,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample=None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -252,7 +273,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Desired size of the output image after applying `resize`.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the `PILImageResampling` filters.
@@ -279,10 +300,8 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -306,13 +325,10 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         apply_ocr = apply_ocr if apply_ocr is not None else self.apply_ocr
         ocr_lang = ocr_lang if ocr_lang is not None else self.ocr_lang
         tesseract_config = tesseract_config if tesseract_config is not None else self.tesseract_config
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,

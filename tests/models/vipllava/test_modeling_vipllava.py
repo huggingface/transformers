@@ -21,6 +21,7 @@ from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
+    BitsAndBytesConfig,
     VipLlavaConfig,
     VipLlavaForConditionalGeneration,
     VipLlavaModel,
@@ -176,10 +177,8 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
         else ()
     )
     pipeline_model_mapping = {"image-text-to-text": VipLlavaForConditionalGeneration} if is_torch_available() else {}
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -192,49 +191,6 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
     # Copied from tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest.test_mismatching_num_image_tokens
     def test_mismatching_num_image_tokens(self):
         """
@@ -245,6 +201,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
             _ = model(**curr_input_dict)  # successful forward with no modifications
 
@@ -336,7 +293,9 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test(self):
         model_id = "llava-hf/vip-llava-7b-hf"
 
-        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = VipLlavaForConditionalGeneration.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/compel-neg.png"

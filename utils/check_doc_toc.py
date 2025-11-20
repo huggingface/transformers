@@ -33,7 +33,6 @@ python utils/check_doc_toc.py --fix_and_overwrite
 
 import argparse
 from collections import defaultdict
-from typing import List
 
 import yaml
 
@@ -41,7 +40,7 @@ import yaml
 PATH_TO_TOC = "docs/source/en/_toctree.yml"
 
 
-def clean_model_doc_toc(model_doc: List[dict]) -> List[dict]:
+def clean_model_doc_toc(model_doc: list[dict]) -> list[dict]:
     """
     Cleans a section of the table of content of the model documentation (one specific modality) by removing duplicates
     and sorting models alphabetically.

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-09-14 and added to Hugging Face Transformers on 2021-10-15.*
 
 # SEW
 
@@ -45,9 +46,6 @@ This model was contributed by [anton-l](https://huggingface.co/anton-l).
 - SEW is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
 - SEWForCTC is fine-tuned using connectionist temporal classification (CTC) so the model output has to be decoded using
   [`Wav2Vec2CTCTokenizer`].
-
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
 ## Resources
 

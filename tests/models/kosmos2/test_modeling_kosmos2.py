@@ -15,7 +15,6 @@
 
 import copy
 import inspect
-import os
 import tempfile
 import unittest
 
@@ -30,7 +29,6 @@ from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
     IS_XPU_SYSTEM,
     require_torch,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -40,12 +38,11 @@ from transformers.utils import (
     is_vision_available,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -271,9 +268,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     _is_composite = True
@@ -317,24 +312,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # overwrite from common to skip `image_to_text_projection.latent_query`
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if name == "image_to_text_projection.latent_query":
-                        # The original code use ` nn.Parameter(torch.randn(...))` for which this test won't pass.
-                        continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -368,7 +345,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                         v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
                     )
                 # Checking there was no complain of missing weights
-                self.assertEqual(infos["missing_keys"], [])
+                self.assertEqual(infos["missing_keys"], set())
 
     # overwrite from common in order to use `self.model_tester.text_model_tester.num_hidden_layers`
     def test_hidden_states_output(self):
@@ -408,124 +385,53 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # overwrite from common in order to use `config.text_config.vocab_size` instead of `config.vocab_size`
-    def test_tie_model_weights(self):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def check_same_values(layer_1, layer_2):
-            equal = True
-            for p1, p2 in zip(layer_1.weight, layer_2.weight):
-                if p1.data.ne(p2.data).sum() > 0:
-                    equal = False
-            return equal
-
-        for model_class in self.all_model_classes:
-            config.torchscript = True
-            model_not_tied = model_class(config)
-            if model_not_tied.get_output_embeddings() is None:
-                continue
-
-            config_tied = copy.deepcopy(config)
-            config_tied.torchscript = False
-            model_tied = model_class(config_tied)
-            params_tied = list(model_tied.parameters())
-            # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(check_same_values(embeddings, decoding))
-
-            # # Check that after modification, they remain the same.
-            # embeddings.weight.data.div_(2)
-            # # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
-            # self.assertTrue(check_same_values(embeddings, decoding))
-
-            # # Check that after modification, they remain the same.
-            # decoding.weight.data.div_(4)
-            # # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
-            # self.assertTrue(check_same_values(embeddings, decoding))
-
-            # Check that after resize they remain tied.
-            model_tied.resize_token_embeddings(config.text_config.vocab_size + 10)
-            params_tied_2 = list(model_tied.parameters())
-            self.assertEqual(len(params_tied_2), len(params_tied))
-
-            # decoding.weight.data.mul_(20)
-            # # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
-            # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
-
-    @pytest.mark.generate
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    @unittest.skip(
-        "KOSMOS-2 doesn't support inputs embeds. The test isn't skipped by checking input args because KOSMOS-2 has `generate()` overwritten"
-    )
-    def test_generate_from_inputs_embeds(self):
-        pass
-
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @unittest.skip("KOSMOS-2 doesn't support padding")
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
+        pass
+
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(reason="Kosmos2 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # Overwrite because Kosmos-2 need to padd pixel values and pad image-attn-mask
+        # Overwrite -- kosmos2 needs to prepare `image_embeds_position_mask`, and it must be padded accordingly
+        _, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        input_ids = inputs_dict["input_ids"]
 
-        def _prepare_model_kwargs(input_ids, attention_mask, pad_size, signature):
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
-            if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
-            if "image_embeds_position_mask" in signature:
-                image_embeds_position_mask = torch.zeros_like(input_ids)
-                image_embeds_position_mask[:, (pad_size + 1) : pad_size + 1 + self.model_tester.latent_query_num] = 1
-                model_kwargs["image_embeds_position_mask"] = image_embeds_position_mask
-            return model_kwargs
-
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            input_ids = inputs_dict["input_ids"]
-            pixel_values = inputs_dict["pixel_values"]
-            attention_mask = inputs_dict.get("attention_mask")
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
-
-            model = model_class(config).to(torch_device).eval()
-            signature = inspect.signature(model.forward).parameters.keys()
-
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
-
-            # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, pad_size=0, signature=signature)
-            next_logits_wo_padding = model(**model_kwargs, pixel_values=pixel_values).logits[:, -1, :]
-
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
+        def _prepare_image_embeds_position_mask(input_ids, pad_size):
+            image_embeds_position_mask = torch.zeros(
+                input_ids.shape[0], input_ids.shape[1] + pad_size, device=torch_device, dtype=input_ids.dtype
             )
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(
-                padded_input_ids, padded_attention_mask, pad_size=32, signature=signature
-            )
-            next_logits_with_padding = model(**model_kwargs, pixel_values=pixel_values).logits[:, -1, :]
+            image_embeds_position_mask[:, (pad_size + 1) : pad_size + 1 + self.model_tester.latent_query_num] = 1
+            return image_embeds_position_mask
 
-            # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-3, atol=1e-3)
+        # `image_embeds_position_mask` is randomly generated in `prepare_config_and_inputs_for_generate`, and it must
+        # match its padded version for the test to be valid -- we need to pass both
+        unpadded_custom_inputs = {"image_embeds_position_mask": _prepare_image_embeds_position_mask(input_ids, 0)}
+        padded_custom_inputs = {"image_embeds_position_mask": _prepare_image_embeds_position_mask(input_ids, 32)}
+        super().test_left_padding_compatibility(
+            unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
+        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -533,85 +439,52 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model = Kosmos2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
+    @pytest.mark.generate
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    def test_generate_from_inputs_embeds(self, _, num_beams):
+        """Tests that we can generate from `inputs_embeds` instead of `input_ids` in LLMs, VLMs, etc"""
+        # NOTE: overwritten because Kosmos with ids prepares position ids differently from embeds
+        # If the model get ids, all pad tokens are masked from position ids. That is not possible with embeds
 
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class)
+        # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
+        # if fails, you should probably update the `prepare_inputs_for_generation` function
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            config.is_decoder = True
 
-            main_input_name = model_class.main_input_name
+            # Skip models without explicit support
+            model = model_class(config).to(torch_device).eval()
 
-            try:
-                main_input = inputs[main_input_name]
-                model(main_input, inputs["input_ids"], inputs["image_embeds_position_mask"])
-                traced_model = torch.jit.trace(
-                    model, (main_input, inputs["input_ids"], inputs["image_embeds_position_mask"])
-                )
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
-                    non_persistent_buffers[key] = loaded_model_state_dict[key]
-
-            loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+            # Traditional way of generating text
+            input_ids = inputs_dict.pop("input_ids")
+            input_ids[input_ids == config.get_text_config().pad_token_id] = 0
+            generation_kwargs = {
+                "return_dict_in_generate": True,
+                "output_scores": True,
+                "num_beams": num_beams,
+                "do_sample": False,
+                "max_new_tokens": 5,
+                "min_new_tokens": 5,  # generate exactly 5 tokens
+                "use_cache": True,
             }
+            outputs_from_ids = model.generate(input_ids=input_ids, **generation_kwargs, **inputs_dict)
+            self.assertEqual(outputs_from_ids.sequences.shape[:2], (input_ids.shape[0], input_ids.shape[1] + 5))
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output).
+            # The output of the two calls should be the same.
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+            outputs_from_embeds = model.generate(
+                input_ids=input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
+            )
+            self.assertTrue(has_similar_generate_outputs(outputs_from_ids, outputs_from_embeds))
 
-            model_buffers = list(model.buffers())
-            for non_persistent_buffer in non_persistent_buffers.values():
-                found_buffer = False
-                for i, model_buffer in enumerate(model_buffers):
-                    if torch.equal(non_persistent_buffer, model_buffer):
-                        found_buffer = True
-                        break
-
-                self.assertTrue(found_buffer)
-                model_buffers.pop(i)
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                if layer_name in loaded_model_state_dict:
-                    p2 = loaded_model_state_dict[layer_name]
-                    if p1.data.ne(p2.data).sum() > 0:
-                        models_equal = False
-
-            self.assertTrue(models_equal)
-
-            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
-            # (Even with this call, there are still memory leak by ~0.04MB)
-            self.clear_torch_jit_class_registry()
+            # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
+            # be the same
+            outputs_from_embeds_wo_ids = model.generate(
+                inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
+            )
+            outputs_from_embeds.sequences = outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :]
+            self.assertTrue(has_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds))
 
 
 # We will verify our results on an image of cute cats

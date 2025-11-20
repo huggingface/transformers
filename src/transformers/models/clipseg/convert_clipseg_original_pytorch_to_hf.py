@@ -36,12 +36,12 @@ def get_clipseg_config(model_name):
     text_config = CLIPSegTextConfig()
     vision_config = CLIPSegVisionConfig(patch_size=16)
 
-    use_complex_transposed_convolution = True if "refined" in model_name else False
+    use_complex_transposed_convolution = "refined" in model_name
     reduce_dim = 16 if "rd16" in model_name else 64
 
-    config = CLIPSegConfig.from_text_vision_configs(
-        text_config,
-        vision_config,
+    config = CLIPSegConfig(
+        text_config=text_config,
+        vision_config=vision_config,
         use_complex_transposed_convolution=use_complex_transposed_convolution,
         reduce_dim=reduce_dim,
     )
@@ -112,7 +112,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if key.startswith("clip_model") and "attn.in_proj" in key:
@@ -172,7 +172,7 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # remove some keys
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if key.startswith("model"):
             state_dict.pop(key, None)
 
@@ -181,7 +181,7 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
     if missing_keys != ["clip.text_model.embeddings.position_ids", "clip.vision_model.embeddings.position_ids"]:
-        raise ValueError("Missing keys that are not expected: {}".format(missing_keys))
+        raise ValueError(f"Missing keys that are not expected: {missing_keys}")
     if unexpected_keys != ["decoder.reduce.weight", "decoder.reduce.bias"]:
         raise ValueError(f"Unexpected keys: {unexpected_keys}")
 
@@ -257,7 +257,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

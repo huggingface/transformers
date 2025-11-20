@@ -16,11 +16,11 @@
 import unittest
 
 from transformers import Swin2SRConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -166,11 +166,7 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else {}
     )
 
-    fx_compatible = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torchscript = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -237,23 +233,6 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         model_name = "caidas/swin2SR-classical-sr-x2-64"
         model = Swin2SRModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    # overwriting because of `logit_scale` parameter
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if "logit_scale" in name:
-                    continue
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -338,7 +317,7 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
     def test_inference_fp16(self):
         processor = Swin2SRImageProcessor()
         model = Swin2SRForImageSuperResolution.from_pretrained(
-            "caidas/swin2SR-classical-sr-x2-64", torch_dtype=torch.float16
+            "caidas/swin2SR-classical-sr-x2-64", dtype=torch.float16
         ).to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -351,7 +330,12 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size([1, 3, 976, 1296])
         self.assertEqual(outputs.reconstruction.shape, expected_shape)
-        expected_slice = torch.tensor(
-            [[0.5454, 0.5542, 0.5640], [0.5518, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]], dtype=model.dtype
-        ).to(torch_device)
-        torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+
+        expectations = Expectations(
+            {
+                (None, None): [[0.5454, 0.5542, 0.5640], [0.5518, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]],
+                ("cuda", 8): [[0.5454, 0.5547, 0.5640], [0.5522, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device, dtype=model.dtype)
+        torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)

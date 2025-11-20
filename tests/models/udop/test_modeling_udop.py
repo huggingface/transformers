@@ -15,10 +15,11 @@
 import copy
 import inspect
 import unittest
+from functools import cached_property
 
-from huggingface_hub import hf_hub_download
+from datasets import load_dataset
 
-from transformers import UdopConfig, is_torch_available, is_vision_available
+from transformers import UdopConfig, is_torch_available
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
@@ -27,7 +28,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -40,10 +40,6 @@ if is_torch_available():
     import torch.nn.functional as F
 
     from transformers import UdopEncoderModel, UdopForConditionalGeneration, UdopModel, UdopProcessor
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class UdopModelTester:
@@ -59,7 +55,7 @@ class UdopModelTester:
         use_attention_mask=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=32,
@@ -181,8 +177,6 @@ class UdopModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_with_lm_head(
         self,
@@ -279,12 +273,8 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_pruning = False
-    test_torchscript = False
-    test_head_masking = False
+
     test_resize_embeddings = True
-    test_model_parallel = False
     is_encoder_decoder = True
     test_cpu_offload = False
     # The small UDOP model needs higher percentages for CPU/MP tests
@@ -340,6 +330,10 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="Udop has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -353,13 +347,10 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 "attention_mask",
                 "bbox",
                 "cache_position",
-                "cross_attn_head_mask",
                 "decoder_attention_mask",
-                "decoder_head_mask",
                 "decoder_input_ids",
                 "decoder_inputs_embeds",
                 "encoder_outputs",
-                "head_mask",
                 "input_ids",
                 "inputs_embeds",
             ]
@@ -429,7 +420,7 @@ class UdopEncoderOnlyModelTester:
         is_training=False,
         use_attention_mask=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         decoder_layers=2,
         num_attention_heads=4,
         d_ff=37,
@@ -556,12 +547,8 @@ class UdopEncoderOnlyModelTester:
 
 class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
-    test_pruning = False
-    test_torchscript = False
-    test_head_masking = False
+
     test_resize_embeddings = False
-    test_model_parallel = False
-    all_parallelizable_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = UdopEncoderOnlyModelTester(self)
@@ -618,12 +605,8 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 class UdopModelIntegrationTests(unittest.TestCase):
     @cached_property
     def image(self):
-        filepath = hf_hub_download(
-            repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
-        )
-        image = Image.open(filepath).convert("RGB")
-
-        return image
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        return ds[1]["image"]
 
     @cached_property
     def processor(self):

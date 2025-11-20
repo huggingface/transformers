@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union, overload
+from typing import Any, Union, overload
 
 import numpy as np
 
@@ -60,7 +60,7 @@ def normalize_box(box, width, height):
     ]
 
 
-def apply_tesseract(image: "Image.Image", lang: Optional[str], tesseract_config: Optional[str]):
+def apply_tesseract(image: "Image.Image", lang: str | None, tesseract_config: str | None):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
     # apply OCR
     data = pytesseract.image_to_data(image, lang=lang, output_type="dict", config=tesseract_config)
@@ -135,6 +135,10 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     """
 
     _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = None
+    _load_feature_extractor = None
+    _load_tokenizer = True
     # Make sure the docstring is updated when the default generation config is changed
     _default_generation_config = GenerationConfig(
         max_new_tokens=256,
@@ -164,8 +168,8 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         padding=None,
         doc_stride=None,
         max_question_len=None,
-        lang: Optional[str] = None,
-        tesseract_config: Optional[str] = None,
+        lang: str | None = None,
+        tesseract_config: str | None = None,
         max_answer_len=None,
         max_seq_len=None,
         top_k=None,
@@ -214,23 +218,23 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         self,
         image: Union["Image.Image", str],
         question: str,
-        word_boxes: Optional[Tuple[str, List[float]]] = None,
+        word_boxes: tuple[str, list[float]] | None = None,
         **kwargs: Any,
-    ) -> List[Dict[str, Any]]: ...
+    ) -> list[dict[str, Any]]: ...
 
     @overload
-    def __call__(self, image: Dict[str, Any], **kwargs: Any) -> List[Dict[str, Any]]: ...
+    def __call__(self, image: dict[str, Any], **kwargs: Any) -> list[dict[str, Any]]: ...
 
     @overload
-    def __call__(self, image: List[Dict[str, Any]], **kwargs: Any) -> List[List[Dict[str, Any]]]: ...
+    def __call__(self, image: list[dict[str, Any]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self,
-        image: Union["Image.Image", str, List[Dict[str, Any]]],
-        question: Optional[str] = None,
-        word_boxes: Optional[Tuple[str, List[float]]] = None,
+        image: Union["Image.Image", str, list[dict[str, Any]]],
+        question: str | None = None,
+        word_boxes: tuple[str, list[float]] | None = None,
         **kwargs: Any,
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """
         Answer the question(s) given as inputs by using the document(s). A document is defined as an image and an
         optional list of (word, box) tuples which represent the text in the document. If the `word_boxes` are not
@@ -256,7 +260,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 broadcasted to multiple questions.
             question (`str`):
                 A question to ask of the document.
-            word_boxes (`List[str, Tuple[float, float, float, float]]`, *optional*):
+            word_boxes (`list[str, tuple[float, float, float, float]]`, *optional*):
                 A list of words and bounding boxes (normalized 0->1000). If you provide this optional input, then the
                 pipeline will use these words and boxes instead of running OCR on the image to derive them for models
                 that need them (e.g. LayoutLM). This allows you to reuse OCR'd results across many invocations of the
@@ -309,7 +313,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         padding="do_not_pad",
         doc_stride=None,
         max_seq_len=None,
-        word_boxes: Optional[Tuple[str, List[float]]] = None,
+        word_boxes: tuple[str, list[float]] | None = None,
         lang=None,
         tesseract_config="",
         timeout=None,
@@ -327,17 +331,16 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         if input.get("image", None) is not None:
             image = load_image(input["image"], timeout=timeout)
             if self.image_processor is not None:
-                image_inputs = self.image_processor(images=image, return_tensors=self.framework)
-                if self.framework == "pt":
-                    image_inputs = image_inputs.to(self.torch_dtype)
+                image_inputs = self.image_processor(images=image, return_tensors="pt")
+                image_inputs = image_inputs.to(self.dtype)
                 image_features.update(image_inputs)
             elif self.feature_extractor is not None:
-                image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
+                image_features.update(self.feature_extractor(images=image, return_tensors="pt"))
             elif self.model_type == ModelType.VisionEncoderDecoder:
                 raise ValueError("If you are using a VisionEncoderDecoderModel, you must provide a feature extractor")
 
         words, boxes = None, None
-        if not self.model_type == ModelType.VisionEncoderDecoder:
+        if self.model_type != ModelType.VisionEncoderDecoder:
             if "word_boxes" in input:
                 words = [x[0] for x in input["word_boxes"]]
                 boxes = [x[1] for x in input["word_boxes"]]
@@ -370,7 +373,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             encoding = {
                 "inputs": image_features["pixel_values"],
                 "decoder_input_ids": self.tokenizer(
-                    task_prompt, add_special_tokens=False, return_tensors=self.framework
+                    task_prompt, add_special_tokens=False, return_tensors="pt"
                 ).input_ids,
                 "return_dict_in_generate": True,
             }
@@ -413,12 +416,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             # This logic mirrors the logic in the question_answering pipeline
             p_mask = [[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)]
             for span_idx in range(num_spans):
-                if self.framework == "pt":
-                    span_encoding = {k: torch.tensor(v[span_idx : span_idx + 1]) for (k, v) in encoding.items()}
-                    if "pixel_values" in image_features:
-                        span_encoding["image"] = image_features["pixel_values"]
-                else:
-                    raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
+                span_encoding = {k: torch.tensor(v[span_idx : span_idx + 1]) for (k, v) in encoding.items()}
+                if "pixel_values" in image_features:
+                    span_encoding["image"] = image_features["pixel_values"]
 
                 input_ids_span_idx = encoding["input_ids"][span_idx]
                 # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
@@ -443,10 +443,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                         else:
                             bbox.append([0] * 4)
 
-                    if self.framework == "pt":
-                        span_encoding["bbox"] = torch.tensor(bbox).unsqueeze(0)
-                    elif self.framework == "tf":
-                        raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
+                    span_encoding["bbox"] = torch.tensor(bbox).unsqueeze(0)
                 yield {
                     **span_encoding,
                     "p_mask": p_mask[span_idx],
@@ -511,9 +508,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         for output in model_outputs:
             words = output["words"]
 
-            if self.framework == "pt" and output["start_logits"].dtype in (torch.bfloat16, torch.float16):
+            if output["start_logits"].dtype in (torch.bfloat16, torch.float16):
                 output["start_logits"] = output["start_logits"].float()
-            if self.framework == "pt" and output["end_logits"].dtype in (torch.bfloat16, torch.float16):
+            if output["end_logits"].dtype in (torch.bfloat16, torch.float16):
                 output["end_logits"] = output["end_logits"].float()
 
             starts, ends, scores, min_null_score = select_starts_ends(

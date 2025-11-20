@@ -16,14 +16,15 @@
 
 import collections.abc
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_seggpt import SegGptConfig
@@ -33,52 +34,57 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class SegGptEncoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`SegGptEncoderOutput`].
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, patch_height, patch_width, hidden_size)`.
-        attentions (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
-            Tuple of *torch.FloatTensor* (one for each layer) of shape
-            `(batch_size, num_heads, seq_len, seq_len)`.
-        intermediate_hidden_states (`Tuple[torch.FloatTensor]`, *optional*, returned when `config.intermediate_hidden_state_indices` is set):
-            Tuple of `torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
-            Each element in the Tuple corresponds to the output of the layer specified in `config.intermediate_hidden_state_indices`.
-            Additionally, each feature passes through a LayerNorm.
+    """
+)
+class SegGptEncoderOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model.
+    hidden_states (`tuple[torch.FloatTensor]`, `optional`, returned when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+        of shape `(batch_size, patch_height, patch_width, hidden_size)`.
+    attentions (`tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
+        Tuple of *torch.FloatTensor* (one for each layer) of shape
+        `(batch_size, num_heads, seq_len, seq_len)`.
+    intermediate_hidden_states (`tuple[torch.FloatTensor]`, *optional*, returned when `config.intermediate_hidden_state_indices` is set):
+        Tuple of `torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
+        Each element in the Tuple corresponds to the output of the layer specified in `config.intermediate_hidden_state_indices`.
+        Additionally, each feature passes through a LayerNorm.
     """
 
     last_hidden_state: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    intermediate_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    intermediate_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class SegGptImageSegmentationOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`SegGptImageSegmentationOutput`].
-
-    Args:
-        loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
-            The loss value.
-        pred_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            The predicted masks.
-        hidden_states (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, patch_height, patch_width, hidden_size)`.
-        attentions (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape
-            `(batch_size, num_heads, seq_len, seq_len)`.
+    """
+)
+class SegGptImageSegmentationOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
+        The loss value.
+    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        The predicted masks.
+    hidden_states (`tuple[torch.FloatTensor]`, `optional`, returned when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+        of shape `(batch_size, patch_height, patch_width, hidden_size)`.
+    attentions (`tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape
+        `(batch_size, num_heads, seq_len, seq_len)`.
     """
 
     loss: Optional[torch.FloatTensor] = None
     pred_masks: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.sam.modeling_sam.SamPatchEmbeddings with Sam->SegGpt
@@ -267,8 +273,8 @@ class SegGptAttention(nn.Module):
         query: torch.Tensor,
         rel_pos_h: torch.Tensor,
         rel_pos_w: torch.Tensor,
-        q_size: Tuple[int, int],
-        k_size: Tuple[int, int],
+        q_size: tuple[int, int],
+        k_size: tuple[int, int],
     ) -> torch.Tensor:
         """
         Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
@@ -364,11 +370,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -392,10 +393,10 @@ class SegGptDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
-class SegGptLayer(nn.Module):
+class SegGptLayer(GradientCheckpointingLayer):
     def __init__(self, config: SegGptConfig, drop_path_rate: float) -> None:
         super().__init__()
         self.attention = SegGptAttention(config)
@@ -410,7 +411,7 @@ class SegGptLayer(nn.Module):
         ensemble_cond: int,
         feature_ensemble: bool = False,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in SegGpt, layernorm is applied before self-attention
             output_attentions=output_attentions,
@@ -470,16 +471,7 @@ class SegGptEncoder(nn.Module):
             # Condition to check if we have the appropriate number of prompts to ensemble
             ensemble_cond = 2 if self.config.merge_index > i else 1
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    ensemble_cond,
-                    feature_ensemble,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, ensemble_cond, feature_ensemble, output_attentions)
+            layer_outputs = layer_module(hidden_states, ensemble_cond, feature_ensemble, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -512,34 +504,30 @@ class SegGptEncoder(nn.Module):
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->SegGpt
-class SegGptLayerNorm(nn.Module):
+class SegGptLayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
 
 
 class SegGptDecoderHead(nn.Module):
@@ -601,51 +589,34 @@ class SegGptDecoder(nn.Module):
 
 @auto_docstring
 class SegGptPreTrainedModel(PreTrainedModel):
-    config_class = SegGptConfig
+    config: SegGptConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SegGptEmbeddings", "SegGptLayer"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(module.weight.data.to(torch.float32), mean=0.0, std=std).to(
-                module.weight.dtype
-            )
+            init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+                init.zeros_(module.bias)
+        elif isinstance(module, (nn.LayerNorm, SegGptLayerNorm)):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, SegGptAttention):
-            module.rel_pos_h.data = nn.init.trunc_normal_(
-                module.rel_pos_h.data.to(torch.float32),
-                mean=0.0,
-                std=std,
-            ).to(module.rel_pos_h.dtype)
-
-            module.rel_pos_w.data = nn.init.trunc_normal_(
-                module.rel_pos_w.data.to(torch.float32),
-                mean=0.0,
-                std=std,
-            ).to(module.rel_pos_w.dtype)
-
+            init.trunc_normal_(module.rel_pos_h, mean=0.0, std=std)
+            init.trunc_normal_(module.rel_pos_w, mean=0.0, std=std)
         elif isinstance(module, SegGptEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=std,
-            ).to(module.position_embeddings.dtype)
-
-            torch.nn.init.normal_(module.mask_token, std=std)
-            torch.nn.init.normal_(module.segment_token_input, std=std)
-            torch.nn.init.normal_(module.segment_token_prompt, std=std)
-            torch.nn.init.normal_(module.type_token_semantic, std=std)
-            torch.nn.init.normal_(module.type_token_instance, std=std)
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=std)
+            init.normal_(module.mask_token, std=std)
+            init.normal_(module.segment_token_input, std=std)
+            init.normal_(module.segment_token_prompt, std=std)
+            init.normal_(module.type_token_semantic, std=std)
+            init.normal_(module.type_token_instance, std=std)
 
 
 @auto_docstring
@@ -663,14 +634,6 @@ class SegGptModel(SegGptPreTrainedModel):
     def get_input_embeddings(self) -> SegGptPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
@@ -684,7 +647,7 @@ class SegGptModel(SegGptPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SegGptEncoderOutput]:
+    ) -> Union[tuple, SegGptEncoderOutput]:
         r"""
         prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Prompt pixel values. Prompt pixel values can be obtained using [`AutoImageProcessor`]. See
@@ -880,7 +843,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SegGptImageSegmentationOutput]:
+    ) -> Union[tuple, SegGptImageSegmentationOutput]:
         r"""
         prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Prompt pixel values. Prompt pixel values can be obtained using [`AutoImageProcessor`]. See

@@ -70,7 +70,6 @@ class BigBirdModelTester:
         rescale_embeddings=False,
         block_size=8,
         num_rand_blocks=3,
-        position_embedding_type="absolute",
         scope=None,
     ):
         self.parent = parent
@@ -101,7 +100,6 @@ class BigBirdModelTester:
         self.rescale_embeddings = rescale_embeddings
         self.block_size = block_size
         self.num_rand_blocks = num_rand_blocks
-        self.position_embedding_type = position_embedding_type
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -145,7 +143,6 @@ class BigBirdModelTester:
             rescale_embeddings=self.rescale_embeddings,
             block_size=self.block_size,
             num_random_blocks=self.num_rand_blocks,
-            position_embedding_type=self.position_embedding_type,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -284,6 +281,7 @@ class BigBirdModelTester:
             attention_mask=next_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            use_cache=False,
             output_hidden_states=True,
         )["hidden_states"][0]
         output_from_past = model(
@@ -292,6 +290,7 @@ class BigBirdModelTester:
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
+            use_cache=True,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -410,14 +409,6 @@ class BigBirdModelTester:
 
 @require_torch
 class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    # head masking & pruning is currently not supported for big bird
-    test_head_masking = False
-    test_pruning = False
-
-    # torchscript should be possible, but takes prohibitively long to test.
-    # Also torchscript is not an important feature to have in the beginning.
-    test_torchscript = False
-
     all_model_classes = (
         (
             BigBirdModel,

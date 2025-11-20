@@ -23,12 +23,12 @@ import tempfile
 import warnings
 from concurrent import futures
 from pathlib import Path
-from typing import Optional, Union
+from typing import TypedDict
 from urllib.parse import urlparse
 from uuid import uuid4
 
+import httpx
 import huggingface_hub
-import requests
 from huggingface_hub import (
     _CACHED_NO_EXIST,
     CommitOperationAdd,
@@ -56,17 +56,13 @@ from huggingface_hub.utils import (
     build_hf_headers,
     get_session,
     hf_raise_for_status,
-    send_telemetry,
 )
-from requests.exceptions import HTTPError
 
 from . import __version__, logging
 from .generic import working_or_temp_dir
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
-    _tf_version,
-    _torch_version,
-    is_tf_available,
+    get_torch_version,
     is_torch_available,
     is_training_run_on_sagemaker,
 )
@@ -78,6 +74,18 @@ CHAT_TEMPLATE_DIR = "additional_chat_templates"
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
+
+class DownloadKwargs(TypedDict, total=False):
+    cache_dir: str | os.PathLike | None
+    force_download: bool
+    proxies: dict[str, str] | None
+    local_files_only: bool
+    token: str | bool | None
+    revision: str | None
+    subfolder: str
+    commit_hash: str | None
+
 
 _is_offline_mode = huggingface_hub.constants.HF_HUB_OFFLINE
 
@@ -134,10 +142,16 @@ HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/tele
 
 
 def _get_cache_file_to_return(
-    path_or_repo_id: str, full_filename: str, cache_dir: Union[str, Path, None] = None, revision: Optional[str] = None
+    path_or_repo_id: str,
+    full_filename: str,
+    cache_dir: str | Path | None = None,
+    revision: str | None = None,
+    repo_type: str | None = None,
 ):
     # We try to see if we have a cached version (not up to date):
-    resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
+    resolved_file = try_to_load_from_cache(
+        path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision, repo_type=repo_type
+    )
     if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
         return resolved_file
     return None
@@ -147,8 +161,9 @@ def list_repo_templates(
     repo_id: str,
     *,
     local_files_only: bool,
-    revision: Optional[str] = None,
-    cache_dir: Optional[str] = None,
+    revision: str | None = None,
+    cache_dir: str | None = None,
+    token: str | bool | None = None,
 ) -> list[str]:
     """List template files from a repo.
 
@@ -161,13 +176,17 @@ def list_repo_templates(
             return [
                 entry.path.removeprefix(f"{CHAT_TEMPLATE_DIR}/")
                 for entry in list_repo_tree(
-                    repo_id=repo_id, revision=revision, path_in_repo=CHAT_TEMPLATE_DIR, recursive=False
+                    repo_id=repo_id,
+                    revision=revision,
+                    path_in_repo=CHAT_TEMPLATE_DIR,
+                    recursive=False,
+                    token=token,
                 )
                 if entry.path.endswith(".jinja")
             ]
         except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
             raise  # valid errors => do not catch
-        except (ConnectionError, HTTPError):
+        except (HfHubHTTPError, OfflineModeIsEnabled, httpx.NetworkError):
             pass  # offline mode, internet down, etc. => try local files
 
     # check local files
@@ -190,7 +209,7 @@ def is_remote_url(url_or_filename):
 
 def define_sagemaker_information():
     try:
-        instance_data = requests.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
+        instance_data = httpx.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
         dlc_container_used = instance_data["Image"]
         dlc_tag = instance_data["Image"].split(":")[1]
     except Exception:
@@ -198,14 +217,14 @@ def define_sagemaker_information():
         dlc_tag = None
 
     sagemaker_params = json.loads(os.getenv("SM_FRAMEWORK_PARAMS", "{}"))
-    runs_distributed_training = True if "sagemaker_distributed_dataparallel_enabled" in sagemaker_params else False
+    runs_distributed_training = "sagemaker_distributed_dataparallel_enabled" in sagemaker_params
     account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
 
     sagemaker_object = {
         "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
         "sm_region": os.getenv("AWS_REGION", None),
-        "sm_number_gpu": os.getenv("SM_NUM_GPUS", 0),
-        "sm_number_cpu": os.getenv("SM_NUM_CPUS", 0),
+        "sm_number_gpu": os.getenv("SM_NUM_GPUS", "0"),
+        "sm_number_cpu": os.getenv("SM_NUM_CPUS", "0"),
         "sm_distributed_training": runs_distributed_training,
         "sm_deep_learning_container": dlc_container_used,
         "sm_deep_learning_container_tag": dlc_tag,
@@ -214,15 +233,13 @@ def define_sagemaker_information():
     return sagemaker_object
 
 
-def http_user_agent(user_agent: Union[dict, str, None] = None) -> str:
+def http_user_agent(user_agent: dict | str | None = None) -> str:
     """
     Formats a user-agent string with basic info about a request.
     """
     ua = f"transformers/{__version__}; python/{sys.version.split()[0]}; session_id/{SESSION_ID}"
     if is_torch_available():
-        ua += f"; torch/{_torch_version}"
-    if is_tf_available():
-        ua += f"; tensorflow/{_tf_version}"
+        ua += f"; torch/{get_torch_version()}"
     if constants.HF_HUB_DISABLE_TELEMETRY:
         return ua + "; telemetry/off"
     if is_training_run_on_sagemaker():
@@ -237,7 +254,7 @@ def http_user_agent(user_agent: Union[dict, str, None] = None) -> str:
     return ua
 
 
-def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]) -> Optional[str]:
+def extract_commit_hash(resolved_file: str | None, commit_hash: str | None) -> str | None:
     """
     Extracts the commit hash from a resolved filename toward a cache file.
     """
@@ -252,10 +269,10 @@ def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]
 
 
 def cached_file(
-    path_or_repo_id: Union[str, os.PathLike],
+    path_or_repo_id: str | os.PathLike,
     filename: str,
     **kwargs,
-) -> Optional[str]:
+) -> str | None:
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
 
@@ -272,15 +289,12 @@ def cached_file(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -315,24 +329,23 @@ def cached_file(
 
 
 def cached_files(
-    path_or_repo_id: Union[str, os.PathLike],
+    path_or_repo_id: str | os.PathLike,
     filenames: list[str],
-    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    cache_dir: str | os.PathLike | None = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     subfolder: str = "",
-    repo_type: Optional[str] = None,
-    user_agent: Optional[Union[str, dict[str, str]]] = None,
+    repo_type: str | None = None,
+    user_agent: str | dict[str, str] | None = None,
     _raise_exceptions_for_gated_repo: bool = True,
     _raise_exceptions_for_missing_entries: bool = True,
     _raise_exceptions_for_connection_errors: bool = True,
-    _commit_hash: Optional[str] = None,
+    _commit_hash: str | None = None,
     **deprecated_kwargs,
-) -> Optional[str]:
+) -> str | None:
     """
     Tries to locate several files in a local folder and repo, downloads and cache them if necessary.
 
@@ -341,7 +354,7 @@ def cached_files(
             This can be either:
             - a string, the *model id* of a model repo on huggingface.co.
             - a path to a *directory* potentially containing the file.
-        filenames (`List[str]`):
+        filenames (`list[str]`):
             The name of all the files to locate in `path_or_repo`.
         cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
@@ -349,15 +362,12 @@ def cached_files(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -397,16 +407,6 @@ def cached_files(
     model_weights_file = cached_file("google-bert/bert-base-uncased", "pytorch_model.bin")
     ```
     """
-    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
@@ -429,12 +429,11 @@ def cached_files(
                         f"'https://huggingface.co/{path_or_repo_id}/tree/{revision_}' for available files."
                     )
                 else:
-                    return None
+                    continue
             existing_files.append(resolved_file)
 
-    # All files exist
-    if len(existing_files) == len(full_filenames):
-        return existing_files
+    if os.path.isdir(path_or_repo_id):
+        return existing_files if existing_files else None
 
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
@@ -477,7 +476,6 @@ def cached_files(
                 user_agent=user_agent,
                 force_download=force_download,
                 proxies=proxies,
-                resume_download=resume_download,
                 token=token,
                 local_files_only=local_files_only,
             )
@@ -491,7 +489,6 @@ def cached_files(
                 user_agent=user_agent,
                 force_download=force_download,
                 proxies=proxies,
-                resume_download=resume_download,
                 token=token,
                 local_files_only=local_files_only,
             )
@@ -502,7 +499,7 @@ def cached_files(
             raise OSError(
                 f"{path_or_repo_id} is not a local folder and is not a valid model identifier "
                 "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token "
-                "having permission to this repo either by logging in with `huggingface-cli login` or by passing "
+                "having permission to this repo either by logging in with `hf auth login` or by passing "
                 "`token=<your_token>`"
             ) from e
         elif isinstance(e, RevisionNotFoundError):
@@ -517,10 +514,13 @@ def cached_files(
                 "Check cache directory permissions. Common causes: 1) another user is downloading the same model (please wait); "
                 "2) a previous download was canceled and the lock file needs manual removal."
             ) from e
+        elif isinstance(e, ValueError):
+            raise OSError(f"{e}") from e
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
-            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
+            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision, repo_type)
+            for filename in full_filenames
         ]
         if all(file is not None for file in resolved_files):
             return resolved_files
@@ -547,10 +547,10 @@ def cached_files(
                 ) from e
         # snapshot_download will not raise EntryNotFoundError, but hf_hub_download can. If this is the case, it will be treated
         # later on anyway and re-raised if needed
-        elif isinstance(e, HTTPError) and not isinstance(e, EntryNotFoundError):
+        elif isinstance(e, HfHubHTTPError) and not isinstance(e, EntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
-            raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}")
+            raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}") from e
         # Any other Exception type should now be re-raised, in order to provide helpful error messages and break the execution flow
         # (EntryNotFoundError will be treated outside this block and correctly re-raised if needed)
         elif not isinstance(e, EntryNotFoundError):
@@ -590,7 +590,7 @@ def download_url(url, proxies=None):
 
     Args:
         url (`str`): The url of the file to download.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
 
@@ -611,15 +611,15 @@ def download_url(url, proxies=None):
 
 
 def has_file(
-    path_or_repo: Union[str, os.PathLike],
+    path_or_repo: str | os.PathLike,
     filename: str,
-    revision: Optional[str] = None,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
+    revision: str | None = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
     *,
     local_files_only: bool = False,
-    cache_dir: Union[str, Path, None] = None,
-    repo_type: Optional[str] = None,
+    cache_dir: str | Path | None = None,
+    repo_type: str | None = None,
     **deprecated_kwargs,
 ):
     """
@@ -634,16 +634,6 @@ def has_file(
 
     </Tip>
     """
-    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     # If path to local directory, check if the file exists
     if os.path.isdir(path_or_repo):
         return os.path.isfile(os.path.join(path_or_repo, filename))
@@ -670,18 +660,13 @@ def has_file(
         response = get_session().head(
             hf_hub_url(path_or_repo, filename=filename, revision=revision, repo_type=repo_type),
             headers=build_hf_headers(token=token, user_agent=http_user_agent()),
-            allow_redirects=False,
-            proxies=proxies,
+            follow_redirects=False,
             timeout=10,
         )
-    except (requests.exceptions.SSLError, requests.exceptions.ProxyError):
+    except httpx.ProxyError:
         # Actually raise for those subclasses of ConnectionError
         raise
-    except (
-        requests.exceptions.ConnectionError,
-        requests.exceptions.Timeout,
-        OfflineModeIsEnabled,
-    ):
+    except (httpx.ConnectError, httpx.TimeoutException, OfflineModeIsEnabled):
         return has_file_in_cache
 
     try:
@@ -692,7 +677,7 @@ def has_file(
         raise OSError(
             f"{path_or_repo} is a gated repository. Make sure to request access at "
             f"https://huggingface.co/{path_or_repo} and pass a token having permission to this repo either by "
-            "logging in with `huggingface-cli login` or by passing `token=<your_token>`."
+            "logging in with `hf auth login` or by passing `token=<your_token>`."
         ) from e
     except RepositoryNotFoundError as e:
         logger.error(e)
@@ -705,7 +690,7 @@ def has_file(
         ) from e
     except EntryNotFoundError:
         return False  # File does not exist
-    except requests.HTTPError:
+    except HfHubHTTPError:
         # Any authentication/authorization error will be caught here => default to cache
         return has_file_in_cache
 
@@ -718,10 +703,10 @@ class PushToHubMixin:
     def _create_repo(
         self,
         repo_id: str,
-        private: Optional[bool] = None,
-        token: Optional[Union[bool, str]] = None,
-        repo_url: Optional[str] = None,
-        organization: Optional[str] = None,
+        private: bool | None = None,
+        token: bool | str | None = None,
+        repo_url: str | None = None,
+        organization: str | None = None,
     ) -> str:
         """
         Create the repo if needed, cleans up repo_id with deprecated kwargs `repo_url` and `organization`, retrieves
@@ -750,7 +735,7 @@ class PushToHubMixin:
         url = create_repo(repo_id=repo_id, token=token, private=private, exist_ok=True)
         return url.repo_id
 
-    def _get_files_timestamps(self, working_dir: Union[str, os.PathLike]):
+    def _get_files_timestamps(self, working_dir: str | os.PathLike):
         """
         Returns the list of files with their last modification timestamp.
         """
@@ -758,14 +743,14 @@ class PushToHubMixin:
 
     def _upload_modified_files(
         self,
-        working_dir: Union[str, os.PathLike],
+        working_dir: str | os.PathLike,
         repo_id: str,
         files_timestamps: dict[str, float],
-        commit_message: Optional[str] = None,
-        token: Optional[Union[bool, str]] = None,
+        commit_message: str | None = None,
+        token: bool | str | None = None,
         create_pr: bool = False,
-        revision: Optional[str] = None,
-        commit_description: Optional[str] = None,
+        revision: str | None = None,
+        commit_description: str | None = None,
     ):
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
@@ -838,16 +823,16 @@ class PushToHubMixin:
     def push_to_hub(
         self,
         repo_id: str,
-        use_temp_dir: Optional[bool] = None,
-        commit_message: Optional[str] = None,
-        private: Optional[bool] = None,
-        token: Optional[Union[bool, str]] = None,
-        max_shard_size: Optional[Union[int, str]] = "5GB",
+        use_temp_dir: bool | None = None,
+        commit_message: str | None = None,
+        private: bool | None = None,
+        token: bool | str | None = None,
+        max_shard_size: int | str | None = "5GB",
         create_pr: bool = False,
         safe_serialization: bool = True,
-        revision: Optional[str] = None,
-        commit_description: Optional[str] = None,
-        tags: Optional[list[str]] = None,
+        revision: str | None = None,
+        commit_description: str | None = None,
+        tags: list[str] | None = None,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -866,7 +851,7 @@ class PushToHubMixin:
                 Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
+                when running `hf auth login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
                 is not specified.
             max_shard_size (`int` or `str`, *optional*, defaults to `"5GB"`):
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
@@ -881,7 +866,7 @@ class PushToHubMixin:
                 Branch to push the uploaded files to.
             commit_description (`str`, *optional*):
                 The description of the commit that will be created
-            tags (`List[str]`, *optional*):
+            tags (`list[str]`, *optional*):
                 List of tags to push on the Hub.
 
         Examples:
@@ -898,22 +883,7 @@ class PushToHubMixin:
         {object}.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
-        use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
         ignore_metadata_errors = deprecated_kwargs.pop("ignore_metadata_errors", False)
-        save_jinja_files = deprecated_kwargs.pop(
-            "save_jinja_files", None
-        )  # TODO: This is only used for testing and should be removed once save_jinja_files becomes the default
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
         repo_path_or_name = deprecated_kwargs.pop("repo_path_or_name", None)
         if repo_path_or_name is not None:
             # Should use `repo_id` instead of `repo_path_or_name`. When using `repo_path_or_name`, we try to infer
@@ -959,15 +929,11 @@ class PushToHubMixin:
             files_timestamps = self._get_files_timestamps(work_dir)
 
             # Save all files.
-            if save_jinja_files:
-                self.save_pretrained(
-                    work_dir,
-                    max_shard_size=max_shard_size,
-                    safe_serialization=safe_serialization,
-                    save_jinja_files=True,
-                )
-            else:
-                self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
+            self.save_pretrained(
+                work_dir,
+                max_shard_size=max_shard_size,
+                safe_serialization=safe_serialization,
+            )
 
             # Update model card if needed:
             model_card.save(os.path.join(work_dir, "README.md"))
@@ -984,42 +950,7 @@ class PushToHubMixin:
             )
 
 
-def send_example_telemetry(example_name, *example_args, framework="pytorch"):
-    """
-    Sends telemetry that helps tracking the examples use.
-
-    Args:
-        example_name (`str`): The name of the example.
-        *example_args (dataclasses or `argparse.ArgumentParser`): The arguments to the script. This function will only
-            try to extract the model and dataset name from those. Nothing else is tracked.
-        framework (`str`, *optional*, defaults to `"pytorch"`): The framework for the example.
-    """
-    if is_offline_mode():
-        return
-
-    data = {"example": example_name, "framework": framework}
-    for args in example_args:
-        args_as_dict = {k: v for k, v in args.__dict__.items() if not k.startswith("_") and v is not None}
-        if "model_name_or_path" in args_as_dict:
-            model_name = args_as_dict["model_name_or_path"]
-            # Filter out local paths
-            if not os.path.isdir(model_name):
-                data["model_name"] = args_as_dict["model_name_or_path"]
-        if "dataset_name" in args_as_dict:
-            data["dataset_name"] = args_as_dict["dataset_name"]
-        elif "task_name" in args_as_dict:
-            # Extract script name from the example_name
-            script_name = example_name.replace("tf_", "").replace("flax_", "").replace("run_", "")
-            script_name = script_name.replace("_no_trainer", "")
-            data["dataset_name"] = f"{script_name}-{args_as_dict['task_name']}"
-
-    # Send telemetry in the background
-    send_telemetry(
-        topic="examples", library_name="transformers", library_version=__version__, user_agent=http_user_agent(data)
-    )
-
-
-def convert_file_size_to_int(size: Union[int, str]):
+def convert_file_size_to_int(size: int | str):
     """
     Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
 
@@ -1058,7 +989,6 @@ def get_checkpoint_shard_files(
     cache_dir=None,
     force_download=False,
     proxies=None,
-    resume_download=None,
     local_files_only=False,
     token=None,
     user_agent=None,
@@ -1077,18 +1007,6 @@ def get_checkpoint_shard_files(
     For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
     index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
     """
-    import json
-
-    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     if not os.path.isfile(index_filename):
         raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
 
@@ -1113,7 +1031,6 @@ def get_checkpoint_shard_files(
         cache_dir=cache_dir,
         force_download=force_download,
         proxies=proxies,
-        resume_download=resume_download,
         local_files_only=local_files_only,
         token=token,
         user_agent=user_agent,
@@ -1127,8 +1044,8 @@ def get_checkpoint_shard_files(
 
 def create_and_tag_model_card(
     repo_id: str,
-    tags: Optional[list[str]] = None,
-    token: Optional[str] = None,
+    tags: list[str] | None = None,
+    token: str | None = None,
     ignore_metadata_errors: bool = False,
 ):
     """
@@ -1137,7 +1054,7 @@ def create_and_tag_model_card(
     Args:
         repo_id (`str`):
             The repo_id where to look for the model card.
-        tags (`List[str]`, *optional*):
+        tags (`list[str]`, *optional*):
             The list of tags to add in the model card
         token (`str`, *optional*):
             Authentication token, obtained with `huggingface_hub.HfApi.login` method. Will default to the stored token.
@@ -1170,7 +1087,7 @@ class PushInProgress:
     Internal class to keep track of a push in progress (which might contain multiple `Future` jobs).
     """
 
-    def __init__(self, jobs: Optional[futures.Future] = None) -> None:
+    def __init__(self, jobs: futures.Future | None = None) -> None:
         self.jobs = [] if jobs is None else jobs
 
     def is_done(self):

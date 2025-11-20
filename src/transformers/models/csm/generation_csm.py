@@ -13,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -62,13 +61,13 @@ class CsmGenerateOutput(GenerateDecoderOnlyOutput):
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
-        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
         audio (`list(torch.FloatTensor)` of length `batch_size`):
             The generated audio.
     """
 
-    audio: Optional[List[torch.Tensor]] = None
+    audio: Optional[list[torch.Tensor]] = None
 
 
 class CsmGenerationMixin(GenerationMixin):
@@ -90,8 +89,8 @@ class CsmGenerationMixin(GenerationMixin):
         return kept_criteria
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
-    ) -> Tuple[GenerationConfig, Dict]:
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Any
+    ) -> tuple[GenerationConfig, dict]:
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
         It ensures that the depth decoder generation config is initialized and that passed args as depth_decoder_* are properly handled.
@@ -153,8 +152,8 @@ class CsmGenerationMixin(GenerationMixin):
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
-        synced_gpus: bool,
-        streamer: Optional["BaseStreamer"],
+        synced_gpus: bool = False,
+        streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         """
@@ -167,7 +166,7 @@ class CsmGenerationMixin(GenerationMixin):
         3. Use these generated codebook tokens as input_ids to sample the next first codebook token using the backbone model
         4. Repeat until stopping criteria is met
 
-        Csm supports two stopping criterias:
+        Csm supports two stopping criteria:
         - stop when the generated sequence is at max_length
         - stop when all the generated codebook tokens are the codebook_eos_token_id
         """
@@ -204,11 +203,11 @@ class CsmGenerationMixin(GenerationMixin):
                     criterion.max_length -= cur_len
         # ============================================
 
-        model_forward = self.__call__
-        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
-        if compile_forward:
-            os.environ["TOKENIZERS_PARALLELISM"] = "0"
-            model_forward = self.get_compiled_call(generation_config.compile_config)
+        model_forward = (
+            self.get_compiled_call(generation_config.compile_config)
+            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            else self.__call__
+        )
 
         is_prefill = True
         while self._has_unfinished_sequences(
@@ -400,14 +399,14 @@ class CsmGenerationMixin(GenerationMixin):
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             output_audio (`bool`, *optional*):
                 Whether to return the generated audio.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. Depth decoder specific kwargs should be prefixed with *depth_decoder_*.
 
         Return:
-            [`CsmGenerateOutput`] or `torch.LongTensor` or `List[torch.FloatTensor]`: A [`CsmGenerateOutput`]
+            [`CsmGenerateOutput`] or `torch.LongTensor` or `list[torch.FloatTensor]`: A [`CsmGenerateOutput`]
             (if `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a `torch.LongTensor` when `output_audio=False`
-            or a `List[torch.FloatTensor]` otherwise.
+            or a `list[torch.FloatTensor]` otherwise.
 
         Example:
 

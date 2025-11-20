@@ -14,24 +14,24 @@
 # limitations under the License.
 """LED model configuration"""
 
-from typing import List, Union
+from typing import Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class LEDConfig(PretrainedConfig):
+class LEDConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LEDModel`]. It is used to instantiate an LED
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LED
     [allenai/led-base-16384](https://huggingface.co/allenai/led-base-16384) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -127,7 +127,7 @@ class LEDConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        attention_window: Union[List[int], int] = 512,
+        attention_window: Union[list[int], int] = 512,
         **kwargs,
     ):
         self.vocab_size = vocab_size

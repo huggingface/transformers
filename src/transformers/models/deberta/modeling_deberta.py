@@ -14,14 +14,15 @@
 # limitations under the License.
 """PyTorch DeBERTa model."""
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -38,7 +39,7 @@ logger = logging.get_logger(__name__)
 
 
 class DebertaLayerNorm(nn.Module):
-    """LayerNorm module in the TF style (epsilon inside the square root)."""
+    """LayerNorm module (epsilon inside the square root)."""
 
     def __init__(self, size, eps=1e-12):
         super().__init__()
@@ -210,7 +211,7 @@ class DisentangledSelfAttention(nn.Module):
         query_states: Optional[torch.Tensor] = None,
         relative_pos: Optional[torch.Tensor] = None,
         rel_embeddings: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Call the module
 
@@ -442,7 +443,7 @@ class DebertaAttention(nn.Module):
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         self_output, att_matrix = self.self(
             hidden_states,
             attention_mask,
@@ -492,7 +493,7 @@ class DebertaOutput(nn.Module):
         return hidden_states
 
 
-class DebertaLayer(nn.Module):
+class DebertaLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = DebertaAttention(config)
@@ -507,7 +508,7 @@ class DebertaLayer(nn.Module):
         relative_pos=None,
         rel_embeddings=None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         attention_output, att_matrix = self.attention(
             hidden_states,
             attention_mask,
@@ -573,32 +574,21 @@ class DebertaEncoder(nn.Module):
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
 
-        all_hidden_states: Optional[Tuple[torch.Tensor]] = (hidden_states,) if output_hidden_states else None
+        all_hidden_states: Optional[tuple[torch.Tensor]] = (hidden_states,) if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
         next_kv = hidden_states
 
         rel_embeddings = self.get_rel_embedding()
         for i, layer_module in enumerate(self.layer):
-            if self.gradient_checkpointing and self.training:
-                hidden_states, att_m = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    next_kv,
-                    attention_mask,
-                    query_states,
-                    relative_pos,
-                    rel_embeddings,
-                    output_attentions,
-                )
-            else:
-                hidden_states, att_m = layer_module(
-                    next_kv,
-                    attention_mask,
-                    query_states=query_states,
-                    relative_pos=relative_pos,
-                    rel_embeddings=rel_embeddings,
-                    output_attentions=output_attentions,
-                )
+            hidden_states, att_m = layer_module(
+                next_kv,
+                attention_mask,
+                query_states=query_states,
+                relative_pos=relative_pos,
+                rel_embeddings=rel_embeddings,
+                output_attentions=output_attentions,
+            )
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -620,31 +610,20 @@ class DebertaEncoder(nn.Module):
 
 @auto_docstring
 class DebertaPreTrainedModel(PreTrainedModel):
-    config_class = DebertaConfig
+    config: DebertaConfig
     base_model_prefix = "deberta"
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, DebertaLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, DisentangledSelfAttention):
-            module.q_bias.data.zero_()
-            module.v_bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, DisentangledSelfAttention):
+            init.zeros_(module.q_bias)
+            init.zeros_(module.v_bias)
         elif isinstance(module, (LegacyDebertaLMPredictionHead, DebertaLMPredictionHead)):
-            module.bias.data.zero_()
+            init.zeros_(module.bias)
 
 
 @auto_docstring
@@ -665,13 +644,6 @@ class DebertaModel(DebertaPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        raise NotImplementedError("The prune function is not implemented in DeBERTa model.")
-
     @auto_docstring
     def forward(
         self,
@@ -683,7 +655,7 @@ class DebertaModel(DebertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -781,15 +753,9 @@ class LegacyDebertaLMPredictionHead(nn.Module):
         self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(self.embedding_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(self.embedding_size, config.vocab_size, bias=True)
 
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -848,7 +814,10 @@ class DebertaOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class DebertaForMaskedLM(DebertaPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "deberta.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -857,7 +826,9 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         if self.legacy:
             self.cls = LegacyDebertaOnlyMLMHead(config)
         else:
-            self._tied_weights_keys = ["lm_predictions.lm_head.weight", "deberta.embeddings.word_embeddings.weight"]
+            self._tied_weights_keys = {
+                "lm_predictions.lm_head.weight": "deberta.embeddings.word_embeddings.weight",
+            }
             self.lm_predictions = DebertaOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
@@ -889,7 +860,7 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MaskedLMOutput]:
+    ) -> Union[tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -998,7 +969,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1092,7 +1063,7 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1154,7 +1125,7 @@ class DebertaForQuestionAnswering(DebertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.deberta(

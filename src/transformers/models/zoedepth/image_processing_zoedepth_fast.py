@@ -15,21 +15,19 @@
 """Fast Image processor class for ZoeDepth."""
 
 from typing import (
-    Dict,
-    List,
     Optional,
-    Tuple,
     Union,
 )
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import (
     BatchFeature,
 )
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -46,51 +44,14 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
     requires_backends,
 )
-from .image_processing_zoedepth import get_resize_output_image_size
+from .image_processing_zoedepth import ZoeDepthImageProcessorKwargs, get_resize_output_image_size
 from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-    from torchvision.transforms import InterpolationMode
-
-
 logger = logging.get_logger(__name__)
-
-
-class ZoeDepthFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Whether to apply pad the input.
-    keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
-        If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it
-        for both dimensions. This ensures that the image is scaled down as little as possible while still fitting
-        within the desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a
-        size that is a multiple of this value by flooring the height and width to the nearest multiple of this value.
-        Can be overridden by `keep_aspect_ratio` in `preprocess`.
-    ensure_multiple_of (`int`, *optional*, defaults to 32):
-        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
-        the height and width to the nearest multiple of this value.
-        Works both with and without `keep_aspect_ratio` being set to `True`.
-        Can be overridden by `ensure_multiple_of` in `preprocess`.
-    """
-
-    do_pad: Optional[bool]
-    keep_aspect_ratio: Optional[bool]
-    ensure_multiple_of: Optional[int]
 
 
 @auto_docstring
@@ -105,16 +66,16 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     keep_aspect_ratio = True
     ensure_multiple_of = 1 / 32
-    valid_kwargs = ZoeDepthFastImageProcessorKwargs
+    valid_kwargs = ZoeDepthImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[ZoeDepthFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[ZoeDepthImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
     @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[ZoeDepthFastImageProcessorKwargs],
+        **kwargs: Unpack[ZoeDepthImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -134,7 +95,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         Args:
             images (`torch.Tensor`):
                 Images to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Target size of the output image.
             keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
                 If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
@@ -189,13 +150,14 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: Optional[float],
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_rescale:
@@ -218,11 +180,11 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
     def post_process_depth_estimation(
         self,
         outputs: "ZoeDepthDepthEstimatorOutput",
-        source_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
+        source_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
         outputs_flipped: Optional[Union["ZoeDepthDepthEstimatorOutput", None]] = None,
         do_remove_padding: Optional[Union[bool, None]] = None,
-    ) -> List[Dict[str, TensorType]]:
+    ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`ZoeDepthDepthEstimatorOutput`] into final depth predictions and depth PIL images.
         Only supports PyTorch.
@@ -230,12 +192,12 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         Args:
             outputs ([`ZoeDepthDepthEstimatorOutput`]):
                 Raw outputs of the model.
-            source_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the source size
+            source_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the source size
                 (height, width) of each image in the batch before preprocessing. This argument should be dealt as
                 "required" unless the user passes `do_remove_padding=False` as input to this function.
-            target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
             outputs_flipped ([`ZoeDepthDepthEstimatorOutput`], *optional*):
                 Raw outputs of the model from flipped input (averaged out in the end).
@@ -245,7 +207,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
                 parameter exists here in case the user changed the image preprocessing to not include padding.
 
         Returns:
-            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
         requires_backends(self, "torch")
@@ -301,7 +263,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
                 depth = F.resize(
                     depth,
                     size=[source_size[0] + 2 * pad_h, source_size[1] + 2 * pad_w],
-                    interpolation=InterpolationMode.BICUBIC,
+                    interpolation=F.InterpolationMode.BICUBIC,
                     antialias=False,
                 )
 
@@ -315,7 +277,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
                 depth = F.resize(
                     depth,
                     size=target_size,
-                    interpolation=InterpolationMode.BICUBIC,
+                    interpolation=F.InterpolationMode.BICUBIC,
                     antialias=False,
                 )
             depth = depth.squeeze(0)

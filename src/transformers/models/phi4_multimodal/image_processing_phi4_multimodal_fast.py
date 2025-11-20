@@ -13,39 +13,29 @@
 # limitations under the License.
 
 import math
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     Unpack,
 )
-from ...image_utils import ImageInput, SizeDict
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    is_vision_available,
     logging,
 )
 
 
-if is_vision_available():
-    from ...image_utils import PILImageResampling
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
 logger = logging.get_logger(__name__)
 
 
-class Phi4MultimodalFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class Phi4MultimodalImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*):
         The size of the patch.
@@ -53,8 +43,8 @@ class Phi4MultimodalFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         The maximum number of crops per image.
     """
 
-    patch_size: Optional[int]
-    dynamic_hd: Optional[int]
+    patch_size: int
+    dynamic_hd: int
 
 
 @auto_docstring
@@ -69,10 +59,10 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_kwargs = Phi4MultimodalFastImageProcessorKwargs
+    valid_kwargs = Phi4MultimodalImageProcessorKwargs
     model_input_names = ["image_pixel_values", "image_sizes", "image_attention_mask"]
 
-    def __init__(self, **kwargs: Unpack[Phi4MultimodalFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Phi4MultimodalImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def find_closest_aspect_ratio(self, aspect_ratio, target_ratios, width, height, image_size):
@@ -168,13 +158,13 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[Phi4MultimodalFastImageProcessorKwargs],
+        **kwargs: Unpack[Phi4MultimodalImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
         patch_size: int,
@@ -182,8 +172,8 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: Optional[float],
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
@@ -247,7 +237,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             images_tokens.append(num_img_tokens)
             image_sizes.append([height, width])
             max_crops = hd_image_reshape.size(0)
-        max_crops = max([img.size(0) for img in images_transformed])
+        max_crops = max(img.size(0) for img in images_transformed)
         images_transformed = [self.pad_to_max_num_crops(im, max_crops) for im in images_transformed]
         images_transformed = torch.stack(images_transformed, dim=0)
         masks_transformed = [self.pad_mask_to_max_num_crops(mask, max_crops) for mask in masks_transformed]

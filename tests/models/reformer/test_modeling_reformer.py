@@ -43,7 +43,7 @@ if is_torch_available():
         ReformerModelWithLMHead,
         ReformerTokenizer,
     )
-    from transformers.models.reformer.modeling_reformer import ReformerLayer
+    from transformers.models.reformer.modeling_reformer import ReformerDynamicCache, ReformerLayer
 
 
 class ReformerModelTester:
@@ -83,7 +83,7 @@ class ReformerModelTester:
         axial_pos_embds=True,
         axial_pos_shape=[4, 8],
         axial_pos_embds_dim=[16, 16],
-        attn_layers=["local", "local", "local", "local"],
+        attn_layers=["local", "local"],
         pad_token_id=0,
         eos_token_id=2,
         scope=None,
@@ -602,9 +602,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         if is_torch_available()
         else ()
     )
-    test_pruning = False
-    test_headmasking = False
-    test_torchscript = False
+
     test_sequence_classification_problem_types = True
 
     def setUp(self):
@@ -620,7 +618,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
-        # NOTE (joao): this function is substancially different from the original, the attention has different
+        # NOTE (joao): this function is substantially different from the original, the attention has different
         # *number* of shapes in certain conditions
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
@@ -663,7 +661,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
-        # NOTE (joao): this function is substancially different from the original, the hidden states have different
+        # NOTE (joao): this function is substantially different from the original, the hidden states have different
         # length in certain conditions
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
@@ -689,6 +687,25 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, ReformerDynamicCache)
+
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        hidden_size = getattr(config, "d_model", config.hidden_size)
+        head_dim = getattr(config, "head_dim", hidden_size // config.num_attention_heads)
+
+        # For cross attention cache, the seq_length depends on the model, so we remove that dim
+        expected_shape = (batch_size, seq_length, num_heads * head_dim)
+
+        # Check the size is coherent
+        self.assertEqual(config.num_hidden_layers, len(past_key_values))
+
+        # Check each layer has the correct shape
+        for idx in range(len(past_key_values)):
+            self.assertEqual(past_key_values.states_cache[idx].shape, expected_shape)
+            self.assertEqual(past_key_values.buckets_cache[idx].shape, (0,))
 
     @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
@@ -726,9 +743,6 @@ class ReformerLSHAttnModelTest(
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_headmasking = False
-    test_torchscript = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -798,7 +812,7 @@ class ReformerLSHAttnModelTest(
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
-        # NOTE (joao): this function is substancially different from the original, the attention has different
+        # NOTE (joao): this function is substantially different from the original, the attention has different
         # *number* of shapes in certain conditions
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
@@ -841,7 +855,7 @@ class ReformerLSHAttnModelTest(
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
-        # NOTE (joao): this function is substancially different from the original, the hidden states have different
+        # NOTE (joao): this function is substantially different from the original, the hidden states have different
         # length in certain conditions
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
@@ -867,6 +881,24 @@ class ReformerLSHAttnModelTest(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, ReformerDynamicCache)
+
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        hidden_size = getattr(config, "d_model", config.hidden_size)
+        head_dim = getattr(config, "head_dim", hidden_size // config.num_attention_heads)
+
+        # For cross attention cache, the seq_length depends on the model, so we remove that dim
+        expected_shape = (batch_size, seq_length, num_heads * head_dim)
+
+        # Check the size is coherent
+        self.assertEqual(config.num_hidden_layers, len(past_key_values))
+
+        # Check each layer has the correct shape
+        for idx in range(len(past_key_values)):
+            self.assertEqual(past_key_values.states_cache[idx].shape, expected_shape)
 
     @unittest.skip(reason="Fails because the sequence length is not a multiple of 4")
     def test_problem_types(self):

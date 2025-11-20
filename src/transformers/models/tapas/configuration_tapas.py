@@ -22,10 +22,10 @@ Hyperparameters are taken from run_task_main.py and hparam_utils.py of the origi
 
 """
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class TapasConfig(PretrainedConfig):
+class TapasConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TapasModel`]. It is used to instantiate a TAPAS
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -33,7 +33,7 @@ class TapasConfig(PretrainedConfig):
     [google/tapas-base-finetuned-sqa](https://huggingface.co/google/tapas-base-finetuned-sqa) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    documentation from [`PreTrainedConfig`] for more information.
 
     Hyperparameters additional to BERT are taken from run_task_main.py and hparam_utils.py of the original
     implementation. Original implementation available at https://github.com/google-research/tapas/tree/master.
@@ -60,7 +60,7 @@ class TapasConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_sizes (`List[int]`, *optional*, defaults to `[3, 256, 256, 2, 256, 256, 10]`):
+        type_vocab_sizes (`list[int]`, *optional*, defaults to `[3, 256, 256, 2, 256, 256, 10]`):
             The vocabulary sizes of the `token_type_ids` passed when calling [`TapasModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -113,7 +113,7 @@ class TapasConfig(PretrainedConfig):
             Whether to restart position indexes at every cell (i.e. use relative position embeddings).
         disable_per_token_loss (`bool`, *optional*, defaults to `False`):
             Whether to disable any (strong or weak) supervision on cells.
-        aggregation_labels (`Dict[int, label]`, *optional*):
+        aggregation_labels (`dict[int, label]`, *optional*):
             The aggregation labels used to aggregate the results. For example, the WTQ models have the following
             aggregation labels: `{0: "NONE", 1: "SUM", 2: "AVERAGE", 3: "COUNT"}`
         no_aggregation_label_index (`int`, *optional*):

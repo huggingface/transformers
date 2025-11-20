@@ -14,18 +14,18 @@
 # limitations under the License.
 """Mask2Former model configuration"""
 
-from typing import Dict, List, Optional
+from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class Mask2FormerConfig(PretrainedConfig):
+class Mask2FormerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Mask2FormerModel`]. It is used to instantiate a
     Mask2Former model according to the specified arguments, defining the model architecture. Instantiating a
@@ -33,13 +33,13 @@ class Mask2FormerConfig(PretrainedConfig):
     [facebook/mask2former-swin-small-coco-instance](https://huggingface.co/facebook/mask2former-swin-small-coco-instance)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Currently, Mask2Former only supports the [Swin Transformer](swin) as backbone.
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `SwinConfig()`):
+        backbone_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `SwinConfig()`):
             The configuration of the backbone model. If unset, the configuration corresponding to
             `swin-base-patch4-window12-384` will be used.
         backbone (`str`, *optional*):
@@ -105,7 +105,7 @@ class Mask2FormerConfig(PretrainedConfig):
         use_auxiliary_loss (`boolean``, *optional*, defaults to `True`):
             If `True` [`Mask2FormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using
             the logits from each decoder's stage.
-        feature_strides (`List[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
+        feature_strides (`list[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
             Feature strides corresponding to features generated from backbone network.
         output_auxiliary_logits (`bool`, *optional*):
             Should the model output its `auxiliary_logits` or not.
@@ -128,12 +128,13 @@ class Mask2FormerConfig(PretrainedConfig):
     """
 
     model_type = "mask2former"
+    sub_configs = {"backbone_config": AutoConfig}
     backbones_supported = ["swin"]
     attribute_map = {"hidden_size": "hidden_dim"}
 
     def __init__(
         self,
-        backbone_config: Optional[Dict] = None,
+        backbone_config: Optional[dict] = None,
         feature_size: int = 256,
         mask_feature_size: int = 256,
         hidden_dim: int = 256,
@@ -159,12 +160,12 @@ class Mask2FormerConfig(PretrainedConfig):
         init_std: float = 0.02,
         init_xavier_std: float = 1.0,
         use_auxiliary_loss: bool = True,
-        feature_strides: List[int] = [4, 8, 16, 32],
+        feature_strides: list[int] = [4, 8, 16, 32],
         output_auxiliary_logits: Optional[bool] = None,
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[Dict] = None,
+        backbone_kwargs: Optional[dict] = None,
         **kwargs,
     ):
         if backbone_config is None and backbone is None:
@@ -235,22 +236,6 @@ class Mask2FormerConfig(PretrainedConfig):
         self.backbone_kwargs = backbone_kwargs
 
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
-        """Instantiate a [`Mask2FormerConfig`] (or a derived class) from a pre-trained backbone model configuration.
-
-        Args:
-            backbone_config ([`PretrainedConfig`]):
-                The backbone configuration.
-
-        Returns:
-            [`Mask2FormerConfig`]: An instance of a configuration object
-        """
-        return cls(
-            backbone_config=backbone_config,
-            **kwargs,
-        )
 
 
 __all__ = ["Mask2FormerConfig"]

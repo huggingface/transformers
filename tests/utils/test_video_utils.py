@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_cv2,
     require_decord,
     require_torch,
+    require_torchcodec,
     require_torchvision,
     require_vision,
 )
@@ -45,7 +46,7 @@ if is_vision_available():
 
 def get_random_video(height, width, num_frames=8, return_torch=False):
     random_frame = np.random.randint(0, 256, (height, width, 3), dtype=np.uint8)
-    video = np.array(([random_frame] * num_frames))
+    video = np.array([random_frame] * num_frames)
     if return_torch:
         # move channel first
         return torch.from_numpy(video).permute(0, 3, 1, 2)
@@ -121,7 +122,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
         torch_video = torch.from_numpy(video)
         videos_list = make_batched_videos(torch_video)
         self.assertIsInstance(videos_list, list)
-        self.assertIsInstance(videos_list[0], np.ndarray)
+        self.assertIsInstance(videos_list[0], torch.Tensor)
         self.assertEqual(videos_list[0].shape, (1, 16, 32, 3))
         self.assertTrue(np.array_equal(videos_list[0][0], video))
 
@@ -261,11 +262,18 @@ class LoadVideoTester(unittest.TestCase):
 
     @require_decord
     @require_torchvision
+    @require_torchcodec
     @require_cv2
     def test_load_video_backend_url(self):
         video, _ = load_video(
             "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
             backend="decord",
+        )
+        self.assertEqual(video.shape, (243, 360, 640, 3))
+
+        video, _ = load_video(
+            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+            backend="torchcodec",
         )
         self.assertEqual(video.shape, (243, 360, 640, 3))
 
@@ -283,6 +291,7 @@ class LoadVideoTester(unittest.TestCase):
 
     @require_decord
     @require_torchvision
+    @require_torchcodec
     @require_cv2
     def test_load_video_backend_local(self):
         video_file_path = hf_hub_download(
@@ -297,6 +306,10 @@ class LoadVideoTester(unittest.TestCase):
         self.assertIsInstance(metadata, VideoMetadata)
 
         video, metadata = load_video(video_file_path, backend="torchvision")
+        self.assertEqual(video.shape, (243, 360, 640, 3))
+        self.assertIsInstance(metadata, VideoMetadata)
+
+        video, metadata = load_video(video_file_path, backend="torchcodec")
         self.assertEqual(video.shape, (243, 360, 640, 3))
         self.assertIsInstance(metadata, VideoMetadata)
 

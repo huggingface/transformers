@@ -14,29 +14,22 @@
 # limitations under the License.
 """EfficientNet model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import List
-
-from packaging import version
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class EfficientNetConfig(PretrainedConfig):
+class EfficientNetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EfficientNetModel`]. It is used to instantiate an
     EfficientNet model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the EfficientNet
     [google/efficientnet-b7](https://huggingface.co/google/efficientnet-b7) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):
@@ -49,19 +42,19 @@ class EfficientNetConfig(PretrainedConfig):
             Scaling coefficient for network depth at each stage.
         depth_divisor `int`, *optional*, defaults to 8):
             A unit of network width.
-        kernel_sizes (`List[int]`, *optional*, defaults to `[3, 3, 5, 3, 5, 5, 3]`):
+        kernel_sizes (`list[int]`, *optional*, defaults to `[3, 3, 5, 3, 5, 5, 3]`):
             List of kernel sizes to be used in each block.
-        in_channels (`List[int]`, *optional*, defaults to `[32, 16, 24, 40, 80, 112, 192]`):
+        in_channels (`list[int]`, *optional*, defaults to `[32, 16, 24, 40, 80, 112, 192]`):
             List of input channel sizes to be used in each block for convolutional layers.
-        out_channels (`List[int]`, *optional*, defaults to `[16, 24, 40, 80, 112, 192, 320]`):
+        out_channels (`list[int]`, *optional*, defaults to `[16, 24, 40, 80, 112, 192, 320]`):
             List of output channel sizes to be used in each block for convolutional layers.
-        depthwise_padding (`List[int]`, *optional*, defaults to `[]`):
+        depthwise_padding (`list[int]`, *optional*, defaults to `[]`):
             List of block indices with square padding.
-        strides (`List[int]`, *optional*, defaults to `[1, 2, 2, 2, 1, 2, 1]`):
+        strides (`list[int]`, *optional*, defaults to `[1, 2, 2, 2, 1, 2, 1]`):
             List of stride sizes to be used in each block for convolutional layers.
-        num_block_repeats (`List[int]`, *optional*, defaults to `[1, 2, 2, 3, 3, 4, 1]`):
+        num_block_repeats (`list[int]`, *optional*, defaults to `[1, 2, 2, 3, 3, 4, 1]`):
             List of the number of times each block is to repeated.
-        expand_ratios (`List[int]`, *optional*, defaults to `[1, 6, 6, 6, 6, 6, 6]`):
+        expand_ratios (`list[int]`, *optional*, defaults to `[1, 6, 6, 6, 6, 6, 6]`):
             List of scaling coefficient of each block.
         squeeze_expansion_ratio (`float`, *optional*, defaults to 0.25):
             Squeeze expansion ratio.
@@ -107,13 +100,13 @@ class EfficientNetConfig(PretrainedConfig):
         width_coefficient: float = 2.0,
         depth_coefficient: float = 3.1,
         depth_divisor: int = 8,
-        kernel_sizes: List[int] = [3, 3, 5, 3, 5, 5, 3],
-        in_channels: List[int] = [32, 16, 24, 40, 80, 112, 192],
-        out_channels: List[int] = [16, 24, 40, 80, 112, 192, 320],
-        depthwise_padding: List[int] = [],
-        strides: List[int] = [1, 2, 2, 2, 1, 2, 1],
-        num_block_repeats: List[int] = [1, 2, 2, 3, 3, 4, 1],
-        expand_ratios: List[int] = [1, 6, 6, 6, 6, 6, 6],
+        kernel_sizes: list[int] = [3, 3, 5, 3, 5, 5, 3],
+        in_channels: list[int] = [32, 16, 24, 40, 80, 112, 192],
+        out_channels: list[int] = [16, 24, 40, 80, 112, 192, 320],
+        depthwise_padding: list[int] = [],
+        strides: list[int] = [1, 2, 2, 2, 1, 2, 1],
+        num_block_repeats: list[int] = [1, 2, 2, 3, 3, 4, 1],
+        expand_ratios: list[int] = [1, 6, 6, 6, 6, 6, 6],
         squeeze_expansion_ratio: float = 0.25,
         hidden_act: str = "swish",
         hidden_dim: int = 2560,
@@ -151,20 +144,4 @@ class EfficientNetConfig(PretrainedConfig):
         self.num_hidden_layers = sum(num_block_repeats) * 4
 
 
-class EfficientNetOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-5
-
-
-__all__ = ["EfficientNetConfig", "EfficientNetOnnxConfig"]
+__all__ = ["EfficientNetConfig"]

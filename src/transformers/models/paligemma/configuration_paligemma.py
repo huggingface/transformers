@@ -13,7 +13,7 @@
 # limitations under the License.
 """PaliGemmamodel configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class PaliGemmaConfig(PretrainedConfig):
+class PaliGemmaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PaliGemmaForConditionalGeneration`]. It is used to instantiate an
     PaliGemmamodel according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -29,8 +29,8 @@ class PaliGemmaConfig(PretrainedConfig):
 
     e.g. [paligemma-hf/paligemma-2b](https://huggingface.co/paligemma-hf/paligemma-2b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`PaliGemmaVisionConfig`,  *optional*):
@@ -92,9 +92,7 @@ class PaliGemmaConfig(PretrainedConfig):
         self.is_encoder_decoder = False
 
         if isinstance(self.vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "siglip_vision_model"
-            )
+            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
             self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             self.vision_config = CONFIG_MAPPING["siglip_vision_model"](
@@ -110,7 +108,7 @@ class PaliGemmaConfig(PretrainedConfig):
 
         self.text_config = text_config
         if isinstance(self.text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "gemma"
+            text_config["model_type"] = text_config.get("model_type", "gemma")
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             self.text_config = CONFIG_MAPPING["gemma"](
@@ -122,6 +120,12 @@ class PaliGemmaConfig(PretrainedConfig):
                 is_encoder_decoder=False,
                 vocab_size=vocab_size,
             )
+
+        # BC: `use_bidirectional_attention` was originally unset in PaliGemma1 (backbone = Gemma1) AND PaliGemma2
+        # (backbone = Gemma2). Both PaliGemmas want to default to True.
+        if self.text_config.use_bidirectional_attention is None:
+            self.text_config.use_bidirectional_attention = True
+
         self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
         self.vision_config.projection_dim = projection_dim
         super().__init__(**kwargs)

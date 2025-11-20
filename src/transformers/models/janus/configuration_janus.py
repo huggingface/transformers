@@ -19,9 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -29,13 +27,13 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class JanusVisionConfig(PretrainedConfig):
+class JanusVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JanusVisionModel`]. It is used to instantiate a
     `JanusVisionModel` according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
@@ -124,12 +122,12 @@ class JanusVisionConfig(PretrainedConfig):
         self.num_image_tokens = num_image_tokens
 
 
-class JanusVQVAEConfig(PretrainedConfig):
+class JanusVQVAEConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JanusVQVAEModel`]. It is used to instantiate a
     `JanusVQVAEModel` according to the specified arguments, defining the model architecture.
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information. Instantiating a
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information. Instantiating a
     configuration with the defaults will yield a similar configuration to the VQModel of the
     [deepseek-community/Janus-Pro-1B](https://huggingface.co/deepseek-community/Janus-Pro-1B).
 
@@ -150,7 +148,7 @@ class JanusVQVAEConfig(PretrainedConfig):
             Number of out channels.
         base_channels (`int`, *optional*, defaults to 128):
             Base channel count.
-        channel_multiplier (`List[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
+        channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
             Channel multipliers for each resolution.
         num_res_blocks (`int`, *optional*, defaults to 2):
             Number of residual blocks.
@@ -182,7 +180,7 @@ class JanusVQVAEConfig(PretrainedConfig):
         in_channels: int = 3,
         out_channels: int = 3,
         base_channels: int = 128,
-        channel_multiplier: List[int] = [1, 1, 2, 2, 4],
+        channel_multiplier: list[int] = [1, 1, 2, 2, 4],
         num_res_blocks: int = 2,
         dropout: float = 0.0,
         initializer_range=0.02,
@@ -211,7 +209,7 @@ class JanusVQVAEConfig(PretrainedConfig):
         self.image_token_embed_dim = image_token_embed_dim
 
 
-class JanusConfig(PretrainedConfig):
+class JanusConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JanusModel`]. It is used to instantiate an
     Janus model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -220,8 +218,8 @@ class JanusConfig(PretrainedConfig):
     e.g. [deepseek-community/Janus-Pro-1B](https://huggingface.co/deepseek-community/Janus-Pro-1B) or
     [deepseek-community/Janus-Pro-7B](https://huggingface.co/deepseek-community/Janus-Pro-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
@@ -279,7 +277,7 @@ class JanusConfig(PretrainedConfig):
         elif text_config is None:
             logger.info("`text_config` is None. Initializing with default values")
             self.text_config = CONFIG_MAPPING["llama"]()
-        elif isinstance(text_config, PretrainedConfig):
+        elif isinstance(text_config, PreTrainedConfig):
             self.text_config = text_config
         else:
             raise ValueError(
@@ -313,6 +311,7 @@ class JanusConfig(PretrainedConfig):
                 f" Type found: {type(vq_config)}"
             )
 
+        self.initializer_range = self.vision_config.initializer_range
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
         # The default is only the index for the 1B model, 7B uses a different one

@@ -224,7 +224,7 @@ class BioGptModelTester:
     def create_and_check_biogpt_weight_initialization(self, config, *args):
         model = BioGptModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.num_hidden_layers)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -270,7 +270,6 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available() and is_sacremoses_available()
         else {}
     )
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = BioGptModelTester(self)
@@ -282,12 +281,6 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_biogpt_model_att_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

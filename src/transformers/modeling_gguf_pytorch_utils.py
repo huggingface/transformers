@@ -243,9 +243,21 @@ class Gemma2TensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
 
+class Lfm2TensorProcessor(TensorProcessor):
+    def __init__(self, config=None):
+        super().__init__(config=config)
+
+    def process(self, weights, name, **kwargs):
+        if "shortconv.conv.weight" in name:
+            ## GGUF shape is [hidden_dim, L_cache], HF expects [hidden_dim, 1, L_cache]
+            weights = np.expand_dims(weights, axis=1)  ## equivalent to unsqueeze(1)
+        return GGUFTensor(weights, name, {})
+
+
 TENSOR_PROCESSORS = {
     "llama": LlamaTensorProcessor,
     "qwen2moe": Qwen2MoeTensorProcessor,
+    "qwen3moe": Qwen2MoeTensorProcessor,
     "bloom": BloomTensorProcessor,
     "t5": T5TensorProcessor,
     "t5encoder": T5TensorProcessor,
@@ -254,6 +266,7 @@ TENSOR_PROCESSORS = {
     "nemotron": NemotronTensorProcessor,
     "gemma2": Gemma2TensorProcessor,
     "gemma3": Gemma2TensorProcessor,
+    "lfm2": Lfm2TensorProcessor,
 }
 
 
@@ -295,8 +308,12 @@ def get_gguf_hf_weights_map(
         model_type = "command-r"
     elif model_type == "qwen2_moe":
         model_type = "qwen2moe"
+    elif model_type == "qwen3_moe":
+        model_type = "qwen3moe"
     elif model_type == "gemma3_text":
         model_type = "gemma3"
+    elif model_type == "umt5":
+        model_type = "t5"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
@@ -315,9 +332,9 @@ def get_gguf_hf_weights_map(
     # hf => gguf and gguf => hf mappings are reversed
     gguf_to_hf_name_map = {}
     state_dict = hf_model.state_dict()
-    for hf_name in state_dict.keys():
-        # An exception for qwen2moe model, where the expert layers are packed
-        if model_type == "qwen2moe" and "mlp.experts." in hf_name:
+    for hf_name in state_dict:
+        # An exception for qwen2moe/qwen3moe model, where the expert layers are packed
+        if model_type in ("qwen2moe", "qwen3moe") and "mlp.experts." in hf_name:
             hf_name = re.sub(r"mlp.experts.\d+.", "mlp.experts.", hf_name)
 
         name, suffix = hf_name, ""
@@ -383,14 +400,21 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # It needs to be developed for supporting legacy t5.
     elif "t5" in architecture or "t5encoder" in architecture:
         parsed_parameters["config"]["is_gated_act"] = True
-        if "t5encoder" in architecture:
-            parsed_parameters["config"]["architectures"] = ["T5EncoderModel"]
-        updated_architecture = "t5"
+        if model_name and "umt5" in model_name[0].lower():
+            updated_architecture = "umt5"
+            if "t5encoder" in architecture:
+                parsed_parameters["config"]["architectures"] = ["UMT5EncoderModel"]
+        else:
+            if "t5encoder" in architecture:
+                parsed_parameters["config"]["architectures"] = ["T5EncoderModel"]
+            updated_architecture = "t5"
     else:
         updated_architecture = architecture
 
     if "qwen2moe" in architecture:
         updated_architecture = "qwen2_moe"
+    elif "qwen3moe" in architecture:
+        updated_architecture = "qwen3_moe"
 
     # For stablelm architecture, we need to set qkv_bias and use_parallel_residual from tensors
     # If `qkv_bias=True`, qkv_proj with bias will be present in the tensors
@@ -428,8 +452,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         if isinstance(value, str) and architecture in value:
             value = value.replace(architecture, updated_architecture)
 
-        for parameter in GGUF_TO_TRANSFORMERS_MAPPING:
-            parameter_renames = GGUF_TO_TRANSFORMERS_MAPPING[parameter]
+        for parameter, parameter_renames in GGUF_TO_TRANSFORMERS_MAPPING.items():
             if prefix in parameter_renames and config_key in parameter_renames[prefix]:
                 renamed_config_key = parameter_renames[prefix][config_key]
                 if renamed_config_key == -1:
@@ -447,6 +470,19 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # Gemma3 GGUF checkpoint only contains weights of text backbone
     if parsed_parameters["config"]["model_type"] == "gemma3":
         parsed_parameters["config"]["model_type"] = "gemma3_text"
+
+    if parsed_parameters["config"]["model_type"] == "lfm2":
+        gguf_num_key_value_heads = parsed_parameters["config"]["num_key_value_heads"]
+        # LFM2 GGUF checkpoint defines num_key_value_heads as a list of integers .e.g [0, 0, 8, 0, 0, 8, 0, 0, 8, 0, 8, 0, 8, 0, 8, 0] but we need to set it to the max value for HF
+        parsed_parameters["config"]["num_key_value_heads"] = max(gguf_num_key_value_heads)
+        ## we already read the correct intermediate_size from the GGUF checkpoint so we need to set block_auto_adjust_ff_dim to False
+        parsed_parameters["config"]["block_auto_adjust_ff_dim"] = False
+
+        ## llama.cpp defines the layers that are full-attention by looking at num_key_value_heads
+        ## we need to set the full_attn_idxs to the layers that are full-attention
+        parsed_parameters["config"]["full_attn_idxs"] = [
+            i for i, num_kv_heads in enumerate(gguf_num_key_value_heads) if num_kv_heads > 0
+        ]
 
     # retrieve config vocab_size from tokenizer
     # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details

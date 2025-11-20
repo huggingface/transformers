@@ -16,13 +16,13 @@
 
 import collections
 import os
-from typing import List, Optional, Tuple
+from typing import Optional
 
-from transformers.utils import is_jieba_available, requires_backends
+from transformers.utils import is_rjieba_available, requires_backends
 
 
-if is_jieba_available():
-    import jieba
+if is_rjieba_available():
+    import rjieba
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -119,7 +119,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         padding_side="left",
         **kwargs,
     ):
-        requires_backends(self, ["jieba"])
+        requires_backends(self, ["rjieba"])
         self.bod_token = bod_token
         self.eod_token = eod_token
         self.encoder = load_vocab(vocab_file)
@@ -169,7 +169,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
     def _tokenize(self, text):
         """Tokenize a string."""
         output_tokens = []
-        for x in jieba.cut(text, cut_all=False):
+        for x in rjieba.cut(text, False):
             output_tokens.extend(self.wordpiece_tokenizer.tokenize(x))
         return output_tokens
 
@@ -184,7 +184,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
     def check(self, token):
         return token in self.encoder
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
         return "".join(tokens)
 
     def _convert_token_to_id(self, token):
@@ -195,7 +195,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index, self.unk_token)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
                 save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
@@ -223,8 +223,8 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A CPMAnt sequence has the following format:
@@ -232,31 +232,31 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         - single sequence: `[BOS] Sequence`.
 
         Args:
-            token_ids_0 (`List[int]`): The first tokenized sequence that special tokens will be added.
-            token_ids_1 (`List[int]`): The optional second tokenized sequence that special tokens will be added.
+            token_ids_0 (`list[int]`): The first tokenized sequence that special tokens will be added.
+            token_ids_1 (`list[int]`): The optional second tokenized sequence that special tokens will be added.
 
         Returns:
-            `List[int]`: The model input with special tokens.
+            `list[int]`: The model input with special tokens.
         """
         if token_ids_1 is None:
             return [self.bos_token_id] + token_ids_0
         return [self.bos_token_id] + token_ids_0 + [self.bos_token_id] + token_ids_1
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`): List of IDs.
-            token_ids_1 (`List[int]`, *optional*): Optional second list of IDs for sequence pairs.
+            token_ids_0 (`list[int]`): List of IDs.
+            token_ids_1 (`list[int]`, *optional*): Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:

@@ -18,7 +18,7 @@ import os
 import pickle
 import time
 from collections.abc import Iterable
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 
@@ -47,7 +47,7 @@ class Index:
     A base class for the Indices encapsulated by the [`RagRetriever`].
     """
 
-    def get_doc_dicts(self, doc_ids: np.ndarray) -> List[dict]:
+    def get_doc_dicts(self, doc_ids: np.ndarray) -> list[dict]:
         """
         Returns a list of dictionaries, containing titles and text of the retrieved documents.
 
@@ -57,7 +57,7 @@ class Index:
         """
         raise NotImplementedError
 
-    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
+    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> tuple[np.ndarray, np.ndarray]:
         """
         For each query in the batch, retrieves `n_docs` documents.
 
@@ -173,7 +173,7 @@ class LegacyIndex(Index):
         self._deserialize_index()
         self._index_initialized = True
 
-    def get_doc_dicts(self, doc_ids: np.array):
+    def get_doc_dicts(self, doc_ids: np.ndarray):
         doc_list = []
         for doc_ids_i in doc_ids:
             ids = [str(int(doc_id)) for doc_id in doc_ids_i]
@@ -187,7 +187,7 @@ class LegacyIndex(Index):
             doc_dicts.append(doc_dict)
         return doc_dicts
 
-    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
+    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> tuple[np.ndarray, np.ndarray]:
         aux_dim = np.zeros(len(question_hidden_states), dtype="float32").reshape(-1, 1)
         query_nhsw_vectors = np.hstack((question_hidden_states, aux_dim))
         _, docs_ids = self.index.search(query_nhsw_vectors, n_docs)
@@ -226,10 +226,10 @@ class HFIndexBase(Index):
     def is_initialized(self):
         return self._index_initialized
 
-    def get_doc_dicts(self, doc_ids: np.ndarray) -> List[dict]:
+    def get_doc_dicts(self, doc_ids: np.ndarray) -> list[dict]:
         return [self.dataset[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
 
-    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
+    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> tuple[np.ndarray, np.ndarray]:
         _, ids = self.dataset.search_batch("embeddings", question_hidden_states, n_docs)
         docs = [self.dataset[[i for i in indices if i >= 0]] for indices in ids]
         vectors = [doc["embeddings"] for doc in docs]
@@ -509,10 +509,7 @@ class RagRetriever:
         def cat_input_and_doc(doc_title, doc_text, input_string, prefix):
             # TODO(Patrick): if we train more RAG models, I want to put the input first to take advantage of effortless truncation
             # TODO(piktus): better handling of truncation
-            if doc_title.startswith('"'):
-                doc_title = doc_title[1:]
-            if doc_title.endswith('"'):
-                doc_title = doc_title[:-1]
+            doc_title = doc_title.removeprefix('"').removesuffix('"')
             if prefix is None:
                 prefix = ""
             out = (prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string).replace(
@@ -541,10 +538,10 @@ class RagRetriever:
 
         return contextualized_inputs["input_ids"], contextualized_inputs["attention_mask"]
 
-    def _chunk_tensor(self, t: Iterable, chunk_size: int) -> List[Iterable]:
+    def _chunk_tensor(self, t: Iterable, chunk_size: int) -> list[Iterable]:
         return [t[i : i + chunk_size] for i in range(0, len(t), chunk_size)]
 
-    def _main_retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, np.ndarray]:
+    def _main_retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> tuple[np.ndarray, np.ndarray]:
         question_hidden_states_batched = self._chunk_tensor(question_hidden_states, self.batch_size)
         ids_batched = []
         vectors_batched = []
@@ -561,7 +558,7 @@ class RagRetriever:
             np.array(vectors_batched),
         )  # shapes (batch_size, n_docs) and (batch_size, n_docs, d)
 
-    def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, np.ndarray, List[dict]]:
+    def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> tuple[np.ndarray, np.ndarray, list[dict]]:
         """
         Retrieves documents for specified `question_hidden_states`.
 
@@ -572,12 +569,12 @@ class RagRetriever:
                 The number of docs retrieved per query.
 
         Return:
-            `Tuple[np.ndarray, np.ndarray, List[dict]]`: A tuple with the following objects:
+            `tuple[np.ndarray, np.ndarray, list[dict]]`: A tuple with the following objects:
 
             - **retrieved_doc_embeds** (`np.ndarray` of shape `(batch_size, n_docs, dim)`) -- The retrieval embeddings
               of the retrieved docs per query.
             - **doc_ids** (`np.ndarray` of shape `(batch_size, n_docs)`) -- The ids of the documents in the index
-            - **doc_dicts** (`List[dict]`): The `retrieved_doc_embeds` examples per query.
+            - **doc_dicts** (`list[dict]`): The `retrieved_doc_embeds` examples per query.
         """
 
         doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
@@ -590,7 +587,7 @@ class RagRetriever:
 
     def __call__(
         self,
-        question_input_ids: List[List[int]],
+        question_input_ids: list[list[int]],
         question_hidden_states: np.ndarray,
         prefix=None,
         n_docs=None,
@@ -600,7 +597,7 @@ class RagRetriever:
         Retrieves documents for specified `question_hidden_states`.
 
         Args:
-            question_input_ids (`List[List[int]]`) batch of input ids
+            question_input_ids (`list[list[int]]`) batch of input ids
             question_hidden_states (`np.ndarray` of shape `(batch_size, vector_size)`:
                 A batch of query vectors to retrieve with.
             prefix (`str`, *optional*):
@@ -610,7 +607,6 @@ class RagRetriever:
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to "pt"):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
 

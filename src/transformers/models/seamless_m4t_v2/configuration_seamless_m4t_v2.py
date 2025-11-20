@@ -14,22 +14,22 @@
 # limitations under the License.
 """SeamlessM4Tv2 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SeamlessM4Tv2Config(PretrainedConfig):
+class SeamlessM4Tv2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~SeamlessM4Tv2Model`]. It is used to instantiate
     an SeamlessM4Tv2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SeamlessM4Tv2
     [""](https://huggingface.co/"") architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -187,18 +187,18 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
         upsample_initial_channel (`int`, *optional*, defaults to 512):
             The number of input channels into the hifi-gan upsampling network. Applies to the vocoder only.
-        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[5, 4, 4, 2, 2]`):
+        upsample_rates (`tuple[int]` or `list[int]`, *optional*, defaults to `[5, 4, 4, 2, 2]`):
             A tuple of integers defining the stride of each 1D convolutional layer in the vocoder upsampling network.
             The length of *upsample_rates* defines the number of convolutional layers and has to match the length of
             *upsample_kernel_sizes*. Applies to the vocoder only.
-        upsample_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[11, 8, 8, 4, 4]`):
+        upsample_kernel_sizes (`tuple[int]` or `list[int]`, *optional*, defaults to `[11, 8, 8, 4, 4]`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the vocoder upsampling
             network. The length of *upsample_kernel_sizes* defines the number of convolutional layers and has to match
             the length of *upsample_rates*. Applies to the vocoder only.
-        resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 7, 11]`):
+        resblock_kernel_sizes (`tuple[int]` or `list[int]`, *optional*, defaults to `[3, 7, 11]`):
             A tuple of integers defining the kernel sizes of the vocoder 1D convolutional layers in the multi-receptive
             field fusion (MRF) module. Applies to the vocoder only.
-        resblock_dilation_sizes (`Tuple[Tuple[int]]` or `List[List[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
+        resblock_dilation_sizes (`tuple[tuple[int]]` or `list[list[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
             A nested tuple of integers defining the dilation rates of the vocoder dilated 1D convolutional layers in
             the multi-receptive field fusion (MRF) module. Applies to the vocoder only.
         leaky_relu_slope (`float`, *optional*, defaults to 0.1):

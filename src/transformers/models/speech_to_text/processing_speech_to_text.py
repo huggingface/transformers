@@ -17,7 +17,6 @@ Speech processor class for Speech2Text
 """
 
 import warnings
-from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
 
@@ -38,13 +37,8 @@ class Speech2TextProcessor(ProcessorMixin):
             An instance of [`Speech2TextTokenizer`]. The tokenizer is a required input.
     """
 
-    feature_extractor_class = "Speech2TextFeatureExtractor"
-    tokenizer_class = "Speech2TextTokenizer"
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
 
     def __call__(self, *args, **kwargs):
         """
@@ -54,10 +48,6 @@ class Speech2TextProcessor(ProcessorMixin):
         [`~Speech2TextTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
         information.
         """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
-
         if "raw_speech" in kwargs:
             warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
             audio = kwargs.pop("raw_speech")
@@ -84,37 +74,6 @@ class Speech2TextProcessor(ProcessorMixin):
         else:
             inputs["labels"] = encodings["input_ids"]
             return inputs
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Speech2TextTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Speech2TextTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @contextmanager
-    def as_target_processor(self):
-        """
-        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
-        Speech2Text.
-        """
-        warnings.warn(
-            "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
-            "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
-            "your audio inputs, or in a separate call."
-        )
-        self._in_target_context_manager = True
-        self.current_processor = self.tokenizer
-        yield
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
 
 
 __all__ = ["Speech2TextProcessor"]

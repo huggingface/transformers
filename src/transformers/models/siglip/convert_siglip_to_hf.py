@@ -20,7 +20,6 @@ URL: https://github.com/google-research/big_vision/tree/main
 import argparse
 import collections
 import os
-from typing import Tuple
 
 import numpy as np
 import requests
@@ -143,7 +142,7 @@ def get_vocab_file_from_model_name(model_name: str) -> str:
     return vocab_file
 
 
-def get_text_and_vision_vit_variants(model_name: str) -> Tuple[str, str]:
+def get_text_and_vision_vit_variants(model_name: str) -> tuple[str, str]:
     variant = model_name.split("-")[1] if "giant-opt" not in model_name else "giant-opt"
     return {
         "base": ("base", "base"),
@@ -526,7 +525,9 @@ if __name__ == "__main__":
         help="Whether to verify logits against the original implementation.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

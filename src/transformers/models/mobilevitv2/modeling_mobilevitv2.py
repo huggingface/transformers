@@ -16,14 +16,15 @@
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
 """PyTorch MobileViTV2 model."""
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -41,9 +42,7 @@ logger = logging.get_logger(__name__)
 # Copied from transformers.models.mobilevit.modeling_mobilevit.make_divisible
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
     """
-    Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the
-    original TensorFlow repo. It can be seen here:
-    https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
+    Ensure that all layers have a channel count that is divisible by `divisor`.
     """
     if min_value is None:
         min_value = divisor
@@ -351,7 +350,7 @@ class MobileViTV2Transformer(nn.Module):
         return hidden_states
 
 
-class MobileViTV2Layer(nn.Module):
+class MobileViTV2Layer(GradientCheckpointingLayer):
     """
     MobileViTV2 layer: https://huggingface.co/papers/2206.02680
     """
@@ -417,7 +416,7 @@ class MobileViTV2Layer(nn.Module):
             use_activation=False,
         )
 
-    def unfolding(self, feature_map: torch.Tensor) -> Tuple[torch.Tensor, Tuple[int, int]]:
+    def unfolding(self, feature_map: torch.Tensor) -> tuple[torch.Tensor, tuple[int, int]]:
         batch_size, in_channels, img_height, img_width = feature_map.shape
         patches = nn.functional.unfold(
             feature_map,
@@ -428,7 +427,7 @@ class MobileViTV2Layer(nn.Module):
 
         return patches, (img_height, img_width)
 
-    def folding(self, patches: torch.Tensor, output_size: Tuple[int, int]) -> torch.Tensor:
+    def folding(self, patches: torch.Tensor, output_size: tuple[int, int]) -> torch.Tensor:
         batch_size, in_dim, patch_size, n_patches = patches.shape
         patches = patches.reshape(batch_size, in_dim * patch_size, n_patches)
 
@@ -556,13 +555,7 @@ class MobileViTV2Encoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layer):
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -574,25 +567,24 @@ class MobileViTV2Encoder(nn.Module):
 
 
 @auto_docstring
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTPreTrainedModel with MobileViT->MobileViTV2,mobilevit->mobilevitv2
 class MobileViTV2PreTrainedModel(PreTrainedModel):
-    config_class = MobileViTV2Config
+    config: MobileViTV2Config
     base_model_prefix = "mobilevitv2"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MobileViTV2Layer"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.GroupNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 @auto_docstring
@@ -624,16 +616,6 @@ class MobileViTV2Model(MobileViTV2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base class PreTrainedModel
-        """
-        for layer_index, heads in heads_to_prune.items():
-            mobilevitv2_layer = self.encoder.layer[layer_index]
-            if isinstance(mobilevitv2_layer, MobileViTV2Layer):
-                for transformer_layer in mobilevitv2_layer.transformer.layer:
-                    transformer_layer.attention.prune_heads(heads)
 
     @auto_docstring
     def forward(
@@ -726,26 +708,7 @@ class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]

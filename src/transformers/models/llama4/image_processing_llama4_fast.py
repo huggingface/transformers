@@ -17,37 +17,27 @@
 import math
 from collections import defaultdict
 from functools import lru_cache
-from typing import List, Optional, Set, Tuple, Union
+from typing import Optional, Union
+
+import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
+from ...image_transforms import split_to_tiles
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-def get_factors(dividend: int) -> Set[int]:
+def get_factors(dividend: int) -> set[int]:
     """
     Calculate all factors of a given number, i.e. a divisor that leaves
     no remainder. For example, if dividend=12, it will return {1, 2, 3, 4, 6, 12}.
@@ -68,18 +58,18 @@ def get_factors(dividend: int) -> Set[int]:
 
 
 def get_max_res_without_distortion(
-    image_size: Tuple[int, int],
-    target_size: Tuple[int, int],
-) -> Tuple[int, int]:
+    image_size: tuple[int, int],
+    target_size: tuple[int, int],
+) -> tuple[int, int]:
     """
     Determines the maximum resolution to which an image can be resized to without distorting its
     aspect ratio, based on the target resolution.
 
     Args:
-        image_size (Tuple[int, int]): The original resolution of the image (height, width).
-        target_resolution (Tuple[int, int]): The desired resolution to fit the image into (height, width).
+        image_size (tuple[int, int]): The original resolution of the image (height, width).
+        target_resolution (tuple[int, int]): The desired resolution to fit the image into (height, width).
     Returns:
-        Tuple[int, int]: The optimal dimensions (height, width) to which the image should be resized.
+        tuple[int, int]: The optimal dimensions (height, width) to which the image should be resized.
     Example:
         >>> _get_max_res_without_distortion([200, 300], target_size = [450, 200])
         (134, 200)
@@ -101,30 +91,6 @@ def get_max_res_without_distortion(
         new_width = min(math.floor(original_width * scale_h), target_width)
 
     return new_height, new_width
-
-
-def split_to_tiles(images: torch.Tensor, num_tiles_height: int, num_tiles_width: int) -> torch.Tensor:
-    # Split image into number of required tiles (width x height)
-    batch_size, num_channels, height, width = images.size()
-    images = images.view(
-        batch_size,
-        num_channels,
-        num_tiles_height,
-        height // num_tiles_height,
-        num_tiles_width,
-        width // num_tiles_width,
-    )
-    # Permute dimensions to reorder the axes
-    image = images.permute(0, 2, 4, 1, 3, 5).contiguous()
-    # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
-    image = image.view(
-        batch_size,
-        num_tiles_width * num_tiles_height,
-        num_channels,
-        height // num_tiles_height,
-        width // num_tiles_width,
-    )
-    return image
 
 
 @lru_cache(maxsize=1)
@@ -177,7 +143,7 @@ def find_supported_resolutions(max_num_chunks: int, patch_size: SizeDict) -> tor
 
     # get the resolutions multiplied by the patch_size
     possible_resolutions = []
-    for key, value in asp_dict.items():
+    for value in asp_dict.values():
         for height, depth in value:
             possible_resolutions.append((height * patch_size, depth * patch_size))
 
@@ -186,8 +152,8 @@ def find_supported_resolutions(max_num_chunks: int, patch_size: SizeDict) -> tor
 
 def pad_to_best_fit(
     images: "torch.Tensor",
-    target_size: Tuple[int, int],
-    background_color: Union[int, Tuple[int, int, int]] = 0,
+    target_size: tuple[int, int],
+    background_color: Union[int, tuple[int, int, int]] = 0,
 ) -> "torch.Tensor":
     """
     Pads an image to fit the target size.
@@ -195,10 +161,10 @@ def pad_to_best_fit(
     Args:
         images (`np.ndarray`):
             The images to pad.
-        background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+        background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
             The color to use for the padding. Can be an integer for single channel or a
             tuple of integers representing for multi-channel images. If passed as integer
-            in mutli-channel mode, it will default to `0` in subsequent channels.
+            in multi-channel mode, it will default to `0` in subsequent channels.
     Returns:
         `torch.Tensor`: The padded images.
     """
@@ -221,10 +187,10 @@ def pad_to_best_fit(
 
 
 def get_best_fit(
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     possible_resolutions: torch.Tensor,
     resize_to_max_canvas: bool = False,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Determines the best canvas possible from a list of possible resolutions to, without distortion,
     resize an image to.
@@ -245,13 +211,13 @@ def get_best_fit(
     has more padding.
 
     Args:
-        image_size (Tuple[int, int]): A tuple containing the height and width of the image.
+        image_size (tuple[int, int]): A tuple containing the height and width of the image.
         possible_resolutions (torch.Tensor): A tensor of shape (N, 2) where each
             row represents a possible resolution (height, width).
         resize_to_max_canvas (bool): If True, will return the largest upscaling resolution.
 
     Returns:
-        List[int]: The best resolution [height, width] for the given image.
+        list[int]: The best resolution [height, width] for the given image.
 
     Example:
         >>> image_size = (200, 300)
@@ -319,8 +285,8 @@ def get_best_fit(
     return optimal_canvas
 
 
-class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
+class Llama4ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
     max_patches (`int`, *optional*, defaults to 16):
         The maximum number of patches to be extracted from the image.
         Can be overridden by the `max_patches` parameter in the `preprocess` method.
@@ -331,8 +297,8 @@ class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         but never upsample, unless the image is smaller than the patch size.
     """
 
-    max_patches: Optional[int]
-    resize_to_max_canvas: Optional[bool]
+    max_patches: int
+    resize_to_max_canvas: bool
 
 
 @auto_docstring
@@ -360,8 +326,8 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, List[float]],
-        image_std: Union[float, List[float]],
+        image_mean: Union[float, list[float]],
+        image_std: Union[float, list[float]],
     ) -> "torch.Tensor":
         """
         Rescale and normalize images.
@@ -383,7 +349,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         size: SizeDict,
         max_patches: int,
         resize_to_max_canvas: bool,
@@ -391,15 +357,16 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         possible_resolutions = find_supported_resolutions(max_num_chunks=max_patches, patch_size=size)
         possible_resolutions = torch.tensor(possible_resolutions, device=images[0].device)
         # process images by batch, grouped by shape
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         grouped_processed_images = {}
         grouped_aspect_ratios = {}
         for shape, stacked_images in grouped_images.items():
@@ -431,7 +398,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
 
             ratio_h, ratio_w = (
                 target_size[0] // size.height,
-                target_size[1] // size.height,
+                target_size[1] // size.width,
             )
             # split into tiles
             processed_images = split_to_tiles(processed_images, ratio_h, ratio_w)

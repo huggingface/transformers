@@ -7,8 +7,8 @@ docs/ @stevhliu
 /docker/ @ydshieh @ArthurZucker
 
 # More high-level globs catch cases when specific rules later don't apply
-/src/transformers/models/*/processing* @molbap @yonigozlan @qubvel
-/src/transformers/models/*/image_processing* @qubvel
+/src/transformers/models/*/processing* @molbap @yonigozlan
+/src/transformers/models/*/image_processing* @yonigozlan
 /src/transformers/models/*/image_processing_*_fast* @yonigozlan
 
 # Owners of subsections of the library
@@ -22,7 +22,6 @@ tests/generation/ @gante
 /src/transformers/models/auto/ @ArthurZucker
 /src/transformers/utils/ @ArthurZucker @Rocketknight1
 /src/transformers/loss/ @ArthurZucker
-/src/transformers/onnx/ @michaelbenayoun
 
 # Specific files come after the sections/globs, so they take priority
 /.circleci/config.yml @ArthurZucker @ydshieh
@@ -186,65 +185,65 @@ trainer_utils.py @zach-huggingface @SunMarc
 /src/transformers/models/zamba/mod*_zamba* @ArthurZucker
 
 # Vision models
-/src/transformers/models/beit/mod*_beit* @amyeroberts @qubvel
-/src/transformers/models/bit/mod*_bit* @amyeroberts @qubvel
-/src/transformers/models/conditional_detr/mod*_conditional_detr* @amyeroberts @qubvel
-/src/transformers/models/convnext/mod*_convnext* @amyeroberts @qubvel
-/src/transformers/models/convnextv2/mod*_convnextv2* @amyeroberts @qubvel
-/src/transformers/models/cvt/mod*_cvt* @amyeroberts @qubvel
-/src/transformers/models/deformable_detr/mod*_deformable_detr* @amyeroberts @qubvel
-/src/transformers/models/deit/mod*_deit* @amyeroberts @qubvel
-/src/transformers/models/depth_anything/mod*_depth_anything* @amyeroberts @qubvel
-/src/transformers/models/depth_anything_v2/mod*_depth_anything_v2* @amyeroberts @qubvel
-/src/transformers/models/deta/mod*_deta* @amyeroberts @qubvel
-/src/transformers/models/detr/mod*_detr* @amyeroberts @qubvel
-/src/transformers/models/dinat/mod*_dinat* @amyeroberts @qubvel
-/src/transformers/models/dinov2/mod*_dinov2* @amyeroberts @qubvel
-/src/transformers/models/dinov2_with_registers/mod*_dinov2_with_registers* @amyeroberts @qubvel
-/src/transformers/models/dit/mod*_dit* @amyeroberts @qubvel
-/src/transformers/models/dpt/mod*_dpt* @amyeroberts @qubvel
-/src/transformers/models/efficientformer/mod*_efficientformer* @amyeroberts @qubvel
-/src/transformers/models/efficientnet/mod*_efficientnet* @amyeroberts @qubvel
-/src/transformers/models/focalnet/mod*_focalnet* @amyeroberts @qubvel
-/src/transformers/models/glpn/mod*_glpn* @amyeroberts @qubvel
-/src/transformers/models/hiera/mod*_hiera* @amyeroberts @qubvel
-/src/transformers/models/ijepa/mod*_ijepa* @amyeroberts @qubvel
-/src/transformers/models/imagegpt/mod*_imagegpt* @amyeroberts @qubvel
-/src/transformers/models/levit/mod*_levit* @amyeroberts @qubvel
-/src/transformers/models/mask2former/mod*_mask2former* @amyeroberts @qubvel
-/src/transformers/models/maskformer/mod*_maskformer* @amyeroberts @qubvel
-/src/transformers/models/mobilenet_v1/mod*_mobilenet_v1* @amyeroberts @qubvel
-/src/transformers/models/mobilenet_v2/mod*_mobilenet_v2* @amyeroberts @qubvel
-/src/transformers/models/mobilevit/mod*_mobilevit* @amyeroberts @qubvel
-/src/transformers/models/mobilevitv2/mod*_mobilevitv2* @amyeroberts @qubvel
-/src/transformers/models/nat/mod*_nat* @amyeroberts @qubvel
-/src/transformers/models/poolformer/mod*_poolformer* @amyeroberts @qubvel
-/src/transformers/models/pvt/mod*_pvt* @amyeroberts @qubvel
-/src/transformers/models/pvt_v2/mod*_pvt_v2* @amyeroberts @qubvel
-/src/transformers/models/regnet/mod*_regnet* @amyeroberts @qubvel
-/src/transformers/models/resnet/mod*_resnet* @amyeroberts @qubvel
-/src/transformers/models/rt_detr/mod*_rt_detr* @amyeroberts @qubvel
-/src/transformers/models/segformer/mod*_segformer* @amyeroberts @qubvel
-/src/transformers/models/seggpt/mod*_seggpt* @amyeroberts @qubvel
-/src/transformers/models/superpoint/mod*_superpoint* @amyeroberts @qubvel
-/src/transformers/models/swiftformer/mod*_swiftformer* @amyeroberts @qubvel
-/src/transformers/models/swin/mod*_swin* @amyeroberts @qubvel
-/src/transformers/models/swinv2/mod*_swinv2* @amyeroberts @qubvel
-/src/transformers/models/swin2sr/mod*_swin2sr* @amyeroberts @qubvel
-/src/transformers/models/table_transformer/mod*_table_transformer* @amyeroberts @qubvel
-/src/transformers/models/textnet/mod*_textnet* @amyeroberts @qubvel
-/src/transformers/models/timm_wrapper/mod*_timm_wrapper* @amyeroberts @qubvel
-/src/transformers/models/upernet/mod*_upernet* @amyeroberts @qubvel
-/src/transformers/models/van/mod*_van* @amyeroberts @qubvel
-/src/transformers/models/vit/mod*_vit* @amyeroberts @qubvel
-/src/transformers/models/vit_hybrid/mod*_vit_hybrid* @amyeroberts @qubvel
-/src/transformers/models/vitdet/mod*_vitdet* @amyeroberts @qubvel
-/src/transformers/models/vit_mae/mod*_vit_mae* @amyeroberts @qubvel
-/src/transformers/models/vitmatte/mod*_vitmatte* @amyeroberts @qubvel
-/src/transformers/models/vit_msn/mod*_vit_msn* @amyeroberts @qubvel
-/src/transformers/models/vitpose/mod*_vitpose* @amyeroberts @qubvel
-/src/transformers/models/yolos/mod*_yolos* @amyeroberts @qubvel
-/src/transformers/models/zoedepth/mod*_zoedepth* @amyeroberts @qubvel
+/src/transformers/models/beit/mod*_beit* @yonigozlan @molbap
+/src/transformers/models/bit/mod*_bit* @yonigozlan @molbap
+/src/transformers/models/conditional_detr/mod*_conditional_detr* @yonigozlan @molbap
+/src/transformers/models/convnext/mod*_convnext* @yonigozlan @molbap
+/src/transformers/models/convnextv2/mod*_convnextv2* @yonigozlan @molbap
+/src/transformers/models/cvt/mod*_cvt* @yonigozlan @molbap
+/src/transformers/models/deformable_detr/mod*_deformable_detr* @yonigozlan @molbap
+/src/transformers/models/deit/mod*_deit* @yonigozlan @molbap
+/src/transformers/models/depth_anything/mod*_depth_anything* @yonigozlan @molbap
+/src/transformers/models/depth_anything_v2/mod*_depth_anything_v2* @yonigozlan @molbap
+/src/transformers/models/deta/mod*_deta* @yonigozlan @molbap
+/src/transformers/models/detr/mod*_detr* @yonigozlan @molbap
+/src/transformers/models/dinat/mod*_dinat* @yonigozlan @molbap
+/src/transformers/models/dinov2/mod*_dinov2* @yonigozlan @molbap
+/src/transformers/models/dinov2_with_registers/mod*_dinov2_with_registers* @yonigozlan @molbap
+/src/transformers/models/dit/mod*_dit* @yonigozlan @molbap
+/src/transformers/models/dpt/mod*_dpt* @yonigozlan @molbap
+/src/transformers/models/efficientformer/mod*_efficientformer* @yonigozlan @molbap
+/src/transformers/models/efficientnet/mod*_efficientnet* @yonigozlan @molbap
+/src/transformers/models/focalnet/mod*_focalnet* @yonigozlan @molbap
+/src/transformers/models/glpn/mod*_glpn* @yonigozlan @molbap
+/src/transformers/models/hiera/mod*_hiera* @yonigozlan @molbap
+/src/transformers/models/ijepa/mod*_ijepa* @yonigozlan @molbap
+/src/transformers/models/imagegpt/mod*_imagegpt* @yonigozlan @molbap
+/src/transformers/models/levit/mod*_levit* @yonigozlan @molbap
+/src/transformers/models/mask2former/mod*_mask2former* @yonigozlan @molbap
+/src/transformers/models/maskformer/mod*_maskformer* @yonigozlan @molbap
+/src/transformers/models/mobilenet_v1/mod*_mobilenet_v1* @yonigozlan @molbap
+/src/transformers/models/mobilenet_v2/mod*_mobilenet_v2* @yonigozlan @molbap
+/src/transformers/models/mobilevit/mod*_mobilevit* @yonigozlan @molbap
+/src/transformers/models/mobilevitv2/mod*_mobilevitv2* @yonigozlan @molbap
+/src/transformers/models/nat/mod*_nat* @yonigozlan @molbap
+/src/transformers/models/poolformer/mod*_poolformer* @yonigozlan @molbap
+/src/transformers/models/pvt/mod*_pvt* @yonigozlan @molbap
+/src/transformers/models/pvt_v2/mod*_pvt_v2* @yonigozlan @molbap
+/src/transformers/models/regnet/mod*_regnet* @yonigozlan @molbap
+/src/transformers/models/resnet/mod*_resnet* @yonigozlan @molbap
+/src/transformers/models/rt_detr/mod*_rt_detr* @yonigozlan @molbap
+/src/transformers/models/segformer/mod*_segformer* @yonigozlan @molbap
+/src/transformers/models/seggpt/mod*_seggpt* @yonigozlan @molbap
+/src/transformers/models/superpoint/mod*_superpoint* @yonigozlan @molbap
+/src/transformers/models/swiftformer/mod*_swiftformer* @yonigozlan @molbap
+/src/transformers/models/swin/mod*_swin* @yonigozlan @molbap
+/src/transformers/models/swinv2/mod*_swinv2* @yonigozlan @molbap
+/src/transformers/models/swin2sr/mod*_swin2sr* @yonigozlan @molbap
+/src/transformers/models/table_transformer/mod*_table_transformer* @yonigozlan @molbap
+/src/transformers/models/textnet/mod*_textnet* @yonigozlan @molbap
+/src/transformers/models/timm_wrapper/mod*_timm_wrapper* @yonigozlan @molbap
+/src/transformers/models/upernet/mod*_upernet* @yonigozlan @molbap
+/src/transformers/models/van/mod*_van* @yonigozlan @molbap
+/src/transformers/models/vit/mod*_vit* @yonigozlan @molbap
+/src/transformers/models/vit_hybrid/mod*_vit_hybrid* @yonigozlan @molbap
+/src/transformers/models/vitdet/mod*_vitdet* @yonigozlan @molbap
+/src/transformers/models/vit_mae/mod*_vit_mae* @yonigozlan @molbap
+/src/transformers/models/vitmatte/mod*_vitmatte* @yonigozlan @molbap
+/src/transformers/models/vit_msn/mod*_vit_msn* @yonigozlan @molbap
+/src/transformers/models/vitpose/mod*_vitpose* @yonigozlan @molbap
+/src/transformers/models/yolos/mod*_yolos* @yonigozlan @molbap
+/src/transformers/models/zoedepth/mod*_zoedepth* @yonigozlan @molbap
 
 # Audio models
 /src/transformers/models/audio_spectrogram_transformer/mod*_audio_spectrogram_transformer* @eustlb
@@ -304,7 +303,7 @@ trainer_utils.py @zach-huggingface @SunMarc
 /src/transformers/models/donut/mod*_donut* @zucchini-nlp
 /src/transformers/models/flava/mod*_flava* @zucchini-nlp
 /src/transformers/models/git/mod*_git* @zucchini-nlp
-/src/transformers/models/grounding_dino/mod*_grounding_dino* @qubvel
+/src/transformers/models/grounding_dino/mod*_grounding_dino* @yonigozlan
 /src/transformers/models/groupvit/mod*_groupvit* @zucchini-nlp
 /src/transformers/models/idefics/mod*_idefics* @zucchini-nlp
 /src/transformers/models/idefics2/mod*_idefics2* @zucchini-nlp
@@ -326,10 +325,10 @@ trainer_utils.py @zach-huggingface @SunMarc
 /src/transformers/models/mgp_str/mod*_mgp_str* @zucchini-nlp
 /src/transformers/models/mllama/mod*_mllama* @zucchini-nlp
 /src/transformers/models/nougat/mod*_nougat* @NielsRogge
-/src/transformers/models/omdet_turbo/mod*_omdet_turbo* @qubvel @yonigozlan
+/src/transformers/models/omdet_turbo/mod*_omdet_turbo* @yonigozlan
 /src/transformers/models/oneformer/mod*_oneformer* @zucchini-nlp
-/src/transformers/models/owlvit/mod*_owlvit* @qubvel
-/src/transformers/models/owlv2/mod*_owlv2* @qubvel
+/src/transformers/models/owlvit/mod*_owlvit* @yonigozlan
+/src/transformers/models/owlv2/mod*_owlv2* @yonigozlan
 /src/transformers/models/paligemma/mod*_paligemma* @zucchini-nlp @molbap
 /src/transformers/models/perceiver/mod*_perceiver* @zucchini-nlp
 /src/transformers/models/pix2struct/mod*_pix2struct* @zucchini-nlp

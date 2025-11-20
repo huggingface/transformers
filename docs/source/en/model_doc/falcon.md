@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-11-28 and added to Hugging Face Transformers on 2023-07-11.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -43,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="tiiuae/falcon-7b-instruct",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device=0
 )
 pipeline(
@@ -64,12 +65,12 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b-instruct")
 model = AutoModelForCausalLM.from_pretrained(
     "tiiuae/falcon-7b-instruct",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa",
 )
 
-input_ids = tokenizer("Write a short poem about coding", return_tensors="pt").to("cuda")
+input_ids = tokenizer("Write a short poem about coding", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -80,7 +81,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```bash
 # pip install -U flash-attn --no-build-isolation
-transformers chat tiiuae/falcon-7b-instruct --torch_dtype auto --attn_implementation flash_attention_2 --device 0
+transformers chat tiiuae/falcon-7b-instruct --dtype auto --attn_implementation flash_attention_2 --device 0
 ```
 
 </hfoption>
@@ -104,12 +105,12 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b")
 model = AutoModelForCausalLM.from_pretrained(
     "tiiuae/falcon-7b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
 )
 
-inputs = tokenizer("In quantum physics, entanglement means", return_tensors="pt").to("cuda")
+inputs = tokenizer("In quantum physics, entanglement means", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```

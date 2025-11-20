@@ -14,7 +14,7 @@
 # limitations under the License.
 """LayoutLMv2 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import is_detectron2_available, logging
 
 
@@ -26,15 +26,15 @@ if is_detectron2_available():
     import detectron2
 
 
-class LayoutLMv2Config(PretrainedConfig):
+class LayoutLMv2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMv2Model`]. It is used to instantiate an
     LayoutLMv2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LayoutLMv2
     [microsoft/layoutlmv2-base-uncased](https://huggingface.co/microsoft/layoutlmv2-base-uncased) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
@@ -78,7 +78,7 @@ class LayoutLMv2Config(PretrainedConfig):
             The maximum number of relative 2D positions in the self-attention mechanism.
         rel_2d_pos_bins (`int`, *optional*, defaults to 64):
             The number of 2D relative position bins in the self-attention mechanism.
-        image_feature_pool_shape (`List[int]`, *optional*, defaults to [7, 7, 256]):
+        image_feature_pool_shape (`list[int]`, *optional*, defaults to [7, 7, 256]):
             The shape of the average-pooled feature map.
         coordinate_size (`int`, *optional*, defaults to 128):
             Dimension of the coordinate embeddings.

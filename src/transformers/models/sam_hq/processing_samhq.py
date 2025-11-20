@@ -17,27 +17,30 @@ Processor class for SAMHQ.
 """
 
 from copy import deepcopy
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import AudioInput, BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_torch_available
-from ...video_utils import VideoInput
 
 
 if is_torch_available():
     import torch
 
+NestedList = list[Union[Optional[float | int], "NestedList"]]
 
-class SamHQImagesKwargs(ImagesKwargs):
+
+class SamHQImagesKwargs(ImagesKwargs, total=False):
     segmentation_maps: Optional[ImageInput]
-    input_points: Optional[List[List[float]]]
-    input_labels: Optional[List[List[int]]]
-    input_boxes: Optional[List[List[List[float]]]]
+    input_points: Optional[NestedList]
+    input_labels: Optional[NestedList]
+    input_boxes: Optional[NestedList]
     point_pad_value: Optional[int]
+    mask_size: dict[str, int]
+    mask_pad_size: dict[str, int]
 
 
 class SamHQProcessorKwargs(ProcessingKwargs, total=False):
@@ -62,16 +65,6 @@ class SamHQProcessor(ProcessorMixin):
             An instance of [`SamImageProcessor`]. The image processor is a required input.
     """
 
-    attributes = ["image_processor"]
-    image_processor_class = "SamImageProcessor"
-
-    optional_call_args = [
-        "segmentation_maps",
-        "input_points",
-        "input_labels",
-        "input_boxes",
-    ]
-
     def __init__(self, image_processor):
         super().__init__(image_processor)
         # Ensure image_processor is properly initialized
@@ -84,16 +77,7 @@ class SamHQProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        # The following is to capture `segmentation_maps`, `input_points`, `input_labels` and `input_boxes`
-        # arguments that may be passed as a positional argument.
-        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details,
-        # or this conversation for more context:
-        # https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
-        # This behavior is only needed for backward compatibility and will be removed in future versions.
-        *args,  # to be deprecated
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        audio: Optional[AudioInput] = None,
-        video: Optional[VideoInput] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         **kwargs: Unpack[SamHQProcessorKwargs],
     ) -> BatchEncoding:
         """
@@ -104,7 +88,6 @@ class SamHQProcessor(ProcessorMixin):
             SamHQProcessorKwargs,
             tokenizer_init_kwargs={},
             **kwargs,
-            **self.prepare_and_validate_optional_call_args(*args),
         )
 
         input_points = output_kwargs["images_kwargs"].pop("input_points", None)
@@ -133,7 +116,7 @@ class SamHQProcessor(ProcessorMixin):
             input_points=input_points,
             input_labels=input_labels,
             input_boxes=input_boxes,
-            return_tensors=output_kwargs["common_kwargs"].get("return_tensors"),
+            return_tensors=output_kwargs["images_kwargs"].get("return_tensors"),
             point_pad_value=output_kwargs["images_kwargs"].get("point_pad_value"),
         )
 
@@ -187,7 +170,7 @@ class SamHQProcessor(ProcessorMixin):
         r"""
         The method pads the 2D points and labels to the maximum number of points in the batch.
         """
-        expected_nb_points = max([point.shape[0] for point in input_points])
+        expected_nb_points = max(point.shape[0] for point in input_points)
         processed_input_points = []
         for i, point in enumerate(input_points):
             if point.shape[0] != expected_nb_points:
@@ -284,7 +267,7 @@ class SamHQProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names))
+        return list(image_processor_input_names + ["original_sizes", "reshaped_input_sizes"])
 
     def post_process_masks(self, *args, **kwargs):
         return self.image_processor.post_process_masks(*args, **kwargs)

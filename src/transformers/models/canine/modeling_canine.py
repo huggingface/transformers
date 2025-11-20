@@ -16,16 +16,15 @@
 
 import copy
 import math
-import os
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     ModelOutput,
@@ -35,7 +34,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import auto_docstring, logging
 from .configuration_canine import CanineConfig
 
@@ -48,135 +47,40 @@ _PRIMES = [31, 43, 59, 61, 73, 97, 103, 113, 137, 149, 157, 173, 181, 193, 211, 
 
 
 @dataclass
-class CanineModelOutputWithPooling(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`CanineModel`]. Based on [`~modeling_outputs.BaseModelOutputWithPooling`], but with slightly
     different `hidden_states` and `attentions`, as these also include the hidden states and attentions of the shallow
     Transformer encoders.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model (i.e. the output of the final
-            shallow Transformer encoder).
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Hidden-state of the first token of the sequence (classification token) at the last layer of the deep
-            Transformer encoder, further processed by a Linear layer and a Tanh activation function. The Linear layer
-            weights are trained from the next sentence prediction (classification) objective during pretraining.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the input to each encoder + one for the output of each layer of each
-            encoder) of shape `(batch_size, sequence_length, hidden_size)` and `(batch_size, sequence_length //
-            config.downsampling_rate, hidden_size)`. Hidden-states of the model at the output of each layer plus the
-            initial input to each Transformer encoder. The hidden states of the shallow encoders have length
-            `sequence_length`, but the hidden states of the deep encoder have length `sequence_length` //
-            `config.downsampling_rate`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of the 3 Transformer encoders of shape `(batch_size,
-            num_heads, sequence_length, sequence_length)` and `(batch_size, num_heads, sequence_length //
-            config.downsampling_rate, sequence_length // config.downsampling_rate)`. Attentions weights after the
-            attention softmax, used to compute the weighted average in the self-attention heads.
+    """
+)
+class CanineModelOutputWithPooling(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model (i.e. the output of the final
+        shallow Transformer encoder).
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        Hidden-state of the first token of the sequence (classification token) at the last layer of the deep
+        Transformer encoder, further processed by a Linear layer and a Tanh activation function. The Linear layer
+        weights are trained from the next sentence prediction (classification) objective during pretraining.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the input to each encoder + one for the output of each layer of each
+        encoder) of shape `(batch_size, sequence_length, hidden_size)` and `(batch_size, sequence_length //
+        config.downsampling_rate, hidden_size)`. Hidden-states of the model at the output of each layer plus the
+        initial input to each Transformer encoder. The hidden states of the shallow encoders have length
+        `sequence_length`, but the hidden states of the deep encoder have length `sequence_length` //
+        `config.downsampling_rate`.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of the 3 Transformer encoders of shape `(batch_size,
+        num_heads, sequence_length, sequence_length)` and `(batch_size, num_heads, sequence_length //
+        config.downsampling_rate, sequence_length // config.downsampling_rate)`. Attentions weights after the
+        attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        # also discard the cls weights (which were used for the next sentence prediction pre-training task)
-        if any(
-            n
-            in [
-                "adam_v",
-                "adam_m",
-                "AdamWeightDecayOptimizer",
-                "AdamWeightDecayOptimizer_1",
-                "global_step",
-                "cls",
-                "autoregressive_decoder",
-                "char_output_weights",
-            ]
-            for n in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            continue
-        # if first scope name starts with "bert", change it to "encoder"
-        if name[0] == "bert":
-            name[0] = "encoder"
-        # remove "embeddings" middle name of HashBucketCodepointEmbedders
-        elif name[1] == "embeddings":
-            name.remove(name[1])
-        # rename segment_embeddings to token_type_embeddings
-        elif name[1] == "segment_embeddings":
-            name[1] = "token_type_embeddings"
-        # rename initial convolutional projection layer
-        elif name[1] == "initial_char_encoder":
-            name = ["chars_to_molecules"] + name[-2:]
-        # rename final convolutional projection layer
-        elif name[0] == "final_char_encoder" and name[1] in ["LayerNorm", "conv"]:
-            name = ["projection"] + name[1:]
-        pointer = model
-        for m_name in name:
-            if (re.fullmatch(r"[A-Za-z]+_\d+", m_name)) and "Embedder" not in m_name:
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name[-10:] in [f"Embedder_{i}" for i in range(8)]:
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-
-        if pointer.shape != array.shape:
-            raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array)
-    return model
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class CanineEmbeddings(nn.Module):
@@ -195,8 +99,6 @@ class CanineEmbeddings(nn.Module):
         self.char_position_embeddings = nn.Embedding(config.num_hash_buckets, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -204,7 +106,6 @@ class CanineEmbeddings(nn.Module):
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
     def _hash_bucket_tensors(self, input_ids, num_hashes: int, num_buckets: int):
         """
@@ -269,12 +170,11 @@ class CanineEmbeddings(nn.Module):
             )
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
         embeddings = inputs_embeds + token_type_embeddings
 
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.char_position_embeddings(position_ids)
-            embeddings += position_embeddings
+        position_embeddings = self.char_position_embeddings(position_ids)
+        embeddings += position_embeddings
+
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -294,8 +194,6 @@ class CharactersToMolecules(nn.Module):
         )
         self.activation = ACT2FN[config.hidden_act]
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, char_encoding: torch.Tensor) -> torch.Tensor:
@@ -342,8 +240,6 @@ class ConvProjection(nn.Module):
             stride=1,
         )
         self.activation = ACT2FN[config.hidden_act]
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -402,53 +298,38 @@ class CanineSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
-
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
 
     def forward(
         self,
         from_tensor: torch.Tensor,
         to_tensor: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        mixed_query_layer = self.query(from_tensor)
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        batch_size, seq_length, _ = from_tensor.shape
 
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
 
-        key_layer = self.transpose_for_scores(self.key(to_tensor))
-        value_layer = self.transpose_for_scores(self.value(to_tensor))
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        key_layer = (
+            self.key(to_tensor)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(to_tensor)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        query_layer = (
+            self.query(from_tensor)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = from_tensor.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=from_tensor.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=from_tensor.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
-
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
@@ -469,10 +350,6 @@ class CanineSelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -492,8 +369,8 @@ class CanineSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
-        self, hidden_states: Tuple[torch.FloatTensor], input_tensor: torch.FloatTensor
-    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+        self, hidden_states: tuple[torch.FloatTensor], input_tensor: torch.FloatTensor
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -531,7 +408,6 @@ class CanineAttention(nn.Module):
         super().__init__()
         self.self = CanineSelfAttention(config)
         self.output = CanineSelfOutput(config)
-        self.pruned_heads = set()
 
         # additional arguments related to local attention
         self.local = local
@@ -550,33 +426,14 @@ class CanineAttention(nn.Module):
         self.attend_to_chunk_width = attend_to_chunk_width
         self.attend_to_chunk_stride = attend_to_chunk_stride
 
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
     def forward(
         self,
-        hidden_states: Tuple[torch.FloatTensor],
+        hidden_states: tuple[torch.FloatTensor],
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
+    ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         if not self.local:
-            self_outputs = self.self(hidden_states, hidden_states, attention_mask, head_mask, output_attentions)
+            self_outputs = self.self(hidden_states, hidden_states, attention_mask, output_attentions)
             attention_output = self_outputs[0]
         else:
             from_seq_length = to_seq_length = hidden_states.shape[1]
@@ -626,7 +483,7 @@ class CanineAttention(nn.Module):
                     to_tensor_chunk = torch.cat([cls_position, to_tensor_chunk], dim=1)
 
                 attention_outputs_chunk = self.self(
-                    from_tensor_chunk, to_tensor_chunk, attention_mask_chunk, head_mask, output_attentions
+                    from_tensor_chunk, to_tensor_chunk, attention_mask_chunk, output_attentions
                 )
                 attention_output_chunks.append(attention_outputs_chunk[0])
                 if output_attentions:
@@ -665,14 +522,14 @@ class CanineOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor], input_tensor: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, hidden_states: tuple[torch.FloatTensor], input_tensor: torch.FloatTensor) -> torch.FloatTensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
-class CanineLayer(nn.Module):
+class CanineLayer(GradientCheckpointingLayer):
     def __init__(
         self,
         config,
@@ -702,15 +559,13 @@ class CanineLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states: Tuple[torch.FloatTensor],
+        hidden_states: tuple[torch.FloatTensor],
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
+    ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -763,13 +618,12 @@ class CanineEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states: Tuple[torch.FloatTensor],
+        hidden_states: tuple[torch.FloatTensor],
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -777,18 +631,7 @@ class CanineEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -812,7 +655,7 @@ class CaninePooler(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor]) -> torch.FloatTensor:
+    def forward(self, hidden_states: tuple[torch.FloatTensor]) -> torch.FloatTensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -831,7 +674,7 @@ class CaninePredictionHeadTransform(nn.Module):
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor]) -> torch.FloatTensor:
+    def forward(self, hidden_states: tuple[torch.FloatTensor]) -> torch.FloatTensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
@@ -845,14 +688,13 @@ class CanineLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
 
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor]) -> torch.FloatTensor:
+    def forward(self, hidden_states: tuple[torch.FloatTensor]) -> torch.FloatTensor:
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
         return hidden_states
@@ -865,34 +707,17 @@ class CanineOnlyMLMHead(nn.Module):
 
     def forward(
         self,
-        sequence_output: Tuple[torch.Tensor],
-    ) -> Tuple[torch.Tensor]:
+        sequence_output: tuple[torch.Tensor],
+    ) -> tuple[torch.Tensor]:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
 
 @auto_docstring
 class CaninePreTrainedModel(PreTrainedModel):
-    config_class = CanineConfig
-    load_tf_weights = load_tf_weights_in_canine
+    config: CanineConfig
     base_model_prefix = "canine"
     supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 @auto_docstring
@@ -930,14 +755,6 @@ class CanineModel(CaninePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     def _create_3d_attention_mask_from_input_mask(self, from_tensor, to_mask):
         """
@@ -1015,12 +832,11 @@ class CanineModel(CaninePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CanineModelOutputWithPooling]:
+    ) -> Union[tuple, CanineModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1056,13 +872,6 @@ class CanineModel(CaninePreTrainedModel):
         extended_molecule_attention_mask: torch.Tensor = self.get_extended_attention_mask(
             molecule_attention_mask, (batch_size, molecule_attention_mask.shape[-1])
         )
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         # `input_char_embeddings`: shape (batch_size, char_seq, char_dim)
         input_char_embeddings = self.char_embeddings(
@@ -1107,7 +916,6 @@ class CanineModel(CaninePreTrainedModel):
         encoder_outputs = self.encoder(
             init_molecule_encoding,
             attention_mask=extended_molecule_attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1193,13 +1001,12 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1213,7 +1020,6 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1278,13 +1084,12 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MultipleChoiceModelOutput]:
+    ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1333,7 +1138,6 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1383,13 +1187,12 @@ class CanineForTokenClassification(CaninePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1431,7 +1234,6 @@ class CanineForTokenClassification(CaninePreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1479,14 +1281,13 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.canine(
@@ -1494,7 +1295,6 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1546,5 +1346,4 @@ __all__ = [
     "CanineLayer",
     "CanineModel",
     "CaninePreTrainedModel",
-    "load_tf_weights_in_canine",
 ]

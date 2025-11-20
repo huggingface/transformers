@@ -4,7 +4,7 @@ import os
 import re
 import unicodedata
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import sentencepiece as spm
 
@@ -97,7 +97,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         unk_token=None,
         eos_token=None,
         bos_token=None,
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -187,7 +187,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         text = unicodedata.normalize("NFC", text)
         return text
 
-    def _tokenize(self, text: str, **kwargs) -> List[str]:
+    def _tokenize(self, text: str, **kwargs) -> list[str]:
         text = self.preprocess_text(text)
         return self.sp_model.encode(text, out_type=str)
 
@@ -204,7 +204,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         """Returns the input string, this function is overridden to remove the default clean up."""
         return out_string
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (strings) to a single string. Special tokens remain intact."""
         current_sub_tokens = []
         out_string = ""
@@ -227,13 +227,13 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         return out_string
 
     # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.get_vocab
-    def get_vocab(self) -> Dict[str, int]:
+    def get_vocab(self) -> dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
     # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -251,8 +251,8 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         return (out_vocab_file,)
 
     def encode_fast(
-        self, text: Union[str, List[str]], return_tensors: Union[str, bool] = False
-    ) -> Union[List[int], List[List[int]], "torch.Tensor"]:
+        self, text: Union[str, list[str]], return_tensors: Union[str, bool] = False
+    ) -> Union[list[int], list[list[int]], "torch.Tensor"]:
         """
         Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
         functionality but is often much faster.
@@ -264,11 +264,11 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         Use default HuggingFace tokenization methods for full functionality.
 
         Args:
-            text (`str` or `List[str]`): One or several text(s) to convert to token ids.
+            text (`str` or `list[str]`): One or several text(s) to convert to token ids.
             return_tensors (`str` or `bool`): Returns PyTorch tensors if set to True or "pt"
 
         Returns:
-            `List[int]`, `List[List[int]]`, or `torch.Tensor`: The encoded text(s) as token ids.
+            `list[int]`, `list[list[int]]`, or `torch.Tensor`: The encoded text(s) as token ids.
         """
 
         if isinstance(text, str):
@@ -283,13 +283,13 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
         return token_ids
 
-    def decode_fast(self, token_ids: Union[int, List[int]]) -> str:
+    def decode_fast(self, token_ids: Union[int, list[int]]) -> str:
         """
         Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
         functionality but is often much faster.
 
         Args:
-            token_ids (`int` or `List[int]`): Encoded token or text as token id(s).
+            token_ids (`int` or `list[int]`): Encoded token or text as token id(s).
 
         Returns:
             `str`: Decoded text

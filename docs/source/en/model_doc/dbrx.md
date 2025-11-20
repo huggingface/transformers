@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2024-03-27 and added to Hugging Face Transformers on 2024-04-18.*
 
 # DBRX
 
@@ -34,7 +35,6 @@ We estimate that this data is at least 2x better token-for-token than the data w
 This new dataset was developed using the full suite of Databricks tools, including Apache Spark™ and Databricks notebooks for data processing, and Unity Catalog for data management and governance.
 We used curriculum learning for pretraining, changing the data mix during training in ways we found to substantially improve model quality.
 
-
 More detailed information about DBRX Instruct and DBRX Base can be found in our [technical blog post](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm).
 
 This model was contributed by [eitan-turok](https://huggingface.co/eitanturok) and [abhi-db](https://huggingface.co/abhi-db). The original code can be found [here](https://github.com/databricks/dbrx-instruct), though this may not be up to date.
@@ -51,19 +51,20 @@ tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOU
 model = DbrxForCausalLM.from_pretrained(
     "databricks/dbrx-instruct",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     )
 
 input_text = "What does it take to build a great LLM?"
 messages = [{"role": "user", "content": input_text}]
-input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=200)
 print(tokenizer.decode(outputs[0]))
 ```
 
 If you have flash-attention installed (`pip install flash-attn`), it is possible to generate faster. (The HuggingFace documentation for flash-attention can be found [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2).)
+
 ```python
 from transformers import DbrxForCausalLM, AutoTokenizer
 import torch
@@ -72,20 +73,21 @@ tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOU
 model = DbrxForCausalLM.from_pretrained(
     "databricks/dbrx-instruct",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     attn_implementation="flash_attention_2",
     )
 
 input_text = "What does it take to build a great LLM?"
 messages = [{"role": "user", "content": input_text}]
-input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=200)
 print(tokenizer.decode(outputs[0]))
 ```
 
 You can also generate faster using the PyTorch scaled dot product attention. (The HuggingFace documentation for scaled dot product attention can be found [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#pytorch-scaled-dot-product-attention).)
+
 ```python
 from transformers import DbrxForCausalLM, AutoTokenizer
 import torch
@@ -94,14 +96,14 @@ tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOU
 model = DbrxForCausalLM.from_pretrained(
     "databricks/dbrx-instruct",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     attn_implementation="sdpa",
     )
 
 input_text = "What does it take to build a great LLM?"
 messages = [{"role": "user", "content": input_text}]
-input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=200)
 print(tokenizer.decode(outputs[0]))
@@ -111,15 +113,12 @@ print(tokenizer.decode(outputs[0]))
 
 [[autodoc]] DbrxConfig
 
-
 ## DbrxModel
 
 [[autodoc]] DbrxModel
     - forward
 
-
 ## DbrxForCausalLM
 
 [[autodoc]] DbrxForCausalLM
     - forward
-

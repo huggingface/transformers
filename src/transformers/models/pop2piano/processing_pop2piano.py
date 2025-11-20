@@ -15,7 +15,7 @@
 """Processor class for Pop2Piano."""
 
 import os
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -42,20 +42,16 @@ class Pop2PianoProcessor(ProcessorMixin):
             An instance of ['Pop2PianoTokenizer`]. The tokenizer is a required input.
     """
 
-    attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "Pop2PianoFeatureExtractor"
-    tokenizer_class = "Pop2PianoTokenizer"
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
     def __call__(
         self,
-        audio: Union[np.ndarray, List[float], List[np.ndarray]] = None,
-        sampling_rate: Optional[Union[int, List[int]]] = None,
+        audio: Union[np.ndarray, list[float], list[np.ndarray]] = None,
+        sampling_rate: Optional[Union[int, list[int]]] = None,
         steps_per_beat: int = 2,
         resample: Optional[bool] = True,
-        notes: Union[List, TensorType] = None,
+        notes: Union[list, TensorType] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
@@ -122,12 +118,6 @@ class Pop2PianoProcessor(ProcessorMixin):
         return self.tokenizer.batch_decode(
             token_ids=token_ids, feature_extractor_output=feature_extractor_output, return_midi=return_midi
         )
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
 
     def save_pretrained(self, save_directory, **kwargs):
         if os.path.isfile(save_directory):

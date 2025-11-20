@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2023-03-09 and added to Hugging Face Transformers on 2023-11-22.*
 
 # TVP
 
@@ -46,6 +47,7 @@ The [`TvpProcessor`] wraps [`BertTokenizer`] and [`TvpImageProcessor`] into a si
 encode the text and prepare the images respectively.
 
 The following example shows how to run temporal video grounding using [`TvpProcessor`] and [`TvpForVideoGrounding`].
+
 ```python
 import av
 import cv2
@@ -164,7 +166,6 @@ Tips:
 - Checkpoints for pre-trained [tvp-base](https://huggingface.co/Intel/tvp-base) is released.
 - Please refer to [Table 2](https://huggingface.co/papers/2303.04995) for TVP's performance on Temporal Video Grounding task.
 
-
 ## TvpConfig
 
 [[autodoc]] TvpConfig
@@ -172,6 +173,11 @@ Tips:
 ## TvpImageProcessor
 
 [[autodoc]] TvpImageProcessor
+    - preprocess
+
+## TvpImageProcessorFast
+
+[[autodoc]] TvpImageProcessorFast
     - preprocess
 
 ## TvpProcessor

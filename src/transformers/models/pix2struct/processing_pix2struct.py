@@ -16,21 +16,15 @@
 Processor class for Pix2Struct.
 """
 
-from typing import List, Optional, Union
+from typing import Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import logging
 
 
-class Pix2StructImagesKwargs(ImagesKwargs, total=False):
-    max_patches: Optional[int]
-    header_text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
-
-
 class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Pix2StructImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -67,10 +61,6 @@ class Pix2StructProcessor(ProcessorMixin):
             An instance of ['T5TokenizerFast`] or ['T5Tokenizer`]. The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Pix2StructImageProcessor"
-    tokenizer_class = ("T5Tokenizer", "T5TokenizerFast")
-
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
@@ -78,9 +68,7 @@ class Pix2StructProcessor(ProcessorMixin):
     def __call__(
         self,
         images=None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[Pix2StructProcessorKwargs],
     ) -> Union[BatchEncoding, BatchFeature]:
         """
@@ -103,7 +91,6 @@ class Pix2StructProcessor(ProcessorMixin):
             output_kwargs["text_kwargs"]["add_special_tokens"] = (
                 add_special_tokens if add_special_tokens is not None else True
             )
-            self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
             return text_encoding
 
@@ -133,25 +120,11 @@ class Pix2StructProcessor(ProcessorMixin):
 
         return encoding_image_processor
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Pix2StructTokenizerFast's [`~PreTrainedTokenizer.batch_decode`].
-        Please refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Pix2StructTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
     def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        decoder_ids = ["decoder_attention_mask", "decoder_input_ids"]
+        return image_processor_input_names + decoder_ids
 
 
 __all__ = ["Pix2StructProcessor"]

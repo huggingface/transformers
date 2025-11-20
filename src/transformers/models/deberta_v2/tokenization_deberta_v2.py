@@ -16,7 +16,7 @@
 
 import os
 import unicodedata
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import sentencepiece as sp
 
@@ -95,7 +95,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -140,7 +140,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         vocab.update(self.get_added_vocab())
         return vocab
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         if self.do_lower_case:
             text = text.lower()
@@ -214,7 +214,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         return self._tokenizer.save_pretrained(save_directory, filename_prefix=filename_prefix)
 
 
@@ -244,7 +244,7 @@ class SPMTokenizer:
     """
 
     def __init__(
-        self, vocab_file, special_tokens, split_by_punct=False, sp_model_kwargs: Optional[Dict[str, Any]] = None
+        self, vocab_file, special_tokens, split_by_punct=False, sp_model_kwargs: Optional[dict[str, Any]] = None
     ):
         self.split_by_punct = split_by_punct
         self.vocab_file = vocab_file
@@ -370,7 +370,7 @@ class SPMTokenizer:
         logger.warning_once(
             "The `DebertaTokenizer.id` method is deprecated and will be removed in `transformers==4.35`"
         )
-        return self.vocab[sym] if sym in self.vocab else 1
+        return self.vocab.get(sym, 1)
 
     def _encode_as_pieces(self, text):
         text = convert_to_unicode(text)

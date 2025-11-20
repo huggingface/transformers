@@ -13,7 +13,7 @@
 # limitations under the License.
 """Llava model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class LlavaConfig(PretrainedConfig):
+class LlavaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlavaForConditionalGeneration`]. It is used to instantiate an
     Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -29,8 +29,8 @@ class LlavaConfig(PretrainedConfig):
 
     e.g. [llava-hf/llava-9b](https://huggingface.co/llava-hf/llava-9b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
@@ -44,7 +44,7 @@ class LlavaConfig(PretrainedConfig):
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`.
-        vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -2):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -2):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
             vision features.
@@ -106,9 +106,7 @@ class LlavaConfig(PretrainedConfig):
         self.vision_feature_layer = vision_feature_layer
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
-            )
+            vision_config["model_type"] = vision_config.get("model_type", "clip_vision_model")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             vision_config = CONFIG_MAPPING["clip_vision_model"](
@@ -125,7 +123,7 @@ class LlavaConfig(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config["model_type"] = text_config.get("model_type", "llama")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["llama"]()

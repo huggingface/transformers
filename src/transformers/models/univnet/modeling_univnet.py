@@ -14,10 +14,9 @@
 """PyTorch UnivNetModel model."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...modeling_outputs import ModelOutput
@@ -30,16 +29,18 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class UnivNetModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output class for the [`UnivNetModel`], which includes the generated audio waveforms and the original unpadded
     lengths of those waveforms (so that the padding can be removed by [`UnivNetModel.batch_decode`]).
-
-    Args:
-        waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Batched 1D (mono-channel) output audio waveforms.
-        waveform_lengths (`torch.FloatTensor` of shape `(batch_size,)`):
-            The batched length in samples of each unpadded waveform in `waveforms`.
+    """
+)
+class UnivNetModelOutput(ModelOutput):
+    r"""
+    waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        Batched 1D (mono-channel) output audio waveforms.
+    waveform_lengths (`torch.FloatTensor` of shape `(batch_size,)`):
+        The batched length in samples of each unpadded waveform in `waveforms`.
     """
 
     waveforms: Optional[torch.FloatTensor] = None
@@ -161,7 +162,7 @@ class UnivNetKernelPredictor(nn.Module):
                 Tensor containing the log-mel spectrograms.
 
         Returns:
-            Tuple[`torch.FloatTensor, `torch.FloatTensor`]: tuple of tensors where the first element is the tensor of
+            tuple[`torch.FloatTensor, `torch.FloatTensor`]: tuple of tensors where the first element is the tensor of
             location variable convolution kernels of shape `(batch_size, self.conv_layers, self.conv_in_channels,
             self.conv_out_channels, self.conv_kernel_size, seq_length)` and the second element is the tensor of
             location variable convolution biases of shape `(batch_size, self.conv_layers. self.conv_out_channels,
@@ -424,8 +425,9 @@ class UnivNetLvcBlock(nn.Module):
 
 @auto_docstring
 class UnivNetModel(PreTrainedModel):
-    config_class = UnivNetConfig
+    config: UnivNetConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: UnivNetConfig):
         super().__init__(config)
@@ -474,11 +476,8 @@ class UnivNetModel(PreTrainedModel):
         padding_mask: Optional[torch.FloatTensor] = None,
         generator: Optional[torch.Generator] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], UnivNetModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], UnivNetModelOutput]:
         r"""
-        input_features (`torch.FloatTensor`):
-            Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
-            config.num_mel_channels)`, or un-batched and of shape `(sequence_length, config.num_mel_channels)`.
         noise_sequence (`torch.FloatTensor`, *optional*):
             Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape `(batch_size,
             sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
@@ -591,13 +590,6 @@ class UnivNetModel(PreTrainedModel):
             waveforms=waveform,
             waveform_lengths=waveform_lengths,
         )
-
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm

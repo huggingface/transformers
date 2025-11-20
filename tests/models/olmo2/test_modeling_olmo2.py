@@ -15,13 +15,15 @@
 
 import unittest
 
+import pytest
 from packaging import version
-from parameterized import parameterized
 
-from transformers import Olmo2Config, is_torch_available, set_seed
+from transformers import Olmo2Config, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
     require_tokenizers,
     require_torch,
     slow,
@@ -170,8 +172,6 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -188,77 +188,59 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OLMo2 does not support head pruning.")
-    def test_headmasking(self):
-        pass
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @parameterized.expand([("linear",), ("dynamic",)])
-    def test_model_rope_scaling(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = Olmo2Model(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = Olmo2Model(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
 
 @require_torch
+@slow
 class Olmo2IntegrationTest(unittest.TestCase):
-    @slow
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def test_model_1b_logits_bfloat16(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = Olmo2ForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B").to(torch.bfloat16)
-        out = model(torch.tensor(input_ids)).logits.float()
+        model = Olmo2ForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B").to(torch_device, torch.bfloat16)
+        out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-5.7094, -6.5548, -3.2527, -2.7847, -5.5092, -4.5223, -4.8427, -4.6867]])
+        expectations = Expectations(
+            {
+                ("cuda", 8): [[-5.6700, -6.5557, -3.1545, -2.7418, -5.5887, -4.5179, -4.9077, -4.6530]],
+            }
+        )
+        EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([2.4531, -5.7188, -5.1562, -4.8750, -6.7812, -4.0625, -4.4375, -4.5938, -7.5938, -5.0938, -3.9375, -3.6875, -5.0938, -3.1875, -5.6875, 0.2266, 1.2578, 1.1016, 0.8945, 0.4785, 0.2256, -0.3613, -0.4258, 0.1377, -0.1104, -7.1875, -5.2188, -6.8125, -0.9062, -2.9062])  # fmt: skip
+        expectations = Expectations(
+            {
+                ("cuda", 8): [2.65625, -5.25, -4.9375, -4.53125, -6.5, -3.828125, -4.15625, -4.1875, -7.0625, -4.71875, -3.609375, -3.09375, -4.59375, -2.640625, -5.25, 0.39453125, 1.3828125, 1.2265625, 1.0078125, 0.57421875, 0.330078125, -0.287109375, -0.3671875, 0.1943359375, -0.0732421875, -6.6875, -4.75, -6.4375, -0.625, -2.625],
+            }
+        )  # fmt: skip
+        EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
-    @slow
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = Olmo2ForCausalLM.from_pretrained("shanearora/OLMo2-7B-1124-hf", device_map="auto")
-        out = model(torch.tensor(input_ids)).logits.float()
+        model = Olmo2ForCausalLM.from_pretrained("shanearora/OLMo2-7B-1124-hf").to(torch_device, dtype=torch.bfloat16)
+        out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor(
-            [[-13.0244, -13.9564, -11.8270, -11.3047, -12.3794, -12.4215, -15.6030, -12.7962]]
+        expectations = Expectations(
+            {
+                ("cuda", 8): [[-13.0518, -13.8897, -11.7999, -11.3222, -12.3441, -12.3884, -15.4874, -12.7365]],
+            }
         )
+        EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-5.3909, -13.9841, -13.6123, -14.5780, -13.9455, -13.2265, -13.4734, -11.9079, -9.2879, -12.6139, -11.4819, -5.9607, -11.9657, -6.3618, -11.1065, -7.3075, -6.5674, -6.7154, -7.3409, -7.9662, -8.0863, -8.1682, -8.7341, -8.7665, -8.8742, -9.7813, -8.0620, -12.5937, -7.6440, -11.3966])  # fmt: skip
+        expectations = Expectations(
+            {
+                ("cuda", 8): [-5.5, -14.4375, -13.8125, -14.875, -14.125, -13.4375, -13.8125, -12.25, -9.5, -12.9375, -11.6875, -6.09375, -12.1875, -6.5, -11.3125, -7.34375, -6.5625, -6.71875, -7.375, -7.96875, -8.0625, -8.1875, -8.75, -8.75, -8.875, -9.9375, -8.1875, -12.875, -7.84375, -11.625],
+            }
+        )  # fmt: skip
+        EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
-    @slow
     def test_model_7b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the fastest speed possible, and 3) the speed of light is the same for all observers, regardless of their relative motion. The theory of relativity is based on the idea that the speed of light is constant. This means that"""
         prompt = "Simply put, the theory of relativity states that "
@@ -300,7 +282,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(rust_tokenizer.encode(" Hello"), [22691])
 
-    @slow
+    @pytest.mark.torch_export_test
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
@@ -321,7 +303,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
         ].shape[-1]
 
         # Load model
-        device = "cpu"
+        device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"
@@ -338,7 +320,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
         model = Olmo2ForCausalLM.from_pretrained(
             olmo2_model,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=generation_config,
         )

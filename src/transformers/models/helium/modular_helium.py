@@ -18,7 +18,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 
 from ...utils import logging
 from ..gemma.modeling_gemma import GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification
@@ -104,7 +103,7 @@ class HeliumAttention(GraniteAttention):
 
 class HeliumDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: HeliumConfig, layer_idx: Optional[int] = None):
-        super().__init__()
+        super().__init__(config, layer_idx)
 
         self.mlp = HeliumMLP(config)
         self.input_layernorm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -122,7 +121,6 @@ class HeliumModel(HeliumPreTrainedModel, LlamaModel):
             [HeliumDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = HeliumRotaryEmbedding(config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -130,24 +128,15 @@ class HeliumModel(HeliumPreTrainedModel, LlamaModel):
 
 
 class HeliumForCausalLM(GemmaForCausalLM):
-    def __init__(self, config: HeliumConfig):
-        super().__init__(config)
-        self.model = HeliumModel(config)
-        self.post_init()
+    pass
 
 
 class HeliumForSequenceClassification(GemmaForSequenceClassification):
-    def __init__(self, config: HeliumConfig):
-        super().__init__(config)
-        self.model = HeliumModel(config)
-        self.post_init()
+    pass
 
 
 class HeliumForTokenClassification(GemmaForTokenClassification):
-    def __init__(self, config: HeliumConfig):
-        super().__init__(config)
-        self.model = HeliumModel(config)
-        self.post_init()
+    pass
 
 
 __all__ = [

@@ -34,12 +34,11 @@ Sometimes errors occur, but we are here to help! This guide covers some of the m
 
 For more details about troubleshooting and getting help, take a look at [Chapter 8](https://huggingface.co/course/chapter8/1?fw=pt) of the Hugging Face course.
 
-
 ## Firewalled environments
 
 Some GPU instances on cloud and intranet setups are firewalled to external connections, resulting in a connection error. When your script attempts to download model weights or datasets, the download will hang and then timeout with the following message:
 
-```
+```text
 ValueError: Connection error, and we cannot find the requested files in the cached path.
 Please try again or make sure your Internet connection is on.
 ```
@@ -50,7 +49,7 @@ In this case, you should try to run 🤗 Transformers on [offline mode](installa
 
 Training large models with millions of parameters can be challenging without the appropriate hardware. A common error you may encounter when the GPU runs out of memory is:
 
-```
+```text
 CUDA out of memory. Tried to allocate 256.00 MiB (GPU 0; 11.17 GiB total capacity; 9.70 GiB already allocated; 179.81 MiB free; 9.85 GiB reserved in total by PyTorch)
 ```
 
@@ -65,34 +64,11 @@ Refer to the Performance [guide](performance) for more details about memory-savi
 
 </Tip>
 
-## Unable to load a saved TensorFlow model
-
-TensorFlow's [model.save](https://www.tensorflow.org/tutorials/keras/save_and_load#save_the_entire_model) method will save the entire model - architecture, weights, training configuration - in a single file. However, when you load the model file again, you may run into an error because 🤗 Transformers may not load all the TensorFlow-related objects in the model file. To avoid issues with saving and loading TensorFlow models, we recommend you:
-
-- Save the model weights as a `h5` file extension with [`model.save_weights`](https://www.tensorflow.org/tutorials/keras/save_and_load#save_the_entire_model) and then reload the model with [`~TFPreTrainedModel.from_pretrained`]:
-
-```py
->>> from transformers import TFPreTrainedModel
->>> from tensorflow import keras
-
->>> model.save_weights("some_folder/tf_model.h5")
->>> model = TFPreTrainedModel.from_pretrained("some_folder")
-```
-
-- Save the model with [`~TFPretrainedModel.save_pretrained`] and load it again with [`~TFPreTrainedModel.from_pretrained`]:
-
-```py
->>> from transformers import TFPreTrainedModel
-
->>> model.save_pretrained("path_to/model")
->>> model = TFPreTrainedModel.from_pretrained("path_to/model")
-```
-
 ## ImportError
 
 Another common error you may encounter, especially if it is a newly released model, is `ImportError`:
 
-```
+```text
 ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
 ```
 
@@ -106,7 +82,7 @@ pip install transformers --upgrade
 
 Sometimes you may run into a generic CUDA error about an error in the device code.
 
-```
+```text
 RuntimeError: CUDA error: device-side assert triggered
 ```
 

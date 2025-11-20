@@ -20,19 +20,21 @@
 # limitations under the License.
 
 
-from ...configuration_utils import PretrainedConfig
+from typing import Optional
+
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class GotOcr2VisionConfig(PretrainedConfig):
+class GotOcr2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GotOcr2VisionModel`]. It is used to instantiate a GOT_OCR2
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     defaults will yield a similar configuration to that of the SAM ViT-h
     [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -65,7 +67,7 @@ class GotOcr2VisionConfig(PretrainedConfig):
             Whether to use relative position embedding.
         window_size (`int`, *optional*, defaults to 14):
             Window size for relative position.
-        global_attn_indexes (`List[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
             The indexes of the global attention layers.
         mlp_dim (`int`, *optional*, defaults to 3072):
             The dimensionality of the MLP layer in the Transformer encoder.
@@ -115,7 +117,7 @@ class GotOcr2VisionConfig(PretrainedConfig):
         self.mlp_dim = mlp_dim
 
 
-class GotOcr2Config(PretrainedConfig):
+class GotOcr2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GotOcr2ForConditionalGeneration`]. It is used to instantiate a
     GotOcr2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -123,8 +125,8 @@ class GotOcr2Config(PretrainedConfig):
 
     e.g [stepfun-ai/GOT-OCR-2.0-hf](https://huggingface.co/stepfun-ai/GOT-OCR-2.0-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -160,11 +162,11 @@ class GotOcr2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vision_config=None,
-        text_config=None,
-        image_token_index=151859,
-        image_seq_length=576,
-        pad_token_id=-1,
+        vision_config: Optional[dict] = None,
+        text_config: Optional[dict] = None,
+        image_token_index: Optional[int] = 151859,
+        image_seq_length: Optional[int] = 576,
+        pad_token_id: Optional[int] = -1,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -179,7 +181,7 @@ class GotOcr2Config(PretrainedConfig):
             self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen2"
+            text_config["model_type"] = text_config.get("model_type", "qwen2")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["qwen2"](
@@ -196,7 +198,7 @@ class GotOcr2Config(PretrainedConfig):
                 use_cache=True,
                 tie_word_embeddings=True,
                 rope_theta=1000000.0,
-                rope_scaling=None,
+                rope_parameters=None,
                 use_sliding_window=False,
                 sliding_window=4096,
                 max_window_layers=21,

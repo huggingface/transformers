@@ -104,7 +104,7 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
     quant_config = quantization_config.quant_config
     linear_tags = list(set(linear_tags) - set(skip_modules) - set(modules_to_not_convert))
 
-    if any(key in linear_tags for key in quant_config.keys()):
+    if any(key in linear_tags for key in quant_config):
         # If the user doesn't specify a key from get_linear_tags, the layer is not quantized via (key, None)
         patch_params = dict.fromkeys(linear_tags)
         patch_params.update(quant_config)

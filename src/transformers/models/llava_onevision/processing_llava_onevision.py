@@ -18,7 +18,7 @@ Processor class for LLaVa-Onevision.
 
 import math
 from collections.abc import Iterable
-from typing import List, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -42,7 +42,6 @@ class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
             "return_mm_token_type_ids": False,
         },
         "image_kwargs": {},
-        "videos_kwargs": {},
     }
 
 
@@ -74,11 +73,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
     """
-
-    attributes = ["image_processor", "tokenizer", "video_processor"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-    video_processor_class = "AutoVideoProcessor"
 
     def __init__(
         self,
@@ -112,28 +106,27 @@ class LlavaOnevisionProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        audio=None,
-        videos: VideoInput = None,
+        images: Optional[ImageInput] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
 
         Returns:
@@ -157,7 +150,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         image_inputs = video_inputs = {}
 
@@ -204,8 +197,8 @@ class LlavaOnevisionProcessor(ProcessorMixin):
 
     def _expand_image_tokens(
         self,
-        text: List[TextInput],
-        image_sizes: Iterable[Union[List[int], int]],
+        text: list[TextInput],
+        image_sizes: Iterable[Union[list[int], int]],
         height: int,
         width: int,
         special_token: str,
@@ -215,14 +208,15 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         max_num_vision_tokens = 0
         for sample in text:
             if special_token in sample:
-                is_multi_image = next(batch_num_images) != 1
+                num_images = next(batch_num_images)  # should consume iterable
+                is_multi_image = num_images != 1
             else:
                 is_multi_image = False
             while special_token in sample:
+                original_size = next(image_sizes)  # should consume iterable
                 if is_multi_image:
                     num_image_tokens = self.num_image_tokens + 1  # one for image_newline
                 else:
-                    original_size = next(image_sizes)
                     if not isinstance(original_size, (list, tuple)):
                         # cast to list to avoid numerical precision errors when calculating unpadding
                         original_size = original_size.tolist()
@@ -290,14 +284,14 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
         Args:
-            image_sizes (List[List[str]], *optional*):
+            image_sizes (list[list[str]], *optional*):
                 The input sizes formatted as (height, width) per each image.
-            video_sizes (List[List[str]], *optional*):
+            video_sizes (list[list[str]], *optional*):
                 The input sizes formatted as (num_frames, height, width) per each video.
-            audio_lengths (List[int], *optional*):
+            audio_lengths (list[int], *optional*):
                 The input length formatted as per each audio.
         Returns:
-            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            dict[str, list[int]]: A dictionary mapping each modality ("image", "video", "audio")
             to a list containing the number of placeholder tokens required. If the model doesn't accept
             a certain modality or no input sizes are provided, the dict value is set to an empty list.
         """
@@ -327,29 +321,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __all__ = ["LlavaOnevisionProcessor"]

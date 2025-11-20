@@ -14,44 +14,47 @@
 # limitations under the License.
 
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 
-from transformers.models.llava.modeling_llava import (
-    KwargsForCausalLM,
+from ... import initialization as init
+from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import auto_docstring, can_return_tuple, logging
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
+    TransformersKwargs,
 )
-from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
+from ..sam.modeling_sam import (
+    SamMLPBlock,
+    SamPreTrainedModel,
+    SamVisionAttention,
+    SamVisionEncoder,
+    SamVisionLayer,
+)
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_vision_available, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
-
-
-if is_vision_available():
-    pass
 
 logger = logging.get_logger(__name__)
 
 
-class GotOcr2VisionConfig(PretrainedConfig):
+class GotOcr2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GotOcr2VisionModel`]. It is used to instantiate a GOT_OCR2
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     defaults will yield a similar configuration to that of the SAM ViT-h
     [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -84,7 +87,7 @@ class GotOcr2VisionConfig(PretrainedConfig):
             Whether to use relative position embedding.
         window_size (`int`, *optional*, defaults to 14):
             Window size for relative position.
-        global_attn_indexes (`List[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
             The indexes of the global attention layers.
         mlp_dim (`int`, *optional*, defaults to 3072):
             The dimensionality of the MLP layer in the Transformer encoder.
@@ -134,7 +137,7 @@ class GotOcr2VisionConfig(PretrainedConfig):
         self.mlp_dim = mlp_dim
 
 
-class GotOcr2Config(PretrainedConfig):
+class GotOcr2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GotOcr2ForConditionalGeneration`]. It is used to instantiate a
     GotOcr2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -142,8 +145,8 @@ class GotOcr2Config(PretrainedConfig):
 
     e.g [stepfun-ai/GOT-OCR-2.0-hf](https://huggingface.co/stepfun-ai/GOT-OCR-2.0-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -179,11 +182,11 @@ class GotOcr2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vision_config=None,
-        text_config=None,
-        image_token_index=151859,
-        image_seq_length=576,
-        pad_token_id=-1,
+        vision_config: Optional[dict] = None,
+        text_config: Optional[dict] = None,
+        image_token_index: Optional[int] = 151859,
+        image_seq_length: Optional[int] = 576,
+        pad_token_id: Optional[int] = -1,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -198,7 +201,7 @@ class GotOcr2Config(PretrainedConfig):
             self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen2"
+            text_config["model_type"] = text_config.get("model_type", "qwen2")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["qwen2"](
@@ -215,7 +218,7 @@ class GotOcr2Config(PretrainedConfig):
                 use_cache=True,
                 tie_word_embeddings=True,
                 rope_theta=1000000.0,
-                rope_scaling=None,
+                rope_parameters=None,
                 use_sliding_window=False,
                 sliding_window=4096,
                 max_window_layers=21,
@@ -237,7 +240,7 @@ class GotOcr2VisionAttention(SamVisionAttention):
 
 class GotOcr2VisionLayer(SamVisionLayer):
     def __init__(self, config, window_size):
-        super().__init__()
+        super().__init__(config, window_size)
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = GotOcr2VisionAttention(config, window_size)
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -245,8 +248,12 @@ class GotOcr2VisionLayer(SamVisionLayer):
         self.window_size = window_size
 
 
-class GotOcr2VisionEncoder(SamVisionEncoder):
-    pass
+class GotOcr2PreTrainedModel(SamPreTrainedModel):
+    input_modalities = ["image", "text"]
+
+
+class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
+    input_modalities = "image"
 
 
 class GotOcr2MultiModalProjector(nn.Module):
@@ -279,23 +286,20 @@ class GotOcr2ModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
 
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, GotOcr2LayerNorm)):  # noqa: F821
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, GotOcr2VisionAttention):
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
-                module.pos_embed.data.zero_()
+                init.zeros_(module.pos_embed)
 
 
 class GotOcr2Model(LlavaModel):
@@ -320,19 +324,19 @@ class GotOcr2Model(LlavaModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, GotOcr2ModelOutputWithPast]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, GotOcr2ModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -342,25 +346,15 @@ class GotOcr2Model(LlavaModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values=pixel_values.to(inputs_embeds.dtype))
-            n_image_tokens = (input_ids == self.config.image_token_id).sum()
-            n_image_features = image_features.shape[0] * image_features.shape[1]
-            if n_image_tokens != n_image_features:
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
@@ -390,11 +384,11 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -403,8 +397,8 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, GotOcr2CausalLMOutputWithPast]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, GotOcr2CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

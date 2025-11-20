@@ -613,10 +613,8 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_torchscript = False
+
     test_resize_embeddings = True
-    test_head_masking = True
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -897,7 +895,7 @@ class LukeModelIntegrationTests(unittest.TestCase):
         encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
 
         # move all values to device
-        for key, value in encoding.items():
+        for key in encoding:
             encoding[key] = encoding[key].to(torch_device)
 
         outputs = model(**encoding)
@@ -932,7 +930,7 @@ class LukeModelIntegrationTests(unittest.TestCase):
         encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
 
         # move all values to device
-        for key, value in encoding.items():
+        for key in encoding:
             encoding[key] = encoding[key].to(torch_device)
 
         outputs = model(**encoding)

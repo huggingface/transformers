@@ -18,6 +18,7 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_torch_multi_accelerator,
+    run_first,
     torch_device,
 )
 
@@ -57,6 +58,7 @@ class DummyModel(nn.Module):
 
 
 class TestTrainerDistributedWorkerSeed(TestCasePlus):
+    @run_first
     @require_torch_multi_accelerator
     def test_trainer(self):
         device_count = backend_device_count(torch_device)

@@ -335,7 +335,7 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
     read_in_q_k_v(state_dict)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
     prefix = "model."
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if not key.startswith("class_labels_classifier") and not key.startswith("bbox_predictor"):
             val = state_dict.pop(key)
             state_dict[prefix + key] = val
@@ -428,7 +428,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     args = parser.parse_args()
     convert_table_transformer_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 
@@ -39,8 +39,9 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
     """
 
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = False
-    config_class = TimmBackboneConfig
+    config: TimmBackboneConfig
 
     def __init__(self, config, **kwargs):
         requires_backends(self, "timm")
@@ -113,11 +114,11 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
     def unfreeze_batch_norm_2d(self):
         timm.utils.model.unfreeze_batch_norm_2d(self._backbone)
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """
         Empty init weights function to ensure compatibility of the class in the library.
         """
-        pass
 
     def forward(
         self,
@@ -126,7 +127,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[BackboneOutput, Tuple[Tensor, ...]]:
+    ) -> Union[BackboneOutput, tuple[Tensor, ...]]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

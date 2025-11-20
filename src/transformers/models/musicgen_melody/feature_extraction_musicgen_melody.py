@@ -17,7 +17,7 @@ Feature extractor class for Musicgen Melody
 """
 
 import copy
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -75,7 +75,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             bugs.
 
             </Tip>
-        stem_indices (`List[int]`, *optional*, defaults to `[3, 2]`):
+        stem_indices (`list[int]`, *optional*, defaults to `[3, 2]`):
             Stem channels to extract if demucs outputs are passed.
     """
 
@@ -182,7 +182,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -196,7 +196,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            audio (`torch.Tensor`, `np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[torch.Tensor]`, `List[List[float]]`):
+            audio (`torch.Tensor`, `np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[torch.Tensor]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a torch tensor, a numpy array, a list of float
                 values, a list of numpy arrays, a list of torch tensors, or a list of list of float values.
                 If `audio` is the output of Demucs, it has to be a torch tensor of shape `(batch_size, num_stems, channel_size, audio_length)`.
@@ -211,7 +211,6 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             return_attention_mask (`bool`, *optional*):
@@ -315,10 +314,10 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
         return padded_inputs
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
         output["feature_extractor_type"] = self.__class__.__name__

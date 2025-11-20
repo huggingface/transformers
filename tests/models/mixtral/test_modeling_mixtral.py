@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import MixtralConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_flash_attn,
@@ -34,9 +34,6 @@ if is_torch_available():
 
     from transformers import (
         MixtralForCausalLM,
-        MixtralForQuestionAnswering,
-        MixtralForSequenceClassification,
-        MixtralForTokenClassification,
         MixtralModel,
     )
 
@@ -44,42 +41,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class MixtralModelTester(CausalLMModelTester):
-    config_class = MixtralConfig
     if is_torch_available():
         base_model_class = MixtralModel
-        causal_lm_class = MixtralForCausalLM
-        sequence_class = MixtralForSequenceClassification
-        token_class = MixtralForTokenClassification
-        question_answering_class = MixtralForQuestionAnswering
 
 
 @require_torch
-class MistralModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            MixtralModel,
-            MixtralForCausalLM,
-            MixtralForSequenceClassification,
-            MixtralForTokenClassification,
-            MixtralForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": MixtralModel,
-            "text-classification": MixtralForSequenceClassification,
-            "token-classification": MixtralForTokenClassification,
-            "text-generation": MixtralForCausalLM,
-            "question-answering": MixtralForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_headmasking = False
-    test_pruning = False
+class MixtralModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = MixtralModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
@@ -100,7 +67,7 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Mistral flash attention does not support right padding")
+        self.skipTest(reason="Mixtral flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):
@@ -149,7 +116,7 @@ class MixtralIntegrationTest(unittest.TestCase):
 
         model = MixtralForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         ).to(torch_device)
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         # these logits have been obtained with the original megablocks implementation.
@@ -183,7 +150,7 @@ class MixtralIntegrationTest(unittest.TestCase):
 
         model = MixtralForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         ).to(torch_device)
 
         # TODO: might need to tweak it in case the logits do not match on our daily runners
@@ -191,25 +158,26 @@ class MixtralIntegrationTest(unittest.TestCase):
         # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4.
         #
         # considering differences in hardware processing and potential deviations in generated text.
-        # fmt: off
+
         EXPECTED_LOGITS_LEFT_UNPADDED = Expectations(
             {
-                ("cuda", 7): torch.Tensor([[0.2236, 0.5195, -0.3828], [0.8203, -0.2275, 0.6054], [0.2656, -0.7070, 0.2460]]).to(torch_device),
-                ("cuda", 8): torch.Tensor([[0.2207, 0.5234, -0.3828], [0.8203, -0.2285, 0.6055], [0.2656, -0.7109, 0.2451]]).to(torch_device),
-                ("rocm", 9): torch.Tensor([[0.2236, 0.5195, -0.3828], [0.8203, -0.2285, 0.6055], [0.2637, -0.7109, 0.2451]]).to(torch_device),
+                ("xpu", 3): [[0.2236, 0.5195, -0.3828], [0.8203, -0.2295, 0.6055], [0.2676, -0.7070, 0.2461]],
+                ("cuda", 7): [[0.2236, 0.5195, -0.3828], [0.8203, -0.2275, 0.6054], [0.2656, -0.7070, 0.2460]],
+                ("cuda", 8): [[0.2217, 0.5195, -0.3828], [0.8203, -0.2295, 0.6055], [0.2676, -0.7109, 0.2461]],
+                ("rocm", 9): [[0.2236, 0.5195, -0.3828], [0.8203, -0.2285, 0.6055], [0.2637, -0.7109, 0.2451]],
             }
         )
-        expected_left_unpadded = EXPECTED_LOGITS_LEFT_UNPADDED.get_expectation()
+        expected_left_unpadded = torch.tensor(EXPECTED_LOGITS_LEFT_UNPADDED.get_expectation(), device=torch_device)
 
         EXPECTED_LOGITS_RIGHT_UNPADDED = Expectations(
             {
-                ("cuda", 7): torch.Tensor([[0.2167, 0.1269, -0.1640], [-0.3496, 0.2988, -1.0312], [0.0688, 0.7929, 0.8007]]).to(torch_device),
-                ("cuda", 8): torch.Tensor([[0.2178, 0.1270, -0.1621], [-0.3496, 0.3008, -1.0312], [0.0693, 0.7930, 0.7969]]).to(torch_device),
-                ("rocm", 9): torch.Tensor([[0.2197, 0.1250, -0.1611], [-0.3516, 0.3008, -1.0312], [0.0684, 0.7930, 0.8008]]).to(torch_device),
+                ("xpu", 3): [[0.2178, 0.1270, -0.1641], [-0.3496, 0.2988, -1.0312], [0.0693, 0.7930, 0.8008]],
+                ("cuda", 7): [[0.2167, 0.1269, -0.1640], [-0.3496, 0.2988, -1.0312], [0.0688, 0.7929, 0.8007]],
+                ("cuda", 8): [[0.2178, 0.1260, -0.1621], [-0.3496, 0.2988, -1.0312], [0.0693, 0.7930, 0.8008]],
+                ("rocm", 9): [[0.2197, 0.1250, -0.1611], [-0.3516, 0.3008, -1.0312], [0.0684, 0.7930, 0.8008]],
             }
         )
-        expected_right_unpadded = EXPECTED_LOGITS_RIGHT_UNPADDED.get_expectation()
-        # fmt: on
+        expected_right_unpadded = torch.tensor(EXPECTED_LOGITS_RIGHT_UNPADDED.get_expectation(), device=torch_device)
 
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits

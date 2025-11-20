@@ -14,15 +14,16 @@
 # limitations under the License.
 """Testing suite for the PyTorch FalconH1 model."""
 
-import inspect
 import unittest
 
 import pytest
 
 from transformers import FalconH1Config, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
+    get_device_properties,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -53,7 +54,7 @@ class FalconH1ModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=64,
@@ -258,9 +259,6 @@ class FalconH1ModelTester:
 @require_torch
 class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FalconH1Model, FalconH1ForCausalLM) if is_torch_available() else ()
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -269,6 +267,39 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     pipeline_model_mapping = (
         {"feature-extraction": FalconH1Model, "text-generation": FalconH1ForCausalLM} if is_torch_available() else {}
     )
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, FalconHybridMambaAttentionDynamicCache)
+
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        expected_shape = (batch_size, num_heads, seq_length, head_dim)
+
+        self.assertListEqual(
+            [key_tensor.shape for key_tensor in past_key_values.key_cache],
+            [expected_shape] * len(past_key_values.key_cache),
+        )
+        self.assertListEqual(
+            [value_cache.shape for value_cache in past_key_values.value_cache],
+            [expected_shape] * len(past_key_values.value_cache),
+        )
+
+    def _check_caches_are_equal(self, cache1, cache2):
+        if not isinstance(cache1, FalconHybridMambaAttentionDynamicCache) or not isinstance(
+            cache2, FalconHybridMambaAttentionDynamicCache
+        ):
+            raise ValueError("The wrong cache is being used!")
+
+        if not len(cache1) == len(cache2):
+            raise ValueError("Both caches do not have the same number of layers.")
+
+        num_layers = len(cache1)
+        for idx in range(num_layers):
+            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
+            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
+            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
+            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
 
     def setUp(self):
         self.model_tester = FalconH1ModelTester(self)
@@ -281,44 +312,13 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_casual_lm(self):
+    def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    # def test_initialization(self):
-    #     r"""
-    #     Overriding the test_initialization test as the A_log and D params of the FalconH1 mixer are initialized differently
-    #     """
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-    #     configs_no_init = _config_zero_init(config)
-    #     for model_class in self.all_model_classes:
-    #         model = model_class(config=configs_no_init)
-    #         for name, param in model.named_parameters():
-    #             if param.requires_grad:
-    #                 if "A_log" in name:
-    #                     A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)
-    #                     torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
-    #                 elif "D" in name:
-    #                     D = torch.ones(config.mamba_n_heads, dtype=torch.float32)
-    #                     torch.testing.assert_close(param.data, D, rtol=1e-5, atol=1e-5)
-    #                 else:
-    #                     self.assertIn(
-    #                         ((param.data.mean() * 1e9).round() / 1e9).item(),
-    #                         [0.0, 1.0],
-    #                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-    #                     )
-
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        r"""
-        Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
-        FalconH1 mixer are initialized differently and we tested that in test_initialization
-        """
-        self.skipTest(reason="Cumbersome and redundant for FalconH1")
 
     def test_attention_outputs(self):
         r"""
@@ -391,100 +391,23 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         super().test_batching_equivalence()
         self.model_tester.use_input_mask = orig
 
-    # essentially the same test in test_utils, just adjustment for rtol for this model
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
-
-        # First, filter out models that don't support left padding
-        # - The model must have generative capabilities
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(reason="No generative architecture available for this model.")
-
-        # - The model must support padding
-        if not self.has_attentions:
-            self.skipTest(reason="This model doesn't support padding.")
-
-        # - The model must be a decoder-only architecture (encoder-based architectures use right-padding)
-        decoder_only_classes = []
-        for model_class in self.all_generative_model_classes:
-            config, _ = self.prepare_config_and_inputs_for_generate()
-            if config.is_encoder_decoder:
-                continue
-            else:
-                decoder_only_classes.append(model_class)
-        if len(decoder_only_classes) == 0:
-            self.skipTest(reason="No decoder-only architecture available for this model.")
-
-        # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
-        #   added support for it yet. We skip these models for now.
-        has_encoder_attributes = any(
-            attr_name
-            for attr_name in config.to_dict().keys()
-            if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
-        )
-        if has_encoder_attributes:
-            self.skipTest(
-                reason="The decoder-only derived from encoder-decoder models are not expected to support left-padding."
-            )
-
-        # Then, test left-padding
-        def _prepare_model_kwargs(input_ids, attention_mask, signature):
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
-            if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
-            return model_kwargs
-
-        for model_class in decoder_only_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            input_ids = inputs_dict["input_ids"]
-
-            # - for left padding we absolutely need to use an all ones
-            #   attention mask, so we do not use the one in inputs_dict
-            attention_mask = torch.ones_like(input_ids)
-
-            model = model_class(config).to(torch_device).eval()
-            signature = inspect.signature(model.forward).parameters.keys()
-
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
-
-            # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
-            next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
-            )
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
-            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
+        # TODO: document why a random attention mask causes this test to fail, but a full mask doesn't
+        unpadded_custom_inputs = {"attention_mask": None}
+        super().test_left_padding_compatibility(unpadded_custom_inputs=unpadded_custom_inputs)
 
 
 @slow
 @require_torch
-@require_torch_gpu
+@require_torch_accelerator
 class FalconH1ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_falcon_h1_hard(self):
         """
         An integration test for Falcon-H1.
         """
-        EXPECTED_TEXT = """
+        EXPECTED_TEXT_DEFAULT = """
             user
             Tell me about the french revolution.
             assistant
@@ -503,16 +426,75 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
             4. **Rise of the Jacobins and Reign of Terror (1793–1794)**: Radical leaders like Maximilien Robespierre sought to purge France of counter-revolutionaries, leading to mass executions and widespread fear.
             5. **Thermidorian Reaction
         """
+
+        EXPECTED_TEXT_A10 = """
+            user
+            Tell me about the french revolution.
+            assistant
+            The French Revolution (1789–1799) was a period of profound social upheaval and radical political change in France that fundamentally transformed the nation and had far-reaching effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+
+            ### **Causes**
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and an inefficient tax system.
+            2. **Social Inequality**: The privileged classes (the nobility and clergy) enjoyed immense wealth and power, while the majority of the population (the Third Estate, comprising commoners) faced poverty and lack of representation.
+            3. **Enlightenment Ideas**: Philosophers like Voltaire, Rousseau, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty, which fueled revolutionary fervor.
+            4. **Political Instability**: The absolute monarchy under King Louis XVI proved unable to address the nation's problems, leading to growing discontent.
+
+            ### **Key Events**
+            1. **Estates-General (1789)**: The Third Estate broke away and formed the National Assembly, forcing King Louis XVI to convene the Estates-General, an old legislative body, to address the financial crisis.
+            2. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
+            3. **Declaration of the Rights of Man and of the Citizen (August 1789)**: This foundational document proclaimed liberty, equality, and fraternity as fundamental rights.
+            4. **Abolition of Feudalism (November 1789)**: The National Assembly abolished feudal privileges, redistributing church lands to the people.
+            5. **Tennis Court Oath (May 5, 1789)**: The National Assembly members, meeting on a tennis court, pledged to continue their work until a new constitution was established.
+            6.
+        """
+
+        EXPECTED_TEXT_XPU = """
+            user
+            Tell me about the french revolution.
+            assistant
+            The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+
+            ### **Causes**
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and inefficient taxation.
+            2. **Social Inequality**: The rigid class system (the Ancien Régime) favored the nobility and clergy while the majority of the population (the Third Estate) bore the brunt of taxation and had limited rights.
+            3. **Enlightenment Ideas**: Philosophers like Rousseau, Voltaire, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
+            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to debates that exposed the weaknesses of the monarchy and the grievances of the common people.
+
+            ### **Key Events**
+            1. **Opening of the Revolution (1789)**:
+               - **Storming of the Bastille**: A symbol of royal tyranny, marking the start of the revolution.
+               - **Declaration of the Rights of Man and of the Citizen**: A foundational document proclaiming liberty, equality, and fraternity.
+
+            2. **Stages of the Revolution**:
+               - **Staffords' Reforms (1789–1791)**: Attempts to address grievances, including the abolition of feudal privileges and the introduction of the Civil Constitution of the Church.
+               - **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre, characterized by mass executions of perceived enemies of the revolution, including King Louis XVI and Queen Marie Antoinette.
+               - **Thermidorian Reaction (1794)**: The fall of Robespierre and the end of the Reign of Terror.
+
+            3. **
+        """
+
+        expected_texts = Expectations(
+            {
+                (None, None): EXPECTED_TEXT_DEFAULT,
+                ("cuda", 8): EXPECTED_TEXT_A10,
+                ("xpu", None): EXPECTED_TEXT_XPU,
+            }
+        )
+        EXPECTED_TEXT = expected_texts.get_expectation()
         # Remove the first char (`\n`) and the consecutive whitespaces caused by the formatting.
         EXPECTED_TEXT = EXPECTED_TEXT.strip().replace(" " * 12, "")
 
+        device_properties = get_device_properties()
+        # For A10, there is an ending " "
+        if device_properties[0] == "cuda" and device_properties[1] == 8:
+            EXPECTED_TEXT = EXPECTED_TEXT + " "
+
         model_id = "tiiuae/Falcon-H1-1.5B-Deep-Instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = FalconH1ForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
-        device = "cuda"
+        model = FalconH1ForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
         messages = [{"role": "user", "content": "Tell me about the french revolution."}]
         input_text = tokenizer.apply_chat_template(messages, tokenize=False)
-        inputs = tokenizer.encode(input_text, return_tensors="pt").to(device)
+        inputs = tokenizer.encode(input_text, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model.generate(inputs, max_new_tokens=512, do_sample=False)

@@ -42,7 +42,7 @@ and you also will find examples of these below.
 Here is an example of a translation fine-tuning with a MarianMT model:
 
 ```bash
-python examples/pytorch/translation/run_translation.py \
+python run_translation.py \
     --model_name_or_path Helsinki-NLP/opus-mt-en-ro \
     --do_train \
     --do_eval \
@@ -53,7 +53,6 @@ python examples/pytorch/translation/run_translation.py \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```
 
@@ -62,7 +61,7 @@ MBart and some T5 models require special handling.
 T5 models `google-t5/t5-small`, `google-t5/t5-base`, `google-t5/t5-large`, `google-t5/t5-3b` and `google-t5/t5-11b` must use an additional argument: `--source_prefix "translate {source_lang} to {target_lang}"`. For example:
 
 ```bash
-python examples/pytorch/translation/run_translation.py \
+python run_translation.py \
     --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
@@ -74,7 +73,6 @@ python examples/pytorch/translation/run_translation.py \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```
 
@@ -85,7 +83,7 @@ For the aforementioned group of T5 models it's important to remember that if you
 MBart models require a different format for `--source_lang` and `--target_lang` values, e.g. instead of `en` it expects `en_XX`, for `ro` it expects `ro_RO`. The full MBart specification for language codes can be found [here](https://huggingface.co/facebook/mbart-large-cc25). For example:
 
 ```bash
-python examples/pytorch/translation/run_translation.py \
+python run_translation.py \
     --model_name_or_path facebook/mbart-large-en-ro  \
     --do_train \
     --do_eval \
@@ -96,7 +94,6 @@ python examples/pytorch/translation/run_translation.py \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
  ```
 
@@ -104,7 +101,7 @@ And here is how you would use the translation finetuning on your own files, afte
 values for the arguments `--train_file`, `--validation_file` to match your setup:
 
 ```bash
-python examples/pytorch/translation/run_translation.py \
+python run_translation.py \
     --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
@@ -118,7 +115,6 @@ python examples/pytorch/translation/run_translation.py \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```
 
@@ -133,7 +129,7 @@ Here the languages are Romanian (`ro`) and English (`en`).
 If you want to use a pre-processed dataset that leads to high BLEU scores, but for the `en-de` language pair, you can use `--dataset_name stas/wmt14-en-de-pre-processed`, as following:
 
 ```bash
-python examples/pytorch/translation/run_translation.py \
+python run_translation.py \
     --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
@@ -144,7 +140,6 @@ python examples/pytorch/translation/run_translation.py \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
  ```
 

@@ -14,22 +14,22 @@
 # limitations under the License.
 """GPTBigCode configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GPTBigCodeConfig(PretrainedConfig):
+class GPTBigCodeConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`GPTBigCodeModel`]. It is used to instantiate a
     GPTBigCode model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPTBigCode
     [gpt_bigcode](https://huggingface.co/gpt_bigcode) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -134,6 +134,7 @@ class GPTBigCodeConfig(PretrainedConfig):
         self.attention_softmax_in_fp32 = attention_softmax_in_fp32
         self.scale_attention_softmax_in_fp32 = scale_attention_softmax_in_fp32
         self.multi_query = multi_query
+        self.num_key_value_heads = 1 if multi_query else n_head
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

@@ -43,9 +43,10 @@ class MarkupLMProcessor(ProcessorMixin):
             Whether or not to use `MarkupLMFeatureExtractor` to parse HTML strings into nodes and corresponding xpaths.
     """
 
-    feature_extractor_class = "MarkupLMFeatureExtractor"
-    tokenizer_class = ("MarkupLMTokenizer", "MarkupLMTokenizerFast")
     parse_html = True
+
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
 
     def __call__(
         self,
@@ -126,25 +127,6 @@ class MarkupLMProcessor(ProcessorMixin):
         )
 
         return encoded_inputs
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
-        docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        return tokenizer_input_names
 
 
 __all__ = ["MarkupLMProcessor"]

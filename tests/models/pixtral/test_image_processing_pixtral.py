@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import time
 import unittest
 
 import numpy as np
-import requests
+import pytest
 from packaging import version
 
+from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -216,33 +217,8 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @require_vision
     @require_torch
-    def test_fast_is_faster_than_slow(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping speed test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping speed test as one of the image processors is not defined")
-
-        def measure_time(image_processor, image):
-            start = time.time()
-            _ = image_processor(image, return_tensors="pt")
-            return time.time() - start
-
-        image_inputs_list = self.image_processor_tester.prepare_image_inputs(torchify=True)
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
-
-        fast_time = measure_time(image_processor_fast, image_inputs_list)
-        slow_time = measure_time(image_processor_slow, image_inputs_list)
-
-        self.assertLessEqual(fast_time, slow_time)
-
-    @require_vision
-    @require_torch
     def test_slow_fast_equivalence(self):
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
 
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
@@ -255,9 +231,7 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        torch.testing.assert_close(
-            encoding_slow.pixel_values[0][0], encoding_fast.pixel_values[0][0], rtol=100, atol=1e-1
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values[0][0], encoding_fast.pixel_values[0][0])
 
     @require_vision
     @require_torch
@@ -282,19 +256,14 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
         for i in range(len(encoding_slow.pixel_values)):
-            self.assertTrue(
-                torch.allclose(encoding_slow.pixel_values[i][0], encoding_fast.pixel_values[i][0], atol=1e-1)
-            )
-            self.assertLessEqual(
-                torch.mean(torch.abs(encoding_slow.pixel_values[i][0] - encoding_fast.pixel_values[i][0])).item(), 1e-3
-            )
-            torch.testing.assert_close(
-                encoding_slow.pixel_values[0][0], encoding_fast.pixel_values[0][0], rtol=100, atol=1e-1
+            self._assert_slow_fast_tensors_equivalence(
+                encoding_slow.pixel_values[i][0], encoding_fast.pixel_values[i][0]
             )
 
     @slow
     @require_torch_gpu
     @require_vision
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")
@@ -309,8 +278,8 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
 
-        torch.testing.assert_close(
-            output_eager.pixel_values[0][0], output_compiled.pixel_values[0][0], rtol=1e-4, atol=1e-4
+        self._assert_slow_fast_tensors_equivalence(
+            output_eager.pixel_values[0][0], output_compiled.pixel_values[0][0], atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
 
     @unittest.skip(reason="PixtralImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy

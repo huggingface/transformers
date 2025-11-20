@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-03-24 and added to Hugging Face Transformers on 2022-03-28.*
 
 # DPT
 
@@ -68,17 +69,17 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DPTConfig
 
-## DPTFeatureExtractor
-
-[[autodoc]] DPTFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
-
 ## DPTImageProcessor
 
 [[autodoc]] DPTImageProcessor
     - preprocess
+
+## DPTImageProcessorFast
+
+[[autodoc]] DPTImageProcessorFast
+    - preprocess
     - post_process_semantic_segmentation
+    - post_process_depth_estimation
 
 ## DPTModel
 

@@ -14,22 +14,22 @@
 # limitations under the License.
 """SegGpt model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SegGptConfig(PretrainedConfig):
+class SegGptConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SegGptModel`]. It is used to instantiate a SegGPT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the SegGPT
     [BAAI/seggpt-vit-large](https://huggingface.co/BAAI/seggpt-vit-large) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -47,7 +47,7 @@ class SegGptConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        image_size (`List[int]`, *optional*, defaults to `[896, 448]`):
+        image_size (`list[int]`, *optional*, defaults to `[896, 448]`):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
@@ -68,7 +68,7 @@ class SegGptConfig(PretrainedConfig):
             Whether to use relative position embeddings in the attention layers.
         merge_index (`int`, *optional*, defaults to 2):
             The index of the encoder layer to merge the embeddings.
-        intermediate_hidden_state_indices (`List[int]`, *optional*, defaults to `[5, 11, 17, 23]`):
+        intermediate_hidden_state_indices (`list[int]`, *optional*, defaults to `[5, 11, 17, 23]`):
             The indices of the encoder layers which we store as features for the decoder.
         beta (`float`, *optional*, defaults to 0.01):
             Regularization factor for SegGptLoss (smooth-l1 loss).

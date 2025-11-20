@@ -17,10 +17,10 @@ import copy
 import inspect
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import SpeechT5Config, SpeechT5HifiGanConfig
 from transformers.testing_utils import (
-    is_flaky,
     is_torch_available,
     require_deterministic_for_xpu,
     require_sentencepiece,
@@ -30,13 +30,11 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.trainer_utils import set_seed
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -65,9 +63,6 @@ def prepare_inputs_dict(
     decoder_input_values=None,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if input_ids is not None:
         encoder_dict = {"input_ids": input_ids}
@@ -79,21 +74,11 @@ def prepare_inputs_dict(
     else:
         decoder_dict = {"decoder_input_values": decoder_input_values}
 
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-
     return {
         **encoder_dict,
         **decoder_dict,
         "attention_mask": attention_mask,
         "decoder_attention_mask": decoder_attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -174,8 +159,7 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
     is_encoder_decoder = True
-    test_pruning = False
-    test_headmasking = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -204,11 +188,7 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 "decoder_input_values",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @unittest.skip(reason="Model has no input_embeds")
@@ -221,21 +201,6 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model does not have decoder_input_ids")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model does not have decoder_input_ids")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model does not have decoder_input_ids")
-    def test_torchscript_simple(self):
         pass
 
 
@@ -354,9 +319,9 @@ class SpeechT5ForSpeechToTextTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(
+            next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values, use_cache=True
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -373,8 +338,6 @@ class SpeechT5ForSpeechToTextTester:
 class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, GenerationTesterMixin):
     all_model_classes = (SpeechT5ForSpeechToText,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToTextTester(self)
@@ -391,7 +354,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -400,6 +363,10 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    @unittest.skip(reason="skipped because of dropout")
+    def test_batching_equivalence(self):
+        pass
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -516,11 +483,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_hidden_states_output(self):
@@ -576,33 +539,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "conv.parametrizations.weight",
-                    "masked_spec_embed",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     # this model has no inputs_embeds
     @unittest.skip(reason="Model has no input_embeds")
     def test_inputs_embeds(self):
@@ -622,6 +558,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -724,20 +661,16 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @is_flaky(max_attempts=5, description="Flaky for some input configurations.")
-    def test_past_key_values_format(self):
-        super().test_past_key_values_format()
-
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
@@ -764,7 +697,7 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
 
@@ -904,8 +837,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForTextToSpeech,) if is_torch_available() else ()
     all_generative_model_classes = ()
     is_encoder_decoder = True
-    test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = SpeechT5ForTextToSpeechTester(self)
@@ -928,7 +859,7 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -978,35 +909,8 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 "decoder_input_values",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     @unittest.skip(reason="Model has no inputs_embeds")
     def test_inputs_embeds(self):
@@ -1022,22 +926,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_simple(self):
-        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @unittest.skip(reason="training is not supported yet")
@@ -1063,30 +951,33 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
 
 
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@slow
 class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
     def default_model(self):
-        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts").to(torch_device)
+        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts", revision="refs/pr/19").to(
+            torch_device
+        )
 
     @cached_property
     def default_processor(self):
-        return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
+        return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts", revision="refs/pr/19")
 
     @cached_property
     def default_vocoder(self):
-        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan").to(torch_device)
+        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan", revision="refs/pr/1").to(torch_device)
 
     def test_generation(self):
         model = self.default_model
@@ -1453,8 +1344,7 @@ class SpeechT5ForSpeechToSpeechTester:
 class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
-    test_headmasking = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -1472,7 +1362,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -1622,11 +1512,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 "decoder_input_values",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_hidden_states_output(self):
@@ -1682,33 +1568,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "conv.parametrizations.weight",
-                    "masked_spec_embed",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     @unittest.skip(reason="Model has no input_embeds")
     def test_inputs_embeds(self):
         pass
@@ -1727,21 +1586,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
     def test_save_load(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_simple(self):
         pass
 
     @unittest.skip(reason="Training is not supported yet")
@@ -1767,13 +1611,13 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
@@ -1792,7 +1636,7 @@ class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
 
@@ -1852,14 +1696,11 @@ class SpeechT5HifiGanTester:
 @require_torch
 class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5HifiGan,) if is_torch_available() else ()
-    test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_resize_position_embeddings = False
-    test_head_masking = False
     test_mismatched_shapes = False
     test_missing_keys = False
-    test_model_parallel = False
     is_encoder_decoder = False
     has_attentions = False
 
@@ -1896,10 +1737,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Model does not output hidden states")
     def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip
-    def test_initialization(self):
         pass
 
     @unittest.skip(reason="Model has no input_embeds")

@@ -14,9 +14,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch ConversationalSpeechModel model."""
 
-import collections
 import copy
-import re
 import unittest
 
 import pytest
@@ -41,7 +39,6 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     ids_tensor,
 )
 
@@ -51,8 +48,6 @@ if is_datasets_available():
 
 if is_torch_available():
     import torch
-
-    from transformers.pytorch_utils import id_tensor_storage
 
 
 class CsmModelTester:
@@ -147,8 +142,7 @@ class CsmModelTester:
 
 class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (CsmForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False
-    test_headmasking = False
+
     test_resize_embeddings = False
     test_resize_embeddings_untied = False
 
@@ -194,25 +188,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
 
         return logits_processor_kwargs
 
-    def test_initialization(self):
-        """
-        Overrides [ModelTesterMixin.test_initialization] because of specificities of Mimi codec model.
-        See https://github.com/huggingface/transformers/blob/1077603410cd73ba71d64a522033574d66d64b55/tests/models/mimi/test_modeling_mimi.py#L384-L397
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = ["conv", "input_proj", "output_proj"]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     def _check_similar_generate_outputs(self, output_1, output_2, atol=1e-5, rtol=1e-5):
         """
         Overrides [GenerationTesterMixin._check_similar_generate_outputs] to handle third input_ids dimension.
@@ -252,11 +227,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support Dola decoding.")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @pytest.mark.generate
     @unittest.skip(reason="CSM does not support beam search.")
     def test_beam_sample_generate(self):
         pass
@@ -282,41 +252,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support group beam search.")
-    def test_group_beam_search_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support group beam search.")
-    def test_group_beam_search_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support constrained beam search.")
-    def test_constrained_beam_search_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support constrained beam search.")
-    def test_constrained_beam_search_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support contrastive search.")
-    def test_contrastive_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support contrastive search.")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support contrastive search.")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @pytest.mark.generate
     @unittest.skip(reason="CSM does not support prompt lookup decoding.")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
@@ -330,10 +265,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_model_get_set_embeddings(self):
         pass
 
-    @pytest.mark.skip(reason="CSM has custom embedding approach (text and audio embeddings).")
-    def test_tie_model_weights(self):
-        pass
-
     @pytest.mark.generate
     @unittest.skip(reason="CSM does not support beam search.")
     def test_generate_from_inputs_embeds_1_beam_search(self, _, num_beams):
@@ -344,38 +275,13 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_model_parallel_beam_search(self):
         pass
 
+    @unittest.skip(reason="CSM has special embeddings that can never be tied")
     def test_tied_weights_keys(self):
-        """
-        Overrides [ModelTesterMixin.test_tied_weights_keys] to not test for text config (not applicable to CSM).
-        """
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model_tied = model_class(config)
+        pass
 
-            ptrs = collections.defaultdict(list)
-            for name, tensor in model_tied.state_dict().items():
-                ptrs[id_tensor_storage(tensor)].append(name)
-
-            # These are all the pointers of shared tensors.
-            tied_params = [names for _, names in ptrs.items() if len(names) > 1]
-
-            tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
-            # Detect we get a hit for each key
-            for key in tied_weight_keys:
-                is_tied_key = any(re.search(key, p) for group in tied_params for p in group)
-                self.assertTrue(is_tied_key, f"{key} is not a tied weight key for {model_class}.")
-
-            # Removed tied weights found from tied params -> there should only be one left after
-            for key in tied_weight_keys:
-                for i in range(len(tied_params)):
-                    tied_params[i] = [p for p in tied_params[i] if re.search(key, p) is None]
-
-            tied_params = [group for group in tied_params if len(group) > 1]
-            self.assertListEqual(
-                tied_params,
-                [],
-                f"Missing `_tied_weights_keys` for {model_class}: add all of {tied_params} except one.",
-            )
+    @unittest.skip(reason="CSM has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
 
     def _get_custom_4d_mask_test_data(self):
         """
@@ -435,7 +341,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_1b_model_integration_generate(self):
         """
         Tests the generated tokens match the ones from the original model implementation.
-        Such tokens are to be retreived using https://gist.github.com/eustlb/d25577a357ddcf8f4a8cd0d00baca551, which is a script that infers the original model.
+        Such tokens are to be retrieved using https://gist.github.com/eustlb/d25577a357ddcf8f4a8cd0d00baca551, which is a script that infers the original model.
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         prompt = "<|begin_of_text|>[0]What are you working on?<|end_of_text|><|AUDIO|><|audio_eos|><|begin_of_text|>[1]I'm figuring out my budget.<|end_of_text|>"
@@ -479,7 +385,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_1b_model_integration_generate_no_audio(self):
         """
         Tests the generated tokens match the ones from the original model implementation.
-        Such tokens are to be retreived using https://gist.github.com/eustlb/aed822f765e928b9612e01b0d8836d69, which is a script that infers the original model.
+        Such tokens are to be retrieved using https://gist.github.com/eustlb/aed822f765e928b9612e01b0d8836d69, which is a script that infers the original model.
         """
 
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
@@ -540,7 +446,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_1b_model_integration_generate_multiple_audio(self):
         """
         Test the generated tokens match the ones from the original model implementation.
-        Such tokens are to be retreived using https://gist.github.com/eustlb/0c94de002e1325abb61d32217f74c0f8, which is a script that infers the original model.
+        Such tokens are to be retrieved using https://gist.github.com/eustlb/0c94de002e1325abb61d32217f74c0f8, which is a script that infers the original model.
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 
@@ -599,7 +505,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_1b_model_integration_generate_batched(self):
         """
         Test the generated tokens match the ones from the original model implementation.
-        Such tokens are to be retreived using https://gist.github.com/eustlb/bcc532b53161bc31da3d66cb07ae193f, which is a script that infers the original model.
+        Such tokens are to be retrieved using https://gist.github.com/eustlb/bcc532b53161bc31da3d66cb07ae193f, which is a script that infers the original model.
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 

@@ -13,22 +13,19 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen3 model."""
 
-import gc
 import unittest
 
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, Qwen3Config, is_torch_available, set_seed
+from transformers import AutoTokenizer, BitsAndBytesConfig, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
-    backend_empty_cache,
+    cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -39,9 +36,6 @@ if is_torch_available():
 
     from transformers import (
         Qwen3ForCausalLM,
-        Qwen3ForQuestionAnswering,
-        Qwen3ForSequenceClassification,
-        Qwen3ForTokenClassification,
         Qwen3Model,
     )
 
@@ -49,42 +43,13 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class Qwen3ModelTester(CausalLMModelTester):
-    config_class = Qwen3Config
     if is_torch_available():
         base_model_class = Qwen3Model
-        causal_lm_class = Qwen3ForCausalLM
-        sequence_class = Qwen3ForSequenceClassification
-        token_class = Qwen3ForTokenClassification
-        question_answering_class = Qwen3ForQuestionAnswering
 
 
 @require_torch
 class Qwen3ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Qwen3Model,
-            Qwen3ForCausalLM,
-            Qwen3ForSequenceClassification,
-            Qwen3ForTokenClassification,
-            Qwen3ForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = Qwen3ModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Qwen3Model,
-            "text-classification": Qwen3ForSequenceClassification,
-            "token-classification": Qwen3ForTokenClassification,
-            "text-generation": Qwen3ForCausalLM,
-            "question-answering": Qwen3ForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -99,16 +64,15 @@ class Qwen3ModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Qwen3 flash attention does not support right padding")
-
 
 @require_torch
 class Qwen3IntegrationTest(unittest.TestCase):
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     @slow
     def test_model_600m_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
@@ -117,15 +81,12 @@ class Qwen3IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-1.4577, 1.3261, 3.8498, 3.4229, 2.9009, 1.8813, 2.1530, 2.1431]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+        EXPECTED_MEAN = torch.tensor([[-1.3789, 1.3029, 3.8262, 3.4637, 2.8796, 1.8357, 2.1290, 2.1814]])
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-4, atol=1e-4)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([5.9062, 6.0938, 5.5625, 3.8594, 2.6094, 1.9531, 4.3125, 4.9375, 3.8906, 3.1094, 3.6719, 5.1562, 6.9062, 5.7500, 5.4062, 7.0625, 8.7500, 8.7500, 8.1250, 7.9375, 8.0625, 7.5312, 7.3750, 7.2188, 7.2500, 5.8750, 2.8750, 4.3438, 2.3438, 2.2500])  # fmt: skip
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
+        EXPECTED_SLICE = torch.tensor([4.6905, 4.9243, 4.7101, 3.2052, 2.2683, 1.6576, 3.6529, 3.9800, 3.2605, 2.6475, 3.0468, 4.2296, 5.7443, 4.8940, 4.4883, 6.0323, 7.4057, 7.3710, 6.8373, 6.6323, 6.7114, 6.3069, 6.1751, 6.0416, 6.0793, 4.6975, 2.3286, 3.6387, 2.0757, 1.9813])  # fmt: skip
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_model_600m_generation(self):
@@ -140,22 +101,18 @@ class Qwen3IntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
     @require_bitsandbytes
     @slow
     @require_flash_attn
     @pytest.mark.flash_attn_test
     def test_model_600m_long_prompt(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
+        EXPECTED_OUTPUT_TOKEN_IDS = [198, 198]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = Qwen3ForCausalLM.from_pretrained(
             "Qwen/Qwen3-0.6B-Base",
             device_map="auto",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
@@ -169,20 +126,15 @@ class Qwen3IntegrationTest(unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
-        del assistant_model
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
     @slow
-    @require_torch_sdpa
     def test_model_600m_long_prompt_sdpa(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
+        EXPECTED_OUTPUT_TOKEN_IDS = [198, 198]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B-Base", device_map="auto", attn_implementation="sdpa")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         # Assisted generation
@@ -190,12 +142,12 @@ class Qwen3IntegrationTest(unittest.TestCase):
         assistant_model.generation_config.num_assistant_tokens = 2
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
         generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
+
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         del assistant_model
 
-        backend_empty_cache(torch_device)
-        gc.collect()
+        cleanup(torch_device, gc_collect=True)
 
         EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"
         prompt = "My favourite condiment is "
@@ -206,18 +158,25 @@ class Qwen3IntegrationTest(unittest.TestCase):
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% peanut butter. I love it so much that I can't help but use it"
-        )
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("xpu", 3): "My favourite condiment is 100% beef and comes in a 12 oz. jar. It is sold in",
+                ("cuda", 7): "My favourite condiment is 100% natural. It's a little spicy and a little sweet, but it's the",
+                ("cuda", 8): "My favourite condiment is 100% beef, 100% beef, 100% beef.",
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B-Base", use_fast=False)
-        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B-Base", device_map="auto", torch_dtype=torch.float16)
+        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B-Base", device_map="auto", dtype=torch.float16)
         assistant_model = Qwen3ForCausalLM.from_pretrained(
-            "Qwen/Qwen3-0.6B-Base", device_map="auto", torch_dtype=torch.float16
+            "Qwen/Qwen3-0.6B-Base", device_map="auto", dtype=torch.float16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -227,12 +186,10 @@ class Qwen3IntegrationTest(unittest.TestCase):
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=assistant_model
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
@@ -254,6 +211,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
 
         expected_text_completions = Expectations(
             {
+                ("xpu", None): ["My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"],
                 ("rocm", (9, 5)): ["My favourite condiment is 100% plain, unflavoured, and unadulterated."],
                 ("cuda", None): cuda_expectation,
             }
@@ -263,7 +221,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
-        device = "cpu"
+        device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"
@@ -273,7 +231,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
         model = Qwen3ForCausalLM.from_pretrained(
             qwen_model,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
@@ -295,7 +253,11 @@ class Qwen3IntegrationTest(unittest.TestCase):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
-        exported_program = exportable_module.export(strict=strict)
+        exported_program = exportable_module.export(
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
+            strict=strict,
+        )
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )
@@ -304,11 +266,12 @@ class Qwen3IntegrationTest(unittest.TestCase):
 
     @require_flash_attn
     @slow
+    @pytest.mark.flash_attn_test
     def test_600m_generation(self):
         model_id = "Qwen/Qwen3-0.6B-Base"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = Qwen3ForCausalLM.from_pretrained(
-            model_id, use_sliding_window=True, max_window_layers=28, sliding_window=2048
+            model_id, use_sliding_window=True, max_window_layers=28, sliding_window=2048, dtype=torch.float16
         ).to(torch_device)
         # we need a long text to test sliding window
         # fmt: off
@@ -713,10 +676,13 @@ In summary:"""
         with self.subTest("Eager matches sdpa"):
             torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
 
-        model.config._attn_implementation = "flex_attention"
-        new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
-        with self.subTest("Eager matches Flex attention"):
-            torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
+        # `flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`
+        # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
+
+        # model.config._attn_implementation = "flex_attention"
+        # new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
+        # with self.subTest("Eager matches Flex attention"):
+        #     torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
 
         model.config._attn_implementation = "flash_attention_2"
         new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]

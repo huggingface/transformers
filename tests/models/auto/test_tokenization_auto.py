@@ -70,7 +70,7 @@ class AutoTokenizerTest(unittest.TestCase):
 
     @slow
     def test_tokenizer_from_pretrained(self):
-        for model_name in {"google-bert/bert-base-uncased", "google-bert/bert-base-cased"}:
+        for model_name in ("google-bert/bert-base-uncased", "google-bert/bert-base-cased"):
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, (BertTokenizer, BertTokenizerFast))
@@ -463,9 +463,9 @@ class NopTokenizer(transformers.PreTrainedTokenizer):
 """
 
         nop_config_code = """
-from transformers import PretrainedConfig
+from transformers import PreTrainedConfig
 
-class NopConfig(PretrainedConfig):
+class NopConfig(PreTrainedConfig):
     model_type = "test_unregistered_dynamic"
 
     def __init__(self, **kwargs):

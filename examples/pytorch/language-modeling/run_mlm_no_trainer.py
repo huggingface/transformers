@@ -12,6 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "albumentations >= 1.4.16",
+#     "accelerate >= 0.12.0",
+#     "torch >= 1.3",
+#     "datasets >= 2.14.0",
+#     "sentencepiece != 0.1.92",
+#     "protobuf",
+#     "evaluate",
+#     "scikit-learn",
+# ]
+# ///
+
 """
 Fine-tuning the library models for masked language modeling (BERT, ALBERT, RoBERTa...)
 on a text file or a dataset without using HuggingFace Trainer.
@@ -51,12 +66,12 @@ from transformers import (
     SchedulerType,
     get_scheduler,
 )
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.53.0.dev0")
+check_min_version("4.57.0.dev0")
 
 logger = get_logger(__name__)
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
@@ -115,7 +130,7 @@ def parse_args():
     parser.add_argument(
         "--use_slow_tokenizer",
         action="store_true",
-        help="If passed, will use a slow tokenizer (not backed by the 🤗 Tokenizers library).",
+        help="If passed, will use a slow tokenizer (not backed by the Hugging Face Tokenizers library).",
     )
     parser.add_argument(
         "--per_device_train_batch_size",
@@ -260,10 +275,6 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_mlm_no_trainer", args)
-
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
@@ -327,7 +338,7 @@ def main():
         raw_datasets = load_dataset(
             args.dataset_name, args.dataset_config_name, trust_remote_code=args.trust_remote_code
         )
-        if "validation" not in raw_datasets.keys():
+        if "validation" not in raw_datasets:
             raw_datasets["validation"] = load_dataset(
                 args.dataset_name,
                 args.dataset_config_name,
@@ -352,7 +363,7 @@ def main():
             extension = "text"
         raw_datasets = load_dataset(extension, data_files=data_files)
         # If no validation data is there, validation_split_percentage will be used to divide the dataset.
-        if "validation" not in raw_datasets.keys():
+        if "validation" not in raw_datasets:
             raw_datasets["validation"] = load_dataset(
                 extension,
                 data_files=data_files,
@@ -481,7 +492,7 @@ def main():
         # max_seq_length.
         def group_texts(examples):
             # Concatenate all texts.
-            concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+            concatenated_examples = {k: list(chain(*examples[k])) for k in examples}
             total_length = len(concatenated_examples[list(examples.keys())[0]])
             # We drop the small remainder, and if the total_length < max_seq_length  we exclude this batch and return an empty dict.
             # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.

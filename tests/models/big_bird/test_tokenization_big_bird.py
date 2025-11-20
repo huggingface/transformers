@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import unittest
+from functools import cached_property
 
 from transformers import BigBirdTokenizer, BigBirdTokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
-from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -201,22 +201,6 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_special_tokens(self):
-        """
-        To reproduce:
-
-        $ wget https://github.com/google-research/bigbird/blob/master/bigbird/vocab/gpt2.model?raw=true
-        $ mv gpt2.model?raw=true gpt2.model
-
-        ```
-        import tensorflow_text as tft
-        import tensorflow as tf
-
-        vocab_model_file = "./gpt2.model"
-        tokenizer = tft.SentencepieceTokenizer(model=tf.io.gfile.GFile(vocab_model_file, "rb").read()))
-        ids = tokenizer.tokenize("Paris is the [MASK].")
-        ids = tf.concat([tf.constant([65]), ids, tf.constant([66])], axis=0)
-        detokenized = tokenizer.detokenize(ids)  # should give [CLS] Paris is the [MASK].[SEP]
-        """
         tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
         decoded_text = tokenizer.decode(tokenizer("Paris is the [MASK].").input_ids)
 

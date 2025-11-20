@@ -14,12 +14,14 @@
 # limitations under the License.
 """Fast Image processor class for Vilt."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
+
+import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     get_max_height_width,
     group_images_by_shape,
     reorder_images,
@@ -28,41 +30,13 @@ from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILIma
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
+from .image_processing_vilt import ViltImageProcessorKwargs
 
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
 
 # Set maximum size based on the typical aspect ratio of the COCO dataset
 MAX_LONGER_EDGE = 1333
 MAX_SHORTER_EDGE = 800
-
-
-class ViltFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image. If `True`, will pad the images in the batch to the largest height and width
-            in the batch. Padding will be applied to the bottom and right with zeros.
-        size_divisor (`int`, *optional*, defaults to 32):
-            The size to make the height and width divisible by.
-        rescale_factor (`float`, *optional*, defaults to 1/255):
-            The factor to rescale the image by.
-    """
-
-    do_pad: Optional[bool]
-    size_divisor: Optional[int]
-    rescale_factor: Optional[float]
 
 
 @auto_docstring
@@ -78,7 +52,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = ViltFastImageProcessorKwargs
+    valid_kwargs = ViltImageProcessorKwargs
 
     def _preprocess(
         self,
@@ -91,8 +65,9 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
@@ -102,7 +77,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         This method overrides the base class method to include padding and pixel mask generation.
         """
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
 
         for shape, stacked_images in grouped_images.items():
@@ -112,7 +87,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for further processing
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
 
         for shape, stacked_images in grouped_images.items():
@@ -127,7 +102,9 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         # Handle padding if required
         data = {}
         if do_pad:
-            pixel_values, pixel_mask = self._pad_batch(processed_images, return_tensors)
+            pixel_values, pixel_mask = self._pad_batch(
+                processed_images, return_tensors, disable_grouping=disable_grouping
+            )
             data = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         else:
             # If no padding, just return the processed images
@@ -149,7 +126,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
 
         Args:
             images (`torch.Tensor`): Image or batch of images to resize.
-            size (`Dict[str, int]`): Size dictionary with shortest_edge key.
+            size (`dict[str, int]`): Size dictionary with shortest_edge key.
             interpolation (`F.InterpolationMode`, *optional*): Interpolation method to use.
             size_divisor (`int`, *optional*): Value to ensure height/width are divisible by.
 
@@ -195,6 +172,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: Optional[bool],
     ) -> tuple:
         """
         Pad a batch of images to the same size based on the maximum dimensions.
@@ -210,7 +188,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         max_size = get_max_height_width(images)
 
         # Group images by shape before padding
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images = {}
         processed_masks = {}
 

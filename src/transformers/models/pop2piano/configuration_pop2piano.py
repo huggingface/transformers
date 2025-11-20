@@ -14,22 +14,22 @@
 # limitations under the License.
 """Pop2Piano model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Pop2PianoConfig(PretrainedConfig):
+class Pop2PianoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Pop2PianoForConditionalGeneration`]. It is used
     to instantiate a Pop2PianoForConditionalGeneration model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     Pop2Piano [sweetcocoa/pop2piano](https://huggingface.co/sweetcocoa/pop2piano) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 2400):
@@ -87,7 +87,7 @@ class Pop2PianoConfig(PretrainedConfig):
         dropout_rate=0.1,
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
-        feed_forward_proj="gated-gelu",  # noqa
+        feed_forward_proj="gated-gelu",
         is_encoder_decoder=True,
         use_cache=True,
         pad_token_id=0,
@@ -122,6 +122,7 @@ class Pop2PianoConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
+        self.tie_encoder_decoder = True  # forcing it
 
 
 __all__ = ["Pop2PianoConfig"]

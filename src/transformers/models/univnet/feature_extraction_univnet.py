@@ -13,7 +13,7 @@
 # limitations under the License.
 """Feature extractor class for UnivNetModel."""
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -260,7 +260,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         return noise
 
-    def batch_decode(self, waveforms, waveform_lengths=None) -> List[np.ndarray]:
+    def batch_decode(self, waveforms, waveform_lengths=None) -> list[np.ndarray]:
         r"""
         Removes padding from generated audio after running [`UnivNetModel.forward`]. This returns a ragged list of 1D
         audio waveform arrays and not a single tensor/array because in general the waveforms will have different
@@ -273,7 +273,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 The batched lengths of each waveform before padding.
 
         Returns:
-            `List[np.ndarray]`: A ragged list of 1D waveform arrays with padding removed.
+            `list[np.ndarray]`: A ragged list of 1D waveform arrays with padding removed.
         """
         # Collapse the batched waveform tensor to a list of 1D audio waveforms
         waveforms = [waveform.detach().to(device="cpu", copy=True).numpy() for waveform in waveforms]
@@ -285,7 +285,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         sampling_rate: Optional[int] = None,
         padding: Union[bool, str, PaddingStrategy] = True,
         max_length: Optional[int] = None,
@@ -303,7 +303,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -355,7 +355,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.np.array` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         """
@@ -417,7 +416,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         mel_spectrograms = [self.mel_spectrogram(waveform) for waveform in input_features]
 
-        if isinstance(input_features[0], List):
+        if isinstance(input_features[0], list):
             batched_speech["input_features"] = [np.asarray(mel, dtype=np.float32) for mel in mel_spectrograms]
         else:
             batched_speech["input_features"] = [mel.astype(np.float32) for mel in mel_spectrograms]
@@ -444,7 +443,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         return batched_speech
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()
 
         # Don't serialize these as they are derived from the other properties.

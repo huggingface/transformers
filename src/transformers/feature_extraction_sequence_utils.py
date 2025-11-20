@@ -20,7 +20,7 @@ from typing import Optional, Union
 import numpy as np
 
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from .utils import PaddingStrategy, TensorType, is_tf_tensor, is_torch_tensor, logging, to_numpy
+from .utils import PaddingStrategy, TensorType, is_torch_tensor, logging, to_numpy
 
 
 logger = logging.get_logger(__name__)
@@ -74,20 +74,20 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         <Tip>
 
-        If the `processed_features` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+        If the `processed_features` passed are dictionary of numpy arrays or PyTorch tensors  the
         result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
         PyTorch tensors, you will lose the specific device of your tensors however.
 
         </Tip>
 
         Args:
-            processed_features ([`BatchFeature`], list of [`BatchFeature`], `Dict[str, List[float]]`, `Dict[str, List[List[float]]` or `List[Dict[str, List[float]]]`):
-                Processed inputs. Can represent one input ([`BatchFeature`] or `Dict[str, List[float]]`) or a batch of
-                input values / vectors (list of [`BatchFeature`], *Dict[str, List[List[float]]]* or *List[Dict[str,
-                List[float]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+            processed_features ([`BatchFeature`], list of [`BatchFeature`], `dict[str, list[float]]`, `dict[str, list[list[float]]` or `list[dict[str, list[float]]]`):
+                Processed inputs. Can represent one input ([`BatchFeature`] or `dict[str, list[float]]`) or a batch of
+                input values / vectors (list of [`BatchFeature`], *dict[str, list[list[float]]]* or *list[dict[str,
+                list[float]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
                 collate function.
 
-                Instead of `List[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
+                Instead of `list[float]` you can have tensors (numpy arrays or PyTorch tensors),
                 see the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
@@ -116,7 +116,6 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         """
@@ -124,7 +123,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(processed_features, (list, tuple)) and isinstance(processed_features[0], (dict, BatchFeature)):
             processed_features = {
-                key: [example[key] for example in processed_features] for key in processed_features[0].keys()
+                key: [example[key] for example in processed_features] for key in processed_features[0]
             }
 
         # The model's main input name, usually `input_values`, has be passed for padding
@@ -145,7 +144,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 processed_features["attention_mask"] = []
             return processed_features
 
-        # If we have PyTorch/TF tensors or lists as inputs, we cast them as Numpy arrays
+        # If we have PyTorch tensors or lists as inputs, we cast them as Numpy arrays
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
 
@@ -159,16 +158,14 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 first_element = required_input[index][0]
 
         if return_tensors is None:
-            if is_tf_tensor(first_element):
-                return_tensors = "tf"
-            elif is_torch_tensor(first_element):
+            if is_torch_tensor(first_element):
                 return_tensors = "pt"
             elif isinstance(first_element, (int, float, list, tuple, np.ndarray)):
                 return_tensors = "np"
             else:
                 raise ValueError(
                     f"type of {first_element} unknown: {type(first_element)}. "
-                    "Should be one of a python, numpy, pytorch or tensorflow object."
+                    "Should be one of a python, numpy, or pytorch object."
                 )
 
         for key, value in processed_features.items():
@@ -235,9 +232,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Pad inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            processed_features (`Union[Dict[str, np.ndarray], BatchFeature]`):
-                Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
-                of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
+            processed_features (`Union[dict[str, np.ndarray], BatchFeature]`):
+                Dictionary of input values (`np.ndarray[float]`) / input vectors (`list[np.ndarray[float]]`) or batch
+                of inputs values (`list[np.ndarray[int]]`) / input vectors (`list[np.ndarray[int]]`)
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see below)
             padding_strategy (`PaddingStrategy`, *optional*, default to `PaddingStrategy.DO_NOT_PAD`):
@@ -306,9 +303,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Truncate inputs to predefined length or max length in the batch
 
         Args:
-            processed_features(`Union[Dict[str, np.ndarray], BatchFeature]`):
-                Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
-                of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
+            processed_features(`Union[dict[str, np.ndarray], BatchFeature]`):
+                Dictionary of input values (`np.ndarray[float]`) / input vectors (`list[np.ndarray[float]]`) or batch
+                of inputs values (`list[np.ndarray[int]]`) / input vectors (`list[np.ndarray[int]]`)
             max_length (`int`, *optional*):
                 maximum length of the returned list and optionally padding length (see below)
             pad_to_multiple_of (`int`, *optional*) :

@@ -17,22 +17,22 @@
 import functools
 import operator
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SpeechT5Config(PretrainedConfig):
+class SpeechT5Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SpeechT5Model`]. It is used to instantiate a
     SpeechT5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the SpeechT5
     [microsoft/speecht5_asr](https://huggingface.co/microsoft/speecht5_asr) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 81):
@@ -84,14 +84,14 @@ class SpeechT5Config(PretrainedConfig):
         feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        conv_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
+        conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             speech encoder pre-net. The length of *conv_dim* defines the number of 1D convolutional layers.
-        conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
+        conv_stride (`tuple[int]` or `list[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the speech encoder pre-net. The
             length of *conv_stride* defines the number of convolutional layers and has to match the length of
             *conv_dim*.
-        conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
+        conv_kernel (`tuple[int]` or `list[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the speech encoder pre-net.
             The length of *conv_kernel* defines the number of convolutional layers and has to match the length of
             *conv_dim*.
@@ -337,15 +337,15 @@ class SpeechT5Config(PretrainedConfig):
         return functools.reduce(operator.mul, self.conv_stride, 1)
 
 
-class SpeechT5HifiGanConfig(PretrainedConfig):
+class SpeechT5HifiGanConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SpeechT5HifiGanModel`]. It is used to instantiate
     a SpeechT5 HiFi-GAN vocoder model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the SpeechT5
     [microsoft/speecht5_hifigan](https://huggingface.co/microsoft/speecht5_hifigan) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         model_in_dim (`int`, *optional*, defaults to 80):
@@ -354,18 +354,18 @@ class SpeechT5HifiGanConfig(PretrainedConfig):
             The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
         upsample_initial_channel (`int`, *optional*, defaults to 512):
             The number of input channels into the upsampling network.
-        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
+        upsample_rates (`tuple[int]` or `list[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
             A tuple of integers defining the stride of each 1D convolutional layer in the upsampling network. The
             length of *upsample_rates* defines the number of convolutional layers and has to match the length of
             *upsample_kernel_sizes*.
-        upsample_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 8, 8]`):
+        upsample_kernel_sizes (`tuple[int]` or `list[int]`, *optional*, defaults to `[8, 8, 8, 8]`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the upsampling network. The
             length of *upsample_kernel_sizes* defines the number of convolutional layers and has to match the length of
             *upsample_rates*.
-        resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 7, 11]`):
+        resblock_kernel_sizes (`tuple[int]` or `list[int]`, *optional*, defaults to `[3, 7, 11]`):
             A tuple of integers defining the kernel sizes of the 1D convolutional layers in the multi-receptive field
             fusion (MRF) module.
-        resblock_dilation_sizes (`Tuple[Tuple[int]]` or `List[List[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
+        resblock_dilation_sizes (`tuple[tuple[int]]` or `list[list[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
             A nested tuple of integers defining the dilation rates of the dilated 1D convolutional layers in the
             multi-receptive field fusion (MRF) module.
         initializer_range (`float`, *optional*, defaults to 0.01):

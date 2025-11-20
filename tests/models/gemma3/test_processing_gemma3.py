@@ -15,7 +15,6 @@
 import shutil
 import tempfile
 import unittest
-from typing import Optional
 
 from transformers import Gemma3Processor, GemmaTokenizer
 from transformers.testing_utils import get_tests_dir, require_vision
@@ -58,6 +57,19 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.boi_token
 
+    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
+
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
@@ -70,7 +82,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }  # fmt: skip
 
     # Override as Gemma3 needs images to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+    def prepare_image_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
         images = super().prepare_image_inputs(batch_size)
         if isinstance(images, (list, tuple)):
@@ -110,7 +122,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = self.prepare_processor_dict()
         processor = self.processor_class(**processor_components, **processor_kwargs)
 
-        input_str = self.prepare_text_inputs(modality="image")
+        input_str = self.prepare_text_inputs(modalities="image")
         image_input = self.prepare_image_inputs()
         inputs = processor(
             text=input_str,
@@ -130,7 +142,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
         _ = processor(
             text=input_str,

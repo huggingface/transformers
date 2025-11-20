@@ -16,6 +16,8 @@
 import copy
 import tempfile
 import unittest
+import unittest.mock
+from functools import cached_property
 
 import timeout_decorator  # noqa
 
@@ -28,7 +30,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -421,8 +422,6 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False  # Fix me Michael
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = BartModelTester(self)
@@ -439,7 +438,7 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -479,6 +478,24 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @unittest.skip("Bart no longer always uses self.shared so not working.")
+    def test_input_embeddings_support_forward_hook(self):
+        # Make sure that registering hooks on the input embeddings are indeed called
+        # in forward. This is necessary for gradient checkpointing in PEFT, see also #41821.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            hook = unittest.mock.MagicMock(return_value=None)
+            model.get_input_embeddings().register_forward_hook(hook)
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            model(**inputs)
+
+            self.assertGreater(hook.call_count, 0)
+
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
@@ -515,7 +532,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:
@@ -958,9 +975,9 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):
-        config = BartConfig.from_pretrained("facebook/bart-large-xsum")
+        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-xsum")
         expected_params = {"num_beams": 6, "do_sample": False, "early_stopping": True, "length_penalty": 1.0}
-        config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
+        config_params = {k: getattr(model.generation_config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
 
     @slow
@@ -1205,6 +1222,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         generated_summaries = tok.batch_decode(hypotheses_batch.tolist())
         assert generated_summaries == EXPECTED
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_bart(self):
         article = (
@@ -1238,7 +1256,15 @@ class BartModelIntegrationTests(unittest.TestCase):
             article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
         ).input_ids.to(torch_device)
 
-        outputs = bart_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64, num_beams=1)
+        outputs = bart_model.generate(
+            input_ids,
+            penalty_alpha=0.5,
+            top_k=5,
+            max_length=64,
+            num_beams=1,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
         generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         self.assertListEqual(
@@ -1496,8 +1522,6 @@ class BartStandaloneDecoderModelTester:
 @require_torch
 class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BartDecoder, BartForCausalLM) if is_torch_available() else ()
-    fx_comptatible = True
-    test_pruning = False
     is_encoder_decoder = False
     test_missing_keys = False
 

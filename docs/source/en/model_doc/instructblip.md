@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2023-05-11 and added to Hugging Face Transformers on 2023-06-26.*
 
 # InstructBLIP
 
@@ -44,7 +45,6 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 ## InstructBlipConfig
 
 [[autodoc]] InstructBlipConfig
-    - from_vision_qformer_text_configs
 
 ## InstructBlipVisionConfig
 
@@ -57,7 +57,6 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 ## InstructBlipProcessor
 
 [[autodoc]] InstructBlipProcessor
-
 
 ## InstructBlipVisionModel
 

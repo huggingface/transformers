@@ -31,9 +31,6 @@ class SpeechT5Processor(ProcessorMixin):
             An instance of [`SpeechT5Tokenizer`]. The tokenizer is a required input.
     """
 
-    feature_extractor_class = "SpeechT5FeatureExtractor"
-    tokenizer_class = "SpeechT5Tokenizer"
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
@@ -167,20 +164,6 @@ class SpeechT5Processor(ProcessorMixin):
                 inputs["decoder_attention_mask"] = decoder_attention_mask
 
         return inputs
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
 
 __all__ = ["SpeechT5Processor"]

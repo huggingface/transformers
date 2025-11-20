@@ -124,7 +124,7 @@ def rename_key(name, config):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:
@@ -153,7 +153,6 @@ def convert_state_dict(orig_state_dict, config):
                 orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.bias"] = (
                     val[-dim:]
                 )
-            pass
         else:
             orig_state_dict[rename_key(key, config)] = val
 
@@ -170,7 +169,7 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
 
     if len(missing_keys) > 0:
-        raise ValueError("Missing keys when converting: {}".format(missing_keys))
+        raise ValueError(f"Missing keys when converting: {missing_keys}")
     for key in unexpected_keys:
         if not ("relative_position_index" in key or "relative_coords_table" in key or "self_mask" in key):
             raise ValueError(f"Unexpected key {key} in state_dict")

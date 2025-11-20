@@ -46,7 +46,7 @@ def make_linear_from_emb(emb):
 
 def rename_fairseq_keys(state_dict, expert_idx=None):
     new_dict = {}
-    for old_key in state_dict.keys():
+    for old_key in state_dict:
         key = old_key
         if "moe_layer.experts." in key:
             if expert_idx is not None:
@@ -85,7 +85,7 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weig
             )
             torch.save(expert_state, save_path)
             sharded_state_dicts.append(expert_state.keys())
-            total_size += sum([value.numel() for key, value in expert_state.items()]) * (
+            total_size += sum(value.numel() for key, value in expert_state.items()) * (
                 expert_state[list(expert_state)[0]].element_size()
             )
 

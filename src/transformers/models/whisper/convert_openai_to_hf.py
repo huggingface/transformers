@@ -21,7 +21,7 @@ import os
 import tempfile
 import urllib
 import warnings
-from typing import Any, List, Optional, Tuple
+from typing import Any, Optional
 
 import torch
 from huggingface_hub.utils import insecure_hashlib
@@ -184,7 +184,7 @@ def _download(url: str, root: str) -> Any:
 
 def convert_openai_whisper_to_tfms(
     checkpoint_path, pytorch_dump_folder_path
-) -> Tuple[WhisperForConditionalGeneration, bool, int]:
+) -> tuple[WhisperForConditionalGeneration, bool, int]:
     if ".pt" not in checkpoint_path:
         root = os.path.dirname(pytorch_dump_folder_path) or "."
         original_checkpoint = _download(_MODELS[checkpoint_path], root)
@@ -252,7 +252,7 @@ def convert_openai_whisper_to_tfms(
 
 
 # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
-def _bpe(mergeable_ranks, token: bytes, max_rank=None) -> List[bytes]:
+def _bpe(mergeable_ranks, token: bytes, max_rank=None) -> list[bytes]:
     parts = [bytes([b]) for b in token]
     while True:
         min_idx = None
@@ -317,8 +317,7 @@ def convert_tiktoken_to_hf(
 
         with open(merge_file, "w", encoding="utf-8") as writer:
             writer.write("#version: 0.2\n")
-            for bpe_tokens in merges:
-                writer.write(bpe_tokens + "\n")
+            writer.writelines(bpe_tokens + "\n" for bpe_tokens in merges)
 
         hf_tokenizer = WhisperTokenizer(vocab_file, merge_file)
 

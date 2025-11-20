@@ -17,7 +17,7 @@
 Feature extractor class for CLVP
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -106,7 +106,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="htk",
         )
 
-    def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
+    def _np_extract_fbank_features(self, waveform: np.ndarray) -> np.ndarray:
         """
         This method first computes the log-mel spectrogram of the provided audio then applies normalization along the
         each mel-filterbank, if `mel_norms` is provided.
@@ -130,7 +130,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         sampling_rate: Optional[int] = None,
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
@@ -148,7 +148,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
         seconds long and then the log-mel spectrogram is extracted from it.
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -170,7 +170,6 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             padding_value (`float`, *optional*, defaults to 0.0):
@@ -230,7 +229,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             self._np_extract_fbank_features(waveform).astype(np.float32) for waveform in input_features[0]
         ]
 
-        if isinstance(input_features[0], List):
+        if isinstance(input_features[0], list):
             padded_inputs["input_features"] = [np.asarray(feature) for feature in input_features]
         else:
             padded_inputs["input_features"] = input_features

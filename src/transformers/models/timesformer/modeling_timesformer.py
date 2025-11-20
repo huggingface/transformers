@@ -15,15 +15,16 @@
 """PyTorch TimeSformer model."""
 
 import collections
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -151,11 +152,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -179,7 +175,7 @@ class TimeSformerDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L57
@@ -245,7 +241,7 @@ class TimeSformerAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, output_attentions)
 
         attention_output = self.output(self_outputs[0])
@@ -288,7 +284,7 @@ class TimesformerOutput(nn.Module):
 
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L89
-class TimesformerLayer(nn.Module):
+class TimesformerLayer(GradientCheckpointingLayer):
     def __init__(self, config: TimesformerConfig, layer_index: int) -> None:
         super().__init__()
 
@@ -309,7 +305,7 @@ class TimesformerLayer(nn.Module):
         self.config = config
         self.attention_type = attention_type
         if attention_type not in ["divided_space_time", "space_only", "joint_space_time"]:
-            raise ValueError("Unknown attention type: {}".format(attention_type))
+            raise ValueError(f"Unknown attention type: {attention_type}")
 
         # Temporal Attention Parameters
         if self.attention_type == "divided_space_time":
@@ -432,14 +428,7 @@ class TimesformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, output_attentions)
+            layer_outputs = layer_module(hidden_states, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -460,24 +449,25 @@ class TimesformerEncoder(nn.Module):
 
 @auto_docstring
 class TimesformerPreTrainedModel(PreTrainedModel):
-    config_class = TimesformerConfig
+    config: TimesformerConfig
     base_model_prefix = "timesformer"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["TimesformerLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
+            init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
+                init.constant_(module.bias, 0)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.constant_(module.bias, 0)
-            nn.init.constant_(module.weight, 1.0)
+            init.constant_(module.bias, 0)
+            init.constant_(module.weight, 1.0)
         elif isinstance(module, TimesformerEmbeddings):
-            nn.init.trunc_normal_(module.cls_token, std=self.config.initializer_range)
-            nn.init.trunc_normal_(module.position_embeddings, std=self.config.initializer_range)
-            module.patch_embeddings.apply(self._init_weights)
+            init.trunc_normal_(module.cls_token, std=self.config.initializer_range)
+            init.trunc_normal_(module.position_embeddings, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -497,14 +487,6 @@ class TimesformerModel(TimesformerPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
@@ -512,7 +494,7 @@ class TimesformerModel(TimesformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], BaseModelOutput]:
         r"""
         Examples:
 
@@ -531,7 +513,7 @@ class TimesformerModel(TimesformerPreTrainedModel):
         ...     Decode the video with PyAV decoder.
         ...     Args:
         ...         container (`av.container.input.InputContainer`): PyAV container.
-        ...         indices (`List[int]`): List of frame indices to decode.
+        ...         indices (`list[int]`): List of frame indices to decode.
         ...     Returns:
         ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
         ...     '''
@@ -555,7 +537,7 @@ class TimesformerModel(TimesformerPreTrainedModel):
         ...         frame_sample_rate (`int`): Sample every n-th frame.
         ...         seg_len (`int`): Maximum allowed index of sample's last frame.
         ...     Returns:
-        ...         indices (`List[int]`): List of sampled frame indices
+        ...         indices (`list[int]`): List of sampled frame indices
         ...     '''
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)
@@ -642,7 +624,7 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImageClassifierOutput]:
+    ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -667,7 +649,7 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         ...     Decode the video with PyAV decoder.
         ...     Args:
         ...         container (`av.container.input.InputContainer`): PyAV container.
-        ...         indices (`List[int]`): List of frame indices to decode.
+        ...         indices (`list[int]`): List of frame indices to decode.
         ...     Returns:
         ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
         ...     '''
@@ -691,7 +673,7 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         ...         frame_sample_rate (`int`): Sample every n-th frame.
         ...         seg_len (`int`): Maximum allowed index of sample's last frame.
         ...     Returns:
-        ...         indices (`List[int]`): List of sampled frame indices
+        ...         indices (`list[int]`): List of sampled frame indices
         ...     '''
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)

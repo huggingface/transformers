@@ -12,21 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
+import importlib.metadata
 import inspect
-import warnings
-from typing import Any, Dict, List, Optional, Union
+import json
+import os
+import re
+from typing import Any, Literal, Optional, Union
 
 from packaging import version
 
 from ..utils import (
+    CONFIG_NAME,
+    cached_file,
     check_peft_version,
+    extract_commit_hash,
     find_adapter_config_file,
     is_accelerate_available,
     is_peft_available,
     is_torch_available,
     logging,
 )
+from ..utils.hub import DownloadKwargs
 
 
 if is_torch_available():
@@ -43,20 +49,35 @@ MIN_PEFT_VERSION = "0.5.0"
 logger = logging.get_logger(__name__)
 
 
+# DO NOT MODIFY, KEPT FOR BC ONLY
+VLMS = [
+    "aria",
+    "ayavision",
+    "emu3",
+    "fuyu",
+    "gotocr2",
+    "gemma3",
+    "internvl",
+    "llava",  # all llava prefixed models fall under this check
+    "mistral3",
+    "mllama",
+    "paligemma",
+    "qwen2vl",
+    "qwen2_5_vl",
+    "videollava",
+    "vipllava",
+]
+
+
 class PeftAdapterMixin:
     """
     A class containing all functions for loading and using adapters weights that are supported in PEFT library. For
     more details about adapters and injecting them on a transformer-based model, check out the documentation of PEFT
     library: https://huggingface.co/docs/peft/index
 
-    Currently supported PEFT methods are all non-prefix tuning methods. Below is the list of supported PEFT methods
-    that anyone can load, train and run with this mixin class:
-    - Low Rank Adapters (LoRA): https://huggingface.co/docs/peft/conceptual_guides/lora
-    - IA3: https://huggingface.co/docs/peft/conceptual_guides/ia3
-    - AdaLora: https://huggingface.co/papers/2303.10512
-
-    Other PEFT models such as prompt tuning, prompt learning are out of scope as these adapters are not "injectable"
-    into a torch module. For using these methods, please refer to the usage guide of PEFT library.
+    Currently supported PEFT methods are all non-prompt learning methods (LoRA, IA³, etc.). Other PEFT models such as
+    prompt tuning, prompt learning are out of scope as these adapters are not "injectable" into a torch module. For
+    using these methods, please refer to the usage guide of PEFT library.
 
     With this mixin, if the correct PEFT version is installed, it is possible to:
 
@@ -68,6 +89,7 @@ class PeftAdapterMixin:
     """
 
     _hf_peft_config_loaded = False
+    _prepare_peft_hotswap_kwargs: Optional[dict] = None
 
     def load_adapter(
         self,
@@ -75,44 +97,42 @@ class PeftAdapterMixin:
         adapter_name: Optional[str] = None,
         revision: Optional[str] = None,
         token: Optional[str] = None,
-        device_map: Optional[str] = "auto",
+        device_map: str = "auto",
         max_memory: Optional[str] = None,
         offload_folder: Optional[str] = None,
         offload_index: Optional[int] = None,
-        peft_config: Optional[Dict[str, Any]] = None,
-        adapter_state_dict: Optional[Dict[str, "torch.Tensor"]] = None,
+        peft_config: Optional[dict[str, Any]] = None,
+        adapter_state_dict: Optional[dict[str, "torch.Tensor"]] = None,
         low_cpu_mem_usage: bool = False,
         is_trainable: bool = False,
-        adapter_kwargs: Optional[Dict[str, Any]] = None,
+        hotswap: bool | Literal["auto"] = "auto",
+        adapter_kwargs: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Load adapter weights from file or remote Hub folder. If you are not familiar with adapters and PEFT methods, we
         invite you to read more about them on PEFT official documentation: https://huggingface.co/docs/peft
 
-        Requires peft as a backend to load the adapter weights.
+        Requires PEFT to be installed as a backend to load the adapter weights.
 
         Args:
             peft_model_id (`str`, *optional*):
                 The identifier of the model to look for on the Hub, or a local path to the saved adapter config file
                 and adapter weights.
             adapter_name (`str`, *optional*):
-                The adapter name to use. If not set, will use the default adapter.
+                The adapter name to use. If not set, will use the name "default".
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
 
-                <Tip>
-
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
-
-                </Tip>
+                > [!TIP]
+                > To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
             token (`str`, `optional`):
                 Whether to use authentication token to load the remote folder. Useful to load private repositories
-                that are on HuggingFace Hub. You might need to call `huggingface-cli login` and paste your tokens to
+                that are on HuggingFace Hub. You might need to call `hf auth login` and paste your tokens to
                 cache it.
-            device_map (`str` or `Dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
+            device_map (`str` or `dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
                 A map that specifies where each submodule should go. It doesn't need to be refined to each
                 parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
                 same device. If we only pass the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank
@@ -129,26 +149,80 @@ class PeftAdapterMixin:
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_index (`int`, `optional`):
                 `offload_index` argument to be passed to `accelerate.dispatch_model` method.
-            peft_config (`Dict[str, Any]`, *optional*):
-                The configuration of the adapter to add, supported adapters are non-prefix tuning and adaption prompts
-                methods. This argument is used in case users directly pass PEFT state dicts
-            adapter_state_dict (`Dict[str, torch.Tensor]`, *optional*):
+            peft_config (`dict[str, Any]`, *optional*):
+                The configuration of the adapter to add, supported adapters are all non-prompt learning configs (LoRA,
+                IA³, etc). This argument is used in case users directly pass PEFT state dicts.
+            adapter_state_dict (`dict[str, torch.Tensor]`, *optional*):
                 The state dict of the adapter to load. This argument is used in case users directly pass PEFT state
-                dicts
+                dicts.
             low_cpu_mem_usage (`bool`, *optional*, defaults to `False`):
                 Reduce memory usage while loading the PEFT adapter. This should also speed up the loading process.
                 Requires PEFT version 0.13.0 or higher.
             is_trainable (`bool`, *optional*, defaults to `False`):
                 Whether the adapter should be trainable or not. If `False`, the adapter will be frozen and can only be
                 used for inference.
-            adapter_kwargs (`Dict[str, Any]`, *optional*):
+            hotswap : (`"auto"` or `bool`, *optional*, defaults to `"auto"`)
+                Whether to substitute an existing (LoRA) adapter with the newly loaded adapter in-place. This means
+                that, instead of loading an additional adapter, this will take the existing adapter weights and replace
+                them with the weights of the new adapter. This can be faster and more memory efficient. However, the
+                main advantage of hotswapping is that when the model is compiled with torch.compile, loading the new
+                adapter does not require recompilation of the model. When using hotswapping, the passed `adapter_name`
+                should be the name of an already loaded adapter.
+
+                If the new adapter and the old adapter have different ranks and/or LoRA alphas (i.e. scaling), you need
+                to call an additional method before loading the adapter:
+
+                ```py
+                model = AutoModel.from_pretrained(...)
+                max_rank = ...  # the highest rank among all LoRAs that you want to load
+                # call *before* compiling and loading the LoRA adapter
+                model.enable_peft_hotswap(target_rank=max_rank)
+                model.load_adapter(file_name_1, adapter_name="default")
+                # optionally compile the model now
+                model = torch.compile(model, ...)
+                output_1 = model(...)
+                # now you can hotswap the 2nd adapter, use the same name as for the 1st
+                # hotswap is activated by default since enable_peft_hotswap was called
+                model.load_adapter(file_name_2, adapter_name="default")
+                output_2 = model(...)
+                ```
+
+                By default, hotswap is disabled and requires passing `hotswap=True`. If you called
+                `enable_peft_hotswap` first, it is enabled. You can still manually disable it in that case by passing
+                `hotswap=False`.
+
+                Note that hotswapping comes with a couple of limitations documented here:
+                https://huggingface.co/docs/peft/main/en/package_reference/hotswap
+            adapter_kwargs (`dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to the `from_pretrained` method of the adapter config and
                 `find_adapter_config_file` method.
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
 
+        from peft import PeftType
+
+        if hotswap == "auto":
+            # if user called model.enable_peft_hotswap and this is not the first adapter, enable hotswap
+            hotswap_enabled = getattr(self, "_hotswap_enabled", False)
+            not_first_adapter = bool(self._hf_peft_config_loaded and (adapter_name in self.peft_config))
+            hotswap = hotswap_enabled and not_first_adapter
+
+        if hotswap:
+            min_version_hotswap = "0.15.0"
+            if version.parse(importlib.metadata.version("peft")) < version.parse(min_version_hotswap):
+                raise ValueError(f"To hotswap the adapter, you need PEFT >= v{min_version_hotswap}.")
+            if (not self._hf_peft_config_loaded) or (adapter_name not in self.peft_config):
+                raise ValueError(
+                    "To hotswap an adapter, there must already be an existing adapter with the same adapter name."
+                )
+            if any(conf.peft_type != PeftType.LORA for conf in self.peft_config.values()):
+                raise ValueError("Hotswapping is currently only supported for LoRA, please set `hotswap=False`.")
+
         # peft only supports low_cpu_mem_usage starting from v0.13.0
         peft_load_kwargs = {}
+        key_mapping = adapter_kwargs.pop("key_mapping", None) if adapter_kwargs is not None else None
+        if key_mapping is None and any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
+            key_mapping = self._checkpoint_conversion_mapping
         if low_cpu_mem_usage:
             min_version_lcmu = "0.13.0"
             if version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_lcmu):
@@ -166,8 +240,12 @@ class PeftAdapterMixin:
         from peft import PeftConfig, inject_adapter_in_model, load_peft_weights
         from peft.utils import set_peft_model_state_dict
 
-        if self._hf_peft_config_loaded and adapter_name in self.peft_config:
+        if self._hf_peft_config_loaded and (not hotswap) and (adapter_name in self.peft_config):
             raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
+        elif hotswap and ((not self._hf_peft_config_loaded) or (adapter_name not in self.peft_config)):
+            raise ValueError(
+                "To hotswap an adapter, there must already be an existing adapter with the same adapter name."
+            )
 
         if peft_model_id is None and (adapter_state_dict is None and peft_config is None):
             raise ValueError(
@@ -216,8 +294,13 @@ class PeftAdapterMixin:
             )
             peft_config.inference_mode = not is_trainable
 
-        # Create and add fresh new adapters into the model.
-        inject_adapter_in_model(peft_config, self, adapter_name, **peft_load_kwargs)
+        if peft_config.peft_type != PeftType.LORA:
+            raise ValueError("Hotswapping is currently only supported for LoRA, please set `hotswap=False`.")
+
+        if not hotswap:
+            # TODO: WE NEED TOO APPLY OUR DYNAMIC WEIGHT CONVERSION AT SOME POINT HERE!
+            # Create and add fresh new adapters into the model, unless the weights are hotswapped
+            inject_adapter_in_model(peft_config, self, adapter_name, **peft_load_kwargs)
 
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
@@ -233,12 +316,54 @@ class PeftAdapterMixin:
                 new_key = key[len(prefix) :]
             else:
                 new_key = key
+
+            if key_mapping:  # TODO dynamic weight loader for adapters
+                for pattern, replacement in key_mapping.items():
+                    new_key, n_replace = re.subn(pattern, replacement, new_key)
+                    # Early exit of the loop
+                    if n_replace > 0:
+                        break
+
+            # For hotswapping, we need the adapter name to be present in the state dict keys
+            if hotswap:
+                if key.endswith("lora_A.weight") or key.endswith("lora_B.weight"):
+                    new_key = new_key[: -len(".weight")] + f".{adapter_name}.weight"
+                elif key.endswith("lora_B.bias"):  # lora_bias=True option
+                    new_key = new_key[: -len(".bias")] + f".{adapter_name}.bias"
             processed_adapter_state_dict[new_key] = value
 
         # Load state dict
-        incompatible_keys = set_peft_model_state_dict(
-            self, processed_adapter_state_dict, adapter_name, **peft_load_kwargs
-        )
+        if not hotswap:
+            incompatible_keys = set_peft_model_state_dict(
+                self, processed_adapter_state_dict, adapter_name, **peft_load_kwargs
+            )
+
+            if self._prepare_peft_hotswap_kwargs is not None:
+                # For hotswapping of compiled models or adapters with different ranks.
+                # If the user called enable_peft_hotswap, we need to ensure it is called:
+                # - after the first adapter was loaded
+                # - before the model is compiled and the 2nd adapter is being hotswapped in
+                # Therefore, it needs to be called here
+                from peft.utils.hotswap import prepare_model_for_compiled_hotswap
+
+                prepare_model_for_compiled_hotswap(self, config=peft_config, **self._prepare_peft_hotswap_kwargs)
+                # We only want to call prepare_model_for_compiled_hotswap once
+                self._prepare_peft_hotswap_kwargs = None
+        else:
+            from peft.utils.hotswap import check_hotswap_configs_compatible, hotswap_adapter_from_state_dict
+
+            check_hotswap_configs_compatible(self.peft_config[adapter_name], peft_config)
+            try:
+                hotswap_adapter_from_state_dict(
+                    model=self,
+                    state_dict=processed_adapter_state_dict,
+                    adapter_name=adapter_name,
+                    config=peft_config,
+                )
+            except Exception as e:
+                logger.error(f"Hotswapping {adapter_name} was unsucessful with the following error: \n{e}")
+                raise
+            incompatible_keys = None
 
         if incompatible_keys is not None:
             err_msg = ""
@@ -280,6 +405,47 @@ class PeftAdapterMixin:
                 offload_index=offload_index,
             )
 
+    def enable_peft_hotswap(
+        self, target_rank: int = 128, check_compiled: Literal["error", "warn", "ignore"] = "error"
+    ) -> None:
+        """Enables the possibility to hotswap PEFT adapters with different ranks, or, if the model is compiled, without
+        triggering recompilation.
+
+        Right now, hotswapping is only supported for LoRA.
+
+        Calling this method is only required when hotswapping adapters and if the model is compiled or if the ranks of
+        the loaded adapters differ. If the ranks are all identical and the model is not compiled, hotswapping works
+        without calling this method first.
+
+        Args:
+            target_rank (`int`, *optional*, defaults to `128`):
+                The highest rank among all the adapters that will be loaded.
+            check_compiled (`str`, *optional*, defaults to `"error"`):
+                How to handle the case when the model is already compiled, which should generally be avoided. The
+                options are:
+                  - "error" (default): raise an error
+                  - "warn": issue a warning
+                  - "ignore": do nothing
+        """
+        min_version_hotswap = "0.15.0"
+        if version.parse(importlib.metadata.version("peft")) < version.parse(min_version_hotswap):
+            raise ValueError(f"To hotswap the adapter, you need PEFT >= v{min_version_hotswap}.")
+
+        if getattr(self, "peft_config", {}):
+            if check_compiled == "error":
+                raise RuntimeError("Call `enable_peft_hotswap` before loading the first adapter.")
+            elif check_compiled == "warn":
+                logger.warning(
+                    "It is recommended to call `enable_peft_hotswap` before loading the first adapter to avoid recompilation."
+                )
+            elif check_compiled != "ignore":
+                raise ValueError(
+                    f"check_compiles should be one of 'error', 'warn', or 'ignore', got '{check_compiled}' instead."
+                )
+
+        self._hotswap_enabled = True
+        self._prepare_peft_hotswap_kwargs = {"target_rank": target_rank, "check_compiled": check_compiled}
+
     def add_adapter(self, adapter_config, adapter_name: Optional[str] = None) -> None:
         r"""
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
@@ -289,10 +455,12 @@ class PeftAdapterMixin:
         name is assigned to the adapter to follow the convention of PEFT library (in PEFT we use "default" as the
         default adapter name).
 
+        Note that the newly added adapter is not automatically activated. To activate it, use `model.set_adapter`.
+
         Args:
             adapter_config (`~peft.PeftConfig`):
-                The configuration of the adapter to add, supported adapters are non-prefix tuning and adaption prompts
-                methods
+                The configuration of the adapter to add, supported adapters are non-prompt learning methods (LoRA,
+                IA³, etc.).
             adapter_name (`str`, *optional*, defaults to `"default"`):
                 The name of the adapter to add. If no name is passed, a default name is assigned to the adapter.
         """
@@ -313,11 +481,12 @@ class PeftAdapterMixin:
         # Retrieve the name or path of the model, one could also use self.config._name_or_path
         # but to be consistent with what we do in PEFT: https://github.com/huggingface/peft/blob/6e783780ca9df3a623992cc4d1d665001232eae0/src/peft/mapping.py#L100
         adapter_config.base_model_name_or_path = self.__dict__.get("name_or_path", None)
+        # TODO: WE NEED TOO APPLY OUR DYNAMIC WEIGHT CONVERSION AT SOME POINT HERE!
         inject_adapter_in_model(adapter_config, self, adapter_name)
 
         self.set_adapter(adapter_name)
 
-    def set_adapter(self, adapter_name: Union[List[str], str]) -> None:
+    def set_adapter(self, adapter_name: Union[list[str], str]) -> None:
         """
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
@@ -325,7 +494,7 @@ class PeftAdapterMixin:
         Sets a specific adapter by forcing the model to use a that adapter and disable the other adapters.
 
         Args:
-            adapter_name (`Union[List[str], str]`):
+            adapter_name (`Union[list[str], str]`):
                 The name of the adapter to set. Can be also a list of strings to set multiple adapters.
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
@@ -407,7 +576,7 @@ class PeftAdapterMixin:
                 else:
                     module.disable_adapters = False
 
-    def active_adapters(self) -> List[str]:
+    def active_adapters(self) -> list[str]:
         """
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
@@ -438,13 +607,6 @@ class PeftAdapterMixin:
             active_adapters = [active_adapters]
 
         return active_adapters
-
-    def active_adapter(self) -> str:
-        warnings.warn(
-            "The `active_adapter` method is deprecated and will be removed in a future version.", FutureWarning
-        )
-
-        return self.active_adapters()[0]
 
     def get_adapter_state_dict(self, adapter_name: Optional[str] = None, state_dict: Optional[dict] = None) -> dict:
         """
@@ -487,7 +649,7 @@ class PeftAdapterMixin:
         accelerate (i.e. with `device_map=xxx`)
 
         Args:
-            device_map (`str` or `Dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
+            device_map (`str` or `dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
                 A map that specifies where each submodule should go. It doesn't need to be refined to each
                 parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
                 same device. If we only pass the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank
@@ -531,36 +693,49 @@ class PeftAdapterMixin:
             **dispatch_model_kwargs,
         )
 
-    def delete_adapter(self, adapter_names: Union[List[str], str]) -> None:
+    def delete_adapter(self, adapter_names: Union[list[str], str]) -> None:
         """
-        Delete an adapter's LoRA layers from the underlying model.
+        Delete a PEFT adapter from the underlying model.
 
         Args:
-            adapter_names (`Union[List[str], str]`):
+            adapter_names (`Union[list[str], str]`):
                 The name(s) of the adapter(s) to delete.
-
-        Example:
-
-        ```py
-        from diffusers import AutoPipelineForText2Image
-        import torch
-
-        pipeline = AutoPipelineForText2Image.from_pretrained(
-            "stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16
-        ).to("cuda")
-        pipeline.load_lora_weights(
-            "jbilcke-hf/sdxl-cinematic-1", weight_name="pytorch_lora_weights.safetensors", adapter_names="cinematic"
-        )
-        pipeline.delete_adapters("cinematic")
-        ```
         """
 
         check_peft_version(min_version=MIN_PEFT_VERSION)
+        min_version_delete_adapter = "0.18.0"
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
 
-        from peft.tuners.tuners_utils import BaseTunerLayer
+        # TODO: delete old version once support for PEFT < 0.18.0 is dropped
+        def old_delete_adapter(model, adapter_name, prefix=None):
+            from peft.tuners.tuners_utils import BaseTunerLayer
+            from peft.utils import ModulesToSaveWrapper
+
+            has_modules_to_save = False
+            for module in model.modules():
+                if isinstance(module, ModulesToSaveWrapper):
+                    has_modules_to_save |= True
+                    continue
+                if isinstance(module, BaseTunerLayer):
+                    if hasattr(module, "delete_adapter"):
+                        module.delete_adapter(adapter_name)
+                    else:
+                        raise ValueError(
+                            "The version of PEFT you are using is not compatible, please use a version that is greater than 0.6.1"
+                        )
+
+            if has_modules_to_save:
+                logger.warning(
+                    "The deleted adapter contains modules_to_save, which could not be deleted. For this to work, PEFT version "
+                    f">= {min_version_delete_adapter} is required."
+                )
+
+        if version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_delete_adapter):
+            from peft.functional import delete_adapter
+        else:
+            delete_adapter = old_delete_adapter
 
         if isinstance(adapter_names, str):
             adapter_names = [adapter_names]
@@ -572,16 +747,9 @@ class PeftAdapterMixin:
                 f"The following adapter(s) are not present and cannot be deleted: {', '.join(missing_adapters)}"
             )
 
-        for adapter_name in adapter_names:
-            for module in self.modules():
-                if isinstance(module, BaseTunerLayer):
-                    if hasattr(module, "delete_adapter"):
-                        module.delete_adapter(adapter_name)
-                    else:
-                        raise ValueError(
-                            "The version of PEFT you are using is not compatible, please use a version that is greater than 0.6.1"
-                        )
-
+        prefixes = [f"{self.peft_config[adapter_name].peft_type.value.lower()}_" for adapter_name in adapter_names]
+        for adapter_name, prefix in zip(adapter_names, prefixes):
+            delete_adapter(self, adapter_name=adapter_name, prefix=prefix)
             # For transformers integration - we need to pop the adapter from the config
             if getattr(self, "_hf_peft_config_loaded", False) and hasattr(self, "peft_config"):
                 self.peft_config.pop(adapter_name, None)
@@ -591,3 +759,57 @@ class PeftAdapterMixin:
         if len(self.peft_config) == 0:
             del self.peft_config
             self._hf_peft_config_loaded = False
+
+
+def maybe_load_adapters(
+    pretrained_model_name_or_path,
+    download_kwargs: DownloadKwargs,
+    **adapter_kwargs,
+):
+    if pretrained_model_name_or_path is None or not is_peft_available():
+        return None, pretrained_model_name_or_path, adapter_kwargs
+
+    token = download_kwargs.get("token")
+
+    if download_kwargs.get("commit_hash") is None:
+        resolved_config_file = cached_file(
+            pretrained_model_name_or_path,
+            CONFIG_NAME,
+            cache_dir=download_kwargs.get("cache_dir"),
+            force_download=bool(download_kwargs.get("force_download", False)),
+            proxies=download_kwargs.get("proxies"),
+            local_files_only=bool(download_kwargs.get("local_files_only", False)),
+            token=token,
+            revision=download_kwargs.get("revision"),
+            subfolder=download_kwargs.get("subfolder"),
+            _raise_exceptions_for_gated_repo=False,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
+        )
+        download_kwargs["commit_hash"] = extract_commit_hash(resolved_config_file, None)
+
+    _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
+
+    token_from_adapter_kwargs = adapter_kwargs.pop("token", None)
+
+    if _adapter_model_path is None:
+        peft_kwargs = adapter_kwargs.copy()
+        for arg_name in ("cache_dir", "proxies", "subfolder"):  # don't override revision
+            if (arg_name not in peft_kwargs) and (arg_name in download_kwargs):
+                peft_kwargs[arg_name] = download_kwargs[arg_name]
+        if "commit_hash" in download_kwargs:
+            peft_kwargs["_commit_hash"] = download_kwargs["commit_hash"]
+        peft_kwargs["force_download"] = bool(download_kwargs.get("force_download", False))
+        peft_kwargs["local_files_only"] = bool(download_kwargs.get("local_files_only", False))
+        peft_kwargs["token"] = token or token_from_adapter_kwargs
+        _adapter_model_path = find_adapter_config_file(
+            pretrained_model_name_or_path,
+            **peft_kwargs,
+        )
+
+    if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
+        with open(_adapter_model_path, "r", encoding="utf-8") as f:
+            _adapter_model_path = pretrained_model_name_or_path
+            pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
+
+    return _adapter_model_path, pretrained_model_name_or_path, adapter_kwargs

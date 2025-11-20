@@ -19,14 +19,14 @@
 # limitations under the License.
 """Idefics model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class IdeficsVisionConfig(PretrainedConfig):
+class IdeficsVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`IdeficsModel`]. It is used to instantiate an
     Idefics model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -34,8 +34,8 @@ class IdeficsVisionConfig(PretrainedConfig):
 
     e.g. [HuggingFaceM4/idefics-9b](https://huggingface.co/HuggingFaceM4/idefics-9b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         embed_dim (`int`, *optional*, defaults to 768):
@@ -103,7 +103,7 @@ class IdeficsVisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class IdeficsPerceiverConfig(PretrainedConfig):
+class IdeficsPerceiverConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`IdeficsModel`]. It is used to instantiate an
     Idefics model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -111,8 +111,8 @@ class IdeficsPerceiverConfig(PretrainedConfig):
 
     e.g. [HuggingFaceM4/idefics-9b](https://huggingface.co/HuggingFaceM4/idefics-9b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         use_resampler (`bool`, *optional*, defaults to `False`):
@@ -151,7 +151,7 @@ class IdeficsPerceiverConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class IdeficsConfig(PretrainedConfig):
+class IdeficsConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`IdeficsModel`]. It is used to instantiate an
     Idefics model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -159,8 +159,8 @@ class IdeficsConfig(PretrainedConfig):
 
     e.g. [HuggingFaceM4/idefics-9b](https://huggingface.co/HuggingFaceM4/idefics-9b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         additional_vocab_size (`int`, *optional*, defaults to 0):
@@ -316,7 +316,7 @@ class IdeficsConfig(PretrainedConfig):
         )
 
         # IMPORTANT: Do not do any __init__ args-based checks in the constructor, since
-        # PretrainedConfig.from_dict first instantiates the class with the config dict and only then
+        # PreTrainedConfig.from_dict first instantiates the class with the config dict and only then
         # updates the config object with `kwargs` from from_pretrained, so during the instantiation
         # of this object many attributes have default values and haven't yet been overridden.
         # Do any required checks inside `from_pretrained` once the superclass' `from_pretrained` was run.

@@ -16,7 +16,7 @@
 Processor class for UDOP.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from transformers import logging
 
@@ -30,8 +30,8 @@ logger = logging.get_logger(__name__)
 
 
 class UdopTextKwargs(TextKwargs, total=False):
-    word_labels: Optional[Union[List[int], List[List[int]]]]
-    boxes: Union[List[List[int]], List[List[List[int]]]]
+    word_labels: Optional[Union[list[int], list[list[int]]]]
+    boxes: Optional[Union[list[list[int]], list[list[list[int]]]]]
 
 
 class UdopProcessorKwargs(ProcessingKwargs, total=False):
@@ -48,7 +48,6 @@ class UdopProcessorKwargs(ProcessingKwargs, total=False):
             "return_length": False,
             "verbose": True,
         },
-        "images_kwargs": {},
     }
 
 
@@ -74,27 +73,13 @@ class UdopProcessor(ProcessorMixin):
             An instance of [`UdopTokenizer`] or [`UdopTokenizerFast`]. The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "LayoutLMv3ImageProcessor"
-    tokenizer_class = ("UdopTokenizer", "UdopTokenizerFast")
-    # For backward compatibility. See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
-    optional_call_args = ["text_pair"]
-
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        # The following is to capture `text_pair` argument that may be passed as a positional argument.
-        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details,
-        # or this conversation for more context: https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
-        # This behavior is only needed for backward compatibility and will be removed in future versions.
-        #
-        *args,
-        audio=None,
-        videos=None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[UdopProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -115,7 +100,6 @@ class UdopProcessor(ProcessorMixin):
             UdopProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
-            **self.prepare_and_validate_optional_call_args(*args),
         )
 
         boxes = output_kwargs["text_kwargs"].pop("boxes", None)
@@ -192,25 +176,12 @@ class UdopProcessor(ProcessorMixin):
 
         return images_with_overflow
 
-    # Copied from transformers.models.layoutlmv3.processing_layoutlmv3.LayoutLMv3Processor.batch_decode
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.layoutlmv3.processing_layoutlmv3.LayoutLMv3Processor.decode
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
     def model_input_names(self):
-        return ["pixel_values", "input_ids", "bbox", "attention_mask"]
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+
+        return list(tokenizer_input_names + image_processor_input_names + ["bbox"])
 
 
 __all__ = ["UdopProcessor"]

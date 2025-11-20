@@ -16,7 +16,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import torch
 from filelock import FileLock
@@ -107,12 +107,8 @@ class Split(Enum):
 
 
 class SquadDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach soon.
-    """
-
     args: SquadDataTrainingArguments
-    features: List[SquadFeatures]
+    features: list[SquadFeatures]
     mode: Split
     is_language_sensitive: bool
 
@@ -122,9 +118,9 @@ class SquadDataset(Dataset):
         tokenizer: PreTrainedTokenizer,
         limit_length: Optional[int] = None,
         mode: Union[str, Split] = Split.train,
-        is_language_sensitive: Optional[bool] = False,
+        is_language_sensitive: bool = False,
         cache_dir: Optional[str] = None,
-        dataset_format: Optional[str] = "pt",
+        dataset_format: str = "pt",
     ):
         self.args = args
         self.is_language_sensitive = is_language_sensitive
@@ -195,7 +191,7 @@ class SquadDataset(Dataset):
     def __len__(self):
         return len(self.features)
 
-    def __getitem__(self, i) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, i) -> dict[str, torch.Tensor]:
         # Convert to Tensors and build dataset
         feature = self.features[i]
 

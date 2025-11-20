@@ -18,7 +18,7 @@ import math
 import random
 from collections.abc import Iterable
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -32,11 +32,12 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 from ...utils.import_utils import requires
 
@@ -56,11 +57,94 @@ FLAVA_CODEBOOK_STD = [1.0, 1.0, 1.0]
 LOGIT_LAPLACE_EPS: float = 0.1
 
 
+class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    return_image_mask (`bool`, *optional*, defaults to `False`):
+        Whether to return the image mask. Can be overridden by the `return_image_mask` parameter in `preprocess`.
+    input_size_patches (`int`, *optional*, defaults to 14):
+        Number of patches in the image in height and width direction. 14x14 = 196 total patches. Can be overridden
+        by the `input_size_patches` parameter in `preprocess`.
+    total_mask_patches (`int`, *optional*, defaults to 75):
+        Total number of patches that should be masked. Can be overridden by the `total_mask_patches` parameter in
+        `preprocess`.
+    mask_group_min_patches (`int`, *optional*, defaults to 16):
+        Minimum number of patches that should be masked. Can be overridden by the `mask_group_min_patches`
+        parameter in `preprocess`.
+    mask_group_max_patches (`int`, *optional*):
+        Maximum number of patches that should be masked. Can be overridden by the `mask_group_max_patches`
+        parameter in `preprocess`.
+    mask_group_min_aspect_ratio (`float`, *optional*, defaults to 0.3):
+        Minimum aspect ratio of the mask window. Can be overridden by the `mask_group_min_aspect_ratio` parameter
+        in `preprocess`.
+    mask_group_max_aspect_ratio (`float`, *optional*):
+        Maximum aspect ratio of the mask window. Can be overridden by the `mask_group_max_aspect_ratio` parameter
+        in `preprocess`.
+    return_codebook_pixels (`bool`, *optional*, defaults to `False`):
+        Whether to return the codebook pixel values.
+    codebook_do_resize (`bool`, *optional*, defaults to `True`):
+        Whether to resize the input for codebook to a certain. Can be overridden by the `codebook_do_resize`
+        parameter in `preprocess`. `codebook_size`.
+    codebook_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        Resize the input for codebook to the given size. Can be overridden by the `codebook_size` parameter in
+        `preprocess`.
+    codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
+        Resampling filter to use if resizing the codebook image. Can be overridden by the `codebook_resample`
+        parameter in `preprocess`.
+    codebook_do_center_crop (`bool`, *optional*, defaults to `True`):
+        Whether to crop the input for codebook at the center. If the input size is smaller than
+        `codebook_crop_size` along any edge, the image is padded with 0's and then center cropped. Can be
+        overridden by the `codebook_do_center_crop` parameter in `preprocess`.
+    codebook_crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        Desired output size for codebook input when applying center-cropping. Can be overridden by the
+        `codebook_crop_size` parameter in `preprocess`.
+    codebook_do_rescale (`bool`, *optional*, defaults to `True`):
+        Whether to rescale the input for codebook by the specified scale `codebook_rescale_factor`. Can be
+        overridden by the `codebook_do_rescale` parameter in `preprocess`.
+    codebook_rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+        Defines the scale factor to use if rescaling the codebook image. Can be overridden by the
+        `codebook_rescale_factor` parameter in `preprocess`.
+    codebook_do_map_pixels (`bool`, *optional*, defaults to `True`):
+        Whether to map the pixel values of the codebook input to (1 - 2e)x + e. Can be overridden by the
+        `codebook_do_map_pixels` parameter in `preprocess`.
+    codebook_do_normalize (`bool`, *optional*, defaults to `True`):
+        Whether or not to normalize the input for codebook with `codebook_image_mean` and `codebook_image_std`. Can
+        be overridden by the `codebook_do_normalize` parameter in `preprocess`.
+    codebook_image_mean (`Optional[Union[float, Iterable[float]]]`, *optional*, defaults to `[0, 0, 0]`):
+        The sequence of means for each channel, to be used when normalizing images for codebook. Can be overridden
+        by the `codebook_image_mean` parameter in `preprocess`.
+    codebook_image_std (`Optional[Union[float, Iterable[float]]]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+        The sequence of standard deviations for each channel, to be used when normalizing images for codebook. Can
+        be overridden by the `codebook_image_std` parameter in `preprocess`.
+    """
+
+    # Mask related params
+    return_image_mask: bool
+    input_size_patches: int
+    total_mask_patches: int
+    mask_group_min_patches: int
+    mask_group_max_patches: int
+    mask_group_min_aspect_ratio: float
+    mask_group_max_aspect_ratio: float
+    # Codebook related params
+    return_codebook_pixels: bool
+    codebook_do_resize: bool
+    codebook_size: bool
+    codebook_resample: int
+    codebook_do_center_crop: bool
+    codebook_crop_size: int
+    codebook_do_rescale: bool
+    codebook_rescale_factor: Union[int, float]
+    codebook_do_map_pixels: bool
+    codebook_do_normalize: bool
+    codebook_image_mean: Union[float, Iterable[float]]
+    codebook_image_std: Union[float, Iterable[float]]
+
+
 # Inspired from https://github.com/microsoft/unilm/blob/master/beit/masking_generator.py
 class FlavaMaskingGenerator:
     def __init__(
         self,
-        input_size: Union[int, Tuple[int, int]] = 14,
+        input_size: Union[int, tuple[int, int]] = 14,
         total_mask_patches: int = 75,
         mask_group_max_patches: Optional[int] = None,
         mask_group_min_patches: int = 16,
@@ -144,14 +228,14 @@ class FlavaImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in `preprocess`.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after resizing. Can be overridden by the `size` parameter in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in
             `preprocess`.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to center crop the images. Can be overridden by the `do_center_crop` parameter in `preprocess`.
-        crop_size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
+        crop_size (`dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of image after the center crop `(crop_size["height"], crop_size["width"])`. Can be overridden by the
             `crop_size` parameter in `preprocess`.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -162,10 +246,10 @@ class FlavaImageProcessor(BaseImageProcessor):
             `preprocess`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in `preprocess`.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         return_image_mask (`bool`, *optional*, defaults to `False`):
@@ -191,7 +275,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         codebook_do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input for codebook to a certain. Can be overridden by the `codebook_do_resize`
             parameter in `preprocess`. `codebook_size`.
-        codebook_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        codebook_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Resize the input for codebook to the given size. Can be overridden by the `codebook_size` parameter in
             `preprocess`.
         codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
@@ -201,7 +285,7 @@ class FlavaImageProcessor(BaseImageProcessor):
             Whether to crop the input for codebook at the center. If the input size is smaller than
             `codebook_crop_size` along any edge, the image is padded with 0's and then center cropped. Can be
             overridden by the `codebook_do_center_crop` parameter in `preprocess`.
-        codebook_crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        codebook_crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Desired output size for codebook input when applying center-cropping. Can be overridden by the
             `codebook_crop_size` parameter in `preprocess`.
         codebook_do_rescale (`bool`, *optional*, defaults to `True`):
@@ -225,14 +309,15 @@ class FlavaImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = FlavaImageProcessorKwargs
 
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -306,7 +391,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         self.codebook_image_std = codebook_image_std if codebook_image_std is not None else FLAVA_CODEBOOK_STD
 
     @classmethod
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
         created using from_dict and kwargs e.g. `FlavaImageProcessor.from_pretrained(checkpoint, codebook_size=600)`
@@ -318,7 +403,7 @@ class FlavaImageProcessor(BaseImageProcessor):
             image_processor_dict["codebook_crop_size"] = kwargs.pop("codebook_crop_size")
         return super().from_dict(image_processor_dict, **kwargs)
 
-    @lru_cache()
+    @lru_cache
     def masking_generator(
         self,
         input_size_patches,
@@ -341,7 +426,7 @@ class FlavaImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -353,7 +438,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
@@ -393,15 +478,15 @@ class FlavaImageProcessor(BaseImageProcessor):
         self,
         image: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_map_pixels: Optional[bool] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[ChannelDimension] = None,
@@ -458,15 +543,15 @@ class FlavaImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         # Mask related params
         return_image_mask: Optional[bool] = None,
         input_size_patches: Optional[int] = None,
@@ -478,10 +563,10 @@ class FlavaImageProcessor(BaseImageProcessor):
         # Codebook related params
         return_codebook_pixels: Optional[bool] = None,
         codebook_do_resize: Optional[bool] = None,
-        codebook_size: Optional[Dict[str, int]] = None,
+        codebook_size: Optional[dict[str, int]] = None,
         codebook_resample: Optional[int] = None,
         codebook_do_center_crop: Optional[bool] = None,
-        codebook_crop_size: Optional[Dict[str, int]] = None,
+        codebook_crop_size: Optional[dict[str, int]] = None,
         codebook_do_rescale: Optional[bool] = None,
         codebook_rescale_factor: Optional[float] = None,
         codebook_do_map_pixels: Optional[bool] = None,
@@ -501,14 +586,14 @@ class FlavaImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image.
-            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
@@ -516,9 +601,9 @@ class FlavaImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
             return_image_mask (`bool`, *optional*, defaults to `self.return_image_mask`):
                 Whether to return the image mask.
@@ -538,14 +623,14 @@ class FlavaImageProcessor(BaseImageProcessor):
                 Whether to return the codebook pixels.
             codebook_do_resize (`bool`, *optional*, defaults to `self.codebook_do_resize`):
                 Whether to resize the codebook pixels.
-            codebook_size (`Dict[str, int]`, *optional*, defaults to `self.codebook_size`):
+            codebook_size (`dict[str, int]`, *optional*, defaults to `self.codebook_size`):
                 Size of the codebook pixels.
             codebook_resample (`int`, *optional*, defaults to `self.codebook_resample`):
                 Resampling filter to use if resizing the codebook pixels. This can be one of the enum
                 `PILImageResampling`, Only has an effect if `codebook_do_resize` is set to `True`.
             codebook_do_center_crop (`bool`, *optional*, defaults to `self.codebook_do_center_crop`):
                 Whether to center crop the codebook pixels.
-            codebook_crop_size (`Dict[str, int]`, *optional*, defaults to `self.codebook_crop_size`):
+            codebook_crop_size (`dict[str, int]`, *optional*, defaults to `self.codebook_crop_size`):
                 Size of the center crop of the codebook pixels. Only has an effect if `codebook_do_center_crop` is set
                 to `True`.
             codebook_do_rescale (`bool`, *optional*, defaults to `self.codebook_do_rescale`):
@@ -556,18 +641,16 @@ class FlavaImageProcessor(BaseImageProcessor):
                 Whether to map the codebook pixels values.
             codebook_do_normalize (`bool`, *optional*, defaults to `self.codebook_do_normalize`):
                 Whether to normalize the codebook pixels.
-            codebook_image_mean (`float` or `List[float]`, *optional*, defaults to `self.codebook_image_mean`):
+            codebook_image_mean (`float` or `list[float]`, *optional*, defaults to `self.codebook_image_mean`):
                 Codebook pixels mean to normalize the codebook pixels by if `codebook_do_normalize` is set to `True`.
-            codebook_image_std (`float` or `List[float]`, *optional*, defaults to `self.codebook_image_std`):
+            codebook_image_std (`float` or `list[float]`, *optional*, defaults to `self.codebook_image_std`):
                 Codebook pixels standard deviation to normalize the codebook pixels by if `codebook_do_normalize` is
                 set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -637,13 +720,10 @@ class FlavaImageProcessor(BaseImageProcessor):
         codebook_image_mean = codebook_image_mean if codebook_image_mean is not None else self.codebook_image_mean
         codebook_image_std = codebook_image_std if codebook_image_std is not None else self.codebook_image_std
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         processed_images = [
             self._preprocess_image(

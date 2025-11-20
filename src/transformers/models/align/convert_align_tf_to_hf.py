@@ -56,9 +56,7 @@ def get_align_config():
     vision_config.depthwise_padding = []
 
     text_config = BertConfig()
-    config = AlignConfig.from_text_vision_configs(
-        text_config=text_config, vision_config=vision_config, projection_dim=640
-    )
+    config = AlignConfig(text_config=text_config, vision_config=vision_config, projection_dim=640)
     return config
 
 
@@ -275,7 +273,7 @@ def replace_params(hf_params, tf_params, key_mapping):
             new_hf_value = torch.from_numpy(np.transpose(value))
         elif "temperature" in key:
             new_hf_value = value
-        elif "bn/gamma" or "bn/beta" in key:
+        elif "bn/gamma" in key or "bn/beta" in key:
             new_hf_value = torch.from_numpy(np.transpose(value)).squeeze()
         else:
             new_hf_value = torch.from_numpy(value)
