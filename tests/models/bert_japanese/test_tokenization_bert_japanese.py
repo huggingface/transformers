@@ -34,7 +34,7 @@ from transformers.testing_utils import custom_tokenizers, require_jumanpp, requi
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-
+@custom_tokenizers
 class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "cl-tohoku/bert-base-japanese"
     tokenizer_class = BertJapaneseTokenizer
@@ -357,7 +357,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert encoded_pair == [2] + text + [3] + text_2 + [3]
 
 
-
+@custom_tokenizers
 class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "cl-tohoku/bert-base-japanese"
     tokenizer_class = BertJapaneseTokenizer
@@ -441,7 +441,7 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
         assert encoded_pair == [2] + text + [3] + text_2 + [3]
 
 
-
+@custom_tokenizers
 class AutoTokenizerCustomTest(unittest.TestCase):
     def test_tokenizer_bert_japanese(self):
         EXAMPLE_BERT_JAPANESE_ID = "cl-tohoku/bert-base-japanese"
