@@ -702,6 +702,8 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         det_scores: Tensor,
         trk_masks: Tensor,
         trk_obj_ids: list[int],
+        det_prompt_ids: torch.Tensor,
+        trk_prompt_ids: torch.Tensor,
     ):
         """
         Match detections on the current frame with the existing masklets.
@@ -711,6 +713,10 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
           - det_scores: (N,) tensor of detection scores
           - trk_masks: (M, H, W) tensor of track masks
           - trk_obj_ids: (M,) list of object IDs corresponding to trk_masks
+          - det_prompt_ids: (N,) tensor of prompt IDs for each detection. Prevents cross-prompt
+            associations by zeroing IoUs between detections and tracks from different prompts.
+          - trk_prompt_ids: (M,) tensor of prompt IDs for each tracked object. Prevents cross-prompt
+            associations by zeroing IoUs between detections and tracks from different prompts.
 
         Returns:
           - new_det_out_inds: list of new object indices among in FA detection outputs
@@ -763,6 +769,10 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         det_masks_binary = det_masks > 0
         trk_masks_binary = trk_masks > 0
         ious = mask_iou(det_masks_binary, trk_masks_binary)  # (N, M) tensor
+
+        # Prevent cross-prompt associations by zeroing IoUs between different prompt groups.
+        prompt_match = det_prompt_ids.unsqueeze(1) == trk_prompt_ids.unsqueeze(0)
+        ious = torch.where(prompt_match, ious, torch.zeros_like(ious))
 
         # trk_is_matched: for each track, True if matched to any detection above threshold
         trk_is_matched = (ious >= iou_threshold_trk).any(dim=0)  # (M,)
@@ -1073,12 +1083,36 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 ],
                 dim=0,
             )
-            to_suppress = self._get_objects_to_suppress_based_on_most_recently_occluded(
-                binary_tracker_low_res_masks_global,
-                last_occluded_prev,
-                obj_ids_global,
-                reverse,
+
+            prompt_ids_global = torch.tensor(
+                [inference_session.obj_id_to_prompt_id[obj_id] for obj_id in obj_ids_global],
+                device=binary_tracker_low_res_masks_global.device,
+                dtype=torch.long,
             )
+            to_suppress = torch.zeros(
+                batch_size,
+                device=binary_tracker_low_res_masks_global.device,
+                dtype=torch.bool,
+            )
+
+            # Only suppress overlaps within the same prompt group.
+            unique_prompts = prompt_ids_global.unique(sorted=True)
+            for prompt_id in unique_prompts:
+                prompt_mask = prompt_ids_global == prompt_id
+                prompt_indices = torch.nonzero(prompt_mask, as_tuple=True)[0]
+                if prompt_indices.numel() <= 1:
+                    continue
+
+                prompt_masks = binary_tracker_low_res_masks_global[prompt_indices]
+                prompt_last_occ = last_occluded_prev[prompt_indices]
+                prompt_obj_ids = [obj_ids_global[idx] for idx in prompt_indices.tolist()]
+                prompt_suppress = self._get_objects_to_suppress_based_on_most_recently_occluded(
+                    prompt_masks,
+                    prompt_last_occ,
+                    prompt_obj_ids,
+                    reverse,
+                )
+                to_suppress[prompt_indices] = prompt_suppress
 
             # Update metadata with occlusion information
             is_obj_occluded = ~(binary_tracker_low_res_masks_global.any(dim=(-1, -2)))
@@ -1126,15 +1160,35 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         pred_masks_after = torch.where(keep_mask, pred_masks, torch.clamp(pred_masks, max=-10.0))
         return pred_masks_after
 
-    def _suppress_object_pw_area_shrinkage(self, pred_masks):
+    def _suppress_object_pw_area_shrinkage(
+        self,
+        pred_masks,
+        prompt_ids: Optional[list[int]] = None,
+    ):
         """
-        This function suppresses masks that shrink in area after applying pixelwise non-overlapping constriants.
-        Note that the final output can still be overlapping.
+        This function suppresses masks that shrink in area after applying pixelwise non-overlapping constraints.
+        When `prompt_ids` are provided, constraints are enforced independently per prompt group.
         """
-        # Apply pixel-wise non-overlapping constraint based on mask scores
+        if prompt_ids is None:
+            return self._suppress_object_pw_area_shrinkage_impl(pred_masks)
+
+        if len(prompt_ids) != pred_masks.size(0):
+            raise ValueError("prompt_ids must have the same length as pred_masks")
+
+        prompt_ids_tensor = torch.tensor(prompt_ids, device=pred_masks.device, dtype=torch.long)
+        pred_masks_grouped = pred_masks.clone()
+        for prompt_id in prompt_ids_tensor.unique(sorted=True):
+            indices = torch.nonzero(prompt_ids_tensor == prompt_id, as_tuple=True)[0]
+            if indices.numel() == 0:
+                continue
+            pred_masks_grouped[indices] = self._suppress_object_pw_area_shrinkage_impl(pred_masks_grouped[indices])
+        return pred_masks_grouped
+
+    def _suppress_object_pw_area_shrinkage_impl(self, pred_masks):
+        if pred_masks.size(0) <= 1:
+            return pred_masks
+
         pixel_level_non_overlapping_masks = self._apply_non_overlapping_constraints(pred_masks)
-        # Fully suppress masks with high shrinkage (probably noisy) based on the pixel wise non-overlapping constraints
-        # NOTE: The output of this function can be a no op if none of the masks shrinked by a large factor.
         pred_masks = self._suppress_shrinked_masks(pred_masks, pixel_level_non_overlapping_masks)
         return pred_masks
 
@@ -1173,8 +1227,13 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 current_out = output_dict["non_cond_frame_outputs"].pop(frame_idx)
                 output_dict["cond_frame_outputs"][frame_idx] = current_out
 
-        # Apply non-overlapping constraints before memory encoding
-        high_res_masks = self._suppress_object_pw_area_shrinkage(high_res_masks)
+        # Apply non-overlapping constraints before memory encoding.
+        # Constraints are enforced independently per prompt group.
+        # Every object ID has a prompt_id assigned when it's created.
+        prompt_ids_for_objects = [
+            inference_session.obj_id_to_prompt_id[obj_id] for obj_id in inference_session.obj_ids
+        ]
+        high_res_masks = self._suppress_object_pw_area_shrinkage(high_res_masks, prompt_ids_for_objects)
         # Use mask areas as a proxy for object scores
         object_score_logits = torch.where((high_res_masks > 0).any(dim=(-1, -2)), 10.0, -10.0)
 
@@ -1230,6 +1289,28 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         # Step 1: make the update plan and resolve heuristics
         det_mask_preds: Tensor = det_out["mask"]  # low-res mask logits
         det_scores: Tensor = det_out["scores"].float()  # Keep as tensor!
+        # det_idx_to_prompt_id maps every detection index to its prompt_id (created by _merge_detections_from_prompts).
+        det_prompt_ids = (
+            torch.tensor(
+                [det_idx_to_prompt_id[idx] for idx in range(det_mask_preds.size(0))],
+                device=det_mask_preds.device,
+                dtype=torch.long,
+            )
+            if det_mask_preds.size(0) > 0
+            else torch.empty(0, device=det_mask_preds.device, dtype=torch.long)
+        )
+        # Get prompt IDs for tracked objects.
+        trk_prompt_ids = (
+            torch.tensor(
+                [inference_session.obj_id_to_prompt_id[obj_id] for obj_id in inference_session.obj_ids],
+                device=tracker_low_res_masks_global.device
+                if tracker_low_res_masks_global.numel() > 0
+                else det_mask_preds.device,
+                dtype=torch.long,
+            )
+            if tracker_low_res_masks_global.numel() > 0
+            else torch.empty(0, device=det_mask_preds.device, dtype=torch.long)
+        )
         # a) match FA and SAM2 masks and find new objects
         (
             new_det_out_inds,
@@ -1242,6 +1323,8 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             det_scores=det_scores,
             trk_masks=tracker_low_res_masks_global,
             trk_obj_ids=inference_session.obj_ids,
+            det_prompt_ids=det_prompt_ids,
+            trk_prompt_ids=trk_prompt_ids,
         )
 
         # check whether we've hit the maximum number of objects we can track (and if so, drop some detections)
@@ -1263,11 +1346,10 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         new_det_start_obj_id = inference_session.max_obj_id + 1
         new_det_obj_ids = list(range(new_det_start_obj_id, new_det_start_obj_id + new_det_num))
 
-        # assign prompt IDs to new objects based on which prompt detected them
+        # Assign prompt IDs to new objects based on which prompt detected them.
         for obj_id, det_idx in zip(new_det_obj_ids, new_det_out_inds):
-            prompt_id = det_idx_to_prompt_id.get(det_idx)
-            if prompt_id is not None:
-                inference_session.obj_id_to_prompt_id[obj_id] = prompt_id
+            prompt_id = det_idx_to_prompt_id[det_idx]
+            inference_session.obj_id_to_prompt_id[obj_id] = prompt_id
 
         # b) handle hotstart heuristics to remove objects
         extra_metadata_new = deepcopy(
