@@ -27,6 +27,8 @@ from typing import Any, Optional, Union
 
 from packaging import version
 
+from transformers.utils.import_utils import is_gptqmodel_available
+
 from ..utils import (
     is_auto_awq_available,
     is_compressed_tensors_available,
@@ -877,17 +879,17 @@ class AwqConfig(QuantizationConfigMixin):
                     raise ValueError("LLM-AWQ backend is only supported on CUDA GPUs with compute capability >= 8.0")
 
         if self.version == AWQLinearVersion.EXLLAMA:
-            awq_version_supports_exllama = False
-            MIN_AWQ_VERSION = "0.2.0"
-            if is_auto_awq_available():
-                awq_version_supports_exllama = version.parse(importlib.metadata.version("autoawq")) >= version.parse(
-                    MIN_AWQ_VERSION
+            gptqmodel_version_supports_awq = False
+            MIN_GPTQMODEL_SUPPORT_AWQ_VERSION = "5.0.0"
+            if is_gptqmodel_available():
+                gptqmodel_version_supports_awq = version.parse(importlib.metadata.version("gptqmodel")) >= version.parse(
+                    MIN_GPTQMODEL_SUPPORT_AWQ_VERSION
                 )
 
-            if not awq_version_supports_exllama:
+            if not gptqmodel_version_supports_awq:
                 raise ValueError(
-                    f"You current version of `autoawq` does not support exllama backend, "
-                    f"please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
+                    f"You current version of `gptqmodel` does not support awq, "
+                    f"please upgrade `gptqmodel` package to at least {MIN_GPTQMODEL_SUPPORT_AWQ_VERSION}."
                 )
 
             if self.exllama_config is None:
