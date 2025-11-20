@@ -114,16 +114,36 @@ class Sam3VideoProcessor(ProcessorMixin):
 
         return encoding_image_processor
 
-    def add_text_prompt(self, inference_session, text):
+    def add_text_prompt(self, inference_session: Sam3VideoInferenceSession, text: Union[str, list[str]]):
         """
-        Add text prompt to the inference session.
+        Add text prompt(s) to the inference session.
+
+        Args:
+            inference_session (`Sam3VideoInferenceSession`): The inference session.
+            text (`str` or `list[str]`): The text prompt(s) to add.
+
+        Returns:
+            `Sam3VideoInferenceSession`: The inference session with the added text prompt(s).
         """
-        encoded_text = self.tokenizer(text, return_tensors="pt", padding="max_length", max_length=32).to(
-            inference_session.inference_device
-        )
-        inference_session.text_attention_mask = encoded_text.attention_mask
-        inference_session.text_input_ids = encoded_text.input_ids
-        inference_session.has_new_text_input = True
+        if isinstance(text, str):
+            text = [text]
+
+        prompt_ids = []
+        for prompt_text in text:
+            # Add prompt and get its ID (reuses existing if duplicate)
+            prompt_id = inference_session.add_prompt(prompt_text)
+
+            # Only encode if this is a new prompt (not already in prompt_input_ids)
+            if prompt_id not in inference_session.prompt_input_ids:
+                encoded_text = self.tokenizer(
+                    prompt_text, return_tensors="pt", padding="max_length", max_length=32
+                ).to(inference_session.inference_device)
+
+                inference_session.prompt_input_ids[prompt_id] = encoded_text.input_ids
+                inference_session.prompt_attention_masks[prompt_id] = encoded_text.attention_mask
+
+            prompt_ids.append(prompt_id)
+
         return inference_session
 
     def init_video_session(
@@ -240,6 +260,8 @@ class Sam3VideoProcessor(ProcessorMixin):
                   (top_left_x, top_left_y, bottom_right_x, bottom_right_y).
                 - **masks** (`torch.Tensor` of shape `(num_objects, height, width)`): Binary segmentation masks
                   for each object at the original video resolution.
+                - **prompt_to_obj_ids** (`dict[str, list[int]]`): Mapping from prompt text to list of
+                  object IDs detected by that prompt.
         """
         obj_id_to_mask = model_outputs["obj_id_to_mask"]  # low res masks (1, H_low, W_low)
         curr_obj_ids = sorted(obj_id_to_mask.keys())
@@ -317,11 +339,18 @@ class Sam3VideoProcessor(ProcessorMixin):
                 ).squeeze(1)
             ) > 0
 
+        prompt_to_obj_ids = {}
+        for obj_id in out_obj_ids.tolist():
+            prompt_id = inference_session.obj_id_to_prompt_id[obj_id]
+            prompt_text = inference_session.prompts[prompt_id]
+            prompt_to_obj_ids.setdefault(prompt_text, []).append(obj_id)
+
         outputs = {
             "object_ids": out_obj_ids,
             "scores": out_probs,
             "boxes": out_boxes_xyxy,
             "masks": out_binary_masks,
+            "prompt_to_obj_ids": prompt_to_obj_ids,
         }
         return outputs
 
