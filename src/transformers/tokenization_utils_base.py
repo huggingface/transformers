@@ -1055,7 +1055,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
-        # By default, cleaning tokenization spaces for both fast and slow tokenizers
+        # By default, clean up tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
 
         # By default, do not split special tokens for both fast and slow tokenizers
@@ -3141,7 +3141,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         token_ids = to_py_obj(token_ids)
 
         # If we received batched input, decode each sequence
-        if isinstance(token_ids, (list, tuple)) and (len(token_ids) == 0 or isinstance(token_ids[0], (list, tuple))):
+        if isinstance(token_ids, (list, tuple)) and len(token_ids) > 0 and isinstance(token_ids[0], (list, tuple)):
             clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
             return [
                 self._decode(
