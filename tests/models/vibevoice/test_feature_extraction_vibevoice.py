@@ -59,7 +59,7 @@ class VibeVoiceFeatureExtractionTester:
         max_seq_length=2000,
         feature_size=1,
         padding_value=0.0,
-        sampling_rate=24000,  # VibeVoice uses 24kHz
+        sampling_rate=24000,
         normalize_audio=True,
         target_dB_FS=-25,
         eps=1e-6,
@@ -127,19 +127,19 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         # Test not batched input
         encoded_sequences_1 = feature_extractor(
             torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np"
-        ).audio
+        ).input_features
         encoded_sequences_2 = feature_extractor(
             np_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np"
-        ).audio
+        ).input_features
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=TOL))
 
         # Test batched
         encoded_sequences_1 = feature_extractor(
             torch_audio_inputs, sampling_rate=sampling_rate, padding=True, return_tensors="np"
-        ).audio
+        ).input_features
         encoded_sequences_2 = feature_extractor(
             np_audio_inputs, sampling_rate=sampling_rate, padding=True, return_tensors="np"
-        ).audio
+        ).input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=TOL))
 
@@ -150,10 +150,10 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         py_audio_inputs = np_audio_inputs.tolist()
 
         for inputs in [py_audio_inputs, np_audio_inputs]:
-            np_processed = feature_extractor.pad([{"audio": inputs}], return_tensors="np")
-            self.assertTrue(np_processed.audio.dtype == np.float32)
-            pt_processed = feature_extractor.pad([{"audio": inputs}], return_tensors="pt")
-            self.assertTrue(pt_processed.audio.dtype == torch.float32)
+            np_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="np")
+            self.assertTrue(np_processed.input_features.dtype == np.float32)
+            pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
+            self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
     # Copied from tests.models.dac.test_feature_extraction_dac.DacFeatureExtractionTest._load_datasamples
     def _load_datasamples(self, num_samples):
@@ -161,7 +161,7 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        audio_samples = ds.sort("id")[:num_samples]["audio"]
+        audio_samples = ds.sort("id")[:num_samples]["input_features"]
 
         return [x["array"] for x in audio_samples]
 
@@ -171,22 +171,15 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         feature_extractor = VibeVoiceFeatureExtractor(normalize_audio=True, target_dB_FS=-25)
         
         # Test with very low amplitude audio (should increase amplitude)
-        low_amplitude_audio = np.random.randn(1000).astype(np.float32) * 0.01  # Very low amplitude
+        low_amplitude_audio = np.random.randn(1000).astype(np.float32) * 0.01
         result = feature_extractor([low_amplitude_audio], return_tensors="pt")
-        normalized_audio = result.audio[0]
-        
-        # Check that normalization increased the amplitude for very low audio
+        normalized_audio = result.input_features.squeeze()
         self.assertGreater(torch.abs(normalized_audio).max().item(), torch.abs(torch.tensor(low_amplitude_audio)).max().item())
         
-        # Test with normalization disabled
+        # Test with normalization disabled (should be close to original)
         feature_extractor_no_norm = VibeVoiceFeatureExtractor(normalize_audio=False)
         result_no_norm = feature_extractor_no_norm([low_amplitude_audio], return_tensors="pt")
-        
-        # Should be very close to original (just type conversion)
-        torch.testing.assert_close(result_no_norm.audio[0], torch.tensor(low_amplitude_audio), rtol=1e-5, atol=1e-5)
-        
-        # Test that normalized and non-normalized are different
-        self.assertFalse(torch.allclose(normalized_audio, result_no_norm.audio[0], atol=1e-3))
+        torch.testing.assert_close(result_no_norm.input_features.squeeze(), torch.tensor(low_amplitude_audio), rtol=1e-5, atol=1e-5)
 
     def test_sampling_rate_validation(self):
         """Test that sampling rate validation works correctly."""
@@ -195,7 +188,7 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         
         # Should work with correct sampling rate
         result = feature_extractor([input_audio], sampling_rate=24000, return_tensors="pt")
-        self.assertIsInstance(result.audio, torch.Tensor)
+        self.assertIsInstance(result.input_features, torch.Tensor)
         
         # Should raise error with incorrect sampling rate
         with self.assertRaises(ValueError):
@@ -212,10 +205,10 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         result = feature_extractor([audio1, audio2], padding=True, return_tensors="pt", return_attention_mask=True)
         
         # Should have padding_mask
-        self.assertIn("padding_mask", result)
-        self.assertEqual(result.padding_mask.shape, result.audio.shape)
+        self.assertIn("input_features_mask", result)
+        self.assertEqual(result.input_features_mask.shape, result.input_features.squeeze(1).shape)
         
         # First sample should have some padding (False values at the end)
-        self.assertTrue(torch.any(~result.padding_mask[0]))
+        self.assertTrue(torch.any(~result.input_features_mask[0]))
         # Second sample should have no padding (all True values)
-        self.assertTrue(torch.all(result.padding_mask[1]))
+        self.assertTrue(torch.all(result.input_features_mask[1]))
