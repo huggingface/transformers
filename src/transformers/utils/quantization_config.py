@@ -793,7 +793,7 @@ class GPTQConfig(QuantizationConfigMixin):
 
 
 @dataclass
-class AwqConfig(QuantizationConfigMixin):
+class AwqConfig(GPTQConfig):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `auto-awq` library awq quantization relying on auto_awq backend.
@@ -867,6 +867,9 @@ class AwqConfig(QuantizationConfigMixin):
             raise ValueError(
                 f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA, AWQLinearVersion.IPEX] - not recognized version {self.version}"
             )
+        
+        # convert vertion to checkpoint_format
+        self.checkpoint_format = self.version.value
 
         if self.backend == AwqBackendPackingMethod.LLMAWQ:
             # Only cuda device can run this function
