@@ -54,8 +54,8 @@ if is_torchao_available():
         IntxWeightOnlyConfig,
         MappingType,
         ModuleFqnToConfig,
-        PerAxis,
-    )
+        PerAxis
+    ),
     from torchao.quantization.autoquant import AQMixin
 
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0"):
