@@ -131,11 +131,11 @@ class DinoDetrImageLoss(nn.Module):
         return losses
 
     @torch.no_grad()
-    def loss_cardinality(self, outputs, targets, indices, num_boxes):
+    def cardinality_error(self, outputs, targets, indices, num_boxes):
         """
         Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
 
-        This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients.
+        This is not a loss, it is intended for logging purposes only. It doesn't propagate gradients.
         """
         logits = outputs["logits"]
         device = logits.device
@@ -224,7 +224,7 @@ class DinoDetrImageLoss(nn.Module):
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
             "class_labels": self.loss_labels,
-            "cardinality": self.loss_cardinality,
+            "cardinality": self.cardinality_error,
             "boxes": self.loss_boxes,
             "masks": self.loss_masks,
         }
