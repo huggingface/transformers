@@ -156,11 +156,11 @@ class LightOnOCRVisionText2TextModelTester:
         # Place image tokens at the beginning
         input_ids[:, : self.num_image_tokens] = config.image_token_id
 
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+        attention_mask = input_ids.ne(self.pad_token_id)
 
         # Create image_sizes as tensor - must match batch size
         image_sizes = torch.tensor(
-            [[self.image_size, self.image_size]] * self.batch_size, dtype=torch.long, device=torch_device
+            [[self.image_size, self.image_size]] * self.batch_size, dtype=torch.long
         )
 
         inputs_dict = {
@@ -198,11 +198,11 @@ class LightOnOCRVisionText2TextModelTester:
         # Place image tokens at the beginning
         input_ids[:, : self.num_image_tokens] = config.image_token_id
 
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+        attention_mask = input_ids.ne(self.pad_token_id)
 
         # Create image_sizes as tensor - must match batch size
         image_sizes = torch.tensor(
-            [[self.image_size, self.image_size]] * batch_size, dtype=torch.long, device=torch_device
+            [[self.image_size, self.image_size]] * batch_size, dtype=torch.long
         )
 
         inputs_dict = {
@@ -612,7 +612,7 @@ class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
         model.eval()
 
         # Create text-only input
-        input_ids = torch.randint(0, config.vocab_size - 1, (1, 10), device=torch_device) + 1
+        input_ids = torch.randint(0, config.text_config.vocab_size - 1, (1, 10), device=torch_device) + 1
 
         with torch.no_grad():
             outputs = model.generate(input_ids=input_ids, max_new_tokens=5)
@@ -660,7 +660,7 @@ class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
         num_image_tokens = num_patches // (config.spatial_merge_size**2)
 
         seq_len = num_image_tokens + 10
-        input_ids = torch.randint(0, config.vocab_size - 1, (batch_size, seq_len), device=torch_device) + 1
+        input_ids = torch.randint(0, config.text_config.vocab_size - 1, (batch_size, seq_len), device=torch_device) + 1
         # Ensure no tokens accidentally equal image_token_id
         input_ids[input_ids == config.image_token_id] = config.image_token_id + 1
         # Now place image tokens at the beginning
@@ -677,4 +677,4 @@ class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertIsNotNone(outputs.logits)
         self.assertEqual(outputs.logits.shape[0], batch_size)
         self.assertEqual(outputs.logits.shape[1], seq_len)
-        self.assertEqual(outputs.logits.shape[2], config.vocab_size)
+        self.assertEqual(outputs.logits.shape[2], config.text_config.vocab_size)
