@@ -16,12 +16,13 @@
 import queue
 import threading
 from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 from itertools import count
 from math import ceil
 from time import perf_counter
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torch import nn
@@ -446,10 +447,7 @@ class ContinuousBatchProcessor:
         cumulative_seqlens_q = [0]
         logits_indices = []
 
-        if isinstance(self.cumulative_seqlens_k, dict):
-            cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k}
-        else:
-            cumulative_seqlens_k = [0]
+        cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k}
 
         read_index = [[] for _ in range(self.cache.num_groups)]
         write_index = [[] for _ in range(self.cache.num_groups)]
@@ -498,10 +496,7 @@ class ContinuousBatchProcessor:
         self.metrics.record_kv_cache_memory_metrics(self.cache)
 
         if logger.isEnabledFor(logging.DEBUG):
-            if isinstance(self.cumulative_seqlens_k, dict):
-                ck = max(cumulative_seqlens_k[layer_type][-1] for layer_type in self.cumulative_seqlens_k)
-            else:
-                ck = cumulative_seqlens_k[-1]
+            ck = max(cumulative_seqlens_k[layer_type][-1] for layer_type in self.cumulative_seqlens_k)
             logger.debug(
                 f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
                 f"Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. "
@@ -517,7 +512,7 @@ class ContinuousBatchProcessor:
         read_index: list[list[int]],
         write_index: list[list[int]],
         cumulative_seqlens_q: list[int],
-        cumulative_seqlens_k: Union[list[int], dict[str, list[int]]],
+        cumulative_seqlens_k: dict[str, list[int]],
         logits_indices: list[int],
     ) -> None:
         """Builds the actual tensors for the current batch, by modifying the already allocated tensors in place."""
@@ -561,9 +556,7 @@ class ContinuousBatchProcessor:
     @traced
     def _maybe_send_output(self, state: RequestState) -> None:
         """Send output to the queue based on streaming mode and request state."""
-        if state.streaming:
-            self.output_queue.put(state.to_generation_output())
-        elif state.status == RequestStatus.FINISHED:
+        if state.streaming or state.status == RequestStatus.FINISHED:
             self.output_queue.put(state.to_generation_output())
 
     @traced
@@ -571,17 +564,27 @@ class ContinuousBatchProcessor:
         """Update request states based on generated tokens."""
         out_tokens = self._sync()
         for i, state in enumerate(self.requests_in_batch):
+            # If the request has no remaining prompt ids, it means prefill has already ended or just finished
             if len(state.remaining_prompt_ids) == 0:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
                 token = out_tokens[self.logits_indices[i]]
                 state.prompt_ids = [token]
-                if state.update_with_token(token):
+                # Update the request and stop if it is complete
+                is_finished = state.update_and_check_completion(token)
+                # We mark the completed blocks as such
+                self.cache.mark_blocks_as_complete(state)
+                if is_finished:
                     self.metrics.record_request_completion(state.created_time, state.request_id)
                     self.scheduler.finish_request(state.request_id, evict_from_cache=(not self.manual_eviction))
                 self._maybe_send_output(state)
+            #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING_SPLIT:
+                self.cache.mark_blocks_as_complete(state)
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
+            else:
+                raise ValueError(f"Request {state.request_id} is in an unexpected state: {state.status}")
+
         if self.cache.get_num_free_blocks() == 0:
             raise ValueError("No more free blocks")
 
@@ -726,6 +729,7 @@ class ContinuousBatchingManager:
         max_queue_size: int = 0,
         num_q_cuda_graphs: int = 0,
         num_kv_cuda_graphs: int = 0,
+        allow_prefix_sharing: bool = True,
     ) -> None:
         """Initialize the continuous batching manager.
 
@@ -735,6 +739,7 @@ class ContinuousBatchingManager:
             max_queue_size: Maximum size of the request queue (0 = unlimited)
             num_q_cuda_graphs: (optional) Number of CUDA graphs to use for the query dimension
             num_kv_cuda_graphs: (optional) Number of CUDA graphs to use for the keys/values dimension
+            allow_prefix_sharing: (optional) Whether to allow prefix sharing if the model has only full attention layers
         """
         if "paged|" not in model.config._attn_implementation:
             attn_implementation = f"paged|{model.config._attn_implementation}"
@@ -766,6 +771,8 @@ class ContinuousBatchingManager:
         self.profile = getattr(generation_config, "profile", False)  # TODO: not supported yet
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
+
+        self._allow_prefix_sharing = allow_prefix_sharing
 
         # If a number of cuda graphs was specified for either Q or KV, we activate cuda graphs
         if num_q_cuda_graphs > 0 or num_kv_cuda_graphs > 0:
@@ -799,7 +806,6 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return
 
-        self._result_queue = queue.Queue()
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
 
@@ -814,6 +820,16 @@ class ContinuousBatchingManager:
             block: Whether to wait for the thread to stop
             timeout: Maximum time to wait for the thread to stop
         """
+        if self.batch_processor is None:
+            logger.warning("\nBatch processor was not initialized.")
+        else:
+            if self.batch_processor.cache.use_prefix_sharing:
+                logger.warning(
+                    f"\nPrefix sharing was on. Total prefix length: {self.batch_processor.cache._total_prefix_length}"
+                )
+            else:
+                logger.warning("\nPrefix sharing was off.")
+
         if self._generation_thread is None:
             logger.warning("Manager not started.")
             return
@@ -939,20 +955,6 @@ class ContinuousBatchingManager:
                 request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
 
     @traced
-    def warmup(self, batch_processor: ContinuousBatchProcessor) -> None:
-        stream = torch.cuda.Stream(device=self.model.device)
-        stream.wait_stream(torch.cuda.current_stream())
-        with torch.cuda.stream(stream):
-            # Warmup the model with a dummy forward pass
-            self._generation_step(batch_processor)
-        torch.cuda.current_stream().wait_stream(stream)
-
-        self.graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(self.graph, stream=stream):
-            self._generation_step(batch_processor)
-
-    @traced
-    # @torch.compile
     def _generation_step(self) -> None:
         """Perform a single generation step. This is cuda graphed"""
         self.batch_processor._generation_step(self.model, self.logit_processor, self.do_sample)
@@ -968,6 +970,7 @@ class ContinuousBatchingManager:
                 self.model.device,
                 self.model.dtype,
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
+                allow_prefix_sharing=self._allow_prefix_sharing,
             )
             logger.debug(f"PagedAttentionCache created in {perf_counter() - t0} seconds")
 
@@ -1059,6 +1062,15 @@ class ContinuousBatchingManager:
 class ContinuousMixin:
     """Mixin class for models to add continuous batching capabilities."""
 
+    @contextmanager
+    def continuous_batching_context_manager(self, **kwargs) -> Generator[ContinuousBatchingManager]:
+        manager = self.init_continuous_batching(**kwargs)
+        manager.start()
+        try:
+            yield manager
+        finally:
+            manager.stop(block=True)
+
     def init_continuous_batching(
         self,
         generation_config: Optional[GenerationConfig] = None,
@@ -1066,6 +1078,7 @@ class ContinuousMixin:
         max_queue_size: int = 0,
         num_q_cuda_graphs: int = 0,
         num_kv_cuda_graphs: int = 0,
+        allow_prefix_sharing: bool = True,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
 
@@ -1098,6 +1111,7 @@ class ContinuousMixin:
             max_queue_size=max_queue_size,
             num_q_cuda_graphs=num_q_cuda_graphs,
             num_kv_cuda_graphs=num_kv_cuda_graphs,
+            allow_prefix_sharing=allow_prefix_sharing,
         )
 
     # TODO: support streaming
@@ -1169,5 +1183,6 @@ class ContinuousMixin:
         except Exception as e:
             logger.error(f"Error during batch generation: {e}", exc_info=True)
         finally:
+            logger.debug("Generate batch is finished.")  # a dummy log needed for the logs of stop to show. Won't show.
             manager.stop(block=True, timeout=5.0)
         return results
