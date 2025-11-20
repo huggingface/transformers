@@ -180,27 +180,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             special_tokens_pattern="none",
             **kwargs,
         )
-
-        # Remap added tokens so their ids never collide with any nested vocabulary ids. (silent bug pre v5)
-        if isinstance(self.vocab, dict) and len(self.vocab) > 0:
-            sample_value = next(iter(self.vocab.values()))
-            if isinstance(sample_value, dict):
-                nested_vocab_ids = set()
-                for sub_vocab in self.vocab.values():
-                    nested_vocab_ids.update(sub_vocab.values())
-                collisions = [idx for idx in list(self._added_tokens_decoder.keys()) if idx in nested_vocab_ids]
-                if collisions:
-                    next_index = max(nested_vocab_ids | set(self._added_tokens_decoder.keys())) + 1
-                    for idx in collisions:
-                        token = self._added_tokens_decoder.pop(idx)
-                        while next_index in nested_vocab_ids or next_index in self._added_tokens_decoder:
-                            next_index += 1
-                        self._added_tokens_decoder[next_index] = token
-                        self._added_tokens_encoder[token.content] = next_index
-                        nested_vocab_ids.add(next_index)
-                    self._update_trie()
-                    self._update_total_vocab_size()
-
         # make sure that tokens made of several
         # characters are not split at tokenization
         for token in self.encoder:
@@ -221,6 +200,11 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self.init_kwargs["target_lang"] = target_lang
         self.encoder = self.vocab[target_lang]
         self.decoder = {v: k for k, v in self.encoder.items()}
+
+        # Remove conflicting entries from _added_tokens_decoder so vocabulary tokens take precedence
+        for token_id in list(self._added_tokens_decoder.keys()):
+            if token_id in self.decoder:
+                del self._added_tokens_decoder[token_id]
 
         # make sure that tokens made of several
         # characters are not split at tokenization
@@ -294,6 +278,28 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         result = self.decoder.get(index, self.unk_token)
         return result
 
+    def convert_ids_to_tokens(
+        self, ids: Union[int, list[int]], skip_special_tokens: bool = False
+    ) -> Union[str, list[str]]:
+        """Overridden to prioritize vocabulary tokens over added tokens for nested vocabularies."""
+        if isinstance(ids, int):
+            if ids in self.decoder:
+                return self.decoder[ids]
+            return self._added_tokens_decoder[ids].content if ids in self._added_tokens_decoder else self.unk_token
+
+        tokens = []
+        for index in ids:
+            index = int(index)
+            if skip_special_tokens and index in self.all_special_ids:
+                continue
+            if index in self.decoder:
+                tokens.append(self.decoder[index])
+            elif index in self._added_tokens_decoder:
+                tokens.append(self._added_tokens_decoder[index].content)
+            else:
+                tokens.append(self.unk_token)
+        return tokens
+
     def convert_tokens_to_string(
         self,
         tokens: list[str],
@@ -356,6 +362,31 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             string = string.lower()
 
         return {"text": string, "char_offsets": char_offsets, "word_offsets": word_offsets}
+
+    @staticmethod
+    def clean_up_tokenization(out_string: str) -> str:
+        """
+        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
+
+        Args:
+            out_string (`str`): The text to clean up.
+
+        Returns:
+            `str`: The cleaned-up string.
+        """
+        out_string = (
+            out_string.replace(" .", ".")
+            .replace(" ?", "?")
+            .replace(" !", "!")
+            .replace(" ,", ",")
+            .replace(" ' ", "'")
+            .replace(" n't", "n't")
+            .replace(" 'm", "'m")
+            .replace(" 's", "'s")
+            .replace(" 've", "'ve")
+            .replace(" 're", "'re")
+        )
+        return out_string
 
     @staticmethod
     def _compute_offsets(
@@ -427,13 +458,12 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         same as tokens of the base vocabulary and therefore the function `convert_tokens_to_string` has to be called on
         the whole token list and not individually on added tokens
         """
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+        # Don't skip special tokens in convert_ids_to_tokens so we can handle word_delimiter_token specially
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=False)
 
         result = []
         for token in filtered_tokens:
-            if skip_special_tokens and (
-                token in self.all_special_ids or (token != self.pad_token and token in self.all_special_tokens)
-            ):
+            if skip_special_tokens and token in self.all_special_tokens and token != self.word_delimiter_token:
                 continue
             result.append(token)
 
@@ -884,6 +914,31 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
 
         return string
 
+    @staticmethod
+    def clean_up_tokenization(out_string: str) -> str:
+        """
+        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
+
+        Args:
+            out_string (`str`): The text to clean up.
+
+        Returns:
+            `str`: The cleaned-up string.
+        """
+        out_string = (
+            out_string.replace(" .", ".")
+            .replace(" ?", "?")
+            .replace(" !", "!")
+            .replace(" ,", ",")
+            .replace(" ' ", "'")
+            .replace(" n't", "n't")
+            .replace(" 'm", "'m")
+            .replace(" 's", "'s")
+            .replace(" 've", "'ve")
+            .replace(" 're", "'re")
+        )
+        return out_string
+
     def _decode(
         self,
         token_ids: list[int],
@@ -896,13 +951,12 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         same as tokens of the base vocabulary and therefore the function `convert_tokens_to_string` has to be called on
         the whole token list and not individually on added tokens
         """
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+        # Don't skip special tokens in convert_ids_to_tokens so we can handle word_delimiter_token specially
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=False)
 
         result = []
         for token in filtered_tokens:
-            if skip_special_tokens and (
-                token in self.all_special_ids or (token != self.pad_token and token in self.all_special_tokens)
-            ):
+            if skip_special_tokens and token in self.all_special_tokens and token != self.word_delimiter_token:
                 continue
             result.append(token)
 

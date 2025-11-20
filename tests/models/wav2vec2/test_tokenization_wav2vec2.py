@@ -30,7 +30,7 @@ from transformers import (
     Wav2Vec2Tokenizer,
 )
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES, Wav2Vec2CTCTokenizerOutput
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import get_tests_dir, require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -401,6 +401,25 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         merged_kwargs.update(kwargs)
         pretrained_name = pretrained_name or cls.tmpdirname
         return Wav2Vec2CTCTokenizer.from_pretrained(pretrained_name, **merged_kwargs)
+
+    def test_word_delimiter_round_trip_without_config(self):
+        vocab_path = get_tests_dir("fixtures/vocab.json")
+        tokenizer = self.tokenizer_class(
+            vocab_path,
+            bos_token="<s>",
+            eos_token="</s>",
+            pad_token="<pad>",
+            unk_token="<unk>",
+            word_delimiter_token="|",
+        )
+        before_vocab = tokenizer.get_vocab()
+        self.assertIn("|", before_vocab)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            reloaded = self.tokenizer_class.from_pretrained(tmp_dir)
+
+        self.assertDictEqual(before_vocab, reloaded.get_vocab())
 
     def test_tokenizer_add_token_chars(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
