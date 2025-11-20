@@ -382,9 +382,12 @@ To enable ALST/Ulysses sequence parallelism with [`Trainer`], configure `paralle
 ```py
 from accelerate.utils import ParallelismConfig, DeepSpeedSequenceParallelConfig
 
+# Example: 4 GPUs with sp_size=4, dp_replicate_size=1 (no data parallelism)
+# Ensure total_size = dp_replicate_size * dp_shard_size * sp_size = 1 * 1 * 4 = 4 GPUs
 parallelism_config = ParallelismConfig(
     sp_backend="deepspeed",
     sp_size=4,  # Number of GPUs to split sequence across
+    dp_replicate_size=1,  # Explicit: no data parallelism
     sp_handler=DeepSpeedSequenceParallelConfig(
         sp_seq_length_is_variable=True,
         sp_attn_implementation="sdpa",
