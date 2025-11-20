@@ -54,7 +54,7 @@ if is_torchao_available():
         IntxWeightOnlyConfig,
         MappingType,
         ModuleFqnToConfig,
-        PerAxis
+        PerAxis,
     )
     from torchao.quantization.autoquant import AQMixin
 
@@ -722,7 +722,9 @@ class TorchAoSerializationTest(unittest.TestCase):
         dtype = torch.bfloat16 if isinstance(self.quant_scheme, Int4WeightOnlyConfig) else "auto"
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname, safe_serialization=safe_serialization)
-            loaded_quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, dtype=dtype, device_map=device, torch_dtype=dtype, use_safetensors=safe_serialization)
+            loaded_quantized_model = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, dtype=dtype, device_map=device, torch_dtype=dtype, use_safetensors=safe_serialization
+            )
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(device)
 
             output = loaded_quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)

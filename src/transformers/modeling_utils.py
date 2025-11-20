@@ -3832,7 +3832,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             if hf_quantizer is not None:
                 weight_conversions.extend(hf_quantizer.get_weight_conversions())
-            
+
         if gguf_file:
             if hf_quantizer is not None:
                 raise ValueError(

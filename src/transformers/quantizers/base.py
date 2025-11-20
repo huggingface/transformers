@@ -184,7 +184,7 @@ class HfQuantizer(ABC):
         elif hasattr(model, "get_parameter"):
             try:
                 return model.get_parameter(param_name).element_size()
-            except AttributeError: 
+            except AttributeError:
                 return model.get_buffer(param_name).element_size()
         else:
             raise ValueError(f"Model {model.__class__.__name__} does not have a get_parameter_or_buffer method")
@@ -416,6 +416,7 @@ class HfQuantizer(ABC):
 
     def get_weight_conversions(self):
         return []
+
 
 class SequentialLlama4TextExperts(ModuleList):
     """

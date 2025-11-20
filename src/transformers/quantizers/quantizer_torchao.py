@@ -28,8 +28,9 @@ if TYPE_CHECKING:
 
 from safetensors import safe_open
 
-from ..utils import is_torch_available, is_torchao_available, logging
 from ..core_model_loading import WeightConverter
+from ..utils import is_torch_available, is_torchao_available, logging
+
 
 if is_torch_available():
     import torch
@@ -533,34 +534,36 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     def get_quantize_ops(self):
         from ..integrations.torchao import TorchAoQuantize
+
         return TorchAoQuantize(self)
 
     def get_weight_conversions(self):
-        from ..integrations.torchao import TorchAoQuantize, TorchAoDeserialize
-        if self.pre_quantized: 
+        from ..integrations.torchao import TorchAoDeserialize, TorchAoQuantize
+
+        if self.pre_quantized:
             return [
                 WeightConverter(
-                    source_keys= ["weight:qdata", "weight:scale", "weight:zero_point"],
-                    target_keys= "weight",
+                    source_keys=["weight:qdata", "weight:scale", "weight:zero_point"],
+                    target_keys="weight",
                     operations=[TorchAoDeserialize(self)],
                 ),
                 WeightConverter(
-                    source_keys= ["weight:_data"],
-                    target_keys= "weight",
+                    source_keys=["weight:_data"],
+                    target_keys="weight",
                     operations=[TorchAoDeserialize(self)],
                 ),
                 # used for unsafe serialization
                 WeightConverter(
-                    source_keys= ["weight"],
-                    target_keys= "weight",
+                    source_keys=["weight"],
+                    target_keys="weight",
                     operations=[TorchAoDeserialize(self)],
                 ),
             ]
         else:
             return [
-            WeightConverter(
-                source_keys= ["weight"],
-                target_keys= "weight",
-                operations=[TorchAoQuantize(self)],
-            ),
-        ]
+                WeightConverter(
+                    source_keys=["weight"],
+                    target_keys="weight",
+                    operations=[TorchAoQuantize(self)],
+                ),
+            ]

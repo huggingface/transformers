@@ -1,14 +1,13 @@
 import importlib.metadata
 import re
 import types
-from collections import defaultdict
-from typing import Optional, Any
+from typing import Optional
 
 import torch
 from packaging import version
 
-from transformers.utils.import_utils import is_torchao_available
 from transformers.utils import logging
+from transformers.utils.import_utils import is_torchao_available
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name
@@ -24,6 +23,7 @@ if is_torchao_available():
 
 logger = logging.get_logger(__name__)
 
+
 def fuzzy_match_size(config_name: str) -> Optional[str]:
     """
     Extract the size digit from strings like "4weight", "8weight".
@@ -38,6 +38,7 @@ def fuzzy_match_size(config_name: str) -> Optional[str]:
 
     return None
 
+
 def _quantization_type(weight):
     from torchao.dtypes import AffineQuantizedTensor
     from torchao.quantization.linear_activation_quantized_tensor import LinearActivationQuantizedTensor
@@ -48,6 +49,7 @@ def _quantization_type(weight):
     if isinstance(weight, LinearActivationQuantizedTensor):
         return f"{weight.__class__.__name__}(activation={weight.input_quant_func}, weight={_quantization_type(weight.original_weight_tensor)})"
 
+
 def _linear_extra_repr(self):
     weight = _quantization_type(self.weight)
     if weight is None:
@@ -55,15 +57,22 @@ def _linear_extra_repr(self):
     else:
         return f"in_features={self.weight.shape[1]}, out_features={self.weight.shape[0]}, weight={weight}"
 
+
 class TorchAoQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
     def convert(
-        self, input_dict: dict[str, torch.Tensor], model: Optional[torch.nn.Module] = None, full_layer_name: str = None, missing_keys=None, **kwargs
+        self,
+        input_dict: dict[str, torch.Tensor],
+        model: Optional[torch.nn.Module] = None,
+        full_layer_name: str | None = None,
+        missing_keys=None,
+        **kwargs,
     ) -> dict[str, torch.Tensor]:
         from torchao.quantization import quantize_
-        _ , value = tuple(input_dict.items())[0]
+
+        _, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
 
         if not self.hf_quantizer.param_needs_quantization(model, full_layer_name):
@@ -71,9 +80,7 @@ class TorchAoQuantize(ConversionOps):
 
         module, tensor_name = get_module_from_name(model, full_layer_name)
 
-        module._parameters[tensor_name] = torch.nn.Parameter(
-            value, requires_grad=value.requires_grad
-        ).to(value.device)
+        module._parameters[tensor_name] = torch.nn.Parameter(value, requires_grad=value.requires_grad).to(value.device)
         # if we are quantizing tied parameters, to avoid tying the quantized weights
         # the correct order to do it is
         # 1. load the weight to model
@@ -173,12 +180,18 @@ class TorchAoQuantize(ConversionOps):
         module._is_hf_initialized = True
         return {}
 
+
 class TorchAoDeserialize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
     def convert(
-        self, input_dict: dict[str, torch.Tensor], model: Optional[torch.nn.Module] = None, full_layer_name: str = None, missing_keys=None, **kwargs
+        self,
+        input_dict: dict[str, torch.Tensor],
+        model: Optional[torch.nn.Module] = None,
+        full_layer_name: str | None = None,
+        missing_keys=None,
+        **kwargs,
     ) -> dict[str, torch.Tensor]:
         if isinstance(self.hf_quantizer.quantization_config.quant_type, str):
             is_int_4 = "int4" in self.hf_quantizer.quantization_config.quant_type
@@ -188,7 +201,11 @@ class TorchAoDeserialize(ConversionOps):
 
         # Simple case if we gather layermsnorm weights, we can just return the value since they are not quantized
         if "weight:_data" in input_dict.keys():
-            value = input_dict["weight:_data"][0] if isinstance(input_dict["weight:_data"], list) else input_dict["weight:_data"]
+            value = (
+                input_dict["weight:_data"][0]
+                if isinstance(input_dict["weight:_data"], list)
+                else input_dict["weight:_data"]
+            )
             return {full_layer_name: value}
 
         is_unsafe_serialization = ":" not in list(input_dict.keys())[0]
@@ -198,11 +215,19 @@ class TorchAoDeserialize(ConversionOps):
             weight = input_dict["weight"][0] if isinstance(input_dict["weight"], list) else input_dict["weight"]
         else:
             param_data = {
-                f"{full_layer_name}:qdata": input_dict["weight:qdata"][0] if isinstance(input_dict["weight:qdata"], list) else input_dict["weight:qdata"],
-                f"{full_layer_name}:scale": input_dict["weight:scale"][0] if isinstance(input_dict["weight:scale"], list) else input_dict["weight:scale"],
+                f"{full_layer_name}:qdata": input_dict["weight:qdata"][0]
+                if isinstance(input_dict["weight:qdata"], list)
+                else input_dict["weight:qdata"],
+                f"{full_layer_name}:scale": input_dict["weight:scale"][0]
+                if isinstance(input_dict["weight:scale"], list)
+                else input_dict["weight:scale"],
             }
             if is_int_4:
-                param_data[f"{full_layer_name}:zero_point"] = input_dict["weight:zero_point"][0] if isinstance(input_dict["weight:zero_point"], list) else input_dict["weight:zero_point"]
+                param_data[f"{full_layer_name}:zero_point"] = (
+                    input_dict["weight:zero_point"][0]
+                    if isinstance(input_dict["weight:zero_point"], list)
+                    else input_dict["weight:zero_point"]
+                )
 
         # If it's a bias, no need to do anything special (except removing the ":_data" part of the key, but was
         # already done) - if it's unsafe-serialized (i.e. not safetensors), not need for anything either
@@ -212,7 +237,7 @@ class TorchAoDeserialize(ConversionOps):
         elif not (TORCHAO_VERSION >= version.parse("0.14.0") and is_metadata_torchao(self.hf_quantizer.metadata)):
             # print("metadata", self.hf_quantizer.metadata)
             print("TORCHAO_VERSION", TORCHAO_VERSION)
-            raise ValueError("To use `safetensors` serialization, you should have `torchao>=0.14.0` installed")        
+            raise ValueError("To use `safetensors` serialization, you should have `torchao>=0.14.0` installed")
         print("param_data", param_data.keys())
         new_param = unflatten_tensor_state_dict(param_data, self.hf_quantizer.metadata)[full_layer_name]
 
@@ -222,4 +247,3 @@ class TorchAoDeserialize(ConversionOps):
             module.extra_repr = types.MethodType(_linear_extra_repr, module)
 
         return {full_layer_name: new_param}
-
