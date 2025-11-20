@@ -21,11 +21,8 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available, logging
+from ...utils import logging
 
-
-if is_torch_available():
-    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -121,8 +118,6 @@ class Phi3VProcessor(ProcessorMixin):
             image_inputs = {"pixel_values": None, "image_sizes": None, "num_img_tokens": []}
 
         num_image_tokens = image_inputs["num_img_tokens"]
-        max_length = output_kwargs["text_kwargs"]["max_length"]
-        padding = output_kwargs["text_kwargs"]["padding"]
 
         if text is not None:
             if isinstance(text, str):
@@ -131,52 +126,27 @@ class Phi3VProcessor(ProcessorMixin):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         # Replace the image token with expanded image tokens.
-        tokenized_prompts = []
+        prompt_strings = []
         image_token_counter = 0
         for prompt in text:
             image_token = re.escape(self.image_token)
             prompt_splits = re.split(f"({image_token})", prompt)
 
-            tokenized_outputs = []
-            for split in prompt_splits:
-                if split == "<|image|>":
+            outputs = []
+            for text in prompt_splits:
+                # If the text is an image token, replace it with the corresponding number of image tokens.
+                if text == self.image_token:
                     if image_token_counter >= len(num_image_tokens):
                         raise ValueError("More image placeholders in the text than images provided.")
-                    image_tokens = [self.image_token_id] * num_image_tokens[image_token_counter]
-                    tokenized_outputs.extend(image_tokens)
+                    text = "".join([self.image_token] * num_image_tokens[image_token_counter])
                     image_token_counter += 1
-                else:
-                    text_tokens = self.tokenizer(split)["input_ids"]
-                    tokenized_outputs.extend(text_tokens)
 
-            tokenized_prompts.append(tokenized_outputs)
+                outputs.append(text)
+            prompt_strings.append("".join(outputs))
 
-        if padding != "max_length":
-            max_length = min(max_length, max([len(tokenized_input) for tokenized_input in tokenized_prompts]))
-
-        pad_token_id = self.tokenizer.pad_token_id
-        padded_input_ids = []
-        attention_masks = []
-
-        for prompt_tokens in tokenized_prompts:
-            # Truncate the sequence to max_length
-            if len(prompt_tokens) > max_length:
-                prompt_tokens = prompt_tokens[:max_length]
-
-            # Left Pad sequence to max_length
-            if padding:
-                prompt_tokens = [pad_token_id] * (max_length - len(prompt_tokens)) + prompt_tokens
-            attn_mask = [1 if token != pad_token_id else 0 for token in prompt_tokens]
-
-            padded_input_ids.append(prompt_tokens)
-            attention_masks.append(attn_mask)
-
-        data = {
-            "input_ids": torch.tensor(padded_input_ids, dtype=torch.long),
-            "attention_mask": torch.tensor(attention_masks, dtype=torch.long),
-            "pixel_values": image_inputs["pixel_values"],
-            "image_sizes": image_inputs["image_sizes"],
-        }
+        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        data["pixel_values"] = image_inputs["pixel_values"]
+        data["image_sizes"] = image_inputs["image_sizes"]
 
         return BatchFeature(data=data)
 

@@ -51,7 +51,7 @@ CHAT_TEMPLATE = """{% for message in messages %}
 <|{{ message['role'] }}|>
 {% for entry in message['content'] %}
     {% if entry['type'] == 'image' %}
-<|image|>
+<|image|><s>
     {% elif entry['type'] == 'text' %}
 {{ entry['text'] }}{%- endif %}{% endfor -%}<|end|>
 {% endfor -%}
