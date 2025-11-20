@@ -159,9 +159,7 @@ class LightOnOCRVisionText2TextModelTester:
         attention_mask = input_ids.ne(self.pad_token_id)
 
         # Create image_sizes as tensor - must match batch size
-        image_sizes = torch.tensor(
-            [[self.image_size, self.image_size]] * self.batch_size, dtype=torch.long
-        )
+        image_sizes = torch.tensor([[self.image_size, self.image_size]] * self.batch_size, dtype=torch.long)
 
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -201,9 +199,7 @@ class LightOnOCRVisionText2TextModelTester:
         attention_mask = input_ids.ne(self.pad_token_id)
 
         # Create image_sizes as tensor - must match batch size
-        image_sizes = torch.tensor(
-            [[self.image_size, self.image_size]] * batch_size, dtype=torch.long
-        )
+        image_sizes = torch.tensor([[self.image_size, self.image_size]] * batch_size, dtype=torch.long)
 
         inputs_dict = {
             "pixel_values": pixel_values,
