@@ -100,49 +100,6 @@ def build_glob_alternation(
     return alternation, src_group_to_glob, tgt_group_to_glob
 
 
-def sub_key(
-    key: str,
-    alternation: re.Pattern,
-    group_to_glob: dict[str, str],
-    compiled_rules: dict[str, tuple[re.Pattern, str]],
-) -> str:
-    """
-    Apply glob-based rewrite rules to a single key.
-    """
-    match = alternation.match(key)
-    if not match:
-        return key
-
-    matched_globs = [group_to_glob[group_name] for group_name, value in match.groupdict().items() if value is not None]
-
-    result: str | None = None
-
-    for source_glob in matched_globs:
-        regex, replacement = compiled_rules[source_glob]
-
-        if not regex.search(key):
-            continue
-
-        candidate = regex.sub(replacement, key, count=1)
-
-        if result is None:
-            result = candidate
-        elif candidate != result:
-            raise ValueError(f"Contradictory rules for key {key!r}: {result!r} vs {candidate!r}")
-
-    return result if result is not None else key
-
-
-def match_glob(key: str, alt: re.Pattern, name_map: dict[str, str]) -> Optional[str]:
-    """
-    Match the key against the alternation; return the original glob string that matched.
-    """
-    m = alt.match(key)
-    if not m or m.lastgroup is None:
-        return None
-    return name_map.get(m.lastgroup)
-
-
 class ConversionOps:
     """Base class for weight conversion operations."""
 
@@ -184,7 +141,7 @@ class Chunk(ConversionOps):
         tensors = next(iter(value.values()))
         tensor = tensors[0]
         sizes = len(target_keys)
-        chunks = torch.split(tensor, sizes, dim=self.dim)
+        chunks = torch.chunk(tensor, sizes, dim=self.dim)
         return {full_layer_name.replace(target_keys[0], target): [chunk] for target, chunk in zip(target_keys, chunks)}
 
 
@@ -650,6 +607,35 @@ def convert_and_load_state_dict_in_model(
     ```
 
     """
+
+    Now that this is done, we can quantize / dequantize accordingly the collected_tensors.
+
+    For some quantization methods, we need to gather different tensors:
+
+    ```python
+    # for "medmekk/llama-3.2-1b-float8-torchao"
+    WeightConverter(
+        source_keys=[":qdata", ":scale"],
+        target_keys="",
+        operations=[TorchaoDeserialize()],
+    )
+    ```
+    This will collect all tensors that have the same prefix, but end with `:qdata` or `:scale`. This will give us:
+    ```python
+    all_weight_mapping = {
+        "model.layers.13.self_attn.o_proj.weight": WeightConverter(
+            source_keys=[":qdata", ":scale"],
+            target_keys="",
+            operations=[TorchaoDeserialize()],
+            collected_tensors={
+                ":qdata": [Future],
+                ":scale": [Future],
+            },
+        ...
+    }
+    ```
+
+    """
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
     device_map = device_map or {"": "cpu"}
@@ -719,23 +705,22 @@ def convert_and_load_state_dict_in_model(
                 source_pattern = renamed_key
 
             # 5. Handle dtype casting
-            _dtype = dtype
             if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, renamed_key):
-                # mapping.quantization_operation = hf_quantizer.get_quantize_ops()
-                pass
-            else:
-                _dtype = dtype
-                if dtype_plan != {}:
-                    matched_dtype_pattern = match_glob(renamed_key, dtype_policy_alt, dtype_policy_by_group_name)
-                    if matched_dtype_pattern is not None:
-                        _dtype = dtype_plan[matched_dtype_pattern]
-                elif empty_param is not None and empty_param.dtype != _dtype:
-                    _dtype = empty_param.dtype
+                mapping.quantization_operation = hf_quantizer.get_quantize_ops()
+
+            _dtype = dtype
+            if dtype_plan != {} and dtype_policy_alt.search(renamed_key):
+                matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
+                if matched_dtype_pattern is not None:
+                    _dtype = dtype_plan[matched_dtype_pattern.group()]
+            elif empty_param is not None and empty_param.dtype != _dtype:
+                _dtype = empty_param.dtype  # usually correct when initializing
 
             # 6. Handle TP sharding or device_map placement -> scheduled materialization
             future = None
             if device_mesh:
-                if matched_tp_pattern := match_glob(renamed_key, tp_plan_alt, tp_plan_by_group_name):
+                if matched_tp_pattern := tp_plan_alt.search(renamed_key):
+                    matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:
                         tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
                         mapping.distributed_operation = tp_layer(
@@ -785,8 +770,7 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation,
                         hf_quantizer,
                     )
-            except SkipLayer as e:
-                print(e)
+            except SkipLayer:
                 continue
     thread_pool.shutdown(wait=False)
     return missing_keys, unexpected_keys, mismatch_keys, misc

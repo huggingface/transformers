@@ -23,6 +23,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -431,6 +432,15 @@ class OlmoePreTrainedModel(PreTrainedModel):
     }
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, OlmoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, OlmoeTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
