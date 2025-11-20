@@ -41,14 +41,14 @@ class TestWeightGlobMatching(unittest.TestCase):
             "model.layers.*.self_attn.q_proj.weight",
             "embed_tokens.weight",
         ]
-        self.alt_digits, self.map_digits = build_glob_alternation(self.weight_globs_digits)
+        self.alt_digits, self.map_digits, _ = build_glob_alternation(self.weight_globs_digits)
 
         self.weight_globs_any = [
             "model.layers.*.mlp.gate_up_proj.weight",
             "model.layers.*.self_attn.q_proj.weight",
             "embed_tokens.weight",
         ]
-        self.alt_any, self.map_any = build_glob_alternation(self.weight_globs_any)
+        self.alt_any, self.map_any, _ = build_glob_alternation(self.weight_globs_any)
 
     def test_exact_match(self):
         self.assertEqual(match_glob("embed_tokens.weight", self.alt_digits, self.map_digits), "embed_tokens.weight")
@@ -82,7 +82,7 @@ class TestWeightGlobMatching(unittest.TestCase):
             "model.layers.*.mlp.*.weight",  # broader (first)
             "model.layers.0.mlp.gate_up_proj.weight",  # more specific (second)
         ]
-        alt, mapping = build_glob_alternation(globs)
+        alt, mapping, _ = build_glob_alternation(globs)
 
         # Both branches match; Python's regex picks the leftmost alternative → index 0
         self.assertEqual(
@@ -95,7 +95,7 @@ class TestWeightGlobMatching(unittest.TestCase):
             "model.layers.*.self_attn.k_proj.weight",
             "model.layers.*.self_attn.v_proj.weight",
         ]
-        alt, mapping = build_glob_alternation(
+        alt, mapping, _ = build_glob_alternation(
             globs,
         )
 
@@ -118,7 +118,7 @@ class TestWeightGlobMatching(unittest.TestCase):
     def test_large_batch_performance_smoke(self):
         # Not a perf benchmark, but ensures building and matching a larger alternation is OK
         globs = [f"model.layers.*.mlp.block{i}.weight" for i in range(200)]
-        alt, mapping = build_glob_alternation(globs)
+        alt, mapping, _ = build_glob_alternation(globs)
         key = "model.layers.123.mlp.block57.weight"
         self.assertEqual(match_glob(key, alt, mapping), "model.layers.*.mlp.block57.weight")
 
@@ -130,7 +130,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         }
 
         compiled = {src: compile_glob_rule(src, tgt) for src, tgt in rules.items()}
-        alt, mapping = build_glob_alternation(list(rules.keys()))
+        alt, mapping, _ = build_glob_alternation(list(rules.keys()))
 
         self.assertEqual(
             sub_key("foo.block_sparse_moe.experts.3.w1.weight", alt, mapping, compiled),
@@ -150,7 +150,7 @@ class TestWeightGlobMatching(unittest.TestCase):
             "*.block_sparse_moe.experts.*.w1.weight": "*.mlp.experts.gate_up_proj",
         }
         compiled = {src: compile_glob_rule(src, tgt) for src, tgt in rules.items()}
-        alt, mapping = build_glob_alternation(list(rules.keys()))
+        alt, mapping, _ = build_glob_alternation(list(rules.keys()))
 
         key = "unrelated.key"
         self.assertEqual(sub_key(key, alt, mapping, compiled), key)
