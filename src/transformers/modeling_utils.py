@@ -49,6 +49,7 @@ from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_checkpoint_conversion_mapping
 from .core_model_loading import (
     WeightConverter,
+    WeightRenaming,
     convert_and_load_state_dict_in_model,
     revert_weight_conversion,
 )
@@ -3819,14 +3820,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config, quantization_config, dtype, device_map, weights_only, user_agent
         )
 
-        weight_conversions: Optional[list[WeightConverter]] = None
+        weight_conversions: Optional[list[WeightConverter | WeightRenaming]] = None
         model_type = getattr(config, "model_type", None)
         if model_type is not None:
             weight_conversions = get_checkpoint_conversion_mapping(model_type)
             if weight_conversions is None:
                 weight_conversions = get_checkpoint_conversion_mapping("legacy")
             if key_mapping is not None:
-                weight_conversions.extend([WeightConverter(k, v) for k, v in key_mapping.items()])
+                weight_conversions.extend(
+                    [WeightRenaming(source_keys=k, target_keys=v) for k, v in key_mapping.items()]
+                )
 
         if gguf_file:
             if hf_quantizer is not None:
@@ -3997,7 +4000,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         hf_quantizer: Optional[HfQuantizer] = None,
         device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
         weights_only: bool = True,
-        weight_mapping: Optional[Sequence[WeightConverter]] = None,
+        weight_mapping: Optional[Sequence[WeightConverter | WeightRenaming]] = None,
     ):
         is_quantized = hf_quantizer is not None
         is_hqq_or_quark = is_quantized and hf_quantizer.quantization_config.quant_method in {
