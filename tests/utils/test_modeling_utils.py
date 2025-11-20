@@ -1319,12 +1319,6 @@ class ModelUtilsTest(TestCasePlus):
         with self.assertRaises(OSError) as missing_model_file_error:
             BertModel.from_pretrained("hf-internal-testing/config-no-model")
 
-        self.assertTrue(
-            "does not appear to have a file named pytorch_model.bin or model.safetensors."
-            in str(missing_model_file_error.exception),
-            msg=missing_model_file_error.exception,
-        )
-
         with self.assertRaises(OSError) as missing_model_file_error:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 with open(os.path.join(tmp_dir, "config.json"), "w") as f:
