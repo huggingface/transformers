@@ -412,6 +412,7 @@ num_machines: 1
 num_processes: 4  # Total number of processes
 parallelism_config:
   parallelism_config_sp_size: 4  # Sequence parallel size
+  parallelism_config_dp_replicate_size: 1  # Must be: dp_replicate_size * dp_shard_size * sp_size = num_processes
   parallelism_config_sp_backend: deepspeed
   parallelism_config_sp_seq_length_is_variable: true
   parallelism_config_sp_attn_implementation: sdpa
