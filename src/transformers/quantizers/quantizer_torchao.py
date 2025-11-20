@@ -553,11 +553,6 @@ class TorchAoHfQuantizer(HfQuantizer):
                     operations=[TorchAoDeserialize(self)],
                 ),
                 # used for unsafe serialization
-                WeightConverter(
-                    source_keys=["weight"],
-                    target_keys="weight",
-                    operations=[TorchAoDeserialize(self)],
-                ),
             ]
         else:
             return [
