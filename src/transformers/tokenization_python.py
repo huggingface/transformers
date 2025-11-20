@@ -439,6 +439,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # 7. init the parent class
         super().__init__(**kwargs)
 
+        if self._added_tokens_decoder:
+            self._update_total_vocab_size()
+
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
         # V5: the order of addition follows self.SPECIAL_TOKENS_ATTRIBUTES, then extra special tokens
         # Note: _add_tokens will automatically skip tokens that are already in the base vocab
@@ -446,6 +449,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             [token for token in self.all_special_tokens if token not in self._added_tokens_encoder],
             special_tokens=True,
         )
+        self._update_total_vocab_size()
 
     @property
     def is_fast(self) -> bool:
