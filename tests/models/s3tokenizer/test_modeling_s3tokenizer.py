@@ -15,8 +15,6 @@
 
 import unittest
 
-import numpy as np
-
 from transformers import S3TokenizerConfig
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
 
@@ -25,8 +23,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
-    import torch
-
     from transformers import S3TokenizerModel
 
 
