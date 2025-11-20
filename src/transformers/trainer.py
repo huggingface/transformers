@@ -1023,12 +1023,16 @@ class Trainer:
         else:
             data_collator = self._get_collator_with_removed_columns(self.data_collator, description=description)
 
+        # MPS requrires forking if multiple workers are specified
+        should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
+
         dataloader_params = {
             "batch_size": batch_size,
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
+            "multiprocessing_context": "fork" if should_fork else None,
         }
 
         if not isinstance(dataset, torch.utils.data.IterableDataset):
@@ -4639,10 +4643,11 @@ class Trainer:
         Returns:
             `int`: The number of floating-point operations.
         """
-        if hasattr(self.model, "floating_point_ops"):
-            return self.model.floating_point_ops(inputs)
-        else:
-            return 0
+        if (main_input := getattr(self.model, "main_input_name", "input_ids")) in inputs and hasattr(
+            self.model, "num_parameters"
+        ):
+            return 6 * inputs[main_input].numel() * self.model.num_parameters(exclude_embeddings=True)
+        return 0
 
     def init_hf_repo(self, token: Optional[str] = None):
         """
