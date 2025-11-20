@@ -721,14 +721,14 @@ def convert_and_load_state_dict_in_model(
             _dtype = dtype
             if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, renamed_key):
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
-            else:
-                _dtype = dtype
-                if dtype_plan != {}:
-                    matched_dtype_pattern = match_glob(renamed_key, dtype_policy_alt, dtype_policy_by_group_name)
-                    if matched_dtype_pattern is not None:
-                        _dtype = dtype_plan[matched_dtype_pattern]
-                elif empty_param is not None and empty_param.dtype != _dtype:
-                    _dtype = empty_param.dtype
+
+            _dtype = dtype
+            if dtype_plan != {}:
+                matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
+                if matched_dtype_pattern is not None:
+                    _dtype = dtype_plan[matched_dtype_pattern.group()]
+            elif empty_param is not None and empty_param.dtype != _dtype:
+                _dtype = empty_param.dtype
 
             # 6. Handle TP sharding or device_map placement -> scheduled materialization
             future = None
