@@ -1025,7 +1025,7 @@ class Trainer:
 
         # MPS requrires forking if multiple workers are specified
         should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
-        
+
         dataloader_params = {
             "batch_size": batch_size,
             "collate_fn": data_collator,
