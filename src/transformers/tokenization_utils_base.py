@@ -2099,13 +2099,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             template = template.removesuffix(".jinja")
                             vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
-        # Find the first file matching pattern
         remote_files = list_repo_files(pretrained_model_name_or_path)
-        vocab_files["vocab_file"] += "|tekken.json|tokenizer.model.*"
-        for file_name in remote_files:
-            if re.search(vocab_files["vocab_file"], file_name):
-                vocab_files["vocab_file"] = file_name
-                break
+        if not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
+            # mistral tokenizer names are different, but we can still convert them if
+            # mistral common is not there
+            other_pattern = "tekken.json|tokenizer.model.*"
+            vocab_files["vocab_file"] = re.search(other_pattern, "".join(remote_files)).group()
 
         resolved_vocab_files = {}
         for file_id, file_path in vocab_files.items():
@@ -2425,6 +2424,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
                 " fine-tuned or trained."
             )
+        if tokenizer.vocab_size > 100000:
+            # Try to catch mistral tokenizers.
+            pass # TODO
         return tokenizer
 
     @staticmethod
