@@ -150,7 +150,7 @@ class AwqTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model has been converted properly
         """
-        from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
+        from gptqmodel.quantization.awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
 
         from transformers.integrations.awq import replace_with_awq_linear
 
@@ -522,7 +522,9 @@ class AwqScaleTest(unittest.TestCase):
     model_name = "TechxGenus/starcoder2-3b-AWQ"
 
     def test_load_quantized_model(self):
-        from awq.modules.act import ScaledActivation
+        from gptqmodel.quantization.awq.modules.act import ScaledActivation
+
+
 
         """
         Simple test that checks if the scales have been replaced in the quantized model

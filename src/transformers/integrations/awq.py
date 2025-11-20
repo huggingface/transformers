@@ -75,7 +75,7 @@ AWQ_SCALES_MAPPINGS = {
 
 
 def replace_quantization_scales(model, model_type):
-    from awq.modules.act import ScaledActivation
+    from gptqmodel.quantization.awq.modules.act import ScaledActivation
 
     if model_type not in AWQ_SCALES_MAPPINGS:
         return model
@@ -131,26 +131,26 @@ def replace_with_awq_linear(
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         if quantization_config.version == AWQLinearVersion.GEMM:
-            from awq.modules.linear.gemm import WQLinear_GEMM
+            from gptqmodel.quantization.awq.modules.linear.gemm import WQLinear_GEMM
 
             target_cls = WQLinear_GEMM
         elif quantization_config.version == AWQLinearVersion.GEMV:
-            from awq.modules.linear.gemv import WQLinear_GEMV
+            from gptqmodel.quantization.awq.modules.linear.gemv import WQLinear_GEMV
 
             target_cls = WQLinear_GEMV
         elif quantization_config.version == AWQLinearVersion.EXLLAMA:
             if quantization_config.exllama_config["version"] == ExllamaVersion.ONE:
-                from awq.modules.linear.exllama import WQLinear_Exllama
+                from gptqmodel.quantization.awq.modules.linear.exllama import WQLinear_Exllama
 
                 target_cls = WQLinear_Exllama
             elif quantization_config.exllama_config["version"] == ExllamaVersion.TWO:
-                from awq.modules.linear.exllamav2 import WQLinear_ExllamaV2
+                from gptqmodel.quantization.awq.modules.linear.exllamav2 import WQLinear_ExllamaV2
 
                 target_cls = WQLinear_ExllamaV2
             else:
                 raise ValueError(f"Unrecognized Exllama version: {quantization_config.exllama_config['version']}")
         elif quantization_config.version == AWQLinearVersion.IPEX:
-            from awq.modules.linear.gemm_ipex import WQLinear_IPEX
+            from gptqmodel.quantization.awq.modules.linear.gemm_ipex import WQLinear_IPEX
 
             target_cls = WQLinear_IPEX
         else:
@@ -383,7 +383,7 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
             The `QuantAttentionFused` class as it only supports that class
             for now.
     """
-    from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
+    from gptqmodel.quantization.awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
 
     module_has_been_fused = False
 
@@ -401,7 +401,7 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
             linear_target_cls = WQLinear_GEMM
             cat_dim = 1
         elif is_ipex_available() and version.parse(importlib.metadata.version("autoawq")) > version.parse("0.2.6"):
-            from awq.modules.linear import WQLinear_IPEX
+            from gptqmodel.quantization.awq.modules.linear import WQLinear_IPEX
 
             if isinstance(q_proj, WQLinear_IPEX):
                 linear_target_cls = WQLinear_IPEX
@@ -468,11 +468,11 @@ def post_init_awq_exllama_modules(model, exllama_config):
     """
 
     if exllama_config["version"] == ExllamaVersion.ONE:
-        from awq.modules.linear.exllama import exllama_post_init
+        from gptqmodel.quantization.awq.modules.linear.exllama import exllama_post_init
 
         model = exllama_post_init(model)
     elif exllama_config["version"] == ExllamaVersion.TWO:
-        from awq.modules.linear.exllamav2 import exllamav2_post_init
+        from gptqmodel.quantization.awq.modules.linear.exllamav2 import exllamav2_post_init
 
         model = exllamav2_post_init(
             model,
@@ -491,7 +491,7 @@ def post_init_awq_ipex_modules(model):
         - Weights packing, reordering and repacking
     """
 
-    from awq.modules.linear.gemm_ipex import ipex_post_init
+    from gptqmodel.quantization.awq.modules.linear.gemm_ipex import ipex_post_init
 
     model = ipex_post_init(model)
 
