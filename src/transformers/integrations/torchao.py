@@ -69,6 +69,9 @@ class TorchAoQuantize(ConversionOps):
 
         module, tensor_name = get_module_from_name(model, full_layer_name)
 
+        if not isinstance(module, torch.nn.Linear):
+            return {full_layer_name: value}
+
         module._parameters[tensor_name] = torch.nn.Parameter(
             value, requires_grad=value.requires_grad
         ).to(value.device)
@@ -163,6 +166,7 @@ class TorchAoQuantize(ConversionOps):
                     missing_keys.discard(full_layer_name)
                     module._is_hf_initialized = True
                     return {}
+
                 return {full_layer_name: value}
 
         quantize_(module, self.hf_quantizer.quantization_config.get_apply_tensor_subclass())

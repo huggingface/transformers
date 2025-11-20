@@ -250,6 +250,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         # making sure embedding is quantized
         self.assertTrue(isinstance(quantized_model.model.embed_tokens.weight, AffineQuantizedTensor))
@@ -332,6 +333,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         # highest precedence is fully specified module fqn
         self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, Float8Tensor))
@@ -365,6 +367,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         # highest precedence is fully specified module fqn
         self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, Float8Tensor))
@@ -399,6 +402,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, Float8Tensor))
         self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
@@ -430,6 +434,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
         self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.k_proj.weight, AffineQuantizedTensor))
@@ -460,6 +465,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         self.assertTrue(not isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, AffineQuantizedTensor))
         self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.k_proj.weight, AffineQuantizedTensor))
@@ -490,6 +496,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         self.assertTrue(not isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, AffineQuantizedTensor))
         self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
@@ -590,7 +597,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            dtype=torch.bfloat16,
+            torch_dtype=torch.bfloat16,
             device_map=device_map_offload,
             quantization_config=quant_config,
         )
@@ -625,7 +632,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
         quant_config = TorchAoConfig(config)
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            dtype=torch.bfloat16,
+            torch_dtype=torch.bfloat16,
             device_map="auto",
             quantization_config=quant_config,
         )
@@ -646,7 +653,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            dtype="auto",
+            torch_dtype="auto",
             device_map=self.device,
             quantization_config=quant_config,
         )
@@ -715,7 +722,7 @@ class TorchAoSerializationTest(unittest.TestCase):
         dtype = torch.bfloat16 if isinstance(self.quant_scheme, Int4WeightOnlyConfig) else "auto"
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname, safe_serialization=safe_serialization)
-            loaded_quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, dtype=dtype, device_map=device, use_safetensors=safe_serialization)
+            loaded_quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, dtype=dtype, device_map=device, torch_dtype=dtype, use_safetensors=safe_serialization)
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(device)
 
             output = loaded_quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)

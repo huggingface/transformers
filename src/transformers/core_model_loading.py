@@ -785,7 +785,8 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation,
                         hf_quantizer,
                     )
-            except SkipLayer:
+            except SkipLayer as e:
+                print(e)
                 continue
     thread_pool.shutdown(wait=False)
     return missing_keys, unexpected_keys, mismatch_keys, misc
