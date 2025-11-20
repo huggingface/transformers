@@ -2011,18 +2011,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ):
             if attn_implementation.endswith("2"):
                 applicable_attn_implementation = "kernels-community/flash-attn2"
+                if is_torch_xpu_available():
+                    attn_implementation = "kernels-community/flash-attn2"
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
 
         if is_kernel(applicable_attn_implementation):
-            # XPU only supports flash-attn2 kernels
-            if is_torch_xpu_available() and "flash-attn3" in applicable_attn_implementation:
-                raise ValueError(
-                    f"XPU does not support `{applicable_attn_implementation}`. "
-                    "Please use `attn_implementation='flash_attention_2'` or "
-                    "`attn_implementation='kernels-community/flash-attn2'` instead."
-                )
-
             try:
                 load_and_register_attn_kernel(applicable_attn_implementation)
                 # log that we used kernel fallback if successful

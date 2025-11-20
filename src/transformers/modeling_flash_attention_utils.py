@@ -51,7 +51,7 @@ def is_flash_attn_available():
         is_flash_attn_3_available()
         or is_flash_attn_2_available()
         or is_torch_npu_available()
-        or (is_torch_xpu_available() and is_torch_greater_or_equal("2.8", True))
+        or is_torch_xpu_available()
     )
 
 
