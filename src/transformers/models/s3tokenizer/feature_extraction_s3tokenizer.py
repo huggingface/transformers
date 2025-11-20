@@ -60,7 +60,12 @@ class S3TokenizerFeatureExtractor(SequenceFeatureExtractor):
         hop_length: int = 160,
         **kwargs,
     ):
-        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            padding_value=padding_value,
+            **kwargs,
+        )
         self.n_mels = n_mels
         self.n_fft = n_fft
         self.hop_length = hop_length
@@ -124,8 +129,7 @@ class S3TokenizerFeatureExtractor(SequenceFeatureExtractor):
             )
 
         is_batched = bool(
-            isinstance(raw_audio, (list, tuple))
-            and (isinstance(raw_audio[0], (np.ndarray, tuple, list)))
+            isinstance(raw_audio, (list, tuple)) and (isinstance(raw_audio[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:
@@ -156,4 +160,3 @@ class S3TokenizerFeatureExtractor(SequenceFeatureExtractor):
 
 
 __all__ = ["S3TokenizerFeatureExtractor"]
-
