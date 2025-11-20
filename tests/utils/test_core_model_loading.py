@@ -24,9 +24,10 @@ from transformers.core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     WeightConverter,
-    build_glob_alt,
+    WeightRenaming,
+    build_glob_alternation,
     convert_and_load_state_dict_in_model,
-    match_glob,
+    repl,
 )
 from transformers.utils.import_utils import is_triton_available
 
@@ -38,40 +39,47 @@ class TestWeightGlobMatching(unittest.TestCase):
             "model.layers.*.self_attn.q_proj.weight",
             "embed_tokens.weight",
         ]
-        self.alt_digits, self.map_digits = build_glob_alt(self.weight_globs_digits)
+        self.alt_digits, self.map_digits, _ = build_glob_alternation(self.weight_globs_digits)
 
         self.weight_globs_any = [
             "model.layers.*.mlp.gate_up_proj.weight",
             "model.layers.*.self_attn.q_proj.weight",
             "embed_tokens.weight",
         ]
-        self.alt_any, self.map_any = build_glob_alt(self.weight_globs_any)
+        self.alt_any, self.map_any, _ = build_glob_alternation(self.weight_globs_any)
+
+    @staticmethod
+    def _match_glob(key, alt, mapping):
+        matched = alt.search(key)
+        return mapping.get(matched.lastgroup) if matched else None
 
     def test_exact_match(self):
-        self.assertEqual(match_glob("embed_tokens.weight", self.alt_digits, self.map_digits), "embed_tokens.weight")
+        self.assertEqual(
+            self._match_glob("embed_tokens.weight", self.alt_digits, self.map_digits), "embed_tokens.weight"
+        )
 
     def test_digits_only_star_accepts_digits(self):
         self.assertEqual(
-            match_glob("model.layers.0.mlp.gate_up_proj.weight", self.alt_digits, self.map_digits),
+            self._match_glob("model.layers.0.mlp.gate_up_proj.weight", self.alt_digits, self.map_digits),
             "model.layers.*.mlp.gate_up_proj.weight",
         )
         self.assertEqual(
-            match_glob("model.layers.12.self_attn.q_proj.weight", self.alt_digits, self.map_digits),
+            self._match_glob("model.layers.12.self_attn.q_proj.weight", self.alt_digits, self.map_digits),
             "model.layers.*.self_attn.q_proj.weight",
         )
 
     def test_anychar_star_accepts_nondigits(self):
         self.assertEqual(
-            match_glob("model.layers.a.mlp.gate_up_proj.weight", self.alt_any, self.map_any),
+            self._match_glob("model.layers.a.mlp.gate_up_proj.weight", self.alt_any, self.map_any),
             "model.layers.*.mlp.gate_up_proj.weight",
         )
         self.assertEqual(
-            match_glob("model.layers.00x.mlp.gate_up_proj.weight", self.alt_any, self.map_any),
+            self._match_glob("model.layers.00x.mlp.gate_up_proj.weight", self.alt_any, self.map_any),
             "model.layers.*.mlp.gate_up_proj.weight",
         )
 
     def test_no_match(self):
-        self.assertIsNone(match_glob("model.layers.0.mlp.up_proj.weight", self.alt_digits, self.map_digits))
+        self.assertIsNone(self._match_glob("model.layers.0.mlp.up_proj.weight", self.alt_digits, self.map_digits))
 
     def test_leftmost_alternative_wins_for_overlapping_patterns(self):
         # Overlapping patterns: both could match; ensure leftmost wins
@@ -79,11 +87,11 @@ class TestWeightGlobMatching(unittest.TestCase):
             "model.layers.*.mlp.*.weight",  # broader (first)
             "model.layers.0.mlp.gate_up_proj.weight",  # more specific (second)
         ]
-        alt, mapping = build_glob_alt(globs)
+        alt, mapping, _ = build_glob_alternation(globs)
 
         # Both branches match; Python's regex picks the leftmost alternative → index 0
         self.assertEqual(
-            match_glob("model.layers.0.mlp.gate_up_proj.weight", alt, mapping), "model.layers.*.mlp.*.weight"
+            self._match_glob("model.layers.0.mlp.gate_up_proj.weight", alt, mapping), "model.layers.*.mlp.*.weight"
         )
 
     def test_multiple_patterns_same_prefix(self):
@@ -92,34 +100,59 @@ class TestWeightGlobMatching(unittest.TestCase):
             "model.layers.*.self_attn.k_proj.weight",
             "model.layers.*.self_attn.v_proj.weight",
         ]
-        alt, mapping = build_glob_alt(
+        alt, mapping, _ = build_glob_alternation(
             globs,
         )
 
         self.assertEqual(
-            match_glob("model.layers.3.self_attn.q_proj.weight", alt, mapping),
+            self._match_glob("model.layers.3.self_attn.q_proj.weight", alt, mapping),
             "model.layers.*.self_attn.q_proj.weight",
         )
         self.assertEqual(
-            match_glob("model.layers.3.self_attn.k_proj.weight", alt, mapping),
+            self._match_glob("model.layers.3.self_attn.k_proj.weight", alt, mapping),
             "model.layers.*.self_attn.k_proj.weight",
         )
         self.assertEqual(
-            match_glob("model.layers.3.self_attn.v_proj.weight", alt, mapping),
+            self._match_glob("model.layers.3.self_attn.v_proj.weight", alt, mapping),
             "model.layers.*.self_attn.v_proj.weight",
         )
 
     def test_anchor_full_match_only(self):
-        self.assertIsNotNone(match_glob("model.layers.0.mlp.gate_up_proj.weight.bar", self.alt_any, self.map_any))
+        self.assertIsNotNone(
+            self._match_glob("model.layers.0.mlp.gate_up_proj.weight.bar", self.alt_any, self.map_any)
+        )
 
     def test_large_batch_performance_smoke(self):
         # Not a perf benchmark, but ensures building and matching a larger alternation is OK
         globs = [f"model.layers.*.mlp.block{i}.weight" for i in range(200)]
-        alt, mapping = build_glob_alt(
-            globs,
-        )
+        alt, mapping, _ = build_glob_alternation(globs)
         key = "model.layers.123.mlp.block57.weight"
-        self.assertEqual(match_glob(key, alt, mapping), "model.layers.*.mlp.block57.weight")
+        self.assertEqual(self._match_glob(key, alt, mapping), "model.layers.*.mlp.block57.weight")
+
+    def test_sub_key_rewrites_targets(self):
+        renamings = [
+            WeightRenaming("block_sparse_moe.experts.*.w1.weight", "mlp.experts.gate_up_proj"),
+            WeightRenaming("block_sparse_moe.experts.*.w2.weight", "mlp.experts.down_proj"),
+            WeightRenaming("model.language_model.*", "language_model"),
+        ]
+        rename_alt, _, rename_by_group = build_glob_alternation(renamings)
+
+        def rename(original_key: str) -> str:
+            return rename_alt.sub(lambda m: repl(m, rename_by_group), original_key).replace("\\", "")
+
+        self.assertEqual(rename("foo.block_sparse_moe.experts.3.w1.weight"), "foo.mlp.experts.gate_up_proj")
+        self.assertEqual(rename("foo.block_sparse_moe.experts.3.w2.weight"), "foo.mlp.experts.down_proj")
+        self.assertEqual(rename("model.language_model.lm_head.weight"), "language_model")
+
+    def test_sub_key_no_match_returns_original(self):
+        renamings = [
+            WeightRenaming("block_sparse_moe.experts.*.w1.weight", "*.mlp.experts.gate_up_proj"),
+        ]
+        rename_alt, _, rename_by_group = build_glob_alternation(renamings)
+
+        key = "unrelated.key"
+        renamed_key = rename_alt.sub(lambda m: repl(m, rename_by_group), key).replace("\\", "")
+        self.assertEqual(renamed_key, key)
 
 
 class DummyParamModule(nn.Module):
@@ -215,7 +248,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 ],
                 operations=[Chunk(dim=0, chunks=3)],
             ),
-            WeightConverter("mlp.w2.weight", "mlp.down_proj.weight"),
+            WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
         missing, unexpected, mismatch, misc = convert_and_load_state_dict_in_model(
             model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
