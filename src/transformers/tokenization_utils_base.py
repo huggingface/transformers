@@ -2424,9 +2424,22 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
                 " fine-tuned or trained."
             )
-        if tokenizer.vocab_size > 100000:
-            # Try to catch mistral tokenizers.
-            pass # TODO
+        if tokenizer.vocab_size > 100000 and getattr(tokenizer.backend_tokenizer, "pre_tokenizer", None) is not None:
+            from huggingface_hub import model_info
+            def is_base_mistral(model_id: str) -> bool:
+                model = model_info(model_id)
+                if model.tags is not None:
+                    if re.search("base_model:.*mistralai", "".join(model.tags)):
+                        return True
+                return False
+
+            if is_base_mistral(pretrained_model_name_or_path) and not kwargs.get("fix_regex"):
+                logger.warning(
+                    f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
+                    f" with an old regex pattern. This will lead to incorrect tokenization."
+                )
+                import tokenizers
+                tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(pattern=tokenizers.Regex(r"[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]*[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]+|[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]+[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]*|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n/]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"), behavior = "isolated")
         return tokenizer
 
     @staticmethod
