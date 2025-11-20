@@ -2140,12 +2140,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 init.ones_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
                 init.zeros_(module.bias)
-        if isinstance(getattr(module, "gate_up_proj", None), nn.Parameter):
-            init.normal_(module.gate_up_proj, mean=0.0, std=std)
-        if isinstance(getattr(module, "down_proj", None), nn.Parameter):
-            init.normal_(module.down_proj, mean=0.0, std=std)
-        if isinstance(getattr(module, "gate", None), nn.Parameter):
-            init.normal_(module.gate, mean=0.0, std=std)
 
     def _initialize_weights(self, module):
         """
@@ -2166,10 +2160,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         module graph along the recursion. It can handle an arbitrary number of sub-models. Without it, every composite
         model would have to recurse a second time on all sub-models explicitly in the outer-most `_init_weights`, which
         is extremely error prone and inefficient.
-
-        Note that the `torch.no_grad()` decorator is very important as well, as most of our `_init_weights` do not use
-        `torch.nn.init` functions (which are all no_grad by default), but simply do in-place ops such as
-        `module.weight.zero_()`.
         """
         if not hasattr(torch.nn.Module, "smart_apply"):
             # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function
