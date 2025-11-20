@@ -20,12 +20,11 @@
 """PyTorch S3Tokenizer model - self-contained implementation."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-from einops import rearrange
 from torch.nn.utils.rnn import pad_sequence
 
 from ...modeling_utils import PreTrainedModel
@@ -100,7 +99,7 @@ def mask_to_bias(mask: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     return mask
 
 
-def padding(data: List[torch.Tensor]):
+def padding(data: list[torch.Tensor]):
     """Padding the data into batch data
 
     Parameters
@@ -241,7 +240,7 @@ def apply_rotary_emb(
     xq: torch.Tensor,
     xk: torch.Tensor,
     freqs_cis: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply rotary embeddings to query and key tensors."""
     real = torch.view_as_real(freqs_cis)
     cos, sin = real[:, :, 0], real[:, :, 1]
@@ -270,7 +269,8 @@ class FSQCodebook(torch.nn.Module):
 
     @torch.inference_mode()
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
-        x = rearrange(x, "... d -> (...) d")
+        # Flatten all dimensions except last: equivalent to rearrange(x, "... d -> (...) d")
+        x = x.view(-1, x.shape[-1])
         return x
 
     @torch.inference_mode()
@@ -313,7 +313,8 @@ class FSQVectorQuantization(torch.nn.Module):
     @torch.inference_mode()
     def decode(self, embed_ind: torch.Tensor) -> torch.Tensor:
         quantize = self._codebook.decode(embed_ind)
-        quantize = rearrange(quantize, "b n d -> b d n")
+        # Transpose dimensions: equivalent to rearrange(quantize, "b n d -> b d n")
+        quantize = quantize.transpose(1, 2)
         return quantize
 
 
@@ -428,7 +429,7 @@ class AudioEncoderV2(torch.nn.Module):
             for _ in range(n_layer)
         ])
 
-    def forward(self, x: torch.Tensor, x_len: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor, x_len: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         mask = make_non_pad_mask(x_len).unsqueeze(1)
         x = torch.nn.functional.gelu(self.conv1(x * mask))
         x_len = (x_len + 2 - 1 * (3 - 1) - 1) // self.stride + 1
@@ -457,11 +458,11 @@ class S3TokenizerV2Core(torch.nn.Module):
         self.encoder = AudioEncoderV2(n_mels, n_audio_state, n_audio_head, n_audio_layer, 2, use_sdpa)
         self.quantizer = FSQVectorQuantization(n_audio_state, n_codebook_size)
 
-    def forward(self, mel: torch.Tensor, mel_len: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, mel: torch.Tensor, mel_len: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         return self.quantize(mel, mel_len)
 
     @torch.inference_mode()
-    def quantize(self, mel: torch.Tensor, mel_len: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def quantize(self, mel: torch.Tensor, mel_len: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Quantize mel spectrogram to tokens, with automatic long audio handling."""
         max_frames = 3000
         long_audio_mask = mel_len > max_frames
@@ -476,7 +477,7 @@ class S3TokenizerV2Core(torch.nn.Module):
     @torch.inference_mode()
     def _quantize_mixed_batch(self, mel: torch.Tensor, mel_len: torch.Tensor,
                               long_audio_mask: torch.Tensor,
-                              max_frames: int) -> Tuple[torch.Tensor, torch.Tensor]:
+                              max_frames: int) -> tuple[torch.Tensor, torch.Tensor]:
         """Handle mixed batch with both short and long audio using unified batch processing."""
         batch_size = mel.size(0)
         sample_rate, hop_length = 16000, 160
@@ -602,10 +603,10 @@ class S3TokenizerPreTrainedModel(PreTrainedModel):
 class S3TokenizerModel(S3TokenizerPreTrainedModel):
     """
     S3Tokenizer model for speech tokenization.
-    
+
     This model integrates the S3Tokenizer implementation from xingchensong/S3Tokenizer
     repository into HuggingFace Transformers.
-    
+
     Args:
         config (S3TokenizerConfig): Model configuration class with all parameters of the model.
     """
@@ -646,7 +647,7 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
 
         self.register_buffer("window", torch.hann_window(self.n_fft))
 
-    def pad(self, wavs: List[Union[torch.Tensor, np.ndarray]], sr: int) -> List[torch.Tensor]:
+    def pad(self, wavs: list[Union[torch.Tensor, np.ndarray]], sr: int) -> list[torch.Tensor]:
         """Pad waveforms to be multiple of 40ms (S3 runs at 25 token/sec)."""
         processed_wavs = []
         for wav in wavs:
@@ -662,7 +663,7 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
             processed_wavs.append(wav)
         return processed_wavs
 
-    def _prepare_audio(self, wavs: List[Union[torch.Tensor, np.ndarray]]) -> List[torch.Tensor]:
+    def _prepare_audio(self, wavs: list[Union[torch.Tensor, np.ndarray]]) -> list[torch.Tensor]:
         """Prepare a list of audios for s3tokenizer processing."""
         processed_wavs = []
         for wav in wavs:
@@ -681,23 +682,23 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
         audio = audio.to(self.device)
         if padding > 0:
             audio = F.pad(audio, (0, padding))
-            
+
         if audio.dim() == 1:
             audio = audio.unsqueeze(0)
             squeeze_output = True
         else:
             squeeze_output = False
-            
+
         stft = torch.stft(audio, self.n_fft, S3_HOP, window=self.window.to(self.device), return_complex=True)
         magnitudes = stft[..., :-1].abs()**2
         mel_spec = self._mel_filters.to(self.device) @ magnitudes
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
-        
+
         if squeeze_output:
             log_spec = log_spec.squeeze(0)
-            
+
         return log_spec
 
     def forward(
@@ -706,7 +707,7 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         max_len: Optional[int] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, S3TokenizerOutput]:
+    ) -> Union[tuple, S3TokenizerOutput]:
         """
         Args:
             input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -734,7 +735,7 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
 
         processed_wavs = self._prepare_audio(wavs)
         mels, mel_lens = [], []
-        
+
         for wav in processed_wavs:
             wav = wav.to(self.device)
             mel = self.log_mel_spectrogram(wav.squeeze(0))
@@ -768,7 +769,7 @@ def drop_invalid_tokens(x: torch.Tensor) -> torch.Tensor:
     """Drop SoS and EoS tokens from speech token sequence."""
     assert len(x.shape) == 1 or (len(x.shape) == 2 and x.shape[0] == 1), \
         "only batch size of one allowed for now"
-    
+
     if SOS in x:
         s = (x == SOS).nonzero(as_tuple=True)[0].squeeze(0) + 1
     else:
