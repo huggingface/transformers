@@ -29,7 +29,7 @@ from transformers.core_model_loading import (
     compile_glob_rule,
     convert_and_load_state_dict_in_model,
     match_glob,
-    sub_key,
+    repl,
 )
 from transformers.utils.import_utils import is_triton_available
 
@@ -130,7 +130,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         }
 
         compiled = {src: compile_glob_rule(src, tgt) for src, tgt in rules.items()}
-        alt, mapping, _ = build_glob_alternation(list(rules.keys()))
+        alt,  _, mapping = build_glob_alternation(list(rules.keys()))
 
         self.assertEqual(
             sub_key("foo.block_sparse_moe.experts.3.w1.weight", alt, mapping, compiled),

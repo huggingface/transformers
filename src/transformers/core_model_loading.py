@@ -100,16 +100,6 @@ def build_glob_alternation(
     return alternation, src_group_to_glob, tgt_group_to_glob
 
 
-def match_glob(key: str, alt: re.Pattern, name_map: dict[str, str]) -> Optional[str]:
-    """
-    Match the key against the alternation; return the original glob string that matched.
-    """
-    m = alt.match(key)
-    if not m or m.lastgroup is None:
-        return None
-    return name_map.get(m.lastgroup)
-
-
 class ConversionOps:
     """Base class for weight conversion operations."""
 
@@ -699,7 +689,8 @@ def convert_and_load_state_dict_in_model(
             # 6. Handle TP sharding or device_map placement -> scheduled materialization
             future = None
             if device_mesh:
-                if matched_tp_pattern := match_glob(renamed_key, tp_plan_alt, tp_plan_by_group_name):
+                if matched_tp_pattern := tp_plan_alt.search(renamed_key):
+                    matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:
                         tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
                         mapping.distributed_operation = tp_layer(
