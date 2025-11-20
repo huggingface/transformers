@@ -97,6 +97,8 @@ class S3TokenizerConfig(PreTrainedConfig):
         self.n_audio_head = n_audio_head
         self.n_audio_layer = n_audio_layer
         self.use_sdpa = use_sdpa
+        # Add hidden_size as an alias for n_audio_state for compatibility with common tests
+        self.hidden_size = n_audio_state
 
         super().__init__(**kwargs)
 

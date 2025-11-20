@@ -663,6 +663,7 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
     """
 
     ignore_state_dict_missing = ("_mel_filters", "window")
+    _tied_weights_keys = []
 
     def __init__(self, config: S3TokenizerConfig, name: str = "speech_tokenizer_v2_25hz"):
         super().__init__(config)
@@ -814,6 +815,10 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
             speech_tokens=speech_tokens,
             speech_token_lens=speech_token_lens,
         )
+
+    def get_input_embeddings(self):
+        """S3Tokenizer does not use input embeddings in the traditional sense."""
+        return None
 
     @property
     def device(self):
