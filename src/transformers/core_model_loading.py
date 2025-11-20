@@ -373,7 +373,7 @@ class WeightConverter(WeightTransform):
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
 
-    def convert(self, layer_name: str, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
+    def convert(self, layer_name: str, model=None, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
         misc = {}
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]
@@ -386,7 +386,9 @@ class WeightConverter(WeightTransform):
                     source_keys=self.source_keys,
                     target_keys=self.target_keys,
                     full_layer_name=layer_name,
+                    model=model,
                     config=config,
+                    missing_keys=missing_keys,
                 )
         if quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (collected_tensors, layer_name), self.quantization_operation):
@@ -719,7 +721,8 @@ def convert_and_load_state_dict_in_model(
             # 5. Handle dtype casting
             _dtype = dtype
             if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, renamed_key):
-                mapping.quantization_operation = hf_quantizer.get_quantize_ops()
+                # mapping.quantization_operation = hf_quantizer.get_quantize_ops()
+                pass
             else:
                 _dtype = dtype
                 if dtype_plan != {}:
@@ -768,7 +771,7 @@ def convert_and_load_state_dict_in_model(
             pbar.refresh()
             try:
                 realized_value, misc = mapping.convert(
-                    layer_name, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys
+                    layer_name, model=model, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys
                 )
                 for k, output_value in realized_value.items():
                     set_param_for_module(

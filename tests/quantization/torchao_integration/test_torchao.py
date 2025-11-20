@@ -153,7 +153,7 @@ class TorchAoTest(unittest.TestCase):
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What are we having for"
 
     def tearDown(self):
         gc.collect()
@@ -217,6 +217,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
@@ -273,6 +274,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         # making sure `model.layers.0.self_attn.q_proj` is skipped
         self.assertTrue(not isinstance(quantized_model.model.layers[0].self_attn.q_proj.weight, AffineQuantizedTensor))
@@ -296,6 +298,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         # making sure `model.layers.0.self_attn.q_proj` is skipped
         self.assertTrue(not isinstance(quantized_model.model.layers[0].self_attn.q_proj.weight, AffineQuantizedTensor))
@@ -542,7 +545,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
-                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
+                ("cuda", 7): "What are we having for dinner?\n- 1. What are we having for",
             }
         )
         # fmt: on
@@ -599,7 +602,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
-                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
+                ("cuda", 7): "What are we having for dinner?\n- 1. What are we having for",
             }
         )
         # fmt: on
@@ -682,7 +685,7 @@ class TorchAoSerializationTest(unittest.TestCase):
         )
         cls.quant_scheme = Int4WeightOnlyConfig(**cls.quant_scheme_kwargs)
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What are we having for"
 
     def setUp(self):
         self.quant_config = TorchAoConfig(self.quant_scheme)
@@ -815,7 +818,7 @@ class TorchAoSerializationAcceleratorTest(TorchAoSerializationTest):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
-                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
+                ("cuda", 7): "What are we having for dinner?\n- 1. What are we having for",
             }
         )
         # fmt: on

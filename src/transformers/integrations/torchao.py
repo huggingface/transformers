@@ -66,7 +66,7 @@ class TorchAoQuantize(ConversionOps):
 
         _ , value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
-        print(model)
+
         module, tensor_name = get_module_from_name(model, full_layer_name)
 
         module._parameters[tensor_name] = torch.nn.Parameter(
@@ -188,9 +188,10 @@ class TorchAoDeserialize(ConversionOps):
             return {full_layer_name: value}
 
         is_unsafe_serialization = ":" not in list(input_dict.keys())[0]
+
         param_data = {}
         if is_unsafe_serialization:
-            weight = input_dict["qdata"][0] if isinstance(input_dict["qdata"], list) else input_dict["qdata"]
+            weight = input_dict["weight"][0] if isinstance(input_dict["weight"], list) else input_dict["weight"]
         else:
             param_data = {
                 f"{full_layer_name}:qdata": input_dict["weight:qdata"][0] if isinstance(input_dict["weight:qdata"], list) else input_dict["weight:qdata"],
