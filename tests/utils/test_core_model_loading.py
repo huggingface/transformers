@@ -54,7 +54,9 @@ class TestWeightGlobMatching(unittest.TestCase):
         return mapping.get(matched.lastgroup) if matched else None
 
     def test_exact_match(self):
-        self.assertEqual(self._match_glob("embed_tokens.weight", self.alt_digits, self.map_digits), "embed_tokens.weight")
+        self.assertEqual(
+            self._match_glob("embed_tokens.weight", self.alt_digits, self.map_digits), "embed_tokens.weight"
+        )
 
     def test_digits_only_star_accepts_digits(self):
         self.assertEqual(
@@ -116,7 +118,9 @@ class TestWeightGlobMatching(unittest.TestCase):
         )
 
     def test_anchor_full_match_only(self):
-        self.assertIsNotNone(self._match_glob("model.layers.0.mlp.gate_up_proj.weight.bar", self.alt_any, self.map_any))
+        self.assertIsNotNone(
+            self._match_glob("model.layers.0.mlp.gate_up_proj.weight.bar", self.alt_any, self.map_any)
+        )
 
     def test_large_batch_performance_smoke(self):
         # Not a perf benchmark, but ensures building and matching a larger alternation is OK

@@ -684,7 +684,7 @@ def convert_and_load_state_dict_in_model(
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[matched_dtype_pattern.group()]
             elif empty_param is not None and empty_param.dtype != _dtype:
-                _dtype = empty_param.dtype # usually correct when initializing
+                _dtype = empty_param.dtype  # usually correct when initializing
 
             # 6. Handle TP sharding or device_map placement -> scheduled materialization
             future = None
