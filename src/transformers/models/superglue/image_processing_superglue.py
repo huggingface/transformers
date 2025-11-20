@@ -394,8 +394,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             matches0 = matches[mask0]
             scores0 = scores[mask0]
 
-            # Filter out matches with low scores
-            valid_matches = torch.logical_and(scores0 > threshold, matches0 > -1)
+            # Filter out matches with low scores, invalid matches, and out-of-bounds indices
+            valid_matches = (scores0 > threshold) & (matches0 > -1) & (matches0 < keypoints1.shape[0])
 
             matched_keypoints0 = keypoints0[valid_matches]
             matched_keypoints1 = keypoints1[matches0[valid_matches]]
