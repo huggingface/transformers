@@ -35,6 +35,8 @@ from transformers import (
     BertTokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
+    T5Tokenizer,
+    T5TokenizerFast,
     TokenizersBackend,
     is_mlx_available,
     is_torch_available,
@@ -2579,4 +2581,68 @@ class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTest
     Uses T5Tokenizer as a representative SentencePiece tokenizer.
     """
 
-    from_pretrained_kwargs = {}
+    tokenizer_class = T5Tokenizer
+    rust_tokenizer_class = T5TokenizerFast
+    test_slow_tokenizer = True
+    test_rust_tokenizer = True
+    from_pretrained_id = "google-t5/t5-base"
+    from_pretrained_kwargs = {"use_fast": False}
+
+    def test_add_tokens(self):
+        tokenizer_r = self.get_rust_tokenizer()
+
+        vocab_size = len(tokenizer_r)
+        self.assertEqual(tokenizer_r.add_tokens(""), 0)
+        self.assertEqual(tokenizer_r.add_tokens("testoken"), 1)
+        self.assertEqual(tokenizer_r.add_tokens(["testoken1", "testtoken2"]), 2)
+        self.assertEqual(len(tokenizer_r), vocab_size + 3)
+
+        self.assertEqual(tokenizer_r.add_special_tokens({}), 0)
+        self.assertEqual(tokenizer_r.add_special_tokens({"bos_token": "[BOS]", "eos_token": "[EOS]"}), 2)
+        self.assertRaises(
+            ValueError, tokenizer_r.add_special_tokens, {"additional_special_tokens": "<testtoken1>"}
+        )
+        self.assertEqual(tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken2>"]}), 1)
+        self.assertEqual(
+            tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}), 2
+        )
+        added_vocab = tokenizer_r.get_added_vocab()
+        self.assertIn("<testtoken3>", added_vocab)
+
+    def test_add_tokens_tokenizer(self):
+        tokenizer = self.get_tokenizer(do_lower_case=False)
+        vocab_size = tokenizer.vocab_size
+        all_size = len(tokenizer)
+
+        new_toks = [
+            AddedToken("newtokenone", rstrip=False, lstrip=False),
+            AddedToken("newtokentwo", rstrip=False, lstrip=False),
+        ]
+        added_toks = tokenizer.add_tokens(new_toks)
+        vocab_size_2 = tokenizer.vocab_size
+        all_size_2 = len(tokenizer)
+
+        self.assertEqual(vocab_size, vocab_size_2)
+        self.assertEqual(added_toks, len(new_toks))
+        self.assertEqual(all_size_2, all_size + len(new_toks))
+
+        tokens = tokenizer.encode("newtokenone words newtokentwo", add_special_tokens=False)
+        self.assertGreaterEqual(len(tokens), 3)
+        self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
+        self.assertGreater(tokens[-1], tokenizer.vocab_size - 1)
+
+        new_specials = {
+            "eos_token": AddedToken("<|eos_new|>", rstrip=False, lstrip=False),
+            "pad_token": AddedToken("<|pad_new|>", rstrip=False, lstrip=False),
+        }
+        added_specials = tokenizer.add_special_tokens(new_specials)
+        all_size_3 = len(tokenizer)
+        self.assertEqual(added_specials, len(new_specials))
+        self.assertEqual(all_size_3, all_size_2 + len(new_specials))
+
+        tokens = tokenizer.encode("<|eos_new|> newtokenone <|pad_new|>", add_special_tokens=False)
+        self.assertEqual(tokens[0], tokenizer.eos_token_id)
+        self.assertEqual(tokens[-1], tokenizer.pad_token_id)
+
+    def test_alignment_methods(self):
+        self.skipTest("SentencePiece fast tokenizers do not expose token alignment metadata.")
