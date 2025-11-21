@@ -452,7 +452,7 @@ def set_param_for_module(
 
         ref = getattr(module_obj, param_name)
         if ref is None:
-            unexpected_keys.add(layer_name)
+            unexpected_keys.add(full_param_name)
         else:
             use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
             if not isinstance(param_value, torch.nn.Parameter):
@@ -472,14 +472,13 @@ def set_param_for_module(
                     param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
             # Remove from missing keys (it's either mismatched, or all good)
-            missing_keys.discard(layer_name)
+            missing_keys.discard(full_param_name)
             if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
-                mismatch_keys.add((layer_name, param_value.shape, ref.shape))
+                mismatch_keys.add((full_param_name, param_value.shape, ref.shape))
                 module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
             else:
-                param_value._is_hf_initialized = (
-                    True  # super important otherwise _init_weight re-initi if bias is missing
-                )
+                # super important otherwise _init_weight will re-init the param
+                param_value._is_hf_initialized = True
                 setattr(module_obj, param_name, param_value)
 
 
@@ -711,6 +710,8 @@ def convert_and_load_state_dict_in_model(
             if future is None:
                 device_match = device_map_regex.match(renamed_key)
                 param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
+                # If disk, we need to materialize on cpu first
+                param_device = "cpu" if param_device == "disk" else param_device
                 future = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future)
@@ -734,9 +735,7 @@ def convert_and_load_state_dict_in_model(
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
                     device_match = device_map_regex.match(target_name)
-                    param_device = (
-                        device_map[device_match.group()] if device_match else device_map.get("", "cpu")
-                    )
+                    param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
                     # Offloading support
                     if param_device == "disk":
                         missing_keys.discard(target_name)

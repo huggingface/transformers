@@ -18,7 +18,6 @@ and simplicity/ease of use.
 
 import copy
 import inspect
-import itertools
 import os
 import re
 from collections import OrderedDict, defaultdict
@@ -466,27 +465,6 @@ def expand_device_map(device_map, param_names):
     return new_device_map
 
 
-def update_param_name(param_name: str, weight_pattern_alt, weight_pattern_by_group_name, source_to_target) -> str:
-    """Update a source `param_name` in a checkpoint into the target name that the model expects, if different.
-    This uses the same logic as `core_model_loading.py`."""
-    # TODO Cyril: This function would not even need to exist if the Converter entries already contained the
-    # full expanded source and target names
-    from ..core_model_loading import match_glob
-
-    if weight_pattern_alt is None:
-        return param_name
-
-    matched_pattern = match_glob(param_name, weight_pattern_alt, weight_pattern_by_group_name)
-    if matched_pattern is not None:
-        converter = source_to_target[matched_pattern]
-        # Only change name if it's a simple renaming, i.e. no custom Ops
-        if len(converter.source_keys) == 1 and len(converter.target_keys) == 1:
-            source_pattern = converter.source_keys[0]
-            target_pattern = converter.target_keys[0]
-            return re.sub(source_pattern, target_pattern, param_name)
-    return param_name
-
-
 def accelerate_disk_offload(
     disk_offload_folder: str | None,
     checkpoint_files: list[str] | None,
@@ -496,17 +474,18 @@ def accelerate_disk_offload(
     dtype: torch.dtype | None,
     weight_mapping=None,
 ):
-    from ..core_model_loading import build_glob_alt
+    from ..core_model_loading import WeightRenaming, build_glob_alternation, repl
 
     if disk_offload_folder is not None:
         os.makedirs(disk_offload_folder, exist_ok=True)
     is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
 
-    _patterns, weight_pattern_alt, weight_pattern_by_group_name = None, None, None
+    rename = False
     if weight_mapping is not None:
-        _patterns = list(itertools.chain.from_iterable([k.source_keys for k in weight_mapping]))
-        source_to_target = {sk: k for k in weight_mapping for sk in k.source_keys}
-        weight_pattern_alt, weight_pattern_by_group_name = build_glob_alt(_patterns)
+        renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
+        if len(renamings) > 0:
+            rename = True
+            rename_alt, _, rename_by_group = build_glob_alternation(renamings)
 
     # In this case, the offload index is simply the existing safetensors (except if using custom weight loading
     # Operation, e.g. the MoE models, where we need to resave the weights that were changed at loading time)
@@ -521,7 +500,7 @@ def accelerate_disk_offload(
 
         # Update the weight names according to the `weight_mapping`
         weight_renaming_map = {
-            update_param_name(k, weight_pattern_alt, weight_pattern_by_group_name, source_to_target): k
+            rename_alt.sub(lambda m: repl(m, rename_by_group), k).replace("\\", "") if rename else k: k
             for k in weight_map
         }
 
