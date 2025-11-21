@@ -377,7 +377,7 @@ class Ernie4_5_VLPreTrainedModel(Qwen2_5_VLPreTrainedModel):
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, Ernie4_5_MoeTopKRouter):
+        if isinstance(module, Ernie4_5_VLMoeTopKRouter):
             init.zeros_(module.moe_statics.e_score_correction_bias)
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Ernie4_5_VLMoeExperts):
