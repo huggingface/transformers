@@ -18,6 +18,7 @@ from typing import Any, overload
 
 from ..generation import GenerationConfig
 from ..utils import is_torch_available
+from ..utils.chat_template_utils import Chat, ChatType
 from .base import Pipeline
 
 
@@ -28,22 +29,6 @@ if is_torch_available():
     from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 
 DEFAULT_VOCODER_ID = "microsoft/speecht5_hifigan"
-
-
-ChatType = list[dict[str, str]]
-
-
-# Copied from transformers.pipelines.text_generation.Chat
-class Chat:
-    """This class is intended to just be used internally in this pipeline and not exposed to users. We convert chats
-    to this format because the rest of the pipeline code tends to assume that lists of messages are
-    actually a batch of samples rather than messages in the same conversation."""
-
-    def __init__(self, messages: dict):
-        for message in messages:
-            if not ("role" in message and "content" in message):
-                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
-        self.messages = messages
 
 
 class TextToAudioPipeline(Pipeline):

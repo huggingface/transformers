@@ -5,6 +5,7 @@ from typing import Any, overload
 
 from ..generation import GenerationConfig
 from ..utils import ModelOutput, add_end_docstrings, is_torch_available
+from ..utils.chat_template_utils import Chat, ChatType
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -14,25 +15,11 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
     from .pt_utils import KeyDataset
 
-ChatType = list[dict[str, str]]
-
 
 class ReturnType(enum.Enum):
     TENSORS = 0
     NEW_TEXT = 1
     FULL_TEXT = 2
-
-
-class Chat:
-    """This class is intended to just be used internally in this pipeline and not exposed to users. We convert chats
-    to this format because the rest of the pipeline code tends to assume that lists of messages are
-    actually a batch of samples rather than messages in the same conversation."""
-
-    def __init__(self, messages: dict):
-        for message in messages:
-            if not ("role" in message and "content" in message):
-                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
-        self.messages = messages
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
