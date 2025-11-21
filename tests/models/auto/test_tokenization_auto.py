@@ -158,12 +158,11 @@ class AutoTokenizerTest(unittest.TestCase):
         tokenizers = TOKENIZER_MAPPING.values()
         tokenizer_names = []
 
-        for slow_tok, fast_tok in tokenizers:
-            if slow_tok is not None:
-                tokenizer_names.append(slow_tok.__name__)
-
-            if fast_tok is not None:
-                tokenizer_names.append(fast_tok.__name__)
+        for tokenizer_entry in tokenizers:
+            candidates = tokenizer_entry if isinstance(tokenizer_entry, tuple) else (tokenizer_entry,)
+            for tokenizer_cls in candidates:
+                if tokenizer_cls is not None:
+                    tokenizer_names.append(tokenizer_cls.__name__)
 
         for tokenizer_name in tokenizer_names:
             # must find the right class

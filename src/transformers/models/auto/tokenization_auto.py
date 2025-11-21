@@ -235,7 +235,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("mpnet", "MPNetTokenizer" if is_tokenizers_available() else None),
         ("mpt", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("mra", "RobertaTokenizer"),
-        ("mt5", "MT5TokenizerFast" if is_tokenizers_available() else None),
+        ("mt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("musicgen", "T5Tokenizer" if is_tokenizers_available() else None),
         ("musicgen_melody", "T5Tokenizer" if is_tokenizers_available() else None),
         ("mvp", "RobertaTokenizer" if is_tokenizers_available() else None),

@@ -2420,6 +2420,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             tokenizer_config.pop("tokenizer_file", None)
         if "device_map" in tokenizer_config:
             tokenizer_config.pop("device_map")
+        if "slow_tokenizer_class" in tokenizer_config:
+            tokenizer_config.pop("slow_tokenizer_class")
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"

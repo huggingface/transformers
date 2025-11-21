@@ -242,6 +242,19 @@ class PLBartTokenizer(SentencePieceBackend):
             return base_vocab + lang_code_count + fairseq_offset + 1  # +1 for mask token
         return base_vocab + lang_code_count + fairseq_offset
 
+    def get_vocab(self):
+        """Override to use fairseq vocabulary structure"""
+        vocab = self.fairseq_tokens_to_ids.copy()
+        for i in range(self.sp_model.get_piece_size()):
+            sp_token = self.sp_model.IdToPiece(i)
+            # Map SP token to fairseq ID: SP ID 0 maps to unk_token_id, others map to SP_ID + fairseq_offset
+            vocab_id = self.unk_token_id if i == 0 else (i + self.fairseq_offset)
+            if sp_token not in vocab:
+                vocab[sp_token] = vocab_id
+        # Add any additional tokens
+        vocab.update({token: idx for token, idx in self._added_tokens_encoder.items() if token not in vocab})
+        return vocab
+
     @property
     def src_lang(self) -> str:
         return self._src_lang

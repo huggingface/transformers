@@ -183,6 +183,10 @@ class MarianTokenizer(PreTrainedTokenizer):
     def _convert_token_to_id(self, token):
         if token in self.current_encoder:
             return self.current_encoder[token]
+        # Fall back to SPM model for tokens not in external vocab (matches _convert_id_to_token behavior)
+        spm_id = self.current_spm.piece_to_id(token)
+        if spm_id >= 0:
+            return spm_id
         # The Marian vocab is not aligned with the SentencePiece IDs, so falling back to raw
         # SentencePiece indices would map to unrelated tokens. Treat such pieces as unknown.
         return self.current_encoder[self.unk_token]

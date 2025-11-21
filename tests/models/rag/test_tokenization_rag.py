@@ -116,7 +116,7 @@ class RagTokenizerTest(TestCase):
         rag_config.save_pretrained(save_dir)
         rag_tokenizer.save_pretrained(save_dir)
         new_rag_tokenizer = RagTokenizer.from_pretrained(save_dir, config=rag_config)
-        self.assertIsInstance(new_rag_tokenizer.question_encoder, DPRQuestionEncoderTokenizerFast)
+        self.assertIsInstance(new_rag_tokenizer.question_encoder, DPRQuestionEncoderTokenizer)
         self.assertEqual(new_rag_tokenizer.question_encoder.get_vocab(), rag_tokenizer.question_encoder.get_vocab())
         self.assertIsInstance(new_rag_tokenizer.generator, RobertaTokenizer)
         self.assertEqual(new_rag_tokenizer.generator.get_vocab(), rag_tokenizer.generator.get_vocab())
