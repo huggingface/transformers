@@ -38,8 +38,7 @@ from .utils import is_torch_greater_or_equal, logging
 
 if is_torch_available():
     _torch_distributed_available = torch.distributed.is_available()
-
-_is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
+    _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 
 if _is_dtensor_available:
     from torch.distributed.tensor import DTensor, Replicate
