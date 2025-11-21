@@ -148,4 +148,4 @@ class AwqQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self):
-        return version.parse(importlib.metadata.version("gptqmodel")) >= version.parse(5.0.0)
+        return version.parse(importlib.metadata.version("gptqmodel")) >= version.parse("5.0.0")
