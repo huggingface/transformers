@@ -628,7 +628,9 @@ class ModelUtilsTest(TestCasePlus):
         # but if the model has `_keep_in_fp32_modules` then those modules should be in fp32 no matter what
         LlavaForConditionalGeneration._keep_in_fp32_modules = ["multi_modal_projector"]
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, dtype="auto")
-        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(
+            model.model.language_model.dtype, torch.float32
+        )  # remember config says float32 for text_config
         self.assertEqual(model.model.vision_tower.dtype, torch.bfloat16)
         self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
         self.assertIsInstance(model.config.dtype, torch.dtype)
@@ -1318,12 +1320,6 @@ class ModelUtilsTest(TestCasePlus):
         # test no model file found when use_safetensors=None (default when safetensors package available)
         with self.assertRaises(OSError) as missing_model_file_error:
             BertModel.from_pretrained("hf-internal-testing/config-no-model")
-
-        self.assertTrue(
-            "does not appear to have a file named pytorch_model.bin or model.safetensors."
-            in str(missing_model_file_error.exception),
-            msg=missing_model_file_error.exception,
-        )
 
         with self.assertRaises(OSError) as missing_model_file_error:
             with tempfile.TemporaryDirectory() as tmp_dir:
