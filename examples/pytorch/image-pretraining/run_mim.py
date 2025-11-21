@@ -24,8 +24,8 @@ import torch
 from datasets import load_dataset
 from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     CONFIG_MAPPING,
     IMAGE_PROCESSOR_MAPPING,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
@@ -36,9 +36,9 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
-from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
-from transformers.utils.versions import require_version
+from sarah.trainer_utils import get_last_checkpoint
+from sarah.utils import check_min_version, send_example_telemetry
+from sarah.utils.versions import require_version
 
 
 """ Pre-training a 🤗 Transformers model for simple masked image modeling (SimMIM).

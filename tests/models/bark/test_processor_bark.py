@@ -19,8 +19,8 @@ import unittest
 
 import numpy as np
 
-from transformers import AutoTokenizer, BarkProcessor
-from transformers.testing_utils import require_torch, slow
+from sarah import AutoTokenizer, BarkProcessor
+from sarah.testing_utils import require_torch, slow
 
 
 @require_torch

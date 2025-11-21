@@ -18,8 +18,8 @@ import unittest
 import numpy as np
 from huggingface_hub import HfFolder, snapshot_download
 
-from transformers import BertConfig, is_flax_available
-from transformers.testing_utils import (
+from sarah import BertConfig, is_flax_available
+from sarah.testing_utils import (
     TOKEN,
     CaptureLogger,
     TemporaryHubRepo,
@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     require_flax,
     require_safetensors,
 )
-from transformers.utils import FLAX_WEIGHTS_NAME, SAFE_WEIGHTS_NAME, logging
+from sarah.utils import FLAX_WEIGHTS_NAME, SAFE_WEIGHTS_NAME, logging
 
 
 if is_flax_available():
@@ -36,7 +36,7 @@ if is_flax_available():
     from flax.core.frozen_dict import unfreeze
     from flax.traverse_util import flatten_dict
 
-    from transformers import FlaxBertModel
+    from sarah import FlaxBertModel
 
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.12"  # assumed parallelism: 8
 

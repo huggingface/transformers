@@ -19,7 +19,7 @@ import tempfile
 import unittest
 from typing import List
 
-from transformers import (
+from sarah import (
     AddedToken,
     SpecialTokensMixin,
     UdopTokenizer,
@@ -28,7 +28,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     get_tests_dir,
     require_pandas,
     require_sentencepiece,
@@ -1174,7 +1174,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 
-        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
+        from sarah import MODEL_MAPPING, TOKENIZER_MAPPING
 
         MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
 

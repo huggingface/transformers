@@ -15,8 +15,8 @@
 
 import unittest
 
-from transformers import load_tool
-from transformers.agents.agent_types import AGENT_TYPE_MAPPING
+from sarah import load_tool
+from sarah.agents.agent_types import AGENT_TYPE_MAPPING
 
 from .test_tools_common import ToolTesterMixin, output_type
 

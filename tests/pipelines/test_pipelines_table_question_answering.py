@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers import (
+from sarah import (
     MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
     AutoModelForTableQuestionAnswering,
     AutoTokenizer,
@@ -22,7 +22,7 @@ from transformers import (
     TFAutoModelForTableQuestionAnswering,
     pipeline,
 )
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     is_pipeline_test,
     require_pandas,
     require_tensorflow_probability,

@@ -20,8 +20,8 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, JambaConfig, is_torch_available
-from transformers.testing_utils import (
+from sarah import AutoTokenizer, JambaConfig, is_torch_available
+from sarah.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -39,12 +39,12 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         JambaForCausalLM,
         JambaForSequenceClassification,
         JambaModel,
     )
-    from transformers.models.jamba.modeling_jamba import (
+    from sarah.models.jamba.modeling_jamba import (
         HybridMambaAttentionDynamicCache,
     )
 

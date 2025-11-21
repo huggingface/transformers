@@ -2,14 +2,14 @@ import unittest
 
 import numpy as np
 
-from transformers import ElectraConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from sarah import ElectraConfig, is_flax_available
+from sarah.testing_utils import require_flax, slow
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
-    from transformers.models.electra.modeling_flax_electra import (
+    from sarah.models.electra.modeling_flax_electra import (
         FlaxElectraForCausalLM,
         FlaxElectraForMaskedLM,
         FlaxElectraForMultipleChoice,

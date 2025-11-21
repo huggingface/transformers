@@ -18,14 +18,14 @@ import inspect
 import tempfile
 import unittest
 
-from transformers import (
+from sarah import (
     FastSpeech2ConformerConfig,
     FastSpeech2ConformerHifiGanConfig,
     FastSpeech2ConformerTokenizer,
     FastSpeech2ConformerWithHifiGanConfig,
     is_torch_available,
 )
-from transformers.testing_utils import require_g2p_en, require_torch, require_torch_accelerator, slow, torch_device
+from sarah.testing_utils import require_g2p_en, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
@@ -34,7 +34,7 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_ten
 if is_torch_available():
     import torch
 
-    from transformers import FastSpeech2ConformerModel, FastSpeech2ConformerWithHifiGan, set_seed
+    from sarah import FastSpeech2ConformerModel, FastSpeech2ConformerWithHifiGan, set_seed
 
 
 class FastSpeech2ConformerModelTester:

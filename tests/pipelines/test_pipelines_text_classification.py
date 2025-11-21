@@ -14,13 +14,13 @@
 
 import unittest
 
-from transformers import (
+from sarah import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     TextClassificationPipeline,
     pipeline,
 )
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,

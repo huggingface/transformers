@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import unittest
 
-from transformers import EsmConfig, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from sarah import EsmConfig, is_tf_available
+from sarah.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -30,8 +30,8 @@ if is_tf_available():
     import numpy
     import tensorflow as tf
 
-    from transformers.modeling_tf_utils import keras
-    from transformers.models.esm.modeling_tf_esm import (
+    from sarah.modeling_tf_utils import keras
+    from sarah.models.esm.modeling_tf_esm import (
         TFEsmForMaskedLM,
         TFEsmForSequenceClassification,
         TFEsmForTokenClassification,

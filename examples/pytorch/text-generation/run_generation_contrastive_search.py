@@ -25,7 +25,7 @@ import logging
 from accelerate import PartialState
 from accelerate.utils import set_seed
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from sarah import AutoModelForCausalLM, AutoTokenizer
 
 
 logging.basicConfig(

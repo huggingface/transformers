@@ -29,8 +29,8 @@ import evaluate
 import tensorflow as tf
 from datasets import ClassLabel, load_dataset
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     CONFIG_MAPPING,
     AutoConfig,
     AutoTokenizer,
@@ -42,8 +42,8 @@ from transformers import (
     create_optimizer,
     set_seed,
 )
-from transformers.utils import send_example_telemetry
-from transformers.utils.versions import require_version
+from sarah.utils import send_example_telemetry
+from sarah.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)

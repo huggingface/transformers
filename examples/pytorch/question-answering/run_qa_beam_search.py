@@ -30,8 +30,8 @@ from datasets import load_dataset
 from trainer_qa import QuestionAnsweringTrainer
 from utils_qa import postprocess_qa_predictions_with_beam_search
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
@@ -42,9 +42,9 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
-from transformers.utils.versions import require_version
+from sarah.trainer_utils import get_last_checkpoint
+from sarah.utils import check_min_version, send_example_telemetry
+from sarah.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

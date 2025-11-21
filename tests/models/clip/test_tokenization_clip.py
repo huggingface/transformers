@@ -19,9 +19,9 @@ import os
 import unittest
 from functools import lru_cache
 
-from transformers import CLIPTokenizer, CLIPTokenizerFast
-from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_ftfy, require_tokenizers
+from sarah import CLIPTokenizer, CLIPTokenizerFast
+from sarah.models.clip.tokenization_clip import VOCAB_FILES_NAMES
+from sarah.testing_utils import require_ftfy, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

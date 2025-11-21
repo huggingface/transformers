@@ -34,7 +34,7 @@ from parameterized import parameterized
 from pytest import mark
 from requests.exceptions import HTTPError
 
-from transformers import (
+from sarah import (
     AutoConfig,
     AutoModel,
     AutoModelForImageClassification,
@@ -48,8 +48,8 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.modeling_flash_attention_utils import is_flash_attn_available
-from transformers.testing_utils import (
+from sarah.modeling_flash_attention_utils import is_flash_attn_available
+from sarah.testing_utils import (
     TOKEN,
     CaptureLogger,
     LoggingLevel,
@@ -70,13 +70,13 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import (
+from sarah.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
 )
-from transformers.utils.import_utils import (
+from sarah.utils.import_utils import (
     is_flash_attn_2_available,
     is_flax_available,
     is_tf_available,
@@ -96,7 +96,7 @@ if is_torch_available():
     from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from torch import nn
 
-    from transformers import (
+    from sarah import (
         AutoModelForCausalLM,
         AutoTokenizer,
         BertConfig,
@@ -107,17 +107,17 @@ if is_torch_available():
         T5Config,
         T5ForConditionalGeneration,
     )
-    from transformers.modeling_attn_mask_utils import (
+    from sarah.modeling_attn_mask_utils import (
         AttentionMaskConverter,
         _create_4d_causal_attention_mask,
         _prepare_4d_attention_mask,
         _prepare_4d_causal_attention_mask,
     )
-    from transformers.modeling_utils import (
+    from sarah.modeling_utils import (
         _find_disjoint,
         _find_identical,
     )
-    from transformers.pytorch_utils import isin_mps_friendly
+    from sarah.pytorch_utils import isin_mps_friendly
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -212,7 +212,7 @@ if is_torch_available():
             # Ugly setup with monkeypatches, amending env vars here is too late as libs have already been imported
             from huggingface_hub import constants
 
-            from transformers.utils import hub
+            from sarah.utils import hub
 
             offlfine_env = hub._is_offline_mode
             hub_cache_env = constants.HF_HUB_CACHE
@@ -260,7 +260,7 @@ if is_torch_available():
             # Ugly setup with monkeypatches, amending env vars here is too late as libs have already been imported
             from huggingface_hub import constants
 
-            from transformers.utils import hub
+            from sarah.utils import hub
 
             hub_cache_env = constants.HF_HUB_CACHE
             hub_cache_env1 = constants.HUGGINGFACE_HUB_CACHE
@@ -300,10 +300,10 @@ if is_torch_available():
 
 
 if is_flax_available():
-    from transformers import FlaxBertModel
+    from sarah import FlaxBertModel
 
 if is_tf_available():
-    from transformers import TFBertModel
+    from sarah import TFBertModel
 
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
@@ -1007,7 +1007,7 @@ class ModelUtilsTest(TestCasePlus):
 
         mname = "HuggingFaceTB/SmolLM-135M"
 
-        preamble = "from transformers import AutoModel"
+        preamble = "from sarah import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
         # Save this output as `max_rss_normal` if testing memory results
         max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
@@ -1914,7 +1914,7 @@ class ModelUtilsTest(TestCasePlus):
             import torch
             import time
             import argparse
-            from transformers import AutoModelForCausalLM
+            from sarah import AutoModelForCausalLM
 
             parser = argparse.ArgumentParser()
             parser.add_argument("model_id", type=str)

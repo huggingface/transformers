@@ -15,9 +15,9 @@
 
 import unittest
 
-from transformers.agents.agent_types import AgentImage
-from transformers.agents.agents import AgentError, ReactCodeAgent, ReactJsonAgent
-from transformers.agents.monitoring import stream_to_gradio
+from sarah.agents.agent_types import AgentImage
+from sarah.agents.agents import AgentError, ReactCodeAgent, ReactJsonAgent
+from sarah.agents.monitoring import stream_to_gradio
 
 
 class MonitoringTester(unittest.TestCase):

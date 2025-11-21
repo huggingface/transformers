@@ -17,8 +17,8 @@
 import copy
 import unittest
 
-from transformers import VisualBertConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from sarah import VisualBertConfig, is_torch_available
+from sarah.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -28,7 +28,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         VisualBertForMultipleChoice,
         VisualBertForPreTraining,
         VisualBertForQuestionAnswering,

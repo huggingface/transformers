@@ -16,8 +16,8 @@ from typing import Dict
 
 import numpy as np
 
-from transformers import EvalPrediction, HfArgumentParser, TrainingArguments, is_torch_available
-from transformers.testing_utils import (
+from sarah import EvalPrediction, HfArgumentParser, TrainingArguments, is_torch_available
+from sarah.testing_utils import (
     TestCasePlus,
     backend_device_count,
     execute_subprocess_async,
@@ -25,8 +25,8 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     torch_device,
 )
-from transformers.training_args import ParallelMode
-from transformers.utils import logging
+from sarah.training_args import ParallelMode
+from sarah.utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -37,7 +37,7 @@ if is_torch_available():
     from torch import nn
     from torch.utils.data import Dataset, IterableDataset
 
-    from transformers import Trainer
+    from sarah import Trainer
 
     class DummyDataset(Dataset):
         def __init__(self, length: int = 101):

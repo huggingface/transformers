@@ -20,7 +20,7 @@ SRC_DIR = os.path.join(os.path.dirname(__file__), "src")
 sys.path.append(SRC_DIR)
 
 
-from transformers import (
+from sarah import (
     AutoConfig,
     AutoModel,
     AutoModelForCausalLM,

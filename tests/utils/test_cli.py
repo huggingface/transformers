@@ -18,14 +18,14 @@ import shutil
 import unittest
 from unittest.mock import patch
 
-from transformers.testing_utils import CaptureStd, require_torch
+from sarah.testing_utils import CaptureStd, require_torch
 
 
 class CLITest(unittest.TestCase):
     @patch("sys.argv", ["fakeprogrampath", "env"])
     def test_cli_env(self):
         # test transformers-cli env
-        import transformers.commands.transformers_cli
+        import sarah.commands.transformers_cli
 
         with CaptureStd() as cs:
             transformers.commands.transformers_cli.main()
@@ -36,7 +36,7 @@ class CLITest(unittest.TestCase):
     @require_torch
     @patch("sys.argv", ["fakeprogrampath", "download", "hf-internal-testing/tiny-random-gptj", "--cache-dir", "/tmp"])
     def test_cli_download(self):
-        import transformers.commands.transformers_cli
+        import sarah.commands.transformers_cli
 
         # # remove any previously downloaded model to start clean
         shutil.rmtree("/tmp/models--hf-internal-testing--tiny-random-gptj", ignore_errors=True)
@@ -62,7 +62,7 @@ class CLITest(unittest.TestCase):
         ],
     )
     def test_cli_download_trust_remote(self):
-        import transformers.commands.transformers_cli
+        import sarah.commands.transformers_cli
 
         # # remove any previously downloaded model to start clean
         shutil.rmtree("/tmp/models--hf-internal-testing--test_dynamic_model_with_tokenizer", ignore_errors=True)

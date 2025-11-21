@@ -19,13 +19,13 @@ from functools import lru_cache
 from pathlib import Path
 from shutil import copyfile
 
-from transformers import BatchEncoding, MarianTokenizer
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, slow
-from transformers.utils import is_sentencepiece_available, is_tf_available, is_torch_available
+from sarah import BatchEncoding, MarianTokenizer
+from sarah.testing_utils import get_tests_dir, require_sentencepiece, slow
+from sarah.utils import is_sentencepiece_available, is_tf_available, is_torch_available
 
 
 if is_sentencepiece_available():
-    from transformers.models.marian.tokenization_marian import VOCAB_FILES_NAMES, save_json
+    from sarah.models.marian.tokenization_marian import VOCAB_FILES_NAMES, save_json
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

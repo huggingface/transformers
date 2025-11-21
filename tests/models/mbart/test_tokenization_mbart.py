@@ -16,8 +16,8 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
-from transformers.testing_utils import (
+from sarah import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
+from sarah.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_sentencepiece,
@@ -32,7 +32,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 if is_torch_available():
-    from transformers.models.mbart.modeling_mbart import shift_tokens_right
+    from sarah.models.mbart.modeling_mbart import shift_tokens_right
 
 EN_CODE = 250004
 RO_CODE = 250020

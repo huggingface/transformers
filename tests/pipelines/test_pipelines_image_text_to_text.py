@@ -15,9 +15,9 @@
 import base64
 import unittest
 
-from transformers import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING, is_vision_available
-from transformers.pipelines import ImageTextToTextPipeline, pipeline
-from transformers.testing_utils import (
+from sarah import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING, is_vision_available
+from sarah.pipelines import ImageTextToTextPipeline, pipeline
+from sarah.testing_utils import (
     is_pipeline_test,
     require_torch,
     require_vision,

@@ -16,8 +16,8 @@
 
 import unittest
 
-from transformers import EsmConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_bitsandbytes, require_torch, slow, torch_device
+from sarah import EsmConfig, is_torch_available
+from sarah.testing_utils import TestCasePlus, require_bitsandbytes, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -27,8 +27,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import EsmForMaskedLM, EsmForSequenceClassification, EsmForTokenClassification, EsmModel
-    from transformers.models.esm.modeling_esm import (
+    from sarah import EsmForMaskedLM, EsmForSequenceClassification, EsmForTokenClassification, EsmModel
+    from sarah.models.esm.modeling_esm import (
         EsmEmbeddings,
         create_position_ids_from_input_ids,
     )

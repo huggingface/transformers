@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     require_detectron2,
     require_non_xpu,
     require_torch,
@@ -24,7 +24,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_detectron2_available, is_torch_available
+from sarah.utils import is_detectron2_available, is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    from transformers import (
+    from sarah import (
         LayoutLMv2Config,
         LayoutLMv2ForQuestionAnswering,
         LayoutLMv2ForSequenceClassification,

@@ -4,7 +4,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.models.paligemma.modeling_paligemma import PaliGemmaForConditionalGeneration
+from sarah.models.paligemma.modeling_paligemma import PaliGemmaForConditionalGeneration
 
 from ...cache_utils import Cache
 

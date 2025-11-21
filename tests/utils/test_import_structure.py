@@ -2,7 +2,7 @@ import os
 import unittest
 from pathlib import Path
 
-from transformers.utils.import_utils import define_import_structure, spread_import_structure
+from sarah.utils.import_utils import define_import_structure, spread_import_structure
 
 
 import_structures = Path("import_structures")

@@ -19,16 +19,16 @@ import tempfile
 import unittest
 from typing import List
 
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
-from transformers.models.layoutxlm import LayoutXLMProcessor, LayoutXLMTokenizer, LayoutXLMTokenizerFast
-from transformers.testing_utils import (
+from sarah import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
+from sarah.models.layoutxlm import LayoutXLMProcessor, LayoutXLMTokenizer, LayoutXLMTokenizerFast
+from sarah.testing_utils import (
     require_pytesseract,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
     slow,
 )
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
+from sarah.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -36,7 +36,7 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_pytesseract_available():
     from PIL import Image
 
-    from transformers import LayoutLMv2ImageProcessor
+    from sarah import LayoutLMv2ImageProcessor
 
 
 @require_pytesseract

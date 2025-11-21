@@ -21,9 +21,9 @@ from typing import Optional
 
 import requests
 
-from transformers import Idefics2Processor
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from sarah import Idefics2Processor
+from sarah.testing_utils import require_torch, require_vision
+from sarah.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -31,7 +31,7 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from PIL import Image
 
-    from transformers import (
+    from sarah import (
         AutoProcessor,
         Idefics2Processor,
     )

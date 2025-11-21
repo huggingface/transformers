@@ -19,8 +19,8 @@ import unittest
 import numpy as np
 from huggingface_hub import hf_hub_download
 
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from sarah.testing_utils import require_torch, require_vision
+from sarah.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,7 +31,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import NougatImageProcessor
+    from sarah import NougatImageProcessor
 
 
 class NougatImageProcessingTester:

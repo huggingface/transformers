@@ -19,13 +19,13 @@ import unittest
 
 from datasets import load_dataset
 
-from transformers import (
+from sarah import (
     AddedToken,
     GemmaTokenizer,
     GemmaTokenizerFast,
 )
-from transformers.convert_slow_tokenizer import convert_slow_tokenizer
-from transformers.testing_utils import (
+from sarah.convert_slow_tokenizer import convert_slow_tokenizer
+from sarah.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_jinja,

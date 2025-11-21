@@ -17,8 +17,8 @@ import os
 import unittest
 from functools import lru_cache
 
-from transformers.models.bartpho.tokenization_bartpho import VOCAB_FILES_NAMES, BartphoTokenizer
-from transformers.testing_utils import get_tests_dir
+from sarah.models.bartpho.tokenization_bartpho import VOCAB_FILES_NAMES, BartphoTokenizer
+from sarah.testing_utils import get_tests_dir
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

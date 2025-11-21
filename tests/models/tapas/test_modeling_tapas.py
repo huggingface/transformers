@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from transformers import (
+from sarah import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
@@ -31,9 +31,9 @@ from transformers import (
     TapasConfig,
     is_torch_available,
 )
-from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import cached_property
+from sarah.models.auto import get_values
+from sarah.testing_utils import require_torch, slow, torch_device
+from sarah.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -43,14 +43,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         TapasForMaskedLM,
         TapasForQuestionAnswering,
         TapasForSequenceClassification,
         TapasModel,
         TapasTokenizer,
     )
-    from transformers.models.tapas.modeling_tapas import (
+    from sarah.models.tapas.modeling_tapas import (
         IndexMap,
         ProductIndexMap,
         flatten,

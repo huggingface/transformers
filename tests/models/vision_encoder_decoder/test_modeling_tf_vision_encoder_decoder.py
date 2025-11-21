@@ -22,8 +22,8 @@ import unittest
 
 import numpy as np
 
-from transformers import is_tf_available, is_vision_available
-from transformers.testing_utils import (
+from sarah import is_tf_available, is_vision_available
+from sarah.testing_utils import (
     require_tf,
     require_vision,
     slow,
@@ -37,7 +37,7 @@ from ..vit.test_modeling_tf_vit import TFViTModelTester
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import (
+    from sarah import (
         AutoConfig,
         AutoImageProcessor,
         AutoTokenizer,
@@ -48,12 +48,12 @@ if is_tf_available():
         TFViTModel,
         VisionEncoderDecoderConfig,
     )
-    from transformers.modeling_tf_outputs import TFBaseModelOutput
+    from sarah.modeling_tf_outputs import TFBaseModelOutput
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from sarah import ViTImageProcessor
 
 
 @require_tf

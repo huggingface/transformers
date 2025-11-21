@@ -18,8 +18,8 @@ import unittest
 import requests
 import torch
 
-from transformers.testing_utils import require_vision
-from transformers.utils import is_vision_available
+from sarah.testing_utils import require_vision
+from sarah.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -27,7 +27,7 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from PIL import Image
 
-    from transformers import PixtralProcessor
+    from sarah import PixtralProcessor
 
 
 @require_vision

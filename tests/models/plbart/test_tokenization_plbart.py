@@ -15,8 +15,8 @@
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, BatchEncoding, PLBartTokenizer, is_torch_available
-from transformers.testing_utils import (
+from sarah import SPIECE_UNDERLINE, BatchEncoding, PLBartTokenizer, is_torch_available
+from sarah.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_sentencepiece,
@@ -31,7 +31,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 if is_torch_available():
-    from transformers.models.plbart.modeling_plbart import shift_tokens_right
+    from sarah.models.plbart.modeling_plbart import shift_tokens_right
 
 EN_CODE = 50003
 PYTHON_CODE = 50002

@@ -23,8 +23,8 @@ from shutil import copyfile
 
 from huggingface_hub import HfFolder, Repository
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
     PROCESSOR_MAPPING,
@@ -39,9 +39,9 @@ from transformers import (
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
 )
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
-from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
-from transformers.utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, is_tokenizers_available
+from sarah.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
+from sarah.tokenization_utils import TOKENIZER_CONFIG_FILE
+from sarah.utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, is_tokenizers_available
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))

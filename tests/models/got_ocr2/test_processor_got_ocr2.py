@@ -16,15 +16,15 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, GotOcr2Processor, PreTrainedTokenizerFast
-from transformers.testing_utils import require_vision
-from transformers.utils import is_vision_available
+from sarah import AutoProcessor, GotOcr2Processor, PreTrainedTokenizerFast
+from sarah.testing_utils import require_vision
+from sarah.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import GotOcr2ImageProcessor
+    from sarah import GotOcr2ImageProcessor
 
 
 @require_vision

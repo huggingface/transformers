@@ -18,8 +18,8 @@ import copy
 import tempfile
 import unittest
 
-from transformers import SwitchTransformersConfig, is_torch_available
-from transformers.testing_utils import (
+from sarah import SwitchTransformersConfig, is_torch_available
+from sarah.testing_utils import (
     require_tokenizers,
     require_torch,
     require_torch_accelerator,
@@ -38,14 +38,14 @@ if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    from transformers import (
+    from sarah import (
         AutoTokenizer,
         SwitchTransformersEncoderModel,
         SwitchTransformersForConditionalGeneration,
         SwitchTransformersModel,
         SwitchTransformersTop1Router,
     )
-    from transformers.models.switch_transformers.modeling_switch_transformers import (
+    from sarah.models.switch_transformers.modeling_switch_transformers import (
         load_balancing_loss_func,
         router_z_loss_func,
     )

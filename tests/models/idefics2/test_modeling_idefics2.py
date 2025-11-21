@@ -22,7 +22,7 @@ from io import BytesIO
 import pytest
 import requests
 
-from transformers import (
+from sarah import (
     AutoProcessor,
     Idefics2Config,
     Idefics2ForConditionalGeneration,
@@ -30,7 +30,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_flash_attn,

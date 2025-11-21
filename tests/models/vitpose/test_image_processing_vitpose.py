@@ -18,8 +18,8 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from sarah.testing_utils import require_torch, require_vision
+from sarah.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,7 +31,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import VitPoseImageProcessor
+    from sarah import VitPoseImageProcessor
 
 
 class VitPoseImageProcessingTester:

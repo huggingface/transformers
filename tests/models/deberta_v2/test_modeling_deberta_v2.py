@@ -14,8 +14,8 @@
 # limitations under the License.
 import unittest
 
-from transformers import DebertaV2Config, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from sarah import DebertaV2Config, is_torch_available
+from sarah.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
@@ -25,7 +25,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         DebertaV2ForMaskedLM,
         DebertaV2ForMultipleChoice,
         DebertaV2ForQuestionAnswering,

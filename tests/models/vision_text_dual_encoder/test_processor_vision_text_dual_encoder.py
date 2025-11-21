@@ -18,16 +18,16 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import BertTokenizerFast
-from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES, BertTokenizer
-from transformers.testing_utils import require_tokenizers, require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_torchvision_available, is_vision_available
+from sarah import BertTokenizerFast
+from sarah.models.bert.tokenization_bert import VOCAB_FILES_NAMES, BertTokenizer
+from sarah.testing_utils import require_tokenizers, require_vision
+from sarah.utils import IMAGE_PROCESSOR_NAME, is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import VisionTextDualEncoderProcessor, ViTImageProcessor, ViTImageProcessorFast
+    from sarah import VisionTextDualEncoderProcessor, ViTImageProcessor, ViTImageProcessorFast
 
 
 @require_tokenizers

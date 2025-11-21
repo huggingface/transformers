@@ -28,8 +28,8 @@ import json
 import tempfile
 from pathlib import Path
 
-from transformers import FSMTConfig, FSMTForConditionalGeneration, FSMTTokenizer
-from transformers.models.fsmt.tokenization_fsmt import VOCAB_FILES_NAMES
+from sarah import FSMTConfig, FSMTForConditionalGeneration, FSMTTokenizer
+from sarah.models.fsmt.tokenization_fsmt import VOCAB_FILES_NAMES
 
 
 mname_tiny = "tiny-wmt19-en-ru"

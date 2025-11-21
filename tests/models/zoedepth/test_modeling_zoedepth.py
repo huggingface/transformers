@@ -18,9 +18,9 @@ import unittest
 
 import numpy as np
 
-from transformers import Dinov2Config, ZoeDepthConfig
-from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from sarah import Dinov2Config, ZoeDepthConfig
+from sarah.file_utils import is_torch_available, is_vision_available
+from sarah.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -30,13 +30,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import ZoeDepthForDepthEstimation
+    from sarah import ZoeDepthForDepthEstimation
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ZoeDepthImageProcessor
+    from sarah import ZoeDepthImageProcessor
 
 
 class ZoeDepthModelTester:

@@ -1,4 +1,4 @@
-from transformers import CLIPImageProcessor
+from sarah import CLIPImageProcessor
 
 
 class CustomImageProcessor(CLIPImageProcessor):

@@ -21,14 +21,14 @@ import unittest
 
 import requests
 
-from transformers import AlignConfig, AlignProcessor, AlignTextConfig, AlignVisionConfig
-from transformers.testing_utils import (
+from sarah import AlignConfig, AlignProcessor, AlignTextConfig, AlignVisionConfig
+from sarah.testing_utils import (
     require_torch,
     require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from sarah.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -44,7 +44,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         AlignModel,
         AlignTextModel,
         AlignVisionModel,

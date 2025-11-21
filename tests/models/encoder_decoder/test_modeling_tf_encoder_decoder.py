@@ -22,8 +22,8 @@ import unittest
 
 import numpy as np
 
-from transformers import is_tf_available
-from transformers.testing_utils import require_tf, slow
+from sarah import is_tf_available
+from sarah.testing_utils import require_tf, slow
 
 from ...test_modeling_tf_common import ids_tensor
 from ..bert.test_modeling_tf_bert import TFBertModelTester
@@ -33,7 +33,7 @@ from ..roberta.test_modeling_tf_roberta import TFRobertaModelTester
 
 
 if is_tf_available():
-    from transformers import (
+    from sarah import (
         AutoConfig,
         AutoTokenizer,
         EncoderDecoderConfig,
@@ -48,7 +48,7 @@ if is_tf_available():
         TFRobertaForCausalLM,
         TFRobertaModel,
     )
-    from transformers.modeling_tf_outputs import TFBaseModelOutput
+    from sarah.modeling_tf_outputs import TFBaseModelOutput
 
 
 @require_tf

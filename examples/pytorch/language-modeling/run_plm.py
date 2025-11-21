@@ -29,8 +29,8 @@ from typing import Optional
 import datasets
 from datasets import load_dataset
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     AutoConfig,
     AutoTokenizer,
     DataCollatorForPermutationLanguageModeling,
@@ -41,9 +41,9 @@ from transformers import (
     XLNetLMHeadModel,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
-from transformers.utils.versions import require_version
+from sarah.trainer_utils import get_last_checkpoint
+from sarah.utils import check_min_version, send_example_telemetry
+from sarah.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

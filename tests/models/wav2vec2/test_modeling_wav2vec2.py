@@ -26,8 +26,8 @@ import numpy as np
 from datasets import load_dataset
 from pytest import mark
 
-from transformers import Wav2Vec2Config, is_torch_available
-from transformers.testing_utils import (
+from sarah import Wav2Vec2Config, is_torch_available
+from sarah.testing_utils import (
     CaptureLogger,
     cleanup,
     is_flaky,
@@ -43,7 +43,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_fx_available
+from sarah.utils import is_torch_fx_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -60,7 +60,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import save_file as safe_save_file
 
-    from transformers import (
+    from sarah import (
         Wav2Vec2FeatureExtractor,
         Wav2Vec2ForAudioFrameClassification,
         Wav2Vec2ForCTC,
@@ -71,7 +71,7 @@ if is_torch_available():
         Wav2Vec2Model,
         Wav2Vec2Processor,
     )
-    from transformers.models.wav2vec2.modeling_wav2vec2 import (
+    from sarah.models.wav2vec2.modeling_wav2vec2 import (
         WAV2VEC2_ADAPTER_PT_FILE,
         WAV2VEC2_ADAPTER_SAFE_FILE,
         Wav2Vec2GumbelVectorQuantizer,
@@ -87,12 +87,12 @@ if is_torchaudio_available():
 if is_pyctcdecode_available():
     import pyctcdecode.decoder
 
-    from transformers import Wav2Vec2ProcessorWithLM
-    from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
+    from sarah import Wav2Vec2ProcessorWithLM
+    from sarah.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
 
 if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
+    from sarah.utils.fx import symbolic_trace
 
 
 def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):

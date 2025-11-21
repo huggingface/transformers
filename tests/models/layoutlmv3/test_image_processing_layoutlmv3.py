@@ -16,8 +16,8 @@
 
 import unittest
 
-from transformers.testing_utils import require_pytesseract, require_torch
-from transformers.utils import is_pytesseract_available
+from sarah.testing_utils import require_pytesseract, require_torch
+from sarah.utils import is_pytesseract_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -25,7 +25,7 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_pytesseract_available():
     from PIL import Image
 
-    from transformers import LayoutLMv3ImageProcessor
+    from sarah import LayoutLMv3ImageProcessor
 
 
 class LayoutLMv3ImageProcessingTester:

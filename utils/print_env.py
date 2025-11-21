@@ -20,7 +20,7 @@
 import os
 import sys
 
-import transformers
+import sarah
 
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"

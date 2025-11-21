@@ -21,13 +21,13 @@ from urllib.request import urlopen
 
 import librosa
 
-from transformers import (
+from sarah import (
     AutoProcessor,
     Qwen2AudioConfig,
     Qwen2AudioForConditionalGeneration,
     is_torch_available,
 )
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     cleanup,
     require_torch,
     require_torch_sdpa,

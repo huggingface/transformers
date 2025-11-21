@@ -17,8 +17,8 @@ import unittest
 
 import numpy as np
 
-from transformers import GPT2Config, GPT2Tokenizer, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from sarah import GPT2Config, GPT2Tokenizer, is_flax_available
+from sarah.testing_utils import require_flax, slow
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
@@ -27,7 +27,7 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
 
-    from transformers.models.gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
+    from sarah.models.gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
 
 
 class FlaxGPT2ModelTester:

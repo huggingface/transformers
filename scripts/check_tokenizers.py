@@ -2,9 +2,9 @@ from collections import Counter
 
 import datasets
 
-import transformers
-from transformers.convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
-from transformers.utils import logging
+import sarah
+from sarah.convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
+from sarah.utils import logging
 
 
 logging.set_verbosity_info()

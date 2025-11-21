@@ -17,15 +17,15 @@
 import math
 import unittest
 
-from transformers import LlamaConfig
-from transformers.testing_utils import is_torch_available, require_torch, torch_device
+from sarah import LlamaConfig
+from sarah.testing_utils import is_torch_available, require_torch, torch_device
 
 
 if is_torch_available():
     import torch
 
-    from transformers import ROPE_INIT_FUNCTIONS
-    from transformers.modeling_rope_utils import rope_config_validation
+    from sarah import ROPE_INIT_FUNCTIONS
+    from sarah.modeling_rope_utils import rope_config_validation
 
 
 @require_torch

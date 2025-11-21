@@ -22,8 +22,8 @@ from typing import Optional
 from seq2seq_trainer import Seq2SeqTrainer
 from seq2seq_training_args import Seq2SeqTrainingArguments
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
@@ -32,8 +32,8 @@ from transformers import (
     MBartTokenizerFast,
     set_seed,
 )
-from transformers.trainer_utils import EvaluationStrategy, is_main_process
-from transformers.training_args import ParallelMode
+from sarah.trainer_utils import EvaluationStrategy, is_main_process
+from sarah.training_args import ParallelMode
 from utils import (
     Seq2SeqDataCollator,
     Seq2SeqDataset,

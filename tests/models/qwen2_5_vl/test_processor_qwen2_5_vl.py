@@ -20,15 +20,15 @@ import unittest
 import pytest
 from huggingface_hub import hf_hub_download
 
-from transformers import AutoProcessor, Qwen2Tokenizer
-from transformers.testing_utils import require_av, require_torch, require_vision
-from transformers.utils import is_vision_available
+from sarah import AutoProcessor, Qwen2Tokenizer
+from sarah.testing_utils import require_av, require_torch, require_vision
+from sarah.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Qwen2_5_VLProcessor, Qwen2VLImageProcessor
+    from sarah import Qwen2_5_VLProcessor, Qwen2VLImageProcessor
 
 
 @require_vision

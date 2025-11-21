@@ -6,7 +6,7 @@ import zipfile
 
 from get_ci_error_statistics import download_artifact, get_artifacts_links
 
-from transformers import logging
+from sarah import logging
 
 
 logger = logging.get_logger(__name__)

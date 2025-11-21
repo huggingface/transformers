@@ -22,9 +22,9 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from transformers import AutoImageProcessor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision, slow
-from transformers.utils import is_torch_available, is_vision_available
+from sarah import AutoImageProcessor
+from sarah.testing_utils import check_json_file_has_correct_format, require_torch, require_vision, slow
+from sarah.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -35,7 +35,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ImageGPTImageProcessor
+    from sarah import ImageGPTImageProcessor
 
 
 class ImageGPTImageProcessingTester:

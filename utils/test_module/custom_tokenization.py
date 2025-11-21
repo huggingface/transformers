@@ -1,4 +1,4 @@
-from transformers import BertTokenizer
+from sarah import BertTokenizer
 
 
 class CustomTokenizer(BertTokenizer):

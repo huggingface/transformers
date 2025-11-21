@@ -18,8 +18,8 @@ import unittest
 
 import numpy as np
 
-from transformers import AutoTokenizer, MistralConfig, is_tf_available
-from transformers.testing_utils import (
+from sarah import AutoTokenizer, MistralConfig, is_tf_available
+from sarah.testing_utils import (
     require_tf,
     slow,
 )
@@ -32,7 +32,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.mistral.modeling_tf_mistral import (
+    from sarah.models.mistral.modeling_tf_mistral import (
         TFMistralForCausalLM,
         TFMistralForSequenceClassification,
         TFMistralModel,

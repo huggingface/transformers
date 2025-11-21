@@ -20,9 +20,9 @@ from typing import List
 
 from parameterized import parameterized
 
-from transformers import Phi3Config, StaticCache, is_torch_available, set_seed
-from transformers.models.auto.configuration_auto import AutoConfig
-from transformers.testing_utils import (
+from sarah import Phi3Config, StaticCache, is_torch_available, set_seed
+from sarah.models.auto.configuration_auto import AutoConfig
+from sarah.testing_utils import (
     require_torch,
     slow,
     torch_device,
@@ -37,7 +37,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         AutoTokenizer,
         Phi3ForCausalLM,
         Phi3ForSequenceClassification,
@@ -598,13 +598,13 @@ class Phi3IntegrationTest(unittest.TestCase):
 
     @slow
     def test_export_static_cache(self):
-        from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
+        from sarah.pytorch_utils import is_torch_greater_or_equal_than_2_4
 
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
-        from transformers.integrations.executorch import (
+        from sarah import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+        from sarah.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
         )

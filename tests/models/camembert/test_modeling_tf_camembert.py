@@ -17,15 +17,15 @@ from __future__ import annotations
 
 import unittest
 
-from transformers import is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from sarah import is_tf_available
+from sarah.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 
 if is_tf_available():
     import numpy as np
     import tensorflow as tf
 
-    from transformers import TFCamembertModel
+    from sarah import TFCamembertModel
 
 
 @require_tf

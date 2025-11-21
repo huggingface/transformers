@@ -27,7 +27,7 @@
 # It will be used then as "stas/tiny-wmt19-en-de"
 
 # Build
-from transformers import FSMTConfig, FSMTForConditionalGeneration, FSMTTokenizer
+from sarah import FSMTConfig, FSMTForConditionalGeneration, FSMTTokenizer
 
 
 mname = "facebook/wmt19-en-de"

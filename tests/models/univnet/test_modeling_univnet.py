@@ -18,8 +18,8 @@ import unittest
 
 from datasets import Audio, load_dataset
 
-from transformers import UnivNetConfig, UnivNetFeatureExtractor
-from transformers.testing_utils import (
+from sarah import UnivNetConfig, UnivNetFeatureExtractor
+from sarah.testing_utils import (
     cleanup,
     is_torch_available,
     require_torch,
@@ -38,7 +38,7 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import UnivNetModel
+    from sarah import UnivNetModel
 
 
 class UnivNetModelTester:

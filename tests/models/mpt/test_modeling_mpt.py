@@ -17,8 +17,8 @@
 import math
 import unittest
 
-from transformers import MptConfig, is_torch_available
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
+from sarah import MptConfig, is_torch_available
+from sarah.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -29,7 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         AutoTokenizer,
         MptForCausalLM,
         MptForQuestionAnswering,

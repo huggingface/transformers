@@ -16,13 +16,13 @@ import unittest
 
 import numpy as np
 
-from transformers import (
+from sarah import (
     MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
     AutoProcessor,
     TextToAudioPipeline,
     pipeline,
 )
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     is_pipeline_test,
     require_torch,
     require_torch_accelerator,
@@ -30,7 +30,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import set_seed
+from sarah.trainer_utils import set_seed
 
 from .test_pipelines_common import ANY
 

@@ -15,8 +15,8 @@
 
 from functools import lru_cache
 
-from transformers import SqueezeBertTokenizer, SqueezeBertTokenizerFast
-from transformers.testing_utils import require_tokenizers, slow
+from sarah import SqueezeBertTokenizer, SqueezeBertTokenizerFast
+from sarah.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import use_cache_if_possible
 

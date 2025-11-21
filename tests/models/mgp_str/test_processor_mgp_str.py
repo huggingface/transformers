@@ -23,10 +23,10 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import MgpstrTokenizer
-from transformers.models.mgp_str.tokenization_mgp_str import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
+from sarah import MgpstrTokenizer
+from sarah.models.mgp_str.tokenization_mgp_str import VOCAB_FILES_NAMES
+from sarah.testing_utils import require_torch, require_vision
+from sarah.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
 
 
 if is_torch_available():
@@ -36,7 +36,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MgpstrProcessor, ViTImageProcessor
+    from sarah import MgpstrProcessor, ViTImageProcessor
 
 
 @require_torch

@@ -20,7 +20,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import (
+from sarah import (
     AutoModelForCausalLM,
     AutoTokenizer,
     Gemma3Config,
@@ -28,7 +28,7 @@ from transformers import (
     GenerationConfig,
     is_torch_available,
 )
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     cleanup,
     require_flash_attn,
     require_read_token,
@@ -47,7 +47,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         Gemma3ForCausalLM,
         Gemma3ForConditionalGeneration,
         Gemma3Processor,

@@ -16,15 +16,15 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import GemmaTokenizer, PaliGemmaProcessor
-from transformers.testing_utils import get_tests_dir, require_torch, require_vision
-from transformers.utils import is_vision_available
+from sarah import GemmaTokenizer, PaliGemmaProcessor
+from sarah.testing_utils import get_tests_dir, require_torch, require_vision
+from sarah.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import SiglipImageProcessor
+    from sarah import SiglipImageProcessor
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 

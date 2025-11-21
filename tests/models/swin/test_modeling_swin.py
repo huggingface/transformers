@@ -17,9 +17,9 @@
 import collections
 import unittest
 
-from transformers import SwinConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from sarah import SwinConfig
+from sarah.testing_utils import require_torch, require_vision, slow, torch_device
+from sarah.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -31,13 +31,13 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SwinBackbone, SwinForImageClassification, SwinForMaskedImageModeling, SwinModel
+    from sarah import SwinBackbone, SwinForImageClassification, SwinForMaskedImageModeling, SwinModel
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoImageProcessor
+    from sarah import AutoImageProcessor
 
 
 class SwinModelTester:

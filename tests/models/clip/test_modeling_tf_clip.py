@@ -24,9 +24,9 @@ from importlib import import_module
 
 import requests
 
-from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
-from transformers.testing_utils import require_tf, require_vision, slow
-from transformers.utils import is_tf_available, is_vision_available
+from sarah import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
+from sarah.testing_utils import require_tf, require_vision, slow
+from sarah.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -36,14 +36,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFCLIPModel, TFCLIPTextModel, TFCLIPVisionModel, TFSharedEmbeddings
-    from transformers.modeling_tf_utils import keras
+    from sarah import TFCLIPModel, TFCLIPTextModel, TFCLIPVisionModel, TFSharedEmbeddings
+    from sarah.modeling_tf_utils import keras
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLIPProcessor
+    from sarah import CLIPProcessor
 
 
 class TFCLIPVisionModelTester:

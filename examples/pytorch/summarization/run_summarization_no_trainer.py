@@ -40,8 +40,8 @@ from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
     AutoConfig,
@@ -51,8 +51,8 @@ from transformers import (
     SchedulerType,
     get_scheduler,
 )
-from transformers.utils import check_min_version, is_offline_mode, send_example_telemetry
-from transformers.utils.versions import require_version
+from sarah.utils import check_min_version, is_offline_mode, send_example_telemetry
+from sarah.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

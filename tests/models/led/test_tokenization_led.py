@@ -16,10 +16,10 @@ import os
 import unittest
 from functools import lru_cache
 
-from transformers import BatchEncoding, LEDTokenizer, LEDTokenizerFast
-from transformers.models.led.tokenization_led import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_tokenizers, require_torch
-from transformers.utils import cached_property
+from sarah import BatchEncoding, LEDTokenizer, LEDTokenizerFast
+from sarah.models.led.tokenization_led import VOCAB_FILES_NAMES
+from sarah.testing_utils import require_tokenizers, require_torch
+from sarah.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

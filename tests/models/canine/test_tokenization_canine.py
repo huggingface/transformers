@@ -20,10 +20,10 @@ import tempfile
 import unittest
 from functools import lru_cache
 
-from transformers import BatchEncoding, CanineTokenizer
-from transformers.testing_utils import require_tokenizers, require_torch
-from transformers.tokenization_utils import AddedToken
-from transformers.utils import cached_property
+from sarah import BatchEncoding, CanineTokenizer
+from sarah.testing_utils import require_tokenizers, require_torch
+from sarah.tokenization_utils import AddedToken
+from sarah.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

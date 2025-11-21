@@ -28,7 +28,7 @@ import numpy as np
 from datasets import load_dataset
 from packaging.version import parse
 
-from transformers import (
+from sarah import (
     AutoConfig,
     AutoTokenizer,
     HfArgumentParser,
@@ -39,7 +39,7 @@ from transformers import (
     create_optimizer,
     set_seed,
 )
-from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, send_example_telemetry
+from sarah.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, send_example_telemetry
 
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # Reduce the amount of console output from TF

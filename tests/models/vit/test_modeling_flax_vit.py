@@ -17,8 +17,8 @@ import unittest
 
 import numpy as np
 
-from transformers import ViTConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from sarah import ViTConfig, is_flax_available
+from sarah.testing_utils import require_flax, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
@@ -27,7 +27,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
 if is_flax_available():
     import jax
 
-    from transformers.models.vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
+    from sarah.models.vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 
 
 class FlaxViTModelTester:

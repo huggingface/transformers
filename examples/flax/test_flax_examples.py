@@ -21,7 +21,7 @@ import os
 import sys
 from unittest.mock import patch
 
-from transformers.testing_utils import TestCasePlus, get_gpu_count, slow
+from sarah.testing_utils import TestCasePlus, get_gpu_count, slow
 
 
 SRC_DIRS = [

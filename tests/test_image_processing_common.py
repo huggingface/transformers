@@ -25,9 +25,9 @@ import numpy as np
 import requests
 from packaging import version
 
-from transformers import AutoImageProcessor, BatchFeature
-from transformers.image_utils import AnnotationFormat, AnnotionFormat
-from transformers.testing_utils import (
+from sarah import AutoImageProcessor, BatchFeature
+from sarah.image_utils import AnnotationFormat, AnnotionFormat
+from sarah.testing_utils import (
     check_json_file_has_correct_format,
     is_flaky,
     require_torch,
@@ -36,7 +36,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from sarah.utils import is_torch_available, is_vision_available
 
 
 if is_torch_available():

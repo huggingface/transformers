@@ -21,9 +21,9 @@ import unittest
 
 import numpy as np
 
-from transformers import SwinConfig
-from transformers.testing_utils import require_tf, require_vision, slow, to_2tuple
-from transformers.utils import cached_property, is_tf_available, is_vision_available
+from sarah import SwinConfig
+from sarah.testing_utils import require_tf, require_vision, slow, to_2tuple
+from sarah.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -33,8 +33,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.modeling_tf_utils import keras
-    from transformers.models.swin.modeling_tf_swin import (
+    from sarah.modeling_tf_utils import keras
+    from sarah.models.swin.modeling_tf_swin import (
         TFSwinForImageClassification,
         TFSwinForMaskedImageModeling,
         TFSwinModel,
@@ -44,7 +44,7 @@ if is_tf_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoImageProcessor
+    from sarah import AutoImageProcessor
 
 
 class TFSwinModelTester:

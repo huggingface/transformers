@@ -22,8 +22,8 @@ import unittest
 
 import numpy as np
 
-from transformers import Speech2TextFeatureExtractor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
+from sarah import Speech2TextFeatureExtractor
+from sarah.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
@@ -352,6 +352,6 @@ class Speech2TextFeatureExtractionWithoutTorchaudioTest(Speech2TextFeatureExtrac
         self.assertTrue(hasattr(feat_extract, "window"))
         self.assertTrue(hasattr(feat_extract, "mel_filters"))
 
-        from transformers.models.speech_to_text.feature_extraction_speech_to_text import is_speech_available
+        from sarah.models.speech_to_text.feature_extraction_speech_to_text import is_speech_available
 
         self.assertFalse(is_speech_available())

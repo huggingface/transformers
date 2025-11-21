@@ -16,8 +16,8 @@
 
 import unittest
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from sarah import is_torch_available
+from sarah.testing_utils import require_torch, torch_device
 
 from ..test_modeling_common import floats_tensor, ids_tensor
 
@@ -25,7 +25,7 @@ from ..test_modeling_common import floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers.generation import (
+    from sarah.generation import (
         BeamHypotheses,
         BeamSearchScorer,
         ConstrainedBeamSearchScorer,

@@ -20,9 +20,9 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, Qwen3Config, is_torch_available, set_seed
-from transformers.generation.configuration_utils import GenerationConfig
-from transformers.testing_utils import (
+from sarah import AutoTokenizer, Qwen3Config, is_torch_available, set_seed
+from sarah.generation.configuration_utils import GenerationConfig
+from sarah.testing_utils import (
     backend_empty_cache,
     require_bitsandbytes,
     require_flash_attn,
@@ -42,7 +42,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         Qwen3ForCausalLM,
         Qwen3ForQuestionAnswering,
         Qwen3ForSequenceClassification,
@@ -450,7 +450,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        from transformers.integrations.executorch import (
+        from sarah.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
         )

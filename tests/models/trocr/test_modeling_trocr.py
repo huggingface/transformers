@@ -16,8 +16,8 @@
 
 import unittest
 
-from transformers import TrOCRConfig
-from transformers.testing_utils import is_torch_available, require_torch, torch_device
+from sarah import TrOCRConfig
+from sarah.testing_utils import is_torch_available, require_torch, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -28,7 +28,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers.models.trocr.modeling_trocr import TrOCRDecoder, TrOCRForCausalLM
+    from sarah.models.trocr.modeling_trocr import TrOCRDecoder, TrOCRForCausalLM
 
 
 @require_torch

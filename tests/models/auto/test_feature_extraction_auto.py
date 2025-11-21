@@ -19,8 +19,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
     AutoConfig,
@@ -28,7 +28,7 @@ from transformers import (
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
 )
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, get_tests_dir
+from sarah.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, get_tests_dir
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))

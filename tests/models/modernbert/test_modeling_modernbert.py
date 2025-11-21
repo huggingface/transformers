@@ -20,9 +20,9 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, ModernBertConfig, is_torch_available
-from transformers.models.auto import get_values
-from transformers.testing_utils import (
+from sarah import AutoTokenizer, ModernBertConfig, is_torch_available
+from sarah.models.auto import get_values
+from sarah.testing_utils import (
     CaptureLogger,
     require_flash_attn,
     require_torch,
@@ -39,7 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         MODEL_FOR_PRETRAINING_MAPPING,
         ModernBertForMaskedLM,
         ModernBertForQuestionAnswering,

@@ -19,15 +19,15 @@ import unittest
 from datasets import load_dataset
 from packaging import version
 
-from transformers import BeitConfig
-from transformers.testing_utils import (
+from sarah import BeitConfig
+from sarah.testing_utils import (
     require_torch,
     require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import (
+from sarah.utils import (
     cached_property,
     is_torch_available,
     is_vision_available,
@@ -43,21 +43,21 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
+    from sarah import (
         BeitBackbone,
         BeitForImageClassification,
         BeitForMaskedImageModeling,
         BeitForSemanticSegmentation,
         BeitModel,
     )
-    from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
+    from sarah.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 
 
 if is_vision_available():
     import PIL
     from PIL import Image
 
-    from transformers import BeitImageProcessor
+    from sarah import BeitImageProcessor
 
 
 class BeitModelTester:

@@ -16,9 +16,9 @@ import unittest
 from functools import lru_cache
 
 from tests.test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
-from transformers import SplinterTokenizerFast, is_tf_available, is_torch_available
-from transformers.models.splinter import SplinterTokenizer
-from transformers.testing_utils import get_tests_dir, slow
+from sarah import SplinterTokenizerFast, is_tf_available, is_torch_available
+from sarah.models.splinter import SplinterTokenizer
+from sarah.testing_utils import get_tests_dir, slow
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.txt")

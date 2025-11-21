@@ -16,9 +16,9 @@
 
 import unittest
 
-from transformers import ViTMSNConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from sarah import ViTMSNConfig
+from sarah.testing_utils import require_torch, require_vision, slow, torch_device
+from sarah.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -29,13 +29,13 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ViTMSNForImageClassification, ViTMSNModel
+    from sarah import ViTMSNForImageClassification, ViTMSNModel
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from sarah import ViTImageProcessor
 
 
 class ViTMSNModelTester:

@@ -17,15 +17,15 @@ import tempfile
 import unittest
 from typing import Optional
 
-from transformers import AutoProcessor, Llama4Processor, PreTrainedTokenizerFast
-from transformers.testing_utils import require_vision
-from transformers.utils import is_vision_available
+from sarah import AutoProcessor, Llama4Processor, PreTrainedTokenizerFast
+from sarah.testing_utils import require_vision
+from sarah.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Llama4ImageProcessorFast
+    from sarah import Llama4ImageProcessorFast
 
 
 @require_vision

@@ -20,8 +20,8 @@ from typing import List
 
 from parameterized import parameterized
 
-from transformers import PhimoeConfig, StaticCache, is_torch_available, set_seed
-from transformers.testing_utils import (
+from sarah import PhimoeConfig, StaticCache, is_torch_available, set_seed
+from sarah.testing_utils import (
     is_flaky,
     require_torch,
     slow,
@@ -37,7 +37,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         AutoTokenizer,
         PhimoeForCausalLM,
         PhimoeForSequenceClassification,

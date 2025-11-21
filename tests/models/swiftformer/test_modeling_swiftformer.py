@@ -17,14 +17,14 @@
 import copy
 import unittest
 
-from transformers import PretrainedConfig, SwiftFormerConfig
-from transformers.testing_utils import (
+from sarah import PretrainedConfig, SwiftFormerConfig
+from sarah.testing_utils import (
     require_torch,
     require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from sarah.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -35,13 +35,13 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SwiftFormerForImageClassification, SwiftFormerModel
+    from sarah import SwiftFormerForImageClassification, SwiftFormerModel
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from sarah import ViTImageProcessor
 
 
 class SwiftFormerModelTester:

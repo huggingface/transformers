@@ -16,7 +16,7 @@ import unittest
 
 import numpy as np
 
-from transformers import (
+from sarah import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     AutoModelForTokenClassification,
@@ -24,8 +24,8 @@ from transformers import (
     TokenClassificationPipeline,
     pipeline,
 )
-from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
-from transformers.testing_utils import (
+from sarah.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
+from sarah.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,

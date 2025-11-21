@@ -23,15 +23,15 @@ import pytest
 from datasets import Audio, load_dataset
 from parameterized import parameterized
 
-from transformers import (
+from sarah import (
     MoshiConfig,
     PretrainedConfig,
 )
-from transformers.integrations.deepspeed import (
+from sarah.integrations.deepspeed import (
     is_deepspeed_available,
     is_deepspeed_zero3_enabled,
 )
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     is_flaky,
     is_torch_available,
     require_torch,
@@ -40,7 +40,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
+from sarah.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -59,7 +59,7 @@ if is_deepspeed_available():
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         AutoFeatureExtractor,
         AutoTokenizer,
         MoshiForCausalLM,

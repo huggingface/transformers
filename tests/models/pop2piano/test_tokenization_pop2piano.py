@@ -22,14 +22,14 @@ import shutil
 import tempfile
 import unittest
 
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.testing_utils import (
+from sarah.feature_extraction_utils import BatchFeature
+from sarah.testing_utils import (
     is_pretty_midi_available,
     is_torch_available,
     require_pretty_midi,
     require_torch,
 )
-from transformers.tokenization_utils import BatchEncoding
+from sarah.tokenization_utils import BatchEncoding
 
 
 if is_torch_available():
@@ -40,7 +40,7 @@ requirements_available = is_torch_available() and is_pretty_midi_available()
 if requirements_available:
     import pretty_midi
 
-    from transformers import Pop2PianoTokenizer
+    from sarah import Pop2PianoTokenizer
 
 
 @require_torch

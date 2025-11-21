@@ -1,5 +1,5 @@
-from transformers.models.gemma.modeling_gemma import GemmaForSequenceClassification
-from transformers.models.llama.configuration_llama import LlamaConfig
+from sarah.models.gemma.modeling_gemma import GemmaForSequenceClassification
+from sarah.models.llama.configuration_llama import LlamaConfig
 
 
 # Example where we only want to only modify the docstring
@@ -16,7 +16,7 @@ class MyNewModel2Config(LlamaConfig):
             Vocabulary size of the Gemma model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GemmaModel`]
     ```python
-    >>> from transformers import GemmaModel, GemmaConfig
+    >>> from sarah import GemmaModel, GemmaConfig
     >>> # Initializing a Gemma gemma-7b style configuration
     >>> configuration = GemmaConfig()
     >>> # Initializing a model from the gemma-7b style configuration

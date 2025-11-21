@@ -31,8 +31,8 @@ import datasets
 import tensorflow as tf
 from datasets import load_dataset
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     CONFIG_NAME,
     TF2_WEIGHTS_NAME,
     AutoConfig,
@@ -46,7 +46,7 @@ from transformers import (
     create_optimizer,
     set_seed,
 )
-from transformers.utils import check_min_version, send_example_telemetry
+from sarah.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

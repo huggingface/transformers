@@ -22,7 +22,7 @@ from pathlib import Path
 
 from git import Repo
 
-from transformers.testing_utils import CaptureStdout
+from sarah.testing_utils import CaptureStdout
 
 
 REPO_PATH = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -138,7 +138,7 @@ def create_tmp_repo(tmp_dir, models=None):
     test_dir = tmp_dir / "tests"
     test_dir.mkdir(exist_ok=True)
     with open(test_dir / "test_modeling_common.py", "w") as f:
-        f.write("from transformers.modeling_utils import PreTrainedModel\ncode")
+        f.write("from sarah.modeling_utils import PreTrainedModel\ncode")
 
     for model, cls in zip(models, class_names):
         test_model_dir = test_dir / "models" / model
@@ -146,7 +146,7 @@ def create_tmp_repo(tmp_dir, models=None):
         (test_model_dir / "__init__.py").touch()
         with open(test_model_dir / f"test_modeling_{model}.py", "w") as f:
             f.write(
-                f"from transformers import {cls}Config, {cls}Model\nfrom ...test_modeling_common import ModelTesterMixin\n\ncode"
+                f"from sarah import {cls}Config, {cls}Model\nfrom ...test_modeling_common import ModelTesterMixin\n\ncode"
             )
 
     example_dir = tmp_dir / "examples"
@@ -159,7 +159,7 @@ def create_tmp_repo(tmp_dir, models=None):
         glue_dir = framework_dir / "text-classification"
         glue_dir.mkdir(exist_ok=True)
         with open(glue_dir / "run_glue.py", "w") as f:
-            f.write("from transformers import BertModel\n\ncode")
+            f.write("from sarah import BertModel\n\ncode")
 
     repo.index.add(["examples", "src", "tests"])
     repo.index.commit("Initial commit")
@@ -337,7 +337,7 @@ class TestFetcherTester(unittest.TestCase):
 
             with open(tmp_folder / BERT_MODELING_FILE, "w") as f:
                 f.write(
-                    "from transformers.utils import cached_file, is_torch_available\nfrom transformers.models.bert.configuration_bert import BertConfig\n"
+                    "from sarah.utils import cached_file, is_torch_available\nfrom transformers.models.bert.configuration_bert import BertConfig\n"
                 )
             expected_bert_imports = [
                 ("src/transformers/utils/__init__.py", ["cached_file", "is_torch_available"]),
@@ -349,7 +349,7 @@ class TestFetcherTester(unittest.TestCase):
             # Test with multi-line imports
             with open(tmp_folder / BERT_MODELING_FILE, "w") as f:
                 f.write(
-                    "from transformers.utils import (\n    cached_file,\n    is_torch_available\n)\nfrom transformers.models.bert.configuration_bert import BertConfig\n"
+                    "from sarah.utils import (\n    cached_file,\n    is_torch_available\n)\nfrom transformers.models.bert.configuration_bert import BertConfig\n"
                 )
             expected_bert_imports = [
                 ("src/transformers/models/bert/configuration_bert.py", ["BertConfig"]),
@@ -361,7 +361,7 @@ class TestFetcherTester(unittest.TestCase):
             # Test with base imports
             with open(tmp_folder / BERT_MODELING_FILE, "w") as f:
                 f.write(
-                    "from transformers.utils import (\n    cached_file,\n    is_torch_available\n)\nfrom transformers import BertConfig\n"
+                    "from sarah.utils import (\n    cached_file,\n    is_torch_available\n)\nfrom transformers import BertConfig\n"
                 )
             expected_bert_imports = [
                 ("src/transformers/__init__.py", ["BertConfig"]),
@@ -679,7 +679,7 @@ src/transformers/configuration_utils.py
             (test_dir / "__init__.py").touch()
             with open(test_dir / "test_modeling_t5.py", "w") as f:
                 f.write(
-                    "from transformers import T5Config, T5Model\nfrom ...test_modeling_common import ModelTesterMixin\n\ncode"
+                    "from sarah import T5Config, T5Model\nfrom ...test_modeling_common import ModelTesterMixin\n\ncode"
                 )
 
             repo.index.add(["src", "tests"])
@@ -722,7 +722,7 @@ src/transformers/configuration_utils.py
 
             commit_changes(
                 "tests/models/bert/test_modeling_bert.py",
-                "from transformers import BertConfig, BertModel\nfrom ...test_modeling_common import ModelTesterMixin\n\ncode1",
+                "from sarah import BertConfig, BertModel\nfrom ...test_modeling_common import ModelTesterMixin\n\ncode1",
                 repo,
             )
 
@@ -743,7 +743,7 @@ src/transformers/configuration_utils.py
             # Modification in one example trigger the corresponding test
             commit_changes(
                 "examples/pytorch/text-classification/run_glue.py",
-                "from transformers import BertModeln\n\ncode1",
+                "from sarah import BertModeln\n\ncode1",
                 repo,
             )
 

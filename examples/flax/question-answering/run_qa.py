@@ -45,8 +45,8 @@ from huggingface_hub import HfApi
 from tqdm import tqdm
 from utils_qa import postprocess_qa_predictions
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     AutoConfig,
     AutoTokenizer,
     EvalPrediction,
@@ -55,7 +55,7 @@ from transformers import (
     PreTrainedTokenizerFast,
     is_tensorboard_available,
 )
-from transformers.utils import check_min_version, send_example_telemetry
+from sarah.utils import check_min_version, send_example_telemetry
 
 
 logger = logging.getLogger(__name__)

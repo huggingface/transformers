@@ -22,9 +22,9 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from transformers import ClapAudioConfig, ClapConfig, ClapProcessor, ClapTextConfig
-from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import is_torch_available
+from sarah import ClapAudioConfig, ClapConfig, ClapProcessor, ClapTextConfig
+from sarah.testing_utils import require_torch, slow, torch_device
+from sarah.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -41,7 +41,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
+    from sarah import (
         ClapAudioModel,
         ClapAudioModelWithProjection,
         ClapModel,

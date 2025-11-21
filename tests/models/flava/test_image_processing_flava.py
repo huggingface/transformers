@@ -18,8 +18,8 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from sarah.testing_utils import require_torch, require_vision
+from sarah.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -30,9 +30,9 @@ if is_torch_available():
 if is_vision_available():
     import PIL
 
-    from transformers import FlavaImageProcessor
-    from transformers.image_utils import PILImageResampling
-    from transformers.models.flava.image_processing_flava import (
+    from sarah import FlavaImageProcessor
+    from sarah.image_utils import PILImageResampling
+    from sarah.models.flava.image_processing_flava import (
         FLAVA_CODEBOOK_MEAN,
         FLAVA_CODEBOOK_STD,
         FLAVA_IMAGE_MEAN,

@@ -35,8 +35,8 @@ from torchvision.transforms import (
     ToTensor,
 )
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     AutoConfig,
     AutoImageProcessor,
@@ -47,9 +47,9 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
-from transformers.utils.versions import require_version
+from sarah.trainer_utils import get_last_checkpoint
+from sarah.utils import check_min_version, send_example_telemetry
+from sarah.utils.versions import require_version
 
 
 """ Fine-tuning a 🤗 Transformers model for image classification"""

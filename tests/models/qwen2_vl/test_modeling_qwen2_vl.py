@@ -19,14 +19,14 @@ import unittest
 
 import requests
 
-from transformers import (
+from sarah import (
     AutoProcessor,
     Qwen2VLConfig,
     Qwen2VLForConditionalGeneration,
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,

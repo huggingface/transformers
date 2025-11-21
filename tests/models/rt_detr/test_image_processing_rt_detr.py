@@ -16,7 +16,7 @@ import unittest
 
 import requests
 
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     is_flaky,
     require_torch,
     require_torch_gpu,
@@ -24,7 +24,7 @@ from transformers.testing_utils import (
     require_vision,
     slow,
 )
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from sarah.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -32,7 +32,7 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_vision_available():
     from PIL import Image
 
-    from transformers import RTDetrImageProcessor, RTDetrImageProcessorFast
+    from sarah import RTDetrImageProcessor, RTDetrImageProcessorFast
 
 if is_torch_available():
     import torch

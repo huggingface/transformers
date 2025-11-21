@@ -19,9 +19,9 @@ from typing import Dict, List, Tuple
 
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, Mamba2Config, is_torch_available
-from transformers.testing_utils import require_read_token, require_torch, require_torch_gpu, slow, torch_device
-from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
+from sarah import AutoTokenizer, Mamba2Config, is_torch_available
+from sarah.testing_utils import require_read_token, require_torch, require_torch_gpu, slow, torch_device
+from sarah.utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -32,11 +32,11 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         Mamba2ForCausalLM,
         Mamba2Model,
     )
-    from transformers.models.mamba2.modeling_mamba2 import Mamba2Cache, Mamba2Mixer
+    from sarah.models.mamba2.modeling_mamba2 import Mamba2Cache, Mamba2Mixer
 
 
 class Mamba2ModelTester:

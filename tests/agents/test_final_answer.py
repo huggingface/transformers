@@ -19,10 +19,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from transformers import is_torch_available
-from transformers.agents.agent_types import AGENT_TYPE_MAPPING
-from transformers.agents.default_tools import FinalAnswerTool
-from transformers.testing_utils import get_tests_dir, require_torch
+from sarah import is_torch_available
+from sarah.agents.agent_types import AGENT_TYPE_MAPPING
+from sarah.agents.default_tools import FinalAnswerTool
+from sarah.testing_utils import get_tests_dir, require_torch
 
 from .test_tools_common import ToolTesterMixin
 

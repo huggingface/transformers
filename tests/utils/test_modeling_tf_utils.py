@@ -26,9 +26,9 @@ import unittest.mock as mock
 from huggingface_hub import HfFolder, snapshot_download
 from requests.exceptions import HTTPError
 
-from transformers import is_tf_available
-from transformers.configuration_utils import PretrainedConfig
-from transformers.testing_utils import (  # noqa: F401
+from sarah import is_tf_available
+from sarah.configuration_utils import PretrainedConfig
+from sarah.testing_utils import (  # noqa: F401
     TOKEN,
     USER,
     CaptureLogger,
@@ -38,7 +38,7 @@ from transformers.testing_utils import (  # noqa: F401
     require_tf,
     slow,
 )
-from transformers.utils import (
+from sarah.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     TF2_WEIGHTS_INDEX_NAME,
@@ -55,15 +55,15 @@ if is_tf_available():
     import numpy as np
     import tensorflow as tf
 
-    from transformers import (
+    from sarah import (
         BertConfig,
         RagRetriever,
         TFBertForSequenceClassification,
         TFBertModel,
         TFRagModel,
     )
-    from transformers.modeling_tf_utils import keras, tf_shard_checkpoint, unpack_inputs
-    from transformers.tf_utils import stable_softmax
+    from sarah.modeling_tf_utils import keras, tf_shard_checkpoint, unpack_inputs
+    from sarah.tf_utils import stable_softmax
 
     tf.config.experimental.enable_tensor_float_32_execution(False)
 

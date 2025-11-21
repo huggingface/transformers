@@ -24,7 +24,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
-from transformers import (
+from sarah import (
     BatchEncoding,
     BertTokenizer,
     BertTokenizerFast,
@@ -35,8 +35,8 @@ from transformers import (
     TokenSpan,
     is_tokenizers_available,
 )
-from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
-from transformers.testing_utils import (
+from sarah.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
+from sarah.testing_utils import (
     CaptureStderr,
     require_flax,
     require_sentencepiece,
@@ -424,7 +424,7 @@ class TokenizerUtilsTest(unittest.TestCase):
     def test_sentencepiece_cohabitation(self):
         from sentencepiece import sentencepiece_model_pb2 as _original_protobuf  # noqa: F401
 
-        from transformers.convert_slow_tokenizer import import_protobuf  # noqa: F401
+        from sarah.convert_slow_tokenizer import import_protobuf  # noqa: F401
 
         # Now this will try to import sentencepiece_model_pb2_new.py. This should not fail even if the protobuf
         # was already imported.

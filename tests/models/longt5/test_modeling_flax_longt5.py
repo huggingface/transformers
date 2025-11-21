@@ -17,9 +17,9 @@ import unittest
 
 import numpy as np
 
-from transformers import is_flax_available
-from transformers.models.auto import get_values
-from transformers.testing_utils import (
+from sarah import is_flax_available
+from sarah.models.auto import get_values
+from sarah.testing_utils import (
     require_flax,
     require_sentencepiece,
     require_tokenizers,
@@ -43,8 +43,8 @@ if is_flax_available():
     from flax.core.frozen_dict import unfreeze
     from flax.traverse_util import flatten_dict
 
-    from transformers import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING, FLAX_MODEL_MAPPING, AutoTokenizer, LongT5Config
-    from transformers.models.longt5.modeling_flax_longt5 import (
+    from sarah import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING, FLAX_MODEL_MAPPING, AutoTokenizer, LongT5Config
+    from sarah.models.longt5.modeling_flax_longt5 import (
         FlaxLongT5ForConditionalGeneration,
         FlaxLongT5Model,
         shift_tokens_right,

@@ -22,7 +22,7 @@ import unittest
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 
-from transformers import (
+from sarah import (
     SPIECE_UNDERLINE,
     AddedToken,
     AutoTokenizer,
@@ -30,8 +30,8 @@ from transformers import (
     LlamaTokenizerFast,
     PreTrainedTokenizerFast,
 )
-from transformers.convert_slow_tokenizer import convert_slow_tokenizer
-from transformers.testing_utils import (
+from sarah.convert_slow_tokenizer import convert_slow_tokenizer
+from sarah.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_jinja,

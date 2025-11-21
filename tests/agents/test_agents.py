@@ -19,8 +19,8 @@ import uuid
 
 import pytest
 
-from transformers.agents.agent_types import AgentText
-from transformers.agents.agents import (
+from sarah.agents.agent_types import AgentText
+from sarah.agents.agents import (
     AgentMaxIterationsError,
     CodeAgent,
     ManagedAgent,
@@ -28,8 +28,8 @@ from transformers.agents.agents import (
     ReactJsonAgent,
     Toolbox,
 )
-from transformers.agents.default_tools import PythonInterpreterTool
-from transformers.testing_utils import require_torch
+from sarah.agents.default_tools import PythonInterpreterTool
+from sarah.testing_utils import require_torch
 
 
 def get_new_path(suffix="") -> str:

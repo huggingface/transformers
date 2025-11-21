@@ -21,12 +21,12 @@ from io import BytesIO
 import pytest
 import requests
 
-from transformers import (
+from sarah import (
     AutoProcessor,
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_torch,
@@ -43,7 +43,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         Idefics3Config,
         Idefics3ForConditionalGeneration,
         Idefics3Model,

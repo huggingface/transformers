@@ -15,8 +15,8 @@
 import argparse
 from typing import Any, Callable
 
-from transformers import is_torch_available, is_torch_mlu_available
-from transformers.testing_utils import (
+from sarah import is_torch_available, is_torch_mlu_available
+from sarah.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
     get_torch_dist_unique_port,
@@ -34,8 +34,8 @@ if is_torch_available():
     from torch.distributed.fsdp import FullyShardedDataParallel
     from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    from transformers.models.gpt2.modeling_gpt2 import GPT2Block
+    from sarah import AutoModelForCausalLM, AutoTokenizer
+    from sarah.models.gpt2.modeling_gpt2 import GPT2Block
 
     data = 4 * [
         "Hello world!",

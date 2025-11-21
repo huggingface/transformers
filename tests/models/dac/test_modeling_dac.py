@@ -23,8 +23,8 @@ from typing import Dict, List, Tuple
 import numpy as np
 from datasets import Audio, load_dataset
 
-from transformers import AutoProcessor, DacConfig, DacModel
-from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
+from sarah import AutoProcessor, DacConfig, DacModel
+from sarah.testing_utils import is_torch_available, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor

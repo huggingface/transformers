@@ -21,8 +21,8 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from transformers import Wav2Vec2Config, is_flax_available
-from transformers.testing_utils import (
+from sarah import Wav2Vec2Config, is_flax_available
+from sarah.testing_utils import (
     CaptureLogger,
     is_librosa_available,
     is_pyctcdecode_available,
@@ -43,8 +43,8 @@ if is_flax_available():
     import optax
     from flax.traverse_util import flatten_dict
 
-    from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Processor
-    from transformers.models.wav2vec2.modeling_flax_wav2vec2 import (
+    from sarah import Wav2Vec2FeatureExtractor, Wav2Vec2Processor
+    from sarah.models.wav2vec2.modeling_flax_wav2vec2 import (
         FlaxWav2Vec2ForCTC,
         FlaxWav2Vec2ForPreTraining,
         FlaxWav2Vec2GumbelVectorQuantizer,
@@ -57,8 +57,8 @@ if is_flax_available():
 if is_pyctcdecode_available():
     import pyctcdecode.decoder
 
-    from transformers import Wav2Vec2ProcessorWithLM
-    from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
+    from sarah import Wav2Vec2ProcessorWithLM
+    from sarah.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
 
 if is_librosa_available():

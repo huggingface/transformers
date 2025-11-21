@@ -30,9 +30,9 @@ import time
 from create_dummy_models import COMPOSITE_MODELS, create_tiny_models
 from huggingface_hub import ModelFilter, hf_api
 
-import transformers
-from transformers import AutoFeatureExtractor, AutoImageProcessor, AutoTokenizer
-from transformers.image_processing_utils import BaseImageProcessor
+import sarah
+from sarah import AutoFeatureExtractor, AutoImageProcessor, AutoTokenizer
+from sarah.image_processing_utils import BaseImageProcessor
 
 
 def get_all_model_names():

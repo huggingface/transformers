@@ -17,10 +17,10 @@ import inspect
 import tempfile
 import unittest
 
-from transformers import WhisperConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
-from transformers.utils import cached_property
-from transformers.utils.import_utils import is_datasets_available
+from sarah import WhisperConfig, is_flax_available
+from sarah.testing_utils import require_flax, slow
+from sarah.utils import cached_property
+from sarah.utils.import_utils import is_datasets_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
@@ -36,7 +36,7 @@ if is_flax_available():
     from flax.core.frozen_dict import unfreeze
     from flax.traverse_util import flatten_dict
 
-    from transformers import (
+    from sarah import (
         FLAX_MODEL_MAPPING,
         FlaxWhisperForAudioClassification,
         FlaxWhisperForConditionalGeneration,
@@ -44,7 +44,7 @@ if is_flax_available():
         WhisperFeatureExtractor,
         WhisperProcessor,
     )
-    from transformers.models.whisper.modeling_flax_whisper import sinusoidal_embedding_init
+    from sarah.models.whisper.modeling_flax_whisper import sinusoidal_embedding_init
 
 
 @require_flax

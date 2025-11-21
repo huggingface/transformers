@@ -29,8 +29,8 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoConfig, AutoProcessor, AutoTokenizer, is_torch_available, pipeline
-from transformers.testing_utils import (
+from sarah import AutoConfig, AutoProcessor, AutoTokenizer, is_torch_available, pipeline
+from sarah.testing_utils import (
     is_flaky,
     require_accelerate,
     require_flash_attn,
@@ -47,14 +47,14 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_ipex_available, is_torchdynamo_exporting
+from sarah.utils import is_ipex_available, is_torchdynamo_exporting
 
 
 if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    from transformers import (
+    from sarah import (
         AutoModelForCausalLM,
         AutoModelForImageTextToText,
         AutoModelForSeq2SeqLM,
@@ -68,7 +68,7 @@ if is_torch_available():
         SpeechEncoderDecoderModel,
         T5ForConditionalGeneration,
     )
-    from transformers.cache_utils import (
+    from sarah.cache_utils import (
         Cache,
         DynamicCache,
         EncoderDecoderCache,
@@ -76,7 +76,7 @@ if is_torch_available():
         QuantoQuantizedCache,
         StaticCache,
     )
-    from transformers.generation import (
+    from sarah.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
         BeamSearchDecoderOnlyOutput,
@@ -103,15 +103,15 @@ if is_torch_available():
         WatermarkDetector,
         WatermarkingConfig,
     )
-    from transformers.generation.candidate_generator import (
+    from sarah.generation.candidate_generator import (
         AssistedCandidateGenerator,
         AssistedCandidateGeneratorDifferentTokenizers,
     )
-    from transformers.generation.utils import _speculative_sampling
+    from sarah.generation.utils import _speculative_sampling
 
 from unittest.mock import patch
 
-from transformers.utils import is_sklearn_available
+from sarah.utils import is_sklearn_available
 
 
 # TODO: raushan remove this when VLMs start accepting input embeds

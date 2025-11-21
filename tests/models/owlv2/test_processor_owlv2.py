@@ -4,8 +4,8 @@ import unittest
 
 import pytest
 
-from transformers import Owlv2Processor
-from transformers.testing_utils import require_scipy
+from sarah import Owlv2Processor
+from sarah.testing_utils import require_scipy
 
 from ...test_processing_common import ProcessorTesterMixin
 

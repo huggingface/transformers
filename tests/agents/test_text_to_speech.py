@@ -15,14 +15,14 @@
 
 import unittest
 
-from transformers import load_tool
-from transformers.utils import is_torch_available
+from sarah import load_tool
+from sarah.utils import is_torch_available
 
 
 if is_torch_available():
     import torch
 
-from transformers.testing_utils import require_torch
+from sarah.testing_utils import require_torch
 
 from .test_tools_common import ToolTesterMixin
 

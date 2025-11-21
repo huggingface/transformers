@@ -9,7 +9,7 @@ import psutil
 import psycopg2
 import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, StaticCache
+from sarah import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, StaticCache
 
 
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"

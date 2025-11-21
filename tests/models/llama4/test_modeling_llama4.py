@@ -16,8 +16,8 @@
 
 import unittest
 
-from transformers import is_torch_available
-from transformers.testing_utils import (
+from sarah import is_torch_available
+from sarah.testing_utils import (
     require_read_token,
     require_torch_large_gpu,
     slow,
@@ -28,7 +28,7 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         Llama4ForConditionalGeneration,
         Llama4Processor,
     )

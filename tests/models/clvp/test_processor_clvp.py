@@ -18,8 +18,8 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import ClvpFeatureExtractor, ClvpProcessor, ClvpTokenizer
-from transformers.testing_utils import require_torch
+from sarah import ClvpFeatureExtractor, ClvpProcessor, ClvpTokenizer
+from sarah.testing_utils import require_torch
 
 from .test_feature_extraction_clvp import floats_list
 

@@ -18,9 +18,9 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, XLMRobertaTokenizer, XLMRobertaTokenizerFast
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
-from transformers.utils import cached_property
+from sarah import SPIECE_UNDERLINE, XLMRobertaTokenizer, XLMRobertaTokenizerFast
+from sarah.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
+from sarah.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

@@ -19,8 +19,8 @@ import unittest
 from typing import Dict, List, Tuple
 from unittest.util import safe_repr
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
-from transformers.testing_utils import (
+from sarah import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
+from sarah.testing_utils import (
     require_bitsandbytes,
     require_torch,
     require_torch_accelerator,
@@ -38,11 +38,11 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         FalconMambaForCausalLM,
         FalconMambaModel,
     )
-    from transformers.cache_utils import MambaCache
+    from sarah.cache_utils import MambaCache
 
 
 # Copied from transformers.tests.models.mamba.MambaModelTester with Mamba->FalconMamba,mamba->falcon_mamba

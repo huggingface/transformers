@@ -2,25 +2,25 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from transformers import AutoConfig, TFAutoModel, is_tensorflow_text_available, is_tf_available
-from transformers.models.bert.tokenization_bert import BertTokenizer
-from transformers.testing_utils import require_tensorflow_text, require_tf, slow
+from sarah import AutoConfig, TFAutoModel, is_tensorflow_text_available, is_tf_available
+from sarah.models.bert.tokenization_bert import BertTokenizer
+from sarah.testing_utils import require_tensorflow_text, require_tf, slow
 
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.modeling_tf_utils import keras
+    from sarah.modeling_tf_utils import keras
 
 if is_tensorflow_text_available():
-    from transformers.models.bert import TFBertTokenizer
+    from sarah.models.bert import TFBertTokenizer
 
 
 TOKENIZER_CHECKPOINTS = ["google-bert/bert-base-uncased", "google-bert/bert-base-cased"]
 TINY_MODEL_CHECKPOINT = "hf-internal-testing/tiny-bert-tf-only"
 
 if is_tf_available():
-    from transformers.modeling_tf_utils import keras
+    from sarah.modeling_tf_utils import keras
 
     class ModelToSave(keras.Model):
         def __init__(self, tokenizer):

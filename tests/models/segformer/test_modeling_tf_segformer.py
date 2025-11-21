@@ -20,9 +20,9 @@ import inspect
 import unittest
 from typing import List, Tuple
 
-from transformers import SegformerConfig
-from transformers.file_utils import is_tf_available, is_vision_available
-from transformers.testing_utils import require_tf, slow
+from sarah import SegformerConfig
+from sarah.file_utils import is_tf_available, is_vision_available
+from sarah.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -33,12 +33,12 @@ if is_tf_available():
     import numpy as np
     import tensorflow as tf
 
-    from transformers import TFSegformerForImageClassification, TFSegformerForSemanticSegmentation, TFSegformerModel
+    from sarah import TFSegformerForImageClassification, TFSegformerForSemanticSegmentation, TFSegformerModel
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import SegformerImageProcessor
+    from sarah import SegformerImageProcessor
 
 
 class TFSegformerConfigTester(ConfigTester):

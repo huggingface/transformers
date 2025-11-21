@@ -20,8 +20,8 @@ import unittest
 
 import pytest
 
-from transformers import M2M100Config, is_torch_available
-from transformers.testing_utils import (
+from sarah import M2M100Config, is_torch_available
+from sarah.testing_utils import (
     require_flash_attn,
     require_sentencepiece,
     require_tokenizers,
@@ -31,7 +31,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
+from sarah.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -42,8 +42,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import M2M100ForConditionalGeneration, M2M100Model, M2M100Tokenizer
-    from transformers.models.m2m_100.modeling_m2m_100 import M2M100Decoder, M2M100Encoder
+    from sarah import M2M100ForConditionalGeneration, M2M100Model, M2M100Tokenizer
+    from sarah.models.m2m_100.modeling_m2m_100 import M2M100Decoder, M2M100Encoder
 
 
 def prepare_m2m_100_inputs_dict(

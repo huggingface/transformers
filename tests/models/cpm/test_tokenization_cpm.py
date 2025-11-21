@@ -14,8 +14,8 @@
 
 import unittest
 
-from transformers.models.cpm.tokenization_cpm import CpmTokenizer
-from transformers.testing_utils import custom_tokenizers
+from sarah.models.cpm.tokenization_cpm import CpmTokenizer
+from sarah.testing_utils import custom_tokenizers
 
 
 @custom_tokenizers

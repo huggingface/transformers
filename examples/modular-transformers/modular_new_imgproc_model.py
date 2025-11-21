@@ -1,7 +1,7 @@
 import torch
 import torch.utils.checkpoint
 
-from transformers.models.blip.image_processing_blip import BlipImageProcessor
+from sarah.models.blip.image_processing_blip import BlipImageProcessor
 
 
 class ImgprocModelImageProcessor(BlipImageProcessor):

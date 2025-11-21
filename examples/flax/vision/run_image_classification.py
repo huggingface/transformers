@@ -44,8 +44,8 @@ from huggingface_hub import HfApi
 from torchvision import transforms
 from tqdm import tqdm
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     AutoConfig,
@@ -54,7 +54,7 @@ from transformers import (
     is_tensorboard_available,
     set_seed,
 )
-from transformers.utils import send_example_telemetry
+from sarah.utils import send_example_telemetry
 
 
 logger = logging.getLogger(__name__)

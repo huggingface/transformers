@@ -16,13 +16,13 @@
 
 import unittest
 
-from transformers import (
+from sarah import (
     AutoProcessor,
     GotOcr2Config,
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from sarah.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -33,13 +33,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         GotOcr2ForConditionalGeneration,
     )
 
 
 if is_vision_available():
-    from transformers.image_utils import load_image
+    from sarah.image_utils import load_image
 
 
 class GotOcr2VisionText2TextModelTester:

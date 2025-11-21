@@ -25,9 +25,9 @@ from pathlib import Path
 from huggingface_hub import HfFolder
 from requests.exceptions import HTTPError
 
-from transformers import AutoConfig, BertConfig, GPT2Config
-from transformers.configuration_utils import PretrainedConfig
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test
+from sarah import AutoConfig, BertConfig, GPT2Config
+from sarah.configuration_utils import PretrainedConfig
+from sarah.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -263,7 +263,7 @@ class ConfigTestUtils(unittest.TestCase):
         # This repo has two configuration files, one for v4.0.0 and above with a different hidden size.
         repo = "hf-internal-testing/test-two-configs"
 
-        import transformers as new_transformers
+        import sarah as new_transformers
 
         new_transformers.configuration_utils.__version__ = "v4.0.0"
         new_configuration, kwargs = new_transformers.models.auto.AutoConfig.from_pretrained(
@@ -274,7 +274,7 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertDictEqual(kwargs, {})
 
         # Testing an older version by monkey-patching the version in the module it's used.
-        import transformers as old_transformers
+        import sarah as old_transformers
 
         old_transformers.configuration_utils.__version__ = "v3.0.0"
         old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)

@@ -26,9 +26,9 @@ from typing import Dict, List, Literal, Optional, Union, get_args, get_origin
 
 import yaml
 
-from transformers import HfArgumentParser, TrainingArguments
-from transformers.hf_argparser import make_choice_type_function, string_to_bool
-from transformers.testing_utils import require_torch
+from sarah import HfArgumentParser, TrainingArguments
+from sarah.hf_argparser import make_choice_type_function, string_to_bool
+from sarah.testing_utils import require_torch
 
 
 # Since Python 3.10, we can use the builtin `|` operator for Union types

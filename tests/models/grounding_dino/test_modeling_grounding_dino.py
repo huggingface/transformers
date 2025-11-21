@@ -22,14 +22,14 @@ import unittest
 
 from datasets import load_dataset
 
-from transformers import (
+from sarah import (
     GroundingDinoConfig,
     SwinConfig,
     is_torch_available,
     is_vision_available,
 )
-from transformers.file_utils import cached_property
-from transformers.testing_utils import (
+from sarah.file_utils import cached_property
+from sarah.testing_utils import (
     is_flaky,
     require_timm,
     require_torch,
@@ -47,14 +47,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import GroundingDinoConfig, GroundingDinoForObjectDetection, GroundingDinoModel
-    from transformers.pytorch_utils import id_tensor_storage
+    from sarah import GroundingDinoConfig, GroundingDinoForObjectDetection, GroundingDinoModel
+    from sarah.pytorch_utils import id_tensor_storage
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor
+    from sarah import AutoProcessor
 
 
 def generate_fake_bounding_boxes(n_boxes):

@@ -45,7 +45,7 @@ from typing import Any, Optional, Tuple, Union
 from check_repo import ignore_undocumented
 from git import Repo
 
-from transformers.utils import direct_transformers_import
+from sarah.utils import direct_transformers_import
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()

@@ -18,10 +18,10 @@ import unittest
 
 import numpy as np
 
-from transformers.data.data_collator import default_data_collator
-from transformers.testing_utils import require_accelerate, require_torch
-from transformers.trainer_utils import RemoveColumnsCollator, find_executable_batch_size
-from transformers.utils import is_torch_available
+from sarah.data.data_collator import default_data_collator
+from sarah.testing_utils import require_accelerate, require_torch
+from sarah.trainer_utils import RemoveColumnsCollator, find_executable_batch_size
+from sarah.utils import is_torch_available
 
 
 if is_torch_available():
@@ -29,9 +29,9 @@ if is_torch_available():
     from torch import nn
     from torch.utils.data import IterableDataset
 
-    from transformers.modeling_outputs import SequenceClassifierOutput
-    from transformers.tokenization_utils_base import BatchEncoding
-    from transformers.trainer_pt_utils import (
+    from sarah.modeling_outputs import SequenceClassifierOutput
+    from sarah.tokenization_utils_base import BatchEncoding
+    from sarah.trainer_pt_utils import (
         DistributedLengthGroupedSampler,
         DistributedSamplerWithLoop,
         DistributedTensorGatherer,

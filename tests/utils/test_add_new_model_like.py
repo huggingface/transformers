@@ -17,8 +17,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import transformers
-from transformers.commands.add_new_model_like import (
+import sarah
+from sarah.commands.add_new_model_like import (
     ModelPatterns,
     _re_class_func,
     add_content_to_file,
@@ -36,7 +36,7 @@ from transformers.commands.add_new_model_like import (
     retrieve_model_classes,
     simplify_replacements,
 )
-from transformers.testing_utils import require_flax, require_tf, require_torch
+from sarah.testing_utils import require_flax, require_tf, require_torch
 
 
 BERT_MODEL_FILES = {

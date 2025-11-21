@@ -16,15 +16,15 @@
 
 import unittest
 
-from transformers import Data2VecVisionConfig
-from transformers.testing_utils import (
+from sarah import Data2VecVisionConfig
+from sarah.testing_utils import (
     require_torch,
     require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import (
+from sarah.utils import (
     cached_property,
     is_torch_available,
     is_vision_available,
@@ -39,18 +39,18 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
+    from sarah import (
         Data2VecVisionForImageClassification,
         Data2VecVisionForSemanticSegmentation,
         Data2VecVisionModel,
     )
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+    from sarah.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import BeitImageProcessor
+    from sarah import BeitImageProcessor
 
 
 class Data2VecVisionModelTester:

@@ -18,8 +18,8 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, GraniteMoeConfig, is_torch_available, set_seed
-from transformers.testing_utils import (
+from sarah import AutoTokenizer, GraniteMoeConfig, is_torch_available, set_seed
+from sarah.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_gpu,
@@ -35,11 +35,11 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         GraniteMoeForCausalLM,
         GraniteMoeModel,
     )
-    from transformers.models.granitemoe.modeling_granitemoe import (
+    from sarah.models.granitemoe.modeling_granitemoe import (
         GraniteMoeRotaryEmbedding,
     )
 

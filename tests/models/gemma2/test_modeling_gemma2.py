@@ -21,9 +21,9 @@ from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma2Config, is_torch_available, pipeline
-from transformers.generation.configuration_utils import GenerationConfig
-from transformers.testing_utils import (
+from sarah import AutoModelForCausalLM, AutoTokenizer, Gemma2Config, is_torch_available, pipeline
+from sarah.generation.configuration_utils import GenerationConfig
+from sarah.testing_utils import (
     require_flash_attn,
     require_read_token,
     require_torch,
@@ -40,7 +40,7 @@ from ...test_configuration_common import ConfigTester
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         Gemma2ForCausalLM,
         Gemma2ForSequenceClassification,
         Gemma2ForTokenClassification,
@@ -285,7 +285,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.5.0"):
             self.skipTest(reason="This test requires torch >= 2.5 to run.")
 
-        from transformers.integrations.executorch import (
+        from sarah.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
         )

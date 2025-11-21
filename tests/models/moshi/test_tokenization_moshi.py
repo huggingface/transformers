@@ -19,15 +19,15 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import (
+from sarah import (
     SPIECE_UNDERLINE,
     AddedToken,
     AutoTokenizer,
     PreTrainedTokenizerFast,
     SpecialTokensMixin,
 )
-from transformers.convert_slow_tokenizer import MoshiConverter
-from transformers.testing_utils import (
+from sarah.convert_slow_tokenizer import MoshiConverter
+from sarah.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_sentencepiece,

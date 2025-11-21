@@ -23,12 +23,12 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
     require_torchaudio,
 )
-from transformers.utils.import_utils import is_torchaudio_available
+from sarah.utils.import_utils import is_torchaudio_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
@@ -36,7 +36,7 @@ from ...test_sequence_feature_extraction_common import SequenceFeatureExtraction
 if is_torchaudio_available():
     import torch
 
-    from transformers import MusicgenMelodyFeatureExtractor
+    from sarah import MusicgenMelodyFeatureExtractor
 
 
 global_rng = random.Random()

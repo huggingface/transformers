@@ -16,8 +16,8 @@
 
 import unittest
 
-from transformers import LongformerConfig, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from sarah import LongformerConfig, is_torch_available
+from sarah.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -27,7 +27,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         LongformerForMaskedLM,
         LongformerForMultipleChoice,
         LongformerForQuestionAnswering,
@@ -35,7 +35,7 @@ if is_torch_available():
         LongformerForTokenClassification,
         LongformerModel,
     )
-    from transformers.models.longformer.modeling_longformer import LongformerSelfAttention
+    from sarah.models.longformer.modeling_longformer import LongformerSelfAttention
 
 
 class LongformerModelTester:

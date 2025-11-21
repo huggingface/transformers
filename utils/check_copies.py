@@ -44,7 +44,7 @@ import subprocess
 from collections import OrderedDict
 from typing import List, Optional, Tuple, Union
 
-from transformers.utils import direct_transformers_import
+from sarah.utils import direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command

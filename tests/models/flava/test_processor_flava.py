@@ -21,17 +21,17 @@ import unittest
 
 import pytest
 
-from transformers import BertTokenizer, BertTokenizerFast
-from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from sarah import BertTokenizer, BertTokenizerFast
+from sarah.models.bert.tokenization_bert import VOCAB_FILES_NAMES
+from sarah.testing_utils import require_vision
+from sarah.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import FlavaImageProcessor, FlavaProcessor
-    from transformers.models.flava.image_processing_flava import (
+    from sarah import FlavaImageProcessor, FlavaProcessor
+    from sarah.models.flava.image_processing_flava import (
         FLAVA_CODEBOOK_MEAN,
         FLAVA_CODEBOOK_STD,
         FLAVA_IMAGE_MEAN,

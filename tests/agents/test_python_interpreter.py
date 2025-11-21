@@ -18,10 +18,10 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import load_tool
-from transformers.agents.agent_types import AGENT_TYPE_MAPPING
-from transformers.agents.default_tools import BASE_PYTHON_TOOLS
-from transformers.agents.python_interpreter import InterpreterError, evaluate_python_code
+from sarah import load_tool
+from sarah.agents.agent_types import AGENT_TYPE_MAPPING
+from sarah.agents.default_tools import BASE_PYTHON_TOOLS
+from sarah.agents.python_interpreter import InterpreterError, evaluate_python_code
 
 from .test_tools_common import ToolTesterMixin
 

@@ -18,8 +18,8 @@ import unittest
 
 import pytest
 
-from transformers import Starcoder2Config, is_torch_available
-from transformers.testing_utils import (
+from sarah import Starcoder2Config, is_torch_available
+from sarah.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -38,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         AutoTokenizer,
         Starcoder2ForCausalLM,
         Starcoder2ForSequenceClassification,

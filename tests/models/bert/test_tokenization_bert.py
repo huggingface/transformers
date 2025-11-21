@@ -17,8 +17,8 @@
 import os
 import unittest
 
-from transformers import BertTokenizerFast
-from transformers.models.bert.tokenization_bert import (
+from sarah import BertTokenizerFast
+from sarah.models.bert.tokenization_bert import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
     BertTokenizer,
@@ -27,7 +27,7 @@ from transformers.models.bert.tokenization_bert import (
     _is_punctuation,
     _is_whitespace,
 )
-from transformers.testing_utils import require_tokenizers, slow
+from sarah.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 

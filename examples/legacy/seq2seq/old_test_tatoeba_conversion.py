@@ -16,9 +16,9 @@ import os
 import tempfile
 import unittest
 
-from transformers.models.marian.convert_marian_tatoeba_to_pytorch import DEFAULT_REPO, TatoebaConverter
-from transformers.testing_utils import slow
-from transformers.utils import cached_property
+from sarah.models.marian.convert_marian_tatoeba_to_pytorch import DEFAULT_REPO, TatoebaConverter
+from sarah.testing_utils import slow
+from sarah.utils import cached_property
 
 
 @unittest.skipUnless(os.path.exists(DEFAULT_REPO), "Tatoeba directory does not exist.")

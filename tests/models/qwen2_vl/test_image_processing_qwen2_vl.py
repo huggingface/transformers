@@ -19,10 +19,10 @@ import unittest
 import numpy as np
 import requests
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
-from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from sarah.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
+from sarah.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
+from sarah.testing_utils import require_torch, require_vision
+from sarah.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs, prepare_video_inputs
 
@@ -33,10 +33,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import Qwen2VLImageProcessor
+    from sarah import Qwen2VLImageProcessor
 
     if is_torchvision_available():
-        from transformers import Qwen2VLImageProcessorFast
+        from sarah import Qwen2VLImageProcessorFast
 
 
 class Qwen2VLImageProcessingTester:

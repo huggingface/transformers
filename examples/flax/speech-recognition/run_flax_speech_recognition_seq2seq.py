@@ -43,8 +43,8 @@ from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     AutoConfig,
     AutoFeatureExtractor,
     AutoProcessor,
@@ -54,9 +54,9 @@ from transformers import (
     Seq2SeqTrainingArguments,
     is_tensorboard_available,
 )
-from transformers.file_utils import get_full_repo_name
-from transformers.utils import check_min_version, send_example_telemetry
-from transformers.utils.versions import require_version
+from sarah.file_utils import get_full_repo_name
+from sarah.utils import check_min_version, send_example_telemetry
+from sarah.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.

@@ -17,8 +17,8 @@ import gc
 import tempfile
 import unittest
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, EetqConfig, OPTForCausalLM
-from transformers.testing_utils import (
+from sarah import AutoConfig, AutoModelForCausalLM, AutoTokenizer, EetqConfig, OPTForCausalLM
+from sarah.testing_utils import (
     require_accelerate,
     require_eetq,
     require_torch_gpu,
@@ -26,7 +26,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
+from sarah.utils import is_accelerate_available, is_torch_available
 
 
 if is_torch_available():
@@ -97,7 +97,7 @@ class EetqTest(unittest.TestCase):
         """
         from eetq import EetqLinear
 
-        from transformers.integrations import replace_with_eetq_linear
+        from sarah.integrations import replace_with_eetq_linear
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")

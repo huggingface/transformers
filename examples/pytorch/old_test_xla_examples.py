@@ -21,7 +21,7 @@ import sys
 from time import time
 from unittest.mock import patch
 
-from transformers.testing_utils import TestCasePlus, require_torch_xla
+from sarah.testing_utils import TestCasePlus, require_torch_xla
 
 
 logging.basicConfig(level=logging.DEBUG)

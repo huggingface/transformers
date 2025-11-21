@@ -25,15 +25,15 @@ import datasets
 from parameterized import parameterized
 
 import tests.trainer.test_trainer
-import transformers
+import sarah
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
-from transformers import AutoModel, TrainingArguments, is_torch_available, logging
-from transformers.integrations.deepspeed import (
+from sarah import AutoModel, TrainingArguments, is_torch_available, logging
+from sarah.integrations.deepspeed import (
     HfDeepSpeedConfig,
     is_deepspeed_available,
     unset_hf_deepspeed_config,
 )
-from transformers.testing_utils import (
+from sarah.testing_utils import (
     CaptureLogger,
     CaptureStd,
     CaptureStderr,
@@ -51,8 +51,8 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import get_last_checkpoint, set_seed
-from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
+from sarah.trainer_utils import get_last_checkpoint, set_seed
+from sarah.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
 
 if is_torch_available():
@@ -124,7 +124,7 @@ def require_deepspeed_aio(test_case):
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
     from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
-    from transformers.integrations.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
+    from sarah.integrations.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 
 def get_launcher(distributed=False):
@@ -277,7 +277,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         import deepspeed
         import torch
 
-        from transformers.models.gpt2.modeling_gpt2 import GPT2PreTrainedModel
+        from sarah.models.gpt2.modeling_gpt2 import GPT2PreTrainedModel
 
         class TinyGPT2WithUninitializedWeights(GPT2PreTrainedModel):
             def __init__(self, config):
@@ -778,7 +778,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
     # As well as Zero-3 inference
     # Related PR: https://github.com/huggingface/transformers/pull/32299
     # def test_missed_zero3_init(self):
-    #     from transformers import Trainer  # noqa
+    #     from sarah import Trainer  # noqa
 
     #     with mockenv_context(**self.dist_env_1_gpu):
     #         model = AutoModel.from_pretrained(T5_TINY)
@@ -1032,7 +1032,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # deepspeed doesn't fallback to AdamW, which would prevent the optimizer states from loading
         # correctly
 
-        from transformers import T5ForConditionalGeneration, T5Tokenizer, Trainer  # noqa
+        from sarah import T5ForConditionalGeneration, T5Tokenizer, Trainer  # noqa
 
         output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False, before=False)
 

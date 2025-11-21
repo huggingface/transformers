@@ -19,8 +19,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import transformers
-from transformers import (
+import sarah
+from sarah import (
     CONFIG_MAPPING,
     IMAGE_PROCESSOR_MAPPING,
     AutoConfig,
@@ -30,7 +30,7 @@ from transformers import (
     ViTImageProcessor,
     ViTImageProcessorFast,
 )
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_torchvision, require_vision
+from sarah.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_torchvision, require_vision
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))

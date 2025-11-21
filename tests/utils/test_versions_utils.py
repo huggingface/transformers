@@ -15,8 +15,8 @@
 import importlib.metadata
 import sys
 
-from transformers.testing_utils import TestCasePlus
-from transformers.utils.versions import require_version, require_version_core
+from sarah.testing_utils import TestCasePlus
+from sarah.utils.versions import require_version, require_version_core
 
 
 numpy_ver = importlib.metadata.version("numpy")

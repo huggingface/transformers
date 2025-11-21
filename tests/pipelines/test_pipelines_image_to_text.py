@@ -17,9 +17,9 @@ import unittest
 import requests
 from huggingface_hub import ImageToTextOutput
 
-from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, TF_MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
-from transformers.pipelines import ImageToTextPipeline, pipeline
-from transformers.testing_utils import (
+from sarah import MODEL_FOR_VISION_2_SEQ_MAPPING, TF_MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
+from sarah.pipelines import ImageToTextPipeline, pipeline
+from sarah.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     require_tf,

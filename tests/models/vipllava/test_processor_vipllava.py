@@ -13,12 +13,12 @@
 # limitations under the License.
 import unittest
 
-from transformers.testing_utils import require_vision
-from transformers.utils import is_vision_available
+from sarah.testing_utils import require_vision
+from sarah.utils import is_vision_available
 
 
 if is_vision_available():
-    from transformers import AutoProcessor
+    from sarah import AutoProcessor
 
 
 @require_vision

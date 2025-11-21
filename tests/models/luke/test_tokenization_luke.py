@@ -17,8 +17,8 @@ import unittest
 from functools import lru_cache
 from typing import Tuple
 
-from transformers import AddedToken, LukeTokenizer
-from transformers.testing_utils import get_tests_dir, require_torch, slow
+from sarah import AddedToken, LukeTokenizer
+from sarah.testing_utils import get_tests_dir, require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

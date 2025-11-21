@@ -18,7 +18,7 @@ import json
 import os
 import tempfile
 
-from transformers.testing_utils import check_json_file_has_correct_format
+from sarah.testing_utils import check_json_file_has_correct_format
 
 
 class FeatureExtractionSavingTestMixin:

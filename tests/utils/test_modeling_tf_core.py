@@ -22,9 +22,9 @@ import tempfile
 from importlib import import_module
 from math import isnan
 
-from transformers import is_tf_available
-from transformers.models.auto import get_values
-from transformers.testing_utils import require_tf, slow
+from sarah import is_tf_available
+from sarah.models.auto import get_values
+from sarah.testing_utils import require_tf, slow
 
 from ..test_modeling_tf_common import ids_tensor
 
@@ -33,7 +33,7 @@ if is_tf_available():
     import numpy as np
     import tensorflow as tf
 
-    from transformers import (
+    from sarah import (
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
@@ -46,7 +46,7 @@ if is_tf_available():
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TFSharedEmbeddings,
     )
-    from transformers.modeling_tf_utils import keras
+    from sarah.modeling_tf_utils import keras
 
 
 @require_tf

@@ -14,14 +14,14 @@
 
 import unittest
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch
+from sarah import is_torch_available
+from sarah.testing_utils import require_torch
 
 
 if is_torch_available():
     import torch
 
-    from transformers.activations import gelu_new, gelu_python, get_activation
+    from sarah.activations import gelu_new, gelu_python, get_activation
 
 
 @require_torch

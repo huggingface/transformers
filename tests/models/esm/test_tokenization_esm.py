@@ -20,10 +20,10 @@ import unittest
 from functools import lru_cache
 from typing import List
 
-from transformers.models.esm.tokenization_esm import VOCAB_FILES_NAMES, EsmTokenizer
-from transformers.testing_utils import require_tokenizers
-from transformers.tokenization_utils import PreTrainedTokenizer
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from sarah.models.esm.tokenization_esm import VOCAB_FILES_NAMES, EsmTokenizer
+from sarah.testing_utils import require_tokenizers
+from sarah.tokenization_utils import PreTrainedTokenizer
+from sarah.tokenization_utils_base import PreTrainedTokenizerBase
 
 from ...test_tokenization_common import use_cache_if_possible
 

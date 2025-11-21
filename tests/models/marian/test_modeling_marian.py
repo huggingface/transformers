@@ -17,8 +17,8 @@
 import tempfile
 import unittest
 
-from transformers import MarianConfig, is_torch_available
-from transformers.testing_utils import (
+from sarah import MarianConfig, is_torch_available
+from sarah.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -26,7 +26,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
+from sarah.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -37,7 +37,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
+    from sarah import (
         AutoConfig,
         AutoModelWithLMHead,
         AutoTokenizer,
@@ -45,7 +45,7 @@ if is_torch_available():
         MarianMTModel,
         TranslationPipeline,
     )
-    from transformers.models.marian.modeling_marian import (
+    from sarah.models.marian.modeling_marian import (
         MarianDecoder,
         MarianEncoder,
         MarianForCausalLM,

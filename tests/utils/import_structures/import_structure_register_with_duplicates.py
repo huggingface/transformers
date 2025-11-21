@@ -14,7 +14,7 @@
 
 # fmt: off
 
-from transformers.utils.import_utils import export
+from sarah.utils.import_utils import export
 
 
 @export(backends=("torch", "torch"))

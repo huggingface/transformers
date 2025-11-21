@@ -2,10 +2,10 @@ import gc
 import unittest
 import warnings
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.testing_utils import require_compressed_tensors, require_torch
-from transformers.utils import is_torch_available
-from transformers.utils.quantization_config import CompressedTensorsConfig
+from sarah import AutoModelForCausalLM, AutoTokenizer
+from sarah.testing_utils import require_compressed_tensors, require_torch
+from sarah.utils import is_torch_available
+from sarah.utils.quantization_config import CompressedTensorsConfig
 
 
 if is_torch_available():
@@ -186,7 +186,7 @@ class RunCompressedTest(unittest.TestCase):
         from compressed_tensors.linear.compressed_linear import CompressedLinear
         from compressed_tensors.quantization.utils import iter_named_leaf_modules
 
-        from transformers.utils.quantization_config import CompressedTensorsConfig
+        from sarah.utils.quantization_config import CompressedTensorsConfig
 
         quantization_config = CompressedTensorsConfig(run_compressed=False)
 
@@ -209,8 +209,8 @@ class RunCompressedTest(unittest.TestCase):
     def test_run_compressed_outputs_match(self):
         """Check that run_compressed=True/False output are the same"""
 
-        from transformers import AutoTokenizer
-        from transformers.utils.quantization_config import CompressedTensorsConfig
+        from sarah import AutoTokenizer
+        from sarah.utils.quantization_config import CompressedTensorsConfig
 
         quantization_config = CompressedTensorsConfig(run_compressed=False)
 

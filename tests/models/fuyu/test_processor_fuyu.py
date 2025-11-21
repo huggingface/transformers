@@ -5,7 +5,7 @@ from shutil import rmtree
 
 import requests
 
-from transformers import (
+from sarah import (
     AutoProcessor,
     AutoTokenizer,
     FuyuImageProcessor,
@@ -13,7 +13,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_torch, require_vision
+from sarah.testing_utils import require_torch, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -25,7 +25,7 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from transformers.models.fuyu.processing_fuyu import construct_full_unpacked_stream, full_unpacked_stream_to_tensor
+    from sarah.models.fuyu.processing_fuyu import construct_full_unpacked_stream, full_unpacked_stream_to_tensor
 
 
 @require_torch

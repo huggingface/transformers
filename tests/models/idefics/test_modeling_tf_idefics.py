@@ -19,9 +19,9 @@ import tempfile
 import unittest
 from importlib import import_module
 
-from transformers import IdeficsConfig, is_tf_available, is_vision_available
-from transformers.testing_utils import TestCasePlus, require_tf, require_vision, slow
-from transformers.utils import cached_property
+from sarah import IdeficsConfig, is_tf_available, is_vision_available
+from sarah.testing_utils import TestCasePlus, require_tf, require_vision, slow
+from sarah.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -31,9 +31,9 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import IdeficsProcessor, TFIdeficsForVisionText2Text, TFIdeficsModel
-    from transformers.modeling_tf_utils import keras
-    from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
+    from sarah import IdeficsProcessor, TFIdeficsForVisionText2Text, TFIdeficsModel
+    from sarah.modeling_tf_utils import keras
+    from sarah.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
 
 if is_vision_available():
     from PIL import Image
