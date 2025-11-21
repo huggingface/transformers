@@ -32,14 +32,14 @@ from .utils.import_utils import is_torch_available
 if is_torch_available():
     import torch
 
-from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, Replicate, TensorParallelLayer
+from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer
 from .utils import is_torch_greater_or_equal, logging
 
 
 _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 if _is_dtensor_available:
-    from torch.distributed.tensor import DTensor
+    from torch.distributed.tensor import DTensor, Replicate
 
 if TYPE_CHECKING:
     from .modeling_utils import PreTrainedModel
