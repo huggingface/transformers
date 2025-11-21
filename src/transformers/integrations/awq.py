@@ -131,28 +131,28 @@ def replace_with_awq_linear(
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         if quantization_config.version == AWQLinearVersion.GEMM:
-            from gptqmodel.nn_modules.qlinear.awq_gemm import AwqGEMMQuantLinear
+            from gptqmodel.quantization.awq.modules.linear.gemm import WQLinear_GEMM
 
-            target_cls = AwqGEMMQuantLinear
+            target_cls = WQLinear_GEMM
         elif quantization_config.version == AWQLinearVersion.GEMV:
-            from gptqmodel.nn_modules.qlinear.awq_gemv import AwqGEMVQuantLinear
+            from gptqmodel.quantization.awq.modules.linear.gemv import WQLinear_GEMV
 
-            target_cls = AwqGEMVQuantLinear
+            target_cls = WQLinear_GEMV
         elif quantization_config.version == AWQLinearVersion.EXLLAMA:
             if quantization_config.exllama_config["version"] == ExllamaVersion.ONE:
-                from gptqmodel.nn_modules.qlinear.awq_exllama import AwqExllamaQuantLinear
+                from gptqmodel.quantization.awq.modules.linear.exllama import WQLinear_Exllama
 
-                target_cls = AwqExllamaQuantLinear
+                target_cls = WQLinear_Exllama
             elif quantization_config.exllama_config["version"] == ExllamaVersion.TWO:
-                from gptqmodel.nn_modules.qlinear.awq_exllamav2 import AwqExllamaV2QuantLinear
+                from gptqmodel.quantization.awq.modules.linear.exllamav2 import WQLinear_ExllamaV2
 
-                target_cls = AwqExllamaV2QuantLinear
+                target_cls = WQLinear_ExllamaV2
             else:
                 raise ValueError(f"Unrecognized Exllama version: {quantization_config.exllama_config['version']}")
         elif quantization_config.version == AWQLinearVersion.IPEX:
-            from gptqmodel.nn_modules.qlinear.torch_fused_awq import TorchFusedAwqQuantLinear
+            from gptqmodel.quantization.awq.modules.linear.gemm_ipex import WQLinear_IPEX
 
-            target_cls = TorchFusedAwqQuantLinear
+            target_cls = WQLinear_IPEX
         else:
             raise ValueError(f"Unrecognized AWQ version: {quantization_config.version}")
     else:

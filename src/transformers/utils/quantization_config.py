@@ -838,17 +838,15 @@ class AwqConfig(GPTQConfig):
         modules_to_not_convert: list | None = None,
         **kwargs,
     ):
-        self.quant_method = QuantizationMethod.AWQ
 
-        self.bits = bits
-        self.group_size = group_size
         self.zero_point = zero_point
         self.version = version
-        self.backend = backend
         self.exllama_config = exllama_config
         self.modules_to_not_convert = modules_to_not_convert
 
-        self.post_init()
+        super().__init__(bits=bits, group_size=group_size, backend=backend, **kwargs)
+        self.quant_method = QuantizationMethod.AWQ
+
 
     def post_init(self):
         r"""
