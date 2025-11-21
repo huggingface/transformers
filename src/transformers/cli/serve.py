@@ -27,7 +27,7 @@ from collections.abc import Generator, Iterable
 from contextlib import asynccontextmanager
 from io import BytesIO
 from threading import Thread
-from typing import Annotated, Optional, TypedDict, Union
+from typing import TYPE_CHECKING, Annotated, Optional, TypedDict, Union
 
 import typer
 from huggingface_hub import scan_cache_dir
@@ -35,10 +35,12 @@ from openai.types.chat.chat_completion import Choice
 from tokenizers.decoders import DecodeStream
 
 import transformers
-from transformers.models.auto.modeling_auto import (
-    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
-    MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
-)
+from transformers import BitsAndBytesConfig, GenerationConfig
+
+# from transformers.models.auto.modeling_auto import (
+#     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+#     MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
+# )
 from transformers.utils.import_utils import (
     is_fastapi_available,
     is_librosa_available,
@@ -49,26 +51,20 @@ from transformers.utils.import_utils import (
 )
 
 from .. import (
-    AutoConfig,
     LogitsProcessorList,
-    PreTrainedTokenizerFast,
-    ProcessorMixin,
     TextIteratorStreamer,
 )
-from ..utils import is_torch_available, logging
+from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
+from ..utils import logging
 
 
-if is_torch_available():
-    import torch
-
+if TYPE_CHECKING:
     from transformers import (
-        AutoProcessor,
-        BitsAndBytesConfig,
-        GenerationConfig,
         PreTrainedModel,
+        PreTrainedTokenizerFast,
+        ProcessorMixin,
     )
 
-    from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
 
 if is_librosa_available():
     import librosa
@@ -212,6 +208,25 @@ _MODELS_WITH_TOOL_SUPPORT = list(_TOOL_CALL_TOKENS.keys())
 X_REQUEST_ID = "x-request-id"
 
 
+def set_torch_seed(_seed):
+    import torch
+
+    torch.manual_seed(_seed)
+
+
+def reset_torch_cache():
+    import torch
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+def torch_ones_like(_input_tensor):
+    import torch
+
+    return torch.ones_like(_input_tensor)
+
+
 class Modality(enum.Enum):
     LLM = "LLM"
     VLM = "VLM"
@@ -273,7 +288,7 @@ def create_generation_config_from_req(
     if req.get("top_p") is not None:
         generation_config.top_p = float(req["top_p"])
     if req.get("seed") is not None:
-        torch.manual_seed(req["seed"])
+        set_torch_seed(req["seed"])
 
     return generation_config
 
@@ -327,8 +342,7 @@ class TimedModel:
             gc.collect()
 
             # Clear CUDA cache if available
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            reset_torch_cache()
 
             # XXX: in case we manually delete the model, like on server shutdown
             self._timer.cancel()
@@ -430,7 +444,7 @@ class Serve:
 
         # Seed
         if default_seed is not None:
-            torch.manual_seed(default_seed)
+            set_torch_seed(default_seed)
 
         # Set up logging
         transformers_logger = logging.get_logger("transformers")
@@ -652,7 +666,7 @@ class Serve:
         finish_reason: Optional[str] = None,
         tool_calls: Optional[list["ChoiceDeltaToolCall"]] = None,
         decode_stream: Optional[DecodeStream] = None,
-        tokenizer: Optional[PreTrainedTokenizerFast] = None,
+        tokenizer: Optional["PreTrainedTokenizerFast"] = None,
     ) -> ChatCompletionChunk:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
@@ -900,6 +914,11 @@ class Serve:
 
     @staticmethod
     def get_model_modality(model: "PreTrainedModel") -> Modality:
+        from transformers.models.auto.modeling_auto import (
+            MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+            MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
+        )
+
         model_classname = model.__class__.__name__
         if model_classname in MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values():
             modality = Modality.VLM
@@ -1269,7 +1288,7 @@ class Serve:
 
         generation_kwargs = {
             "inputs": inputs,
-            "attention_mask": torch.ones_like(inputs),
+            "attention_mask": torch_ones_like(inputs),
             "streamer": generation_streamer,
             "generation_config": generation_config,
             "return_dict_in_generate": True,
@@ -1568,7 +1587,7 @@ class Serve:
 
         generate_output = model.generate(
             inputs=inputs,
-            attention_mask=torch.ones_like(inputs),
+            attention_mask=torch_ones_like(inputs),
             generation_config=generation_config,
             return_dict_in_generate=True,
             past_key_values=last_kv_cache,
@@ -1737,6 +1756,10 @@ class Serve:
             `tuple[PreTrainedModel, Union[ProcessorMixin, PreTrainedTokenizerFast]]`: The loaded model and
             data processor (tokenizer, audio processor, etc.).
         """
+        import torch
+
+        from transformers import AutoConfig, AutoProcessor
+
         logger.info(f"Loading {model_id_and_revision}")
 
         if "@" in model_id_and_revision:
@@ -1779,7 +1802,7 @@ class Serve:
 
     def load_model_and_processor(
         self, model_id_and_revision: str
-    ) -> tuple["PreTrainedModel", PreTrainedTokenizerFast]:
+    ) -> tuple["PreTrainedModel", "PreTrainedTokenizerFast"]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
 
@@ -1804,7 +1827,7 @@ class Serve:
 
         return model, processor
 
-    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", ProcessorMixin]:
+    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", "ProcessorMixin"]:
         """
         Loads the audio model and processor from the given model ID and revision into the ServeCommand instance.
 
