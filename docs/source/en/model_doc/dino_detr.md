@@ -26,11 +26,11 @@ DINO DETR (DETR with Improved DeNoising Anchor Boxes) is a state-of-the-art end-
 
 DINO DETR enhances the DETR architecture through three main innovations:
 
-* **Contrastive Denoising Training**: Employs a contrastive approach to denoise training, improving the model's robustness and convergence speed.
+* **Mixed Query Selection for Anchor Initialization**: In DINO DETR decoder queries consist of query locations and query features. The decoder query locations are selected by passing the encoder features through a classification head and selecting the topk locations in terms of max class probability. The decoder query features are learnable weights shared across all samples. In this way, the query locations are initialized close to interesting objects and the query features are made robust to different object classes.
 
-* **Mixed Query Selection for Anchor Initialization**: Utilizes a mixed query selection method to initialize anchors, enhancing the model's ability to detect objects effectively.
+* **Contrastive Denoising Training**: DINO Detr uses denoising queries together with "standard" DETR queries. The denoising queries are strongly perturbed versions of standard queries, assigned to negative labels. This improves the model's robustness and convergence speed.
 
-* **Look Forward Twice Scheme for Box Prediction**: Introduces a scheme where the model predicts bounding boxes twice, refining its predictions and improving accuracy.
+* **Look Forward Twice Scheme for Box Prediction**: This term means that the bounding boxes are refined iteratively from one decoder layer to the next, by adding corrections to the previous layer bounding boxes. This improves training stability.
 
 These advancements enable DINO DETR to achieve significant performance improvements over previous DETR-like models. For instance, with a ResNet-50 backbone and multi-scale features, DINO attains 49.4 AP in 12 epochs and 51.3 AP in 24 epochs on the COCO dataset, marking a substantial enhancement in detection performance.
 
@@ -50,11 +50,11 @@ An input image is processed through a pre-trained convolutional backbone, such a
 
 #### 2. Transformer Encoder
 
-The flattened feature maps are passed through a multi-layer Transformer encoder. This encoder processes the input sequence and outputs `encoder_hidden_states`, which serve as the image features for the subsequent decoder.
+The flattened feature maps are passed through a multi-layer transformer encoder. The self-attention implementation is deformable attention as first introduced in the [Deformable DETR](https://arxiv.org/abs/2010.04159) paper. This encoder processes the input sequence and outputs `encoder_hidden_states`, which serve as the image features for the subsequent decoder.
 
 #### 3. Object Queries and Decoder
 
-DINO introduces dynamic anchor boxes as object queries. These queries are initialized based on anchor box coordinates and are updated through the decoder layers. The decoder receives these object queries along with the encoder outputs and processes them through multiple self-attention and encoder-decoder attention layers. The decoder cross attention layers perform deformable attention as first introduced in the [Deformable DETR](https://arxiv.org/abs/2010.04159) paper. The result is `decoder_hidden_states`, which are then used for prediction.
+DINO introduces dynamic anchor boxes as object queries. These queries are initialized based on anchor box coordinates and are updated through the decoder layers. The decoder receives these object queries along with the encoder outputs and processes them through multiple self-attention and encoder-decoder cross-attention layers. The decoder cross attention layers perform deformable attention while self-attention is standard multi-head self-attention. The result is `decoder_hidden_states`, which are then used for prediction.
 
 #### 4. Prediction Heads
 
