@@ -165,6 +165,9 @@ class TextToAudioPipeline(Pipeline):
             kwargs = new_kwargs
 
         preprocessor = self.processor if self.processor is not None else self.tokenizer
+        if self.model.config.model_type == "musicgen":
+            preprocessor = self.tokenizer
+
         if isinstance(text, Chat):
             output = preprocessor.apply_chat_template(
                 text.messages,
