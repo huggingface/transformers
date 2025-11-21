@@ -139,9 +139,16 @@ def replace_with_awq_linear(
 
             target_cls = AwqGEMVQuantLinear
         elif quantization_config.version == AWQLinearVersion.EXLLAMA:
-            from gptqmodel.nn_modules.qlinear.awq_exllamav2 import AwqExllamaV2QuantLinear
+            if quantization_config.exllama_config["version"] == ExllamaVersion.ONE:
+                from gptqmodel.nn_modules.qlinear.awq_exllama import AwqExllamaQuantLinear
 
-            target_cls = AwqExllamaV2QuantLinear
+                target_cls = AwqExllamaQuantLinear
+            elif quantization_config.exllama_config["version"] == ExllamaVersion.TWO:
+                from gptqmodel.nn_modules.qlinear.awq_exllamav2 import AwqExllamaV2QuantLinear
+
+                target_cls = AwqExllamaV2QuantLinear
+            else:
+                raise ValueError(f"Unrecognized Exllama version: {quantization_config.exllama_config['version']}")
         elif quantization_config.version == AWQLinearVersion.IPEX:
             from gptqmodel.nn_modules.qlinear.torch_fused_awq import TorchFusedAwqQuantLinear
 
