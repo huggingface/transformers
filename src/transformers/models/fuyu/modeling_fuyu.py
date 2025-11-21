@@ -124,11 +124,7 @@ class FuyuModel(FuyuPreTrainedModel):
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 The tensors corresponding to the input images.
         """
-        patch_embeddings = [
-            self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype)).squeeze(0)
-            for patch in pixel_values
-        ]
-        return patch_embeddings
+        return self.vision_embed_tokens(pixel_values)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -207,8 +203,7 @@ class FuyuModel(FuyuPreTrainedModel):
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
 
         if image_patches is not None:
-            patch_embeddings = self.get_image_features(image_patches)
-            patch_embeddings = torch.cat(patch_embeddings, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            patch_embeddings = self.get_image_features(image_patches).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=patch_embeddings
             )
