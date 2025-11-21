@@ -603,15 +603,18 @@ class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings):
         self.position_embedding = nn.Embedding(self.num_patches_per_side**2, config.hidden_size)
 
     def forward(self, pixel_values: torch.FloatTensor, patch_attention_mask: torch.BoolTensor) -> torch.Tensor:
-        batch_size = pixel_values.size(0)
+        batch_size, _, max_im_h, max_im_w = pixel_values.shape
 
         patch_embeds = self.patch_embedding(pixel_values)
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
-        max_im_h, max_im_w = pixel_values.size(2), pixel_values.size(3)
         max_nb_patches_h, max_nb_patches_w = max_im_h // self.patch_size, max_im_w // self.patch_size
-        boundaries = torch.arange(1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side)
-        position_ids = torch.full((batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0)
+        boundaries = torch.arange(
+            1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side, device=pixel_values.device
+        )
+        position_ids = torch.full(
+            size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0, device=pixel_values.device
+        )
 
         nb_patches_h = patch_attention_mask[:, :, 0].sum(dim=1)  # (batch_size,)
         nb_patches_w = patch_attention_mask[:, 0, :].sum(dim=1)  # (batch_size,)

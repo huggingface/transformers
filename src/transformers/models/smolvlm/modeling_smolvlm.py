@@ -533,9 +533,10 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
             image_mask = input_ids == self.config.image_token_id
 
         num_image_tokens = image_mask.sum(dim=1)
-        if not torch.all(num_image_tokens % patch_size == 0):
-            raise ValueError("At least one sample has <image> tokens not divisible by patch_size.")
-
+        torch._check(
+            torch.all(num_image_tokens % patch_size == 0),
+            "At least one sample has <image> tokens not divisible by patch_size.",
+        )
         blocks_per_sample = num_image_tokens // patch_size
 
         offsets = torch.nn.functional.pad(blocks_per_sample.cumsum(dim=0), (1, 0), value=0)
