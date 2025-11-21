@@ -137,8 +137,6 @@ class DinoDetrEncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-# BELOW: utilities copied from
-# https://github.com/facebookresearch/dino_detr/blob/master/backbone.py
 class DinoDetrFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
