@@ -159,8 +159,8 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor, return_tensors="pt")
 
         predicted_tokens = [
-            "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
-            "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
+            "<s>Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
+            "<s>Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
         ]
         predicted_attention_masks = [
             ([1] * 10) + ([0] * 9),
@@ -188,8 +188,8 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         predicted_tokens = [
-            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><s> Describe this image.\nAssistant:",
-            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><s> Describe this image.\nAssistant:",
+            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><s>Describe this image.\nAssistant:",
+            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><s>Describe this image.\nAssistant:",
         ]
         predicted_attention_masks = [
             ([0] * 9) + ([1] * 10),
