@@ -86,7 +86,7 @@ class TorchAoQuantize(ConversionOps):
         input_embed = model.get_input_embeddings()
         is_embedding_param = id(module) == id(input_embed)
         untie_embedding_weights = self.hf_quantizer.quantization_config.untie_embedding_weights
-        
+
         if untie_embedding_weights and is_embedding_param:
             setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
 
@@ -177,7 +177,7 @@ class TorchAoQuantize(ConversionOps):
                     return {"lm_head.weight": lm_head} if is_embedding_param and untie_embedding_weights else {}
 
                 return {full_layer_name: value}
-        
+
         if is_embedding_param and untie_embedding_weights:
             lm_head = module.weight.clone()
         quantize_(module, self.hf_quantizer.quantization_config.get_apply_tensor_subclass())
@@ -217,22 +217,26 @@ class TorchAoDeserialize(ConversionOps):
 
         param_data = {}
         if is_unsafe_serialization:
-            weight = input_dict["weight"][0] if isinstance(input_dict["weight"], list) else input_dict["weight"]
+            if isinstance(input_dict["weight"], list):
+                weight = input_dict["weight"][0]
+            else:
+                weight = input_dict["weight"]
         else:
-            param_data = {
-                f"{full_layer_name}:qdata": input_dict["weight:qdata"][0]
-                if isinstance(input_dict["weight:qdata"], list)
-                else input_dict["weight:qdata"],
-                f"{full_layer_name}:scale": input_dict["weight:scale"][0]
-                if isinstance(input_dict["weight:scale"], list)
-                else input_dict["weight:scale"],
-            }
+            if isinstance(input_dict["weight:qdata"], list):
+                param_data[f"{full_layer_name}:qdata"] = input_dict["weight:qdata"][0]
+            else:
+                param_data[f"{full_layer_name}:qdata"] = input_dict["weight:qdata"]
+
+            if isinstance(input_dict["weight:scale"], list):
+                param_data[f"{full_layer_name}:scale"] = input_dict["weight:scale"][0]
+            else:
+                param_data[f"{full_layer_name}:scale"] = input_dict["weight:scale"]
+
             if is_int_4:
-                param_data[f"{full_layer_name}:zero_point"] = (
-                    input_dict["weight:zero_point"][0]
-                    if isinstance(input_dict["weight:zero_point"], list)
-                    else input_dict["weight:zero_point"]
-                )
+                if isinstance(input_dict["weight:zero_point"], list):
+                    param_data[f"{full_layer_name}:zero_point"] = input_dict["weight:zero_point"][0]
+                else:
+                    param_data[f"{full_layer_name}:zero_point"] = input_dict["weight:zero_point"]
 
         # If it's a bias, no need to do anything special (except removing the ":_data" part of the key, but was
         # already done) - if it's unsafe-serialized (i.e. not safetensors), not need for anything either

@@ -315,7 +315,12 @@ class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
 
     def convert(
-        self, layer_name: str, model=None, config=None, hf_quantizer=None, missing_keys: Optional[MutableSet[str]] = None
+        self,
+        layer_name: str,
+        model=None,
+        config=None,
+        hf_quantizer=None,
+        missing_keys: Optional[MutableSet[str]] = None,
     ):
         misc = {}
         for pattern, futures in self.collected_tensors.items():
@@ -331,7 +336,7 @@ class WeightRenaming(WeightTransform):
                     full_layer_name=layer_name,
                     model=model,
                     config=config,
-                    missing_keys=missing_keys
+                    missing_keys=missing_keys,
                 )
 
         return collected_tensors, misc
@@ -351,7 +356,12 @@ class WeightConverter(WeightTransform):
             raise ValueError("WeightConverter requires at least one operation.")
 
     def convert(
-        self, layer_name: str, model=None, config=None, hf_quantizer=None, missing_keys: Optional[MutableSet[str]] = None
+        self,
+        layer_name: str,
+        model=None,
+        config=None,
+        hf_quantizer=None,
+        missing_keys: Optional[MutableSet[str]] = None,
     ):
         misc = {}
         for pattern, futures in self.collected_tensors.items():

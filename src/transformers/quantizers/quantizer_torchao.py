@@ -540,7 +540,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         return TorchAoQuantize(self)
 
     def get_weight_conversions(self):
-        from ..integrations.torchao import TorchAoDeserialize, TorchAoQuantize
+        from ..integrations.torchao import TorchAoDeserialize
 
         if self.pre_quantized:
             return [
