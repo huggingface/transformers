@@ -253,9 +253,7 @@ class TextToAudioPipeline(Pipeline):
         """
         if isinstance(
             text_inputs,
-            (list, tuple, types.GeneratorType)
-            if is_torch_available()
-            else (list, tuple, types.GeneratorType),
+            (list, tuple, types.GeneratorType) if is_torch_available() else (list, tuple, types.GeneratorType),
         ):
             if isinstance(text_inputs, types.GeneratorType):
                 text_inputs, _ = itertools.tee(text_inputs)
