@@ -2016,6 +2016,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if attn_implementation.endswith("2"):
                 applicable_attn_implementation = "kernels-community/flash-attn2"
                 if is_torch_xpu_available():
+                    # On XPU, kernels library is the native implementation. Rename variable to avoid "fallback" warning and irrelevant checks.
                     attn_implementation = "kernels-community/flash-attn2"
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
