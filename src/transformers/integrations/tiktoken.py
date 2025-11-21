@@ -48,6 +48,6 @@ def convert_tiktoken_to_fast(encoding: Any, output_dir: str):
         ) from e
 
     tokenizer = TikTokenConverter(
-        vocab_file=save_file_absolute, pattern=encoding._pat_str, additional_special_tokens=encoding._special_tokens
+        vocab_file=save_file_absolute, pattern=encoding._pat_str, extra_special_tokens=encoding._special_tokens
     ).converted()
     tokenizer.save(output_file_absolute)

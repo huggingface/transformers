@@ -381,8 +381,8 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = encoding_name_for_model("gpt2")
         convert_tiktoken_to_fast(encoding, self.tmpdirname)
 
-        tiktoken_fast_tokenizer = GPT2TokenizerFast.from_pretrained(self.tmpdirname)
-        rust_tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
+        tiktoken_fast_tokenizer = GPT2Tokenizer.from_pretrained(self.tmpdirname)
+        rust_tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
         sequence = "lower newer"
         self.assertEqual(
             rust_tokenizer.decode(rust_tokenizer.encode(sequence)),
