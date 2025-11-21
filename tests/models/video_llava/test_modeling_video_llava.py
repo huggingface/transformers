@@ -252,7 +252,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             # if we remove some images from inputs leaving only one
             # image number mismatch error should raise
             curr_inputs["pixel_values_images"] = curr_inputs["pixel_values_images"][:1]
-            with self.assertRaises(ValueError):
+            with self.assertRaises(RuntimeError):
                 _ = model(**curr_inputs)
 
     def test_video_only_input(self):
@@ -263,7 +263,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             # replace image token id with dummy id
             # Error will be raised as num-image-tokens and num-of-image-embeds mismatch
             curr_inputs["input_ids"][:, : self.model_tester.num_image_tokens] = 2
-            with self.assertRaises(ValueError):
+            with self.assertRaises(RuntimeError):
                 _ = model(**curr_inputs)
 
             curr_inputs["pixel_values_images"] = None
@@ -281,7 +281,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
                 self.model_tester.num_image_tokens : self.model_tester.num_image_tokens
                 + self.model_tester.num_video_tokens,
             ] = 2
-            with self.assertRaises(ValueError):
+            with self.assertRaises(RuntimeError):
                 _ = model(**curr_inputs)
 
             curr_inputs["pixel_values_videos"] = None
