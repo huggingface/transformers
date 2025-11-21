@@ -22,7 +22,7 @@ from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -410,7 +410,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         )
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_generate_padding_left(self):

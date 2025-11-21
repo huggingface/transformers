@@ -116,6 +116,7 @@ from .utils import (
     is_torch_greater_or_equal,
     is_torch_mlu_available,
     is_torch_npu_available,
+    is_torch_xpu_available,
     logging,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
@@ -1575,6 +1576,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 logger.info("Detect using FlashAttention2 on Ascend NPU.")
                 return True
 
+            if is_torch_xpu_available():
+                logger.info("Detect using FlashAttention2 (via kernel `kernels-community/flash-attn2`) on XPU.")
+                return True
+
             if importlib.util.find_spec("flash_attn") is None:
                 raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
             else:
@@ -1800,7 +1805,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and not is_torch_npu_available()
         ):
             if attn_implementation.endswith("2"):
-                applicable_attn_implementation = "kernels-community/flash-attn"
+                applicable_attn_implementation = "kernels-community/flash-attn2"
+                if is_torch_xpu_available():
+                    # On XPU, kernels library is the native implementation. Rename variable to avoid "fallback" warning and irrelevant checks.
+                    attn_implementation = "kernels-community/flash-attn2"
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
 

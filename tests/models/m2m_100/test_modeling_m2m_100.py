@@ -26,8 +26,8 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -418,7 +418,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         assert generated == expected_en
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_seq_to_seq_generation(self):
