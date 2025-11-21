@@ -30,11 +30,10 @@ if is_torch_available():
 DEFAULT_VOCODER_ID = "microsoft/speecht5_hifigan"
 
 
-# Copied from transformers.pipelines.text_generation
 ChatType = list[dict[str, str]]
 
 
-# Copied from transformers.pipelines.text_generation
+# Copied from transformers.pipelines.text_generation.Chat
 class Chat:
     """This class is intended to just be used internally in this pipeline and not exposed to users. We convert chats
     to this format because the rest of the pipeline code tends to assume that lists of messages are
