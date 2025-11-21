@@ -18,7 +18,6 @@ from transformers.testing_utils import (
     cleanup,
     is_torch_available,
     require_torch,
-    require_torch_accelerator,
     torch_device,
 )
 
@@ -324,7 +323,9 @@ class MaskTest(unittest.TestCase):
             encoder_hidden_states=encoder_hidden_states,
         )
 
-        return ((full_mask_encoder_1, full_mask_encoder_2), (full_mask_cross_1, full_mask_cross_2)), (padded_mask_encoder, padded_mask_cross)
+        full_masks = (full_mask_encoder_1, full_mask_encoder_2), (full_mask_cross_1, full_mask_cross_2)
+        padded_masks = (padded_mask_encoder, padded_mask_cross)
+        return full_masks, padded_masks
 
     def test_bidirectional_mask_cudagraphs(self):
         """
@@ -335,7 +336,9 @@ class MaskTest(unittest.TestCase):
         self._run_bidirectional_mask(mask_fn=mask_creation_function, attn_implementation="sdpa")
 
     def test_bidirectional_mask_skip_eager(self):
-        full_masks, padded_mask = self._run_bidirectional_mask(mask_fn=create_bidirectional_mask, attn_implementation="eager")
+        full_masks, padded_mask = self._run_bidirectional_mask(
+            mask_fn=create_bidirectional_mask, attn_implementation="eager"
+        )
 
         for alternative_masks in full_masks:
             self.assertTrue(alternative_masks[0] is None)
