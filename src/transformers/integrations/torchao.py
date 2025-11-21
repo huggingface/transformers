@@ -75,9 +75,6 @@ class TorchAoQuantize(ConversionOps):
         _, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
 
-        if not self.hf_quantizer.param_needs_quantization(model, full_layer_name):
-            return {full_layer_name: value}
-
         module, tensor_name = get_module_from_name(model, full_layer_name)
 
         module._parameters[tensor_name] = torch.nn.Parameter(value, requires_grad=value.requires_grad).to(value.device)
@@ -174,7 +171,7 @@ class TorchAoQuantize(ConversionOps):
                     return {}
 
                 return {full_layer_name: value}
-
+        
         quantize_(module, self.hf_quantizer.quantization_config.get_apply_tensor_subclass())
         missing_keys.discard(full_layer_name)
         module._is_hf_initialized = True
@@ -236,9 +233,8 @@ class TorchAoDeserialize(ConversionOps):
         # Sanity check for the new serialization format
         elif not (TORCHAO_VERSION >= version.parse("0.14.0") and is_metadata_torchao(self.hf_quantizer.metadata)):
             # print("metadata", self.hf_quantizer.metadata)
-            print("TORCHAO_VERSION", TORCHAO_VERSION)
             raise ValueError("To use `safetensors` serialization, you should have `torchao>=0.14.0` installed")
-        print("param_data", param_data.keys())
+
         new_param = unflatten_tensor_state_dict(param_data, self.hf_quantizer.metadata)[full_layer_name]
 
         module, _ = get_module_from_name(model, full_layer_name)
